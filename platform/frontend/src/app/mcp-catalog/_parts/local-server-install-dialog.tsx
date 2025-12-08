@@ -14,14 +14,23 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { VaultSecretSelector } from "@/components/vault-secret-selector";
+import { useFeatureFlag } from "@/lib/features.hook";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
+export interface LocalServerInstallResult {
+  environmentValues: Record<string, string>;
+  /** External Vault secret path for BYOS */
+  externalVaultSecret?: string;
+}
+
 interface LocalServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (environmentValues: Record<string, string>) => Promise<void>;
+  onConfirm: (result: LocalServerInstallResult) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
 }
@@ -39,6 +48,13 @@ export function LocalServerInstallDialog({
       (env) => env.promptOnInstallation === true,
     ) || [];
 
+  // Separate secret vs non-secret env vars
+  // Secret env vars can be loaded from vault, non-secret must be entered manually
+  const secretEnvVars = promptedEnvVars.filter((env) => env.type === "secret");
+  const nonSecretEnvVars = promptedEnvVars.filter(
+    (env) => env.type !== "secret",
+  );
+
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
   >(
@@ -48,6 +64,15 @@ export function LocalServerInstallDialog({
     }, {}),
   );
 
+  // BYOS (Bring Your Own Secrets) state
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedSecretPath, setSelectedSecretPath] = useState<string | null>(
+    null,
+  );
+
+  // Check if BYOS feature is available (enterprise license + Vault configured)
+  const showByosOption = useFeatureFlag("byosEnabled");
+
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
   };
@@ -55,32 +80,42 @@ export function LocalServerInstallDialog({
   const handleInstall = async () => {
     if (!catalogItem) return;
 
-    // Validate required fields only
-    const missingEnvVars = promptedEnvVars.filter((env) => {
-      // Skip validation for optional fields
-      if (!env.required) return false;
-
-      const value = environmentValues[env.key];
-      // Boolean fields are always valid if they have a value (should be "true" or "false")
-      if (env.type === "boolean") {
-        return !value;
+    // BYOS mode: secrets from vault, non-secrets from form
+    if (showByosOption && secretEnvVars.length > 0) {
+      // Include only non-secret env var values (secret ones come from vault)
+      const nonSecretValues: Record<string, string> = {};
+      for (const env of nonSecretEnvVars) {
+        if (environmentValues[env.key]) {
+          nonSecretValues[env.key] = environmentValues[env.key];
+        }
       }
-      // For other types, check if the trimmed value is non-empty
-      return !value?.trim();
-    });
 
-    if (missingEnvVars.length > 0) {
-      return;
+      await onConfirm({
+        environmentValues: nonSecretValues,
+        externalVaultSecret: selectedSecretPath || undefined,
+      });
+    } else {
+      // Non-BYOS mode: all values from form
+      await onConfirm({ environmentValues });
     }
 
-    await onConfirm(environmentValues);
-
     // Reset form
-    setEnvironmentValues({});
+    resetForm();
+  };
+
+  const resetForm = () => {
+    setEnvironmentValues(
+      promptedEnvVars.reduce<Record<string, string>>((acc, env) => {
+        acc[env.key] = env.value || "";
+        return acc;
+      }, {}),
+    );
+    setSelectedTeamId(null);
+    setSelectedSecretPath(null);
   };
 
   const handleClose = () => {
-    setEnvironmentValues({});
+    resetForm();
     onClose();
   };
 
@@ -90,18 +125,30 @@ export function LocalServerInstallDialog({
     return null;
   }
 
-  const isValid = promptedEnvVars.every((env) => {
-    // Optional fields don't affect validation
+  // Check if non-secret env vars are valid (always required)
+  const isNonSecretValid = nonSecretEnvVars.every((env) => {
     if (!env.required) return true;
-
     const value = environmentValues[env.key];
-    // Boolean fields are always valid if they have a value (should be "true" or "false")
     if (env.type === "boolean") {
       return !!value;
     }
-    // For other types, check if the trimmed value is non-empty
     return !!value?.trim();
   });
+
+  // Check if secrets are valid:
+  // - BYOS mode: vault must be selected
+  // - Non-BYOS mode: manual secret values must be filled
+  const isSecretsValid =
+    secretEnvVars.length === 0 ||
+    (showByosOption
+      ? !!selectedSecretPath
+      : secretEnvVars.every((env) => {
+          if (!env.required) return true;
+          const value = environmentValues[env.key];
+          return !!value?.trim();
+        }));
+
+  const isValid = isNonSecretValid && isSecretsValid;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -115,73 +162,129 @@ export function LocalServerInstallDialog({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Environment Variables that need prompting */}
-          {promptedEnvVars.length > 0 && (
+          {/* Non-secret Environment Variables (always editable) */}
+          {nonSecretEnvVars.length > 0 && (
             <div className="space-y-4">
-              <h3 className="text-sm font-medium">Environment Variables</h3>
-              {promptedEnvVars.map((env) => {
-                return (
-                  <div key={env.key} className="space-y-2">
-                    <Label htmlFor={`env-${env.key}`}>
-                      {env.key}
-                      {env.required && (
-                        <span className="text-destructive ml-1">*</span>
-                      )}
-                    </Label>
-                    {env.description && (
-                      <p className="text-xs text-muted-foreground">
-                        {env.description}
-                      </p>
+              <h3 className="text-sm font-medium">Configuration</h3>
+              {nonSecretEnvVars.map((env) => (
+                <div key={env.key} className="space-y-2">
+                  <Label htmlFor={`env-${env.key}`}>
+                    {env.key}
+                    {env.required && (
+                      <span className="text-destructive ml-1">*</span>
                     )}
+                  </Label>
+                  {env.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {env.description}
+                    </p>
+                  )}
 
-                    {env.type === "boolean" ? (
-                      // Boolean type: render checkbox with True/False label
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id={`env-${env.key}`}
-                          checked={environmentValues[env.key] === "true"}
-                          onCheckedChange={(checked) =>
-                            handleEnvVarChange(
-                              env.key,
-                              checked ? "true" : "false",
-                            )
-                          }
-                        />
-                        <span className="text-sm">
-                          {environmentValues[env.key] === "true"
-                            ? "True"
-                            : "False"}
-                        </span>
-                      </div>
-                    ) : env.type === "number" ? (
-                      // Number type: render number input
-                      <Input
+                  {env.type === "boolean" ? (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
                         id={`env-${env.key}`}
-                        type="number"
-                        value={environmentValues[env.key] || ""}
-                        onChange={(e) =>
-                          handleEnvVarChange(env.key, e.target.value)
+                        checked={environmentValues[env.key] === "true"}
+                        onCheckedChange={(checked) =>
+                          handleEnvVarChange(
+                            env.key,
+                            checked ? "true" : "false",
+                          )
                         }
-                        placeholder="0"
-                        className="font-mono"
+                        disabled={isInstalling}
                       />
-                    ) : (
-                      // String/Secret types: render input
-                      <Input
-                        id={`env-${env.key}`}
-                        type={env.type === "secret" ? "password" : "text"}
-                        value={environmentValues[env.key] || ""}
-                        onChange={(e) =>
-                          handleEnvVarChange(env.key, e.target.value)
-                        }
-                        placeholder={`Enter value for ${env.key}`}
-                        className="font-mono"
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                      <span className="text-sm">
+                        {environmentValues[env.key] === "true"
+                          ? "True"
+                          : "False"}
+                      </span>
+                    </div>
+                  ) : env.type === "number" ? (
+                    <Input
+                      id={`env-${env.key}`}
+                      type="number"
+                      value={environmentValues[env.key] || ""}
+                      onChange={(e) =>
+                        handleEnvVarChange(env.key, e.target.value)
+                      }
+                      placeholder="0"
+                      className="font-mono"
+                      disabled={isInstalling}
+                    />
+                  ) : (
+                    <Input
+                      id={`env-${env.key}`}
+                      type="text"
+                      value={environmentValues[env.key] || ""}
+                      onChange={(e) =>
+                        handleEnvVarChange(env.key, e.target.value)
+                      }
+                      placeholder={`Enter value for ${env.key}`}
+                      className="font-mono"
+                      disabled={isInstalling}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
+          )}
+
+          {/* Secret Environment Variables */}
+          {secretEnvVars.length > 0 && (
+            <>
+              {nonSecretEnvVars.length > 0 && <Separator />}
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium">Secrets</h3>
+
+                {/* BYOS mode: Only vault selection allowed */}
+                {showByosOption ? (
+                  <VaultSecretSelector
+                    selectedTeamId={selectedTeamId}
+                    selectedSecretPath={selectedSecretPath}
+                    onTeamChange={setSelectedTeamId}
+                    onSecretChange={setSelectedSecretPath}
+                    disabled={isInstalling}
+                    expectedKeyHint={secretEnvVars
+                      .map((env) => env.key)
+                      .join(", ")}
+                  />
+                ) : (
+                  /* Non-BYOS mode: Manual secret entry */
+                  <>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Enter secret values
+                    </p>
+                    {secretEnvVars.map((env) => (
+                      <div key={env.key} className="space-y-2 mb-4">
+                        <Label htmlFor={`env-${env.key}`}>
+                          {env.key}
+                          {env.required && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
+                        </Label>
+                        {env.description && (
+                          <p className="text-xs text-muted-foreground">
+                            {env.description}
+                          </p>
+                        )}
+                        <Input
+                          id={`env-${env.key}`}
+                          type="password"
+                          value={environmentValues[env.key] || ""}
+                          onChange={(e) =>
+                            handleEnvVarChange(env.key, e.target.value)
+                          }
+                          placeholder={`Enter value for ${env.key}`}
+                          className="font-mono"
+                          disabled={isInstalling}
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </>
           )}
         </div>
 

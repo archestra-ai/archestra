@@ -11,7 +11,7 @@ import {
   McpServerTeamModel,
   ToolModel,
 } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -85,6 +85,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
+          // For BYOS (Bring Your Own Secrets) - external Vault path
+          externalVaultSecret: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -94,6 +96,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentIds,
         secretId,
         accessToken,
+        externalVaultSecret,
         userConfigValues,
         environmentValues,
         ...restDataFromRequestBody
@@ -111,6 +114,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
+
+      // If externalVaultSecret is provided (BYOS flow), create a secret reference
+      if (externalVaultSecret && !secretId) {
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "BYOS (Bring Your Own Secrets) is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+          );
+        }
+
+        // Use the standard createSecret interface with __vaultPath
+        // When BYOS_VAULT is configured, secretManager is a BYOSVaultSecretManager
+        const secret = await secretManager.createSecret(
+          { __vaultPath: externalVaultSecret },
+          `${serverData.name}-vault-secret`,
+        );
+        secretId = secret.id;
+        createdSecretId = secret.id;
+        logger.info(
+          { secretId: secret.id, vaultPath: externalVaultSecret },
+          "Created BYOS external vault secret reference",
+        );
+      }
 
       // If accessToken is provided (PAT flow), create a secret for it
       if (accessToken && !secretId) {

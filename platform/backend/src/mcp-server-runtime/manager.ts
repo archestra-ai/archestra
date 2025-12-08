@@ -2,9 +2,8 @@ import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel, McpServerModel, SecretModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import { secretManager } from "@/secretsmanager";
-import { teamVaultSecretManager } from "@/team-vault-secret-manager";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 import type {
@@ -214,45 +213,27 @@ export class McpServerRuntimeManager {
       logger.info(`Registered MCP server pod ${id} in map`);
 
       // If MCP server has a secretId, fetch secret and create K8s Secret
+      // The secretManager handles all secret types:
+      // - DB-stored secrets
+      // - Archestra-managed Vault secrets
+      // - External BYOS Vault secrets (via vaultPath)
       if (mcpServer.secretId) {
-        // First check if this is an external Vault secret (BYOS)
-        const secretRecord = await SecretModel.findById(mcpServer.secretId);
+        const secret = await secretManager.getSecret(mcpServer.secretId);
 
-        if (secretRecord?.vaultPath && teamVaultSecretManager) {
-          // External BYOS Vault secret - fetch from the vault_path
-          logger.info(
-            { mcpServerId: id, vaultPath: secretRecord.vaultPath },
-            "Fetching secret from external Vault path (BYOS)",
-          );
+        if (secret?.secret && typeof secret.secret === "object") {
+          const secretData: Record<string, string> = {};
 
-          const secretData = await teamVaultSecretManager.getSecretFromPath(
-            secretRecord.vaultPath,
-          );
+          // Convert secret.secret (Record<string, unknown>) to Record<string, string>
+          for (const [key, value] of Object.entries(secret.secret)) {
+            secretData[key] = String(value);
+          }
 
+          // Create K8s Secret
           await k8sPod.createK8sSecret(secretData);
           logger.info(
-            { mcpServerId: id, vaultPath: secretRecord.vaultPath },
-            "Created K8s Secret from external Vault (BYOS)",
+            { mcpServerId: id, secretId: mcpServer.secretId },
+            "Created K8s Secret from secret manager",
           );
-        } else {
-          // Standard secret flow (DB-stored or Archestra-managed Vault)
-          const secret = await secretManager.getSecret(mcpServer.secretId);
-
-          if (secret?.secret && typeof secret.secret === "object") {
-            const secretData: Record<string, string> = {};
-
-            // Convert secret.secret (Record<string, unknown>) to Record<string, string>
-            for (const [key, value] of Object.entries(secret.secret)) {
-              secretData[key] = String(value);
-            }
-
-            // Create K8s Secret from database secret
-            await k8sPod.createK8sSecret(secretData);
-            logger.info(
-              { mcpServerId: id, secretId: mcpServer.secretId },
-              "Created K8s Secret from database secret",
-            );
-          }
         }
       }
 

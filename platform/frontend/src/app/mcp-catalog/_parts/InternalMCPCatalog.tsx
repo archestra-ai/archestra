@@ -22,7 +22,10 @@ import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { DetailsDialog } from "./details-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
-import { LocalServerInstallDialog } from "./local-server-install-dialog";
+import {
+  LocalServerInstallDialog,
+  type LocalServerInstallResult,
+} from "./local-server-install-dialog";
 import {
   type CatalogItem,
   type InstalledServer,
@@ -30,7 +33,10 @@ import {
 } from "./mcp-server-card";
 import { NoAuthInstallDialog } from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
-import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
+import {
+  RemoteServerInstallDialog,
+  type RemoteServerInstallResult,
+} from "./remote-server-install-dialog";
 
 export function InternalMCPCatalog({
   initialData,
@@ -229,7 +235,7 @@ export function InternalMCPCatalog({
   };
 
   const handleLocalServerInstallConfirm = async (
-    environmentValues: Record<string, string>,
+    installResult: LocalServerInstallResult,
   ) => {
     if (!localServerCatalogItem) return;
 
@@ -238,7 +244,8 @@ export function InternalMCPCatalog({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       teams: [],
-      environmentValues,
+      environmentValues: installResult.environmentValues,
+      externalVaultSecret: installResult.externalVaultSecret,
       dontShowToast: true,
     });
 
@@ -255,22 +262,23 @@ export function InternalMCPCatalog({
 
   const handleRemoteServerInstallConfirm = async (
     catalogItem: CatalogItem,
-    metadata?: Record<string, unknown>,
-    teams: string[] = [],
+    result: RemoteServerInstallResult,
   ) => {
     setInstallingItemId(catalogItem.id);
 
     // Extract access_token from metadata if present and pass as accessToken
     const accessToken =
-      metadata?.access_token && typeof metadata.access_token === "string"
-        ? metadata.access_token
+      result.metadata?.access_token &&
+      typeof result.metadata.access_token === "string"
+        ? result.metadata.access_token
         : undefined;
 
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
-      teams,
+      teams: result.teams,
+      externalVaultSecret: result.externalVaultSecret,
     });
     setInstallingItemId(null);
   };

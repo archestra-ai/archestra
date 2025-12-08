@@ -22,6 +22,10 @@ export const formSchema = z
     authMethod: z.enum(["none", "pat", "oauth"]),
     oauthConfig: oauthConfigSchema.optional(),
     localConfig: LocalConfigFormSchema.optional(),
+    // BYOS: External Vault path for OAuth client secret
+    oauthClientSecretVaultPath: z.string().optional(),
+    // BYOS: External Vault path for local config secret env vars
+    localConfigVaultPath: z.string().optional(),
   })
   .refine(
     (data) => {

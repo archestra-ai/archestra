@@ -5792,6 +5792,7 @@ export type GetChatSettingsResponses = {
         anthropicApiKeySecretId: string | null;
         createdAt: string;
         updatedAt: string;
+        externalVaultSecretPath?: string | null;
     };
 };
 
@@ -5801,6 +5802,7 @@ export type UpdateChatSettingsData = {
     body?: {
         anthropicApiKey?: string;
         resetApiKey?: boolean;
+        externalVaultSecret?: string;
     };
     path?: never;
     query?: never;
@@ -5876,6 +5878,7 @@ export type UpdateChatSettingsResponses = {
         anthropicApiKeySecretId: string | null;
         createdAt: string;
         updatedAt: string;
+        externalVaultSecretPath?: string | null;
     };
 };
 
@@ -6581,6 +6584,7 @@ export type GetFeaturesResponses = {
      */
     200: {
         'orchestrator-k8s-runtime': boolean;
+        byosEnabled: boolean;
     };
 };
 
@@ -7418,6 +7422,8 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        localConfigVaultPath?: string;
     };
     path?: never;
     query?: never;
@@ -7868,6 +7874,8 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        localConfigVaultPath?: string;
     };
     path: {
         id: string;
@@ -9951,6 +9959,7 @@ export type InstallMcpServerData = {
         };
         agentIds?: Array<string>;
         accessToken?: string;
+        externalVaultSecret?: string;
     };
     path?: never;
     query?: never;
@@ -13212,7 +13221,7 @@ export type GetSecretsTypeResponses = {
      * Default Response
      */
     200: {
-        type: 'DB' | 'Vault';
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
         meta: {
             [key: string]: string;
         };
@@ -16199,6 +16208,87 @@ export type ListTeamVaultFolderSecretsResponses = {
 };
 
 export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
+
+export type GetTeamVaultSecretKeysData = {
+    body: {
+        secretPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
+};
+
+export type GetTeamVaultSecretKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
+
+export type GetTeamVaultSecretKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<string>;
+    };
+};
+
+export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
 
 export type GetTokenPricesData = {
     body?: never;

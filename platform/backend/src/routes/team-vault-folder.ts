@@ -1,10 +1,13 @@
-import { RouteId } from "@shared";
+import { ADMIN_ROLE_NAME, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
-import { TeamModel } from "@/models";
+import { MemberModel, TeamModel } from "@/models";
 import TeamVaultFolderModel from "@/models/team-vault-folder";
-import { teamVaultSecretManager } from "@/team-vault-secret-manager";
+import {
+  type BYOSVaultSecretManager,
+  isByosEnabled,
+  secretManager,
+} from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -12,6 +15,23 @@ import {
   SelectTeamVaultFolderSchema,
   SetTeamVaultFolderBodySchema,
 } from "@/types";
+
+/**
+ * Helper to check if BYOS feature is enabled and properly configured.
+ * Throws appropriate error if not.
+ * Returns the secretManager cast to BYOSVaultSecretManager for type narrowing.
+ */
+function assertByosEnabled(): BYOSVaultSecretManager {
+  if (!isByosEnabled()) {
+    throw new ApiError(
+      403,
+      "BYOS (Bring Your Own Secrets) is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+    );
+  }
+
+  // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
+  return secretManager as BYOSVaultSecretManager;
+}
 
 // Response schemas
 const VaultFolderConnectivityResponseSchema = z.object({
@@ -23,6 +43,10 @@ const VaultFolderConnectivityResponseSchema = z.object({
 const VaultSecretListItemSchema = z.object({
   name: z.string(),
   path: z.string(),
+});
+
+const VaultSecretKeysResponseSchema = z.object({
+  keys: z.array(z.string()),
 });
 
 const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -45,21 +69,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { teamId }, organizationId, user }, reply) => {
-      // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
-        throw new ApiError(
-          403,
-          "Team Vault folders is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-        );
-      }
-
-      // Verify Vault is configured
-      if (!teamVaultSecretManager) {
-        throw new ApiError(
-          400,
-          "Vault secrets manager is not configured. Set ARCHESTRA_SECRETS_MANAGER=Vault to enable this feature.",
-        );
-      }
+      assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(teamId);
@@ -67,17 +77,21 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      // Check if user is org admin
+      const member = await MemberModel.getByUserId(user.id, organizationId);
+      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
+
       // Check if user has access (org admin or team admin)
       const hasAccess = await TeamVaultFolderModel.userHasAccess(
         user.id,
         teamId,
-        false, // Let the model check for org admin via team membership
+        isOrgAdmin,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only team admins can view Vault folder configuration",
+          "Only organization admins or team admins can view Vault folder configuration",
         );
       }
 
@@ -107,21 +121,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { teamId }, body: { vaultPath }, organizationId, user },
       reply,
     ) => {
-      // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
-        throw new ApiError(
-          403,
-          "Team Vault folders is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-        );
-      }
-
-      // Verify Vault is configured
-      if (!teamVaultSecretManager) {
-        throw new ApiError(
-          400,
-          "Vault secrets manager is not configured. Set ARCHESTRA_SECRETS_MANAGER=Vault to enable this feature.",
-        );
-      }
+      assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(teamId);
@@ -129,17 +129,21 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      // Check if user is org admin
+      const member = await MemberModel.getByUserId(user.id, organizationId);
+      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
+
       // Check if user has access (org admin or team admin)
       const hasAccess = await TeamVaultFolderModel.userHasAccess(
         user.id,
         teamId,
-        false,
+        isOrgAdmin,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only team admins can configure Vault folder settings",
+          "Only organization admins or team admins can configure Vault folder settings",
         );
       }
 
@@ -173,21 +177,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { teamId }, organizationId, user }, reply) => {
-      // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
-        throw new ApiError(
-          403,
-          "Team Vault folders is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-        );
-      }
-
-      // Verify Vault is configured
-      if (!teamVaultSecretManager) {
-        throw new ApiError(
-          400,
-          "Vault secrets manager is not configured. Set ARCHESTRA_SECRETS_MANAGER=Vault to enable this feature.",
-        );
-      }
+      assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(teamId);
@@ -195,17 +185,21 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      // Check if user is org admin
+      const member = await MemberModel.getByUserId(user.id, organizationId);
+      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
+
       // Check if user has access (org admin or team admin)
       const hasAccess = await TeamVaultFolderModel.userHasAccess(
         user.id,
         teamId,
-        false,
+        isOrgAdmin,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only team admins can delete Vault folder configuration",
+          "Only organization admins or team admins can delete Vault folder configuration",
         );
       }
 
@@ -238,21 +232,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { teamId }, organizationId, user }, reply) => {
-      // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
-        throw new ApiError(
-          403,
-          "Team Vault folders is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-        );
-      }
-
-      // Verify Vault is configured
-      if (!teamVaultSecretManager) {
-        throw new ApiError(
-          400,
-          "Vault secrets manager is not configured. Set ARCHESTRA_SECRETS_MANAGER=Vault to enable this feature.",
-        );
-      }
+      const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(teamId);
@@ -260,17 +240,21 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      // Check if user is org admin
+      const member = await MemberModel.getByUserId(user.id, organizationId);
+      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
+
       // Check if user has access (org admin or team admin)
       const hasAccess = await TeamVaultFolderModel.userHasAccess(
         user.id,
         teamId,
-        false,
+        isOrgAdmin,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only team admins can check Vault folder connectivity",
+          "Only organization admins or team admins can check Vault folder connectivity",
         );
       }
 
@@ -283,9 +267,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const result = await teamVaultSecretManager.checkFolderConnectivity(
-        folder.vaultPath,
-      );
+      const result = await manager.checkFolderConnectivity(folder.vaultPath);
 
       return reply.send(result);
     },
@@ -308,21 +290,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { teamId }, organizationId, user }, reply) => {
-      // Verify enterprise license
-      if (!config.enterpriseLicenseActivated) {
-        throw new ApiError(
-          403,
-          "Team Vault folders is an enterprise feature. Please contact sales@archestra.ai to enable it.",
-        );
-      }
-
-      // Verify Vault is configured
-      if (!teamVaultSecretManager) {
-        throw new ApiError(
-          400,
-          "Vault secrets manager is not configured. Set ARCHESTRA_SECRETS_MANAGER=Vault to enable this feature.",
-        );
-      }
+      const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(teamId);
@@ -330,17 +298,21 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      // Check if user is org admin
+      const member = await MemberModel.getByUserId(user.id, organizationId);
+      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
+
       // Check if user has access (org admin or team admin)
       const hasAccess = await TeamVaultFolderModel.userHasAccess(
         user.id,
         teamId,
-        false,
+        isOrgAdmin,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only team admins can list Vault folder secrets",
+          "Only organization admins or team admins can list Vault folder secrets",
         );
       }
 
@@ -353,11 +325,100 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const secrets = await teamVaultSecretManager.listSecretsInFolder(
-        folder.vaultPath,
-      );
+      const secrets = await manager.listSecretsInFolder(folder.vaultPath);
 
       return reply.send(secrets);
+    },
+  );
+
+  /**
+   * Get keys of a specific secret in team's Vault folder
+   * Used to validate if a secret contains expected keys before selection
+   */
+  fastify.post(
+    "/api/teams/:teamId/vault-folder/secrets/keys",
+    {
+      schema: {
+        operationId: RouteId.GetTeamVaultSecretKeys,
+        description:
+          "Get the keys of a specific secret in a team's Vault folder",
+        tags: ["Teams", "Vault"],
+        params: z.object({
+          teamId: z.string(),
+        }),
+        body: z.object({
+          secretPath: z.string().min(1, "Secret path is required"),
+        }),
+        response: constructResponseSchema(VaultSecretKeysResponseSchema),
+      },
+    },
+    async (
+      { params: { teamId }, body: { secretPath }, organizationId, user },
+      reply,
+    ) => {
+      const manager = assertByosEnabled();
+
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(teamId);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user is org admin
+      const member = await MemberModel.getByUserId(user.id, organizationId);
+      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
+
+      // Check if user has access (org admin or team admin)
+      const hasAccess = await TeamVaultFolderModel.userHasAccess(
+        user.id,
+        teamId,
+        isOrgAdmin,
+      );
+
+      if (!hasAccess) {
+        throw new ApiError(
+          403,
+          "Only organization admins or team admins can access Vault secrets",
+        );
+      }
+
+      // Get the team's Vault folder
+      const folder = await TeamVaultFolderModel.findByTeamId(teamId);
+      if (!folder) {
+        throw new ApiError(
+          400,
+          "No Vault folder configured for this team. Set a Vault path first.",
+        );
+      }
+
+      // Validate that the requested secret path is within the team's vault folder
+      // Normalize paths by removing trailing slashes for comparison
+      const normalizedVaultPath = folder.vaultPath.replace(/\/+$/, "");
+      const normalizedSecretPath = secretPath.replace(/\/+$/, "");
+      // Secret path must start with vault folder path followed by /
+      // e.g., vaultPath "teams/alpha" should match "teams/alpha/secret" but not "teams/alphabeta"
+      const isWithinFolder =
+        normalizedSecretPath === normalizedVaultPath ||
+        normalizedSecretPath.startsWith(`${normalizedVaultPath}/`);
+      if (!isWithinFolder) {
+        throw new ApiError(
+          403,
+          "Access denied. The requested secret is not within this team's Vault folder.",
+        );
+      }
+
+      try {
+        const secretData = await manager.getSecretFromPath(secretPath);
+        const keys = Object.keys(secretData);
+
+        return reply.send({ keys });
+      } catch (error) {
+        // Pass through ApiError from secretsmanager with proper status and message
+        if (error instanceof ApiError) {
+          throw error;
+        }
+        throw new ApiError(500, "Failed to retrieve secret from Vault");
+      }
     },
   );
 };

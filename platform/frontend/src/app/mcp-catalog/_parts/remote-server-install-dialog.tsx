@@ -22,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { VaultSecretSelector } from "@/components/vault-secret-selector";
+import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
 
 type CatalogItem =
@@ -42,13 +44,19 @@ type UserConfigType = Record<
   }
 >;
 
+export interface RemoteServerInstallResult {
+  metadata: Record<string, unknown>;
+  teams: string[];
+  /** External Vault secret path for BYOS */
+  externalVaultSecret?: string;
+}
+
 interface RemoteServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (
     catalogItem: CatalogItem,
-    metadata: Record<string, unknown>,
-    teams: string[],
+    result: RemoteServerInstallResult,
   ) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
@@ -67,7 +75,12 @@ export function RemoteServerInstallDialog({
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
+  // BYOS (Bring Your Own Secrets) state
+  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
+  const [vaultSecretPath, setVaultSecretPath] = useState<string | null>(null);
+
   const { data: teams } = useTeams();
+  const byosEnabled = useFeatureFlag("byosEnabled");
 
   const handleAddTeam = (teamId: string) => {
     if (teamId && !assignedTeamIds.includes(teamId)) {
@@ -93,9 +106,26 @@ export function RemoteServerInstallDialog({
       return;
     }
 
-    // Validate required fields
     const userConfig =
       (catalogItem.userConfig as UserConfigType | null | undefined) || {};
+
+    // If vault secret is selected, use that instead of manual values
+    if (vaultSecretPath) {
+      try {
+        await onConfirm(catalogItem, {
+          metadata: {},
+          teams: assignedTeamIds,
+          externalVaultSecret: vaultSecretPath,
+        });
+        resetForm();
+        onClose();
+      } catch (_error) {
+        // Error handling is done in the parent component
+      }
+      return;
+    }
+
+    // Validate required fields only when not using vault secret
     const requiredFields = Object.entries(userConfig).filter(
       ([_, config]) => config.required,
     );
@@ -125,20 +155,27 @@ export function RemoteServerInstallDialog({
         }
       }
 
-      await onConfirm(catalogItem, metadata, assignedTeamIds);
-      setConfigValues({});
-      setAssignedTeamIds([]);
-      setSelectedTeamId("");
+      await onConfirm(catalogItem, {
+        metadata,
+        teams: assignedTeamIds,
+      });
+      resetForm();
       onClose();
     } catch (_error) {
       // Error handling is done in the parent component
     }
   };
 
-  const handleClose = () => {
+  const resetForm = () => {
     setConfigValues({});
     setAssignedTeamIds([]);
     setSelectedTeamId("");
+    setVaultTeamId(null);
+    setVaultSecretPath(null);
+  };
+
+  const handleClose = () => {
+    resetForm();
     onClose();
   };
 
@@ -151,12 +188,20 @@ export function RemoteServerInstallDialog({
   const hasConfig = Object.keys(userConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
 
-  // Check if all required fields are filled
-  const isValid =
-    Object.entries(userConfig)
-      .filter(([_, config]) => config.required)
-      .every(([fieldName, _]) => configValues[fieldName]?.trim()) &&
-    (!isTeamMode || assignedTeamIds.length > 0);
+  // Check if BYOS feature is available (enterprise license + Vault configured)
+  const showByosOption = byosEnabled && hasConfig;
+
+  // Check if config is valid:
+  // - BYOS mode: vault must be selected
+  // - Non-BYOS mode: manual values must be filled
+  const isConfigValid = showByosOption
+    ? !!vaultSecretPath
+    : !hasConfig ||
+      Object.entries(userConfig)
+        .filter(([_, cfg]) => cfg.required)
+        .every(([fieldName]) => configValues[fieldName]?.trim());
+
+  const isValid = isConfigValid && (!isTeamMode || assignedTeamIds.length > 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -263,54 +308,71 @@ export function RemoteServerInstallDialog({
             </Alert>
           )}
 
+          {/* Config fields - either BYOS vault selector or manual entry */}
           {hasConfig ? (
-            Object.entries(userConfig).map(([fieldName, config]) => (
-              <div key={fieldName} className="grid gap-2">
-                <Label htmlFor={fieldName}>
-                  {config.title}
-                  {config.required && <span className="text-red-500"> *</span>}
-                </Label>
-                {config.type === "boolean" ? (
-                  <select
-                    id={fieldName}
-                    value={configValues[fieldName] || "false"}
-                    onChange={(e) =>
-                      setConfigValues((prev) => ({
-                        ...prev,
-                        [fieldName]: e.target.value,
-                      }))
-                    }
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
-                ) : (
-                  <Input
-                    id={fieldName}
-                    type={
-                      config.sensitive
-                        ? "password"
-                        : config.type === "number"
-                          ? "number"
-                          : "text"
-                    }
-                    placeholder={
-                      config.default?.toString() || config.description
-                    }
-                    value={configValues[fieldName] || ""}
-                    onChange={(e) =>
-                      setConfigValues((prev) => ({
-                        ...prev,
-                        [fieldName]: e.target.value,
-                      }))
-                    }
-                    min={config.min}
-                    max={config.max}
-                  />
-                )}
+            showByosOption ? (
+              <VaultSecretSelector
+                selectedTeamId={vaultTeamId}
+                selectedSecretPath={vaultSecretPath}
+                onTeamChange={setVaultTeamId}
+                onSecretChange={setVaultSecretPath}
+                disabled={isInstalling}
+                expectedKeyHint="access_token"
+              />
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
+                  <div key={fieldName} className="grid gap-2">
+                    <Label htmlFor={fieldName}>
+                      {fieldConfig.title}
+                      {fieldConfig.required && (
+                        <span className="text-red-500"> *</span>
+                      )}
+                    </Label>
+                    {fieldConfig.type === "boolean" ? (
+                      <select
+                        id={fieldName}
+                        value={configValues[fieldName] || "false"}
+                        onChange={(e) =>
+                          setConfigValues((prev) => ({
+                            ...prev,
+                            [fieldName]: e.target.value,
+                          }))
+                        }
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+                      >
+                        <option value="false">No</option>
+                        <option value="true">Yes</option>
+                      </select>
+                    ) : (
+                      <Input
+                        id={fieldName}
+                        type={
+                          fieldConfig.sensitive
+                            ? "password"
+                            : fieldConfig.type === "number"
+                              ? "number"
+                              : "text"
+                        }
+                        placeholder={
+                          fieldConfig.default?.toString() ||
+                          fieldConfig.description
+                        }
+                        value={configValues[fieldName] || ""}
+                        onChange={(e) =>
+                          setConfigValues((prev) => ({
+                            ...prev,
+                            [fieldName]: e.target.value,
+                          }))
+                        }
+                        min={fieldConfig.min}
+                        max={fieldConfig.max}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-            ))
+            )
           ) : !hasOAuth ? (
             <div className="rounded-md bg-muted p-4">
               <p className="text-sm text-muted-foreground">

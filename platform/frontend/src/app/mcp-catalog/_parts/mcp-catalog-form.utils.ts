@@ -38,6 +38,11 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
     };
+
+    // BYOS: Include local config vault path if set
+    if (values.localConfigVaultPath) {
+      data.localConfigVaultPath = values.localConfigVaultPath;
+    }
   }
 
   // Handle OAuth configuration
@@ -59,12 +64,21 @@ export function transformFormToApiData(
       name: values.name, // Use name as OAuth provider name
       server_url: values.serverUrl || "", // Use serverUrl as OAuth server URL
       client_id: values.oauthConfig.client_id || "",
-      client_secret: values.oauthConfig.client_secret || undefined,
+      // Only include client_secret if no BYOS vault path is set
+      client_secret: values.oauthClientSecretVaultPath
+        ? undefined
+        : values.oauthConfig.client_secret || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
       default_scopes: ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
+
+    // BYOS: Include OAuth client secret vault path if set
+    if (values.oauthClientSecretVaultPath) {
+      data.oauthClientSecretVaultPath = values.oauthClientSecretVaultPath;
+    }
+
     // Clear userConfig when using OAuth
     data.userConfig = {};
   } else if (values.authMethod === "pat") {

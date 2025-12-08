@@ -16,12 +16,12 @@ describe("SecretModel", () => {
       expect(secret.isVault).toBe(false);
       expect(secret.vaultPath).toBeNull();
     });
-  });
 
-  describe("createWithVaultPath", () => {
-    test("should create a BYOS secret with vault path", async () => {
-      const secret = await SecretModel.createWithVaultPath({
+    test("should create a secret with vault path", async () => {
+      const secret = await SecretModel.create({
         name: "external-secret",
+        secret: {},
+        isVault: true,
         vaultPath: "secret/data/engineering/api-keys",
       });
 
@@ -52,84 +52,6 @@ describe("SecretModel", () => {
       const found = await SecretModel.findById(crypto.randomUUID());
 
       expect(found).toBeNull();
-    });
-  });
-
-  describe("isExternalVaultSecret", () => {
-    test("should return true for BYOS secret", async () => {
-      const secret = await SecretModel.createWithVaultPath({
-        name: "byos-secret",
-        vaultPath: "secret/data/team/credentials",
-      });
-
-      const isExternal = await SecretModel.isExternalVaultSecret(secret.id);
-
-      expect(isExternal).toBe(true);
-    });
-
-    test("should return false for regular secret", async () => {
-      const secret = await SecretModel.create({
-        name: "regular-secret",
-        secret: { KEY: "value" },
-        isVault: false,
-      });
-
-      const isExternal = await SecretModel.isExternalVaultSecret(secret.id);
-
-      expect(isExternal).toBe(false);
-    });
-
-    test("should return false for Archestra-managed vault secret", async () => {
-      const secret = await SecretModel.create({
-        name: "archestra-vault-secret",
-        secret: { KEY: "value" },
-        isVault: true,
-        // No vaultPath - it's Archestra-managed
-      });
-
-      const isExternal = await SecretModel.isExternalVaultSecret(secret.id);
-
-      expect(isExternal).toBe(false);
-    });
-  });
-
-  describe("findByVaultPathPrefix", () => {
-    test("should find secrets matching path prefix", async () => {
-      await SecretModel.createWithVaultPath({
-        name: "secret-1",
-        vaultPath: "secret/data/engineering/api-keys",
-      });
-      await SecretModel.createWithVaultPath({
-        name: "secret-2",
-        vaultPath: "secret/data/engineering/db-creds",
-      });
-      await SecretModel.createWithVaultPath({
-        name: "secret-3",
-        vaultPath: "secret/data/finance/budgets",
-      });
-
-      const secrets = await SecretModel.findByVaultPathPrefix(
-        "secret/data/engineering",
-      );
-
-      expect(secrets).toHaveLength(2);
-      expect(secrets.map((s) => s.name).sort()).toEqual([
-        "secret-1",
-        "secret-2",
-      ]);
-    });
-
-    test("should return empty array when no matches", async () => {
-      await SecretModel.createWithVaultPath({
-        name: "unrelated",
-        vaultPath: "secret/data/other/path",
-      });
-
-      const secrets = await SecretModel.findByVaultPathPrefix(
-        "secret/data/engineering",
-      );
-
-      expect(secrets).toEqual([]);
     });
   });
 

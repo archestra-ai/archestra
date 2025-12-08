@@ -1,7 +1,7 @@
 "use client";
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Plus, Settings, Trash2, Users } from "lucide-react";
+import { Link2, Plus, Settings, Trash2, Users, Vault } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,18 +30,22 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
+import { useFeatureFlag } from "@/lib/features.hook";
 import { TeamExternalGroupsDialog } from "./team-external-groups-dialog";
 import { TeamMembersDialog } from "./team-members-dialog";
+import { TeamVaultFolderDialog } from "./team-vault-folder-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
 
 export function TeamsList() {
   const queryClient = useQueryClient();
+  const byosEnabled = useFeatureFlag("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [externalGroupsDialogOpen, setExternalGroupsDialogOpen] =
     useState(false);
+  const [vaultFolderDialogOpen, setVaultFolderDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
@@ -181,6 +185,24 @@ export function TeamsList() {
                       <Settings className="mr-2 h-4 w-4" />
                       Manage Members
                     </PermissionButton>
+                    {byosEnabled && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <PermissionButton
+                            permissions={{ team: ["update"] }}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTeam(team);
+                              setVaultFolderDialogOpen(true);
+                            }}
+                          >
+                            <Vault className="h-4 w-4" />
+                          </PermissionButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Configure Vault Folder</TooltipContent>
+                      </Tooltip>
+                    )}
                     {config.enterpriseLicenseActivated && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -301,6 +323,11 @@ export function TeamsList() {
           <TeamExternalGroupsDialog
             open={externalGroupsDialogOpen}
             onOpenChange={setExternalGroupsDialogOpen}
+            team={selectedTeam}
+          />
+          <TeamVaultFolderDialog
+            open={vaultFolderDialogOpen}
+            onOpenChange={setVaultFolderDialogOpen}
             team={selectedTeam}
           />
         </>

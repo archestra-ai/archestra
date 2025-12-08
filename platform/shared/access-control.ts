@@ -251,6 +251,7 @@ export const RouteId = {
   DeleteTeamVaultFolder: "deleteTeamVaultFolder",
   CheckTeamVaultFolderConnectivity: "checkTeamVaultFolderConnectivity",
   ListTeamVaultFolderSecrets: "listTeamVaultFolderSecrets",
+  GetTeamVaultSecretKeys: "getTeamVaultSecretKeys",
 
   // Role Routes
   GetRoles: "getRoles",
@@ -645,6 +646,9 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["update"],
   },
   [RouteId.ListTeamVaultFolderSecrets]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeamVaultSecretKeys]: {
     team: ["read"],
   },
   [RouteId.GetRoles]: {

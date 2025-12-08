@@ -1,12 +1,13 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { ChatSettingsModel } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import logger from "@/logging";
+import { ChatSettingsModel, SecretModel } from "@/models";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
+  ChatSettingsResponseSchema,
   constructResponseSchema,
-  SelectChatSettingsSchema,
 } from "@/types";
 
 const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -17,11 +18,27 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatSettings,
         description: "Get chat settings for the organization",
         tags: ["Chat Settings"],
-        response: constructResponseSchema(SelectChatSettingsSchema),
+        response: constructResponseSchema(ChatSettingsResponseSchema),
       },
     },
     async ({ organizationId }, reply) => {
-      return reply.send(await ChatSettingsModel.getOrCreate(organizationId));
+      const settings = await ChatSettingsModel.getOrCreate(organizationId);
+
+      // If there's an API key secret, check if it's from BYOS Vault
+      let externalVaultSecretPath: string | null = null;
+      if (settings.anthropicApiKeySecretId) {
+        const secret = await SecretModel.findById(
+          settings.anthropicApiKeySecretId,
+        );
+        if (secret?.vaultPath) {
+          externalVaultSecretPath = secret.vaultPath;
+        }
+      }
+
+      return reply.send({
+        ...settings,
+        externalVaultSecretPath,
+      });
     },
   );
 
@@ -36,8 +53,10 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           anthropicApiKey: z.string().optional(),
           resetApiKey: z.boolean().optional(),
+          // For BYOS (Bring Your Own Secrets) - external Vault path
+          externalVaultSecret: z.string().optional(),
         }),
-        response: constructResponseSchema(SelectChatSettingsSchema),
+        response: constructResponseSchema(ChatSettingsResponseSchema),
       },
     },
     async ({ body, organizationId }, reply) => {
@@ -53,8 +72,33 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await secretManager.deleteSecret(secretId);
         }
         secretId = null;
+      } else if (body.externalVaultSecret) {
+        // BYOS flow - create a secret reference to external Vault path
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "BYOS (Bring Your Own Secrets) is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+          );
+        }
+
+        // Delete existing secret if any
+        if (secretId) {
+          await secretManager.deleteSecret(secretId);
+        }
+
+        // Create new secret reference
+        const secret = await secretManager.createSecret(
+          { __vaultPath: body.externalVaultSecret },
+          "chat-anthropic-api-key-vault-secret",
+        );
+        secretId = secret.id;
+        logger.info(
+          { secretId: secret.id, vaultPath: body.externalVaultSecret },
+          "Created BYOS external vault secret reference for chat API key",
+        );
       } else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
-        // If API key is provided, create or update secret
+        // If API key is provided directly, create or update secret
         if (secretId) {
           // Update existing secret
           await secretManager.updateSecret(secretId, {
@@ -79,7 +123,19 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Chat settings not found");
       }
 
-      return reply.send(updated);
+      // Get the vault path if this is a BYOS secret
+      let externalVaultSecretPath: string | null = null;
+      if (secretId) {
+        const secret = await SecretModel.findById(secretId);
+        if (secret?.vaultPath) {
+          externalVaultSecretPath = secret.vaultPath;
+        }
+      }
+
+      return reply.send({
+        ...updated,
+        externalVaultSecretPath,
+      });
     },
   );
 };

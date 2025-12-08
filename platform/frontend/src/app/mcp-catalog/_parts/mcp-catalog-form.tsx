@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Info } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -26,7 +26,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { VaultSecretSelector } from "@/components/vault-secret-selector";
 import config from "@/lib/config";
+import { useFeatureFlag } from "@/lib/features.hook";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -83,6 +85,28 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
+  const environmentVars = form.watch("localConfig.environment") || [];
+
+  // Get secret-type env var keys for BYOS hint
+  const secretEnvVarKeys = environmentVars
+    .filter((env) => env.type === "secret")
+    .map((env) => env.key)
+    .filter((key) => key); // Filter out empty keys
+
+  // BYOS (Bring Your Own Secrets) state
+  const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
+  const [oauthVaultSecretPath, setOauthVaultSecretPath] = useState<
+    string | null
+  >(null);
+  const [localConfigVaultTeamId, setLocalConfigVaultTeamId] = useState<
+    string | null
+  >(null);
+  const [localConfigVaultSecretPath, setLocalConfigVaultSecretPath] = useState<
+    string | null
+  >(null);
+
+  // Check if BYOS feature is available (enterprise license)
+  const showByosOption = useFeatureFlag("byosEnabled");
 
   // Use field array for environment variables
   const { fields, append, remove } = useFieldArray({
@@ -90,10 +114,30 @@ export function McpCatalogForm({
     name: "localConfig.environment",
   });
 
+  // Update form values when BYOS paths change
+  useEffect(() => {
+    form.setValue(
+      "oauthClientSecretVaultPath",
+      oauthVaultSecretPath || undefined,
+    );
+  }, [oauthVaultSecretPath, form]);
+
+  useEffect(() => {
+    form.setValue(
+      "localConfigVaultPath",
+      localConfigVaultSecretPath || undefined,
+    );
+  }, [localConfigVaultSecretPath, form]);
+
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
     if (initialValues) {
       form.reset(transformCatalogItemToFormValues(initialValues));
+      // Reset BYOS state on initial values change
+      setOauthVaultTeamId(null);
+      setOauthVaultSecretPath(null);
+      setLocalConfigVaultTeamId(null);
+      setLocalConfigVaultSecretPath(null);
     }
   }, [initialValues, form]);
 
@@ -234,6 +278,17 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
+
+              {/* BYOS: Vault Secret Selector for Local Config Secrets - only shown when there are secret-type env vars */}
+              {showByosOption && secretEnvVarKeys.length > 0 && (
+                <VaultSecretSelector
+                  selectedTeamId={localConfigVaultTeamId}
+                  selectedSecretPath={localConfigVaultSecretPath}
+                  onTeamChange={setLocalConfigVaultTeamId}
+                  onSecretChange={setLocalConfigVaultSecretPath}
+                  expectedKeyHint={secretEnvVarKeys.join(", ")}
+                />
+              )}
 
               <EnvironmentVariablesFormField
                 control={form.control}
@@ -437,24 +492,35 @@ export function McpCatalogForm({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="oauthConfig.client_secret"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Client Secret</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="your-client-secret (optional)"
-                          className="font-mono"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* BYOS: Vault Secret Selector for OAuth Client Secret */}
+                {showByosOption ? (
+                  <VaultSecretSelector
+                    selectedTeamId={oauthVaultTeamId}
+                    selectedSecretPath={oauthVaultSecretPath}
+                    onTeamChange={setOauthVaultTeamId}
+                    onSecretChange={setOauthVaultSecretPath}
+                    expectedKeyHint="client_secret"
+                  />
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="oauthConfig.client_secret"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Client Secret</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            placeholder="your-client-secret (optional)"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}

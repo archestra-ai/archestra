@@ -3,7 +3,6 @@ import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
-import jmespath from "jmespath";
 import { jwtDecode } from "jwt-decode";
 import { auth } from "@/auth/better-auth";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/auth/sso-team-sync-cache";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { evaluateRoleMappingTemplate } from "@/templating";
 
 import type {
   InsertSsoProvider,
@@ -45,19 +45,19 @@ export type SsoGetRoleData = Parameters<
 
 class SsoProviderModel {
   /**
-   * Evaluates role mapping rules against SSO user data using JMESPath expressions.
+   * Evaluates role mapping rules against SSO user data using Handlebars templates.
    *
    * @example
    * // Map users with "admin" in their groups array to admin role
-   * { expression: "contains(groups || `[]`, 'admin')", role: "admin" }
+   * { expression: "{{#includes groups \"admin\"}}true{{/includes}}", role: "admin" }
    *
    * @example
    * // Map users with specific department
-   * { expression: "department == 'Engineering'", role: "member" }
+   * { expression: "{{#equals department \"Engineering\"}}true{{/equals}}", role: "member" }
    *
    * @example
-   * // Map users with role claim
-   * { expression: "roles[?@ == 'archestra-admin'] | [0]", role: "admin" }
+   * // Map users with specific role in roles array
+   * { expression: "{{#each roles}}{{#equals this \"archestra-admin\"}}true{{/equals}}{{/each}}", role: "admin" }
    */
   static evaluateRoleMapping(
     config: SsoRoleMappingConfig | undefined,
@@ -95,16 +95,8 @@ class SsoProviderModel {
     // Evaluate rules in order, first match wins
     for (const rule of config.rules) {
       try {
-        const result = jmespath.search(data, rule.expression);
-
-        // JMESPath returns null for no match, so we check for truthy values
-        // This handles: true, non-empty strings, non-empty arrays, non-null objects
-        const matches =
-          Boolean(result) &&
-          (typeof result !== "object" ||
-            (Array.isArray(result)
-              ? result.length > 0
-              : Object.keys(result as Record<string, unknown>).length > 0));
+        // Use Handlebars template evaluation
+        const matches = evaluateRoleMappingTemplate(rule.expression, data);
 
         if (matches) {
           logger.info(
@@ -162,10 +154,10 @@ class SsoProviderModel {
 
   /**
    * Dynamic role assignment based on SSO provider role mapping configuration.
-   * Uses JMESPath expressions to evaluate user attributes from the IdP.
+   * Uses Handlebars templates to evaluate user attributes from the IdP.
    *
    * Supports:
-   * - JMESPath-based role mapping rules
+   * - Handlebars-based role mapping rules
    * - Strict mode: Deny login if no rules match
    * - Skip role sync: Only set role on first login
    *
@@ -221,7 +213,10 @@ class SsoProviderModel {
                 ...tokenClaims,
                 ...((userInfo as Record<string, unknown>) || {}),
               };
-              const groups = extractGroupsFromClaims(combinedClaims);
+              const groups = extractGroupsFromClaims(
+                combinedClaims,
+                ssoProvider.teamSyncConfig,
+              );
               if (groups.length > 0) {
                 cacheSsoGroups(
                   provider.providerId,
@@ -291,7 +286,10 @@ class SsoProviderModel {
             ...tokenClaims,
             ...((userInfo as Record<string, unknown>) || {}),
           };
-          const groups = extractGroupsFromClaims(combinedClaims);
+          const groups = extractGroupsFromClaims(
+            combinedClaims,
+            ssoProvider.teamSyncConfig,
+          );
           if (groups.length > 0) {
             cacheSsoGroups(
               provider.providerId,
@@ -312,7 +310,10 @@ class SsoProviderModel {
           ...(token as Record<string, unknown>),
           ...((userInfo as Record<string, unknown>) || {}),
         };
-        const groups = extractGroupsFromClaims(combinedClaims);
+        const groups = extractGroupsFromClaims(
+          combinedClaims,
+          ssoProvider.teamSyncConfig,
+        );
         if (groups.length > 0) {
           cacheSsoGroups(
             provider.providerId,
@@ -383,6 +384,9 @@ class SsoProviderModel {
       roleMapping: provider.roleMapping
         ? JSON.parse(provider.roleMapping as unknown as string)
         : undefined,
+      teamSyncConfig: provider.teamSyncConfig
+        ? JSON.parse(provider.teamSyncConfig as unknown as string)
+        : undefined,
     }));
   }
 
@@ -415,6 +419,9 @@ class SsoProviderModel {
       roleMapping: ssoProvider.roleMapping
         ? JSON.parse(ssoProvider.roleMapping as unknown as string)
         : undefined,
+      teamSyncConfig: ssoProvider.teamSyncConfig
+        ? JSON.parse(ssoProvider.teamSyncConfig as unknown as string)
+        : undefined,
     };
   }
 
@@ -444,6 +451,9 @@ class SsoProviderModel {
         : undefined,
       roleMapping: ssoProvider.roleMapping
         ? JSON.parse(ssoProvider.roleMapping as unknown as string)
+        : undefined,
+      teamSyncConfig: ssoProvider.teamSyncConfig
+        ? JSON.parse(ssoProvider.teamSyncConfig as unknown as string)
         : undefined,
     };
   }
@@ -513,12 +523,17 @@ class SsoProviderModel {
      * See: https://github.com/better-auth/better-auth/issues/6481
      * TODO: Remove this workaround once the upstream issue is fixed.
      */
-    // Also store roleMapping if provided (Better Auth doesn't handle this field)
-    // Note: roleMapping is stored as JSON text but typed as object in Drizzle schema
+    // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
+    // Note: These are stored as JSON text but typed as objects in Drizzle schema
     const roleMappingJson = data.roleMapping
       ? typeof data.roleMapping === "string"
         ? data.roleMapping
         : JSON.stringify(data.roleMapping)
+      : undefined;
+    const teamSyncConfigJson = data.teamSyncConfig
+      ? typeof data.teamSyncConfig === "string"
+        ? data.teamSyncConfig
+        : JSON.stringify(data.teamSyncConfig)
       : undefined;
     await db
       .update(schema.ssoProvidersTable)
@@ -526,6 +541,10 @@ class SsoProviderModel {
         domainVerified: true,
         ...(roleMappingJson && {
           roleMapping: roleMappingJson as unknown as typeof data.roleMapping,
+        }),
+        ...(teamSyncConfigJson && {
+          teamSyncConfig:
+            teamSyncConfigJson as unknown as typeof data.teamSyncConfig,
         }),
       })
       .where(eq(schema.ssoProvidersTable.id, provider.id));
@@ -544,6 +563,11 @@ class SsoProviderModel {
           ? JSON.parse(data.roleMapping)
           : data.roleMapping
         : undefined,
+      teamSyncConfig: data.teamSyncConfig
+        ? typeof data.teamSyncConfig === "string"
+          ? JSON.parse(data.teamSyncConfig)
+          : data.teamSyncConfig
+        : undefined,
     };
   }
 
@@ -561,14 +585,20 @@ class SsoProviderModel {
       return null;
     }
 
-    // Serialize roleMapping if provided as object
-    // Note: roleMapping is stored as JSON text but typed as object in Drizzle schema
-    const { roleMapping, ...restData } = data;
+    // Serialize roleMapping and teamSyncConfig if provided as objects
+    // Note: These are stored as JSON text but typed as objects in Drizzle schema
+    const { roleMapping, teamSyncConfig, ...restData } = data;
     const roleMappingJson =
       roleMapping !== undefined
         ? typeof roleMapping === "string" || roleMapping === null
           ? roleMapping
           : JSON.stringify(roleMapping)
+        : undefined;
+    const teamSyncConfigJson =
+      teamSyncConfig !== undefined
+        ? typeof teamSyncConfig === "string" || teamSyncConfig === null
+          ? teamSyncConfig
+          : JSON.stringify(teamSyncConfig)
         : undefined;
 
     // Update in database
@@ -581,6 +611,10 @@ class SsoProviderModel {
         domainVerified: true,
         ...(roleMappingJson !== undefined && {
           roleMapping: roleMappingJson as unknown as typeof roleMapping,
+        }),
+        ...(teamSyncConfigJson !== undefined && {
+          teamSyncConfig:
+            teamSyncConfigJson as unknown as typeof teamSyncConfig,
         }),
       })
       .where(
@@ -603,6 +637,9 @@ class SsoProviderModel {
         : undefined,
       roleMapping: updatedProvider.roleMapping
         ? JSON.parse(updatedProvider.roleMapping as unknown as string)
+        : undefined,
+      teamSyncConfig: updatedProvider.teamSyncConfig
+        ? JSON.parse(updatedProvider.teamSyncConfig as unknown as string)
         : undefined,
     };
   }

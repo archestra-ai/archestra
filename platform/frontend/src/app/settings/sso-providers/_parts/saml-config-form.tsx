@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { RoleMappingForm } from "./role-mapping-form";
+import { TeamSyncConfigForm } from "./team-sync-config-form";
 
 interface SamlConfigFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
@@ -368,6 +369,8 @@ export function SamlConfigForm({ form, hideProviderId }: SamlConfigFormProps) {
       </div>
 
       <RoleMappingForm form={form} />
+
+      <TeamSyncConfigForm form={form} />
     </div>
   );
 }

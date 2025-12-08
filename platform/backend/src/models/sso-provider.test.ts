@@ -657,9 +657,13 @@ describe("evaluateRoleMapping", () => {
     test("uses combined data source by default (merges token and userInfo)", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "tokenClaim == 'from-token'", role: "token-role" },
           {
-            expression: "userInfoClaim == 'from-userinfo'",
+            expression: '{{#equals tokenClaim "from-token"}}true{{/equals}}',
+            role: "token-role",
+          },
+          {
+            expression:
+              '{{#equals userInfoClaim "from-userinfo"}}true{{/equals}}',
             role: "userinfo-role",
           },
         ],
@@ -681,7 +685,12 @@ describe("evaluateRoleMapping", () => {
     test("combined data source prefers userInfo over token for conflicting keys", () => {
       const config: SsoRoleMappingConfig = {
         dataSource: "combined",
-        rules: [{ expression: "role == 'from-userinfo'", role: "admin" }],
+        rules: [
+          {
+            expression: '{{#equals role "from-userinfo"}}true{{/equals}}',
+            role: "admin",
+          },
+        ],
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
@@ -700,8 +709,14 @@ describe("evaluateRoleMapping", () => {
       const config: SsoRoleMappingConfig = {
         dataSource: "userInfo",
         rules: [
-          { expression: "tokenOnly == 'value'", role: "should-not-match" },
-          { expression: "userInfoOnly == 'value'", role: "userinfo-role" },
+          {
+            expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
+            role: "should-not-match",
+          },
+          {
+            expression: '{{#equals userInfoOnly "value"}}true{{/equals}}',
+            role: "userinfo-role",
+          },
         ],
       };
 
@@ -722,8 +737,14 @@ describe("evaluateRoleMapping", () => {
       const config: SsoRoleMappingConfig = {
         dataSource: "token",
         rules: [
-          { expression: "userInfoOnly == 'value'", role: "should-not-match" },
-          { expression: "tokenOnly == 'value'", role: "token-role" },
+          {
+            expression: '{{#equals userInfoOnly "value"}}true{{/equals}}',
+            role: "should-not-match",
+          },
+          {
+            expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
+            role: "token-role",
+          },
         ],
       };
 
@@ -743,7 +764,12 @@ describe("evaluateRoleMapping", () => {
     test("token data source handles missing token gracefully", () => {
       const config: SsoRoleMappingConfig = {
         dataSource: "token",
-        rules: [{ expression: "tokenOnly == 'value'", role: "admin" }],
+        rules: [
+          {
+            expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
+            role: "admin",
+          },
+        ],
         defaultRole: "member",
       };
 
@@ -760,10 +786,15 @@ describe("evaluateRoleMapping", () => {
     });
   });
 
-  describe("JMESPath expression evaluation", () => {
+  describe("Handlebars template evaluation", () => {
     test("matches simple equality expression", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "role == 'administrator'", role: "admin" }],
+        rules: [
+          {
+            expression: '{{#equals role "administrator"}}true{{/equals}}',
+            role: "admin",
+          },
+        ],
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
@@ -777,11 +808,12 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("matches contains expression for groups array", () => {
+    test("matches includes expression for groups array", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
           {
-            expression: "contains(groups || `[]`, 'archestra-admins')",
+            expression:
+              '{{#includes groups "archestra-admins"}}true{{/includes}}',
             role: "admin",
           },
         ],
@@ -798,10 +830,13 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("handles null groups with fallback", () => {
+    test("handles null groups gracefully", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admin')", role: "admin" },
+          {
+            expression: '{{#includes groups "admin"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         defaultRole: "member",
       };
@@ -817,10 +852,14 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("matches array element check with filter", () => {
+    test("matches array element check with each loop", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "roles[?@ == 'platform-admin'] | [0]", role: "admin" },
+          {
+            expression:
+              '{{#each roles}}{{#equals this "platform-admin"}}true{{/equals}}{{/each}}',
+            role: "admin",
+          },
         ],
       };
 
@@ -838,7 +877,11 @@ describe("evaluateRoleMapping", () => {
     test("matches compound expressions with AND", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "department == 'IT' && title != null", role: "admin" },
+          {
+            expression:
+              '{{#and department title}}{{#equals department "IT"}}true{{/equals}}{{/and}}',
+            role: "admin",
+          },
         ],
       };
 
@@ -853,11 +896,16 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("matches compound expressions with OR", () => {
+    test("matches compound expressions with OR (using multiple rules)", () => {
+      // OR logic is implemented using multiple rules - first match wins
       const config: SsoRoleMappingConfig = {
         rules: [
           {
-            expression: "contains(groups || `[]`, 'admins') || role == 'admin'",
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#equals role "admin"}}true{{/equals}}',
             role: "admin",
           },
         ],
@@ -874,9 +922,14 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("does not match when expression evaluates to false", () => {
+    test("does not match when expression evaluates to empty", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "role == 'administrator'", role: "admin" }],
+        rules: [
+          {
+            expression: '{{#equals role "administrator"}}true{{/equals}}',
+            role: "admin",
+          },
+        ],
         defaultRole: "member",
       };
 
@@ -893,7 +946,13 @@ describe("evaluateRoleMapping", () => {
 
     test("does not match empty array result", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "groups[?@ == 'non-existent']", role: "admin" }],
+        rules: [
+          {
+            expression:
+              '{{#each groups}}{{#equals this "non-existent"}}true{{/equals}}{{/each}}',
+            role: "admin",
+          },
+        ],
         defaultRole: "member",
       };
 
@@ -908,9 +967,9 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("does not match null result from expression", () => {
+    test("does not match empty result from expression", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "nonExistentField", role: "admin" }],
+        rules: [{ expression: "{{nonExistentField}}", role: "admin" }],
         defaultRole: "member",
       };
 
@@ -919,14 +978,14 @@ describe("evaluateRoleMapping", () => {
         provider: mockProvider,
       });
 
-      // JMESPath returns null for missing fields
+      // Handlebars template renders empty for missing fields
       expect(result.matched).toBe(false);
       expect(result.role).toBe("member");
     });
 
-    test("matches boolean true result", () => {
+    test("matches when if helper evaluates to truthy", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "isAdmin", role: "admin" }],
+        rules: [{ expression: "{{#if isAdmin}}true{{/if}}", role: "admin" }],
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
@@ -940,9 +999,9 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("does not match boolean false result", () => {
+    test("does not match when if helper evaluates to falsy", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "isAdmin", role: "admin" }],
+        rules: [{ expression: "{{#if isAdmin}}true{{/if}}", role: "admin" }],
         defaultRole: "member",
       };
 
@@ -957,9 +1016,14 @@ describe("evaluateRoleMapping", () => {
       });
     });
 
-    test("matches non-empty string result", () => {
+    test("matches when exists helper finds value", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "adminGroup", role: "admin" }],
+        rules: [
+          {
+            expression: "{{#exists adminGroup}}true{{/exists}}",
+            role: "admin",
+          },
+        ],
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
@@ -975,7 +1039,7 @@ describe("evaluateRoleMapping", () => {
 
     test("does not match empty string result", () => {
       const config: SsoRoleMappingConfig = {
-        rules: [{ expression: "adminGroup", role: "admin" }],
+        rules: [{ expression: "{{adminGroup}}", role: "admin" }],
         defaultRole: "member",
       };
 
@@ -996,11 +1060,17 @@ describe("evaluateRoleMapping", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
           {
-            expression: "contains(groups || `[]`, 'super-admins')",
+            expression: '{{#includes groups "super-admins"}}true{{/includes}}',
             role: "super_admin",
           },
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
-          { expression: "contains(groups || `[]`, 'users')", role: "member" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
+          {
+            expression: '{{#includes groups "users"}}true{{/includes}}',
+            role: "member",
+          },
         ],
       };
 
@@ -1018,8 +1088,14 @@ describe("evaluateRoleMapping", () => {
     test("evaluates rules in order until first match", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "role == 'super-admin'", role: "super_admin" },
-          { expression: "role == 'admin'", role: "admin" },
+          {
+            expression: '{{#equals role "super-admin"}}true{{/equals}}',
+            role: "super_admin",
+          },
+          {
+            expression: '{{#equals role "admin"}}true{{/equals}}',
+            role: "admin",
+          },
           { expression: "true", role: "member" }, // Catch-all
         ],
       };
@@ -1037,11 +1113,14 @@ describe("evaluateRoleMapping", () => {
   });
 
   describe("error handling", () => {
-    test("continues to next rule on JMESPath syntax error", () => {
+    test("continues to next rule on Handlebars syntax error", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "invalid[[[syntax", role: "broken" }, // Invalid JMESPath
-          { expression: "role == 'admin'", role: "admin" },
+          { expression: "{{#invalid}}", role: "broken" }, // Invalid Handlebars
+          {
+            expression: '{{#equals role "admin"}}true{{/equals}}',
+            role: "admin",
+          },
         ],
       };
 
@@ -1059,8 +1138,8 @@ describe("evaluateRoleMapping", () => {
     test("uses default role when all rules have errors", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "invalid[[[syntax", role: "broken1" },
-          { expression: "also[[[invalid", role: "broken2" },
+          { expression: "{{#invalid}}", role: "broken1" },
+          { expression: "{{#alsoInvalid}}", role: "broken2" },
         ],
         defaultRole: "fallback",
       };
@@ -1081,7 +1160,10 @@ describe("evaluateRoleMapping", () => {
     test("returns error when strict mode is enabled and no rules match", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         strictMode: true,
       };
@@ -1119,7 +1201,10 @@ describe("evaluateRoleMapping", () => {
     test("returns matched role when strict mode is enabled and a rule matches", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         strictMode: true,
       };
@@ -1138,7 +1223,10 @@ describe("evaluateRoleMapping", () => {
     test("returns default role when strict mode is disabled and no rules match", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         strictMode: false,
         defaultRole: "member",
@@ -1162,11 +1250,13 @@ describe("evaluateRoleMapping", () => {
         dataSource: "combined",
         rules: [
           {
-            expression: "contains(groups || `[]`, 'Archestra-Admins')",
+            expression:
+              '{{#includes groups "Archestra-Admins"}}true{{/includes}}',
             role: "admin",
           },
           {
-            expression: "contains(groups || `[]`, 'Archestra-Users')",
+            expression:
+              '{{#includes groups "Archestra-Users"}}true{{/includes}}',
             role: "member",
           },
         ],
@@ -1206,7 +1296,7 @@ describe("evaluateRoleMapping", () => {
         rules: [
           {
             expression:
-              "contains(groups || `[]`, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890')",
+              '{{#includes groups "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}}true{{/includes}}',
             role: "admin",
           },
         ],
@@ -1232,9 +1322,14 @@ describe("evaluateRoleMapping", () => {
     test("Keycloak realm roles mapping", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
-          { expression: "roles[?@ == 'archestra-admin'] | [0]", role: "admin" },
           {
-            expression: "roles[?@ == 'archestra-editor'] | [0]",
+            expression:
+              '{{#each roles}}{{#equals this "archestra-admin"}}true{{/equals}}{{/each}}',
+            role: "admin",
+          },
+          {
+            expression:
+              '{{#each roles}}{{#equals this "archestra-editor"}}true{{/equals}}{{/each}}',
             role: "editor",
           },
         ],
@@ -1262,10 +1357,14 @@ describe("evaluateRoleMapping", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
           {
-            expression: "department == 'IT' && jobTitle == 'Administrator'",
+            expression:
+              '{{#and department jobTitle}}{{#equals department "IT"}}{{#equals jobTitle "Administrator"}}true{{/equals}}{{/equals}}{{/and}}',
             role: "admin",
           },
-          { expression: "department == 'IT'", role: "power_user" },
+          {
+            expression: '{{#equals department "IT"}}true{{/equals}}',
+            role: "power_user",
+          },
         ],
         defaultRole: "member",
       };
@@ -1293,16 +1392,15 @@ describe("evaluateRoleMapping", () => {
     });
 
     test("multi-tenant SaaS with organization roles", () => {
+      // Using flat role structure since Handlebars doesn't support complex filtering
       const config: SsoRoleMappingConfig = {
         rules: [
           {
-            expression:
-              "contains(organizations[?name == 'Acme Corp'].roles[] || `[]`, 'owner')",
+            expression: '{{#includes orgRoles "owner"}}true{{/includes}}',
             role: "admin",
           },
           {
-            expression:
-              "contains(organizations[?name == 'Acme Corp'].roles[] || `[]`, 'member')",
+            expression: '{{#includes orgRoles "member"}}true{{/includes}}',
             role: "member",
           },
         ],
@@ -1312,10 +1410,7 @@ describe("evaluateRoleMapping", () => {
       // Organization owner
       const ownerResult = SsoProviderModel.evaluateRoleMapping(config, {
         userInfo: {
-          organizations: [
-            { name: "Acme Corp", roles: ["owner", "billing"] },
-            { name: "Other Org", roles: ["member"] },
-          ],
+          orgRoles: ["owner", "billing"],
         },
         provider: mockProvider,
       });
@@ -1324,7 +1419,7 @@ describe("evaluateRoleMapping", () => {
       // Organization member
       const memberResult = SsoProviderModel.evaluateRoleMapping(config, {
         userInfo: {
-          organizations: [{ name: "Acme Corp", roles: ["member"] }],
+          orgRoles: ["member"],
         },
         provider: mockProvider,
       });
@@ -1333,7 +1428,7 @@ describe("evaluateRoleMapping", () => {
       // Not part of organization (strict mode denies)
       const outsiderResult = SsoProviderModel.evaluateRoleMapping(config, {
         userInfo: {
-          organizations: [{ name: "Other Company", roles: ["owner"] }],
+          orgRoles: [], // No roles
         },
         provider: mockProvider,
       });
@@ -1386,7 +1481,10 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         defaultRole: "member",
       };
@@ -1412,7 +1510,10 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         defaultRole: "viewer",
       };
@@ -1438,7 +1539,12 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         dataSource: "token",
-        rules: [{ expression: "role == 'super-admin'", role: "admin" }],
+        rules: [
+          {
+            expression: '{{#equals role "super-admin"}}true{{/equals}}',
+            role: "admin",
+          },
+        ],
         defaultRole: "member",
       };
       const provider = await makeSsoProvider(org.id, {
@@ -1466,7 +1572,10 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         strictMode: true,
       };
@@ -1495,7 +1604,10 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         strictMode: true,
       };
@@ -1528,7 +1640,10 @@ describe("resolveSsoRole", () => {
 
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         skipRoleSync: true,
       };
@@ -1559,7 +1674,10 @@ describe("resolveSsoRole", () => {
 
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         skipRoleSync: true,
       };
@@ -1591,7 +1709,10 @@ describe("resolveSsoRole", () => {
 
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         skipRoleSync: false,
       };
@@ -1621,11 +1742,13 @@ describe("resolveSsoRole", () => {
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
           {
-            expression: "contains(groups || `[]`, 'Archestra-Admins')",
+            expression:
+              '{{#includes groups "Archestra-Admins"}}true{{/includes}}',
             role: "admin",
           },
           {
-            expression: "contains(groups || `[]`, 'Archestra-Users')",
+            expression:
+              '{{#includes groups "Archestra-Users"}}true{{/includes}}',
             role: "member",
           },
         ],
@@ -1655,9 +1778,14 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "roles[?@ == 'archestra-admin'] | [0]", role: "admin" },
           {
-            expression: "roles[?@ == 'archestra-editor'] | [0]",
+            expression:
+              '{{#each roles}}{{#equals this "archestra-admin"}}true{{/equals}}{{/each}}',
+            role: "admin",
+          },
+          {
+            expression:
+              '{{#each roles}}{{#equals this "archestra-editor"}}true{{/equals}}{{/each}}',
             role: "editor",
           },
         ],
@@ -1694,7 +1822,7 @@ describe("resolveSsoRole", () => {
         rules: [
           {
             expression:
-              "contains(groups || `[]`, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890')",
+              '{{#includes groups "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}}true{{/includes}}',
             role: "admin",
           },
         ],
@@ -1730,7 +1858,10 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         rules: [
-          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
         ],
         defaultRole: "member",
       };
@@ -1833,7 +1964,12 @@ describe("resolveSsoRole", () => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
         dataSource: "token",
-        rules: [{ expression: "role == 'admin'", role: "admin" }],
+        rules: [
+          {
+            expression: '{{#equals role "admin"}}true{{/equals}}',
+            role: "admin",
+          },
+        ],
         defaultRole: "member",
       };
       const provider = await makeSsoProvider(org.id, {

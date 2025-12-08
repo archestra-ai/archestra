@@ -13665,6 +13665,11 @@ export type GetSsoProvidersResponses = {
             strictMode?: boolean;
             skipRoleSync?: boolean;
         };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            enabled?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
@@ -13776,6 +13781,11 @@ export type CreateSsoProviderData = {
             dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            enabled?: boolean;
         };
         userId?: string | null;
         providerId: string;
@@ -13951,6 +13961,11 @@ export type CreateSsoProviderResponses = {
             dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            enabled?: boolean;
         };
         userId: string | null;
         providerId: string;
@@ -14215,6 +14230,11 @@ export type GetSsoProviderResponses = {
             strictMode?: boolean;
             skipRoleSync?: boolean;
         };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            enabled?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
@@ -14326,6 +14346,11 @@ export type UpdateSsoProviderData = {
             dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            enabled?: boolean;
         };
         providerId?: string;
         domain?: string;
@@ -14502,6 +14527,11 @@ export type UpdateSsoProviderResponses = {
             dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            enabled?: boolean;
         };
         userId: string | null;
         providerId: string;

@@ -1,0 +1,32 @@
+# Enforce LF line endings for all text files
+# This prevents CRLF issues on Windows that can break shell scripts, env files, and Tiltfiles
+* text=auto eol=lf
+
+# Explicitly mark certain file types as text with LF
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.env* text eol=lf
+Tiltfile text eol=lf
+Dockerfile text eol=lf
+
+# Binary files - don't modify
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.tgz binary

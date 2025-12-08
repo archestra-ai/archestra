@@ -1,4 +1,7 @@
+import fs from "node:fs/promises";
+import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import config from "@/config";
 import logger from "@/logging";
@@ -288,7 +291,6 @@ export class VaultSecretManager implements SecretManager {
     const tokenPath = this.config.k8sTokenPath as string;
 
     try {
-      const fs = await import("node:fs/promises");
       const jwt = await fs.readFile(tokenPath, "utf-8");
 
       const result = await this.client.kubernetesLogin({
@@ -390,9 +392,6 @@ export class VaultSecretManager implements SecretManager {
     };
     serverIdHeader?: string;
   }): Promise<{ headers: Record<string, string> }> {
-    const { SignatureV4 } = await import("@smithy/signature-v4");
-    const { Sha256 } = await import("@aws-crypto/sha256-js");
-
     const url = new URL(options.url);
     const headers: Record<string, string> = {
       host: url.host,

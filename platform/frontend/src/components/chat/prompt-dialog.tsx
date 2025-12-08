@@ -166,12 +166,8 @@ export function PromptDialog({
               permissions={{ profile: ["read"] }}
               noPermissionHandle="tooltip"
             >
-              {({ isDisabled }) => {
-                return isDisabled ? (
-                  <Badge variant="outline" className="text-xs">
-                    Unable to show the list of profiles
-                  </Badge>
-                ) : (
+              {({ hasPermission }) => {
+                return hasPermission === undefined ? null : hasPermission ? (
                   <Select value={agentId} onValueChange={setProfileId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a profile" />
@@ -184,6 +180,10 @@ export function PromptDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    Unable to show the list of profiles
+                  </Badge>
                 );
               }}
             </WithPermissions>
@@ -192,16 +192,16 @@ export function PromptDialog({
                 permissions={{ profile: ["read"] }}
                 noPermissionHandle="tooltip"
               >
-                {({ isDisabled }) => {
-                  return isDisabled ? (
-                    <Badge variant="outline" className="text-xs">
-                      Unable to show the list of tools
-                    </Badge>
-                  ) : (
+                {({ hasPermission }) => {
+                  return hasPermission === undefined ? null : hasPermission ? (
                     <McpToolsDisplay
                       agentId={agentId}
                       className="text-xs text-muted-foreground"
                     />
+                  ) : (
+                    <Badge variant="outline" className="text-xs">
+                      Unable to show the list of tools
+                    </Badge>
                   );
                 }}
               </WithPermissions>

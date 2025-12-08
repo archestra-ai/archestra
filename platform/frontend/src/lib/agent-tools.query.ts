@@ -93,21 +93,26 @@ export function useAssignTool() {
       toolId,
       credentialSourceMcpServerId,
       executionSourceMcpServerId,
+      useDynamicTeamCredential,
     }: {
       agentId: string;
       toolId: string;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
+      useDynamicTeamCredential?: boolean;
     }) => {
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
         body:
-          credentialSourceMcpServerId || executionSourceMcpServerId
+          credentialSourceMcpServerId ||
+          executionSourceMcpServerId ||
+          useDynamicTeamCredential !== undefined
             ? {
                 credentialSourceMcpServerId:
                   credentialSourceMcpServerId || undefined,
                 executionSourceMcpServerId:
                   executionSourceMcpServerId || undefined,
+                useDynamicTeamCredential,
               }
             : undefined,
       });

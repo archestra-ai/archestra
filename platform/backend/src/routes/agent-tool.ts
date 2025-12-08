@@ -105,6 +105,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
             executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+            useDynamicTeamCredential: z.boolean().optional(),
           })
           .nullish(),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -112,14 +113,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const { credentialSourceMcpServerId, executionSourceMcpServerId } =
-        request.body || {};
+      const {
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+        useDynamicTeamCredential,
+      } = request.body || {};
 
       const result = await assignToolToAgent(
         agentId,
         toolId,
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
+        undefined,
+        useDynamicTeamCredential,
       );
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -148,6 +154,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               toolId: UuidIdSchema,
               credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
               executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+              useDynamicTeamCredential: z.boolean().optional(),
             }),
           ),
         }),
@@ -220,6 +227,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
             preFetchedData,
+            assignment.useDynamicTeamCredential,
           ),
         ),
       );
@@ -360,12 +368,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
+          useDynamicTeamCredential: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
-      const { credentialSourceMcpServerId, executionSourceMcpServerId } = body;
+      const {
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+        useDynamicTeamCredential,
+      } = body;
 
       // Get the agent-tool relationship for validation (needed for both credential and execution source)
       let agentToolForValidation:
@@ -423,23 +436,27 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentToolForValidation.tool.catalogId,
         );
         // Check if tool is from local server and executionSourceMcpServerId is being set to null
+        // (allowed if useDynamicTeamCredential is being set to true)
         if (
           catalogItem?.serverType === "local" &&
-          !executionSourceMcpServerId
+          !executionSourceMcpServerId &&
+          !useDynamicTeamCredential
         ) {
           throw new ApiError(
             400,
-            "Execution source installation is required for local MCP server tools and cannot be set to null",
+            "Execution source installation or dynamic team credential is required for local MCP server tools",
           );
         }
         // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+        // (allowed if useDynamicTeamCredential is being set to true)
         if (
           catalogItem?.serverType === "remote" &&
-          !credentialSourceMcpServerId
+          !credentialSourceMcpServerId &&
+          !useDynamicTeamCredential
         ) {
           throw new ApiError(
             400,
-            "Credential source is required for remote MCP server tools and cannot be set to null",
+            "Credential source or dynamic team credential is required for remote MCP server tools",
           );
         }
       }
@@ -563,6 +580,7 @@ export async function assignToolToAgent(
     toolsMap?: Map<string, Tool>;
     catalogItemsMap?: Map<string, InternalMcpCatalog>;
   },
+  useDynamicTeamCredential?: boolean,
 ): Promise<
   | {
       status: 400 | 404;
@@ -618,25 +636,25 @@ export async function assignToolToAgent(
     }
 
     if (catalogItem?.serverType === "local") {
-      if (!executionSourceMcpServerId) {
+      if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
         return {
           status: 400,
           error: {
             message:
-              "Execution source installation is required for local MCP server tools",
+              "Execution source installation or dynamic team credential is required for local MCP server tools",
             type: "validation_error",
           },
         };
       }
     }
-    // Check if tool is from remote server (requires credentialSourceMcpServerId)
+    // Check if tool is from remote server (requires credentialSourceMcpServerId OR useDynamicTeamCredential)
     if (catalogItem?.serverType === "remote") {
-      if (!credentialSourceMcpServerId) {
+      if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
         return {
           status: 400,
           error: {
             message:
-              "Credential source is required for remote MCP server tools",
+              "Credential source or dynamic team credential is required for remote MCP server tools",
             type: "validation_error",
           },
         };
@@ -674,6 +692,7 @@ export async function assignToolToAgent(
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
+    useDynamicTeamCredential,
   );
 
   // Return appropriate status

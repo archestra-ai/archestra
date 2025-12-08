@@ -13,7 +13,10 @@ import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { InstallationSelect } from "@/components/installation-select";
 import { LoadingSpinner } from "@/components/loading";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -531,17 +534,23 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
 
           // Show InstallationSelect for local servers, TokenSelect for remote
           if (isLocalServer) {
+            // Show dynamic value if useDynamicTeamCredential is true
+            const currentValue = row.original.useDynamicTeamCredential
+              ? DYNAMIC_CREDENTIAL_VALUE
+              : row.original.executionSourceMcpServerId;
+
             return (
               <InstallationSelect
-                value={row.original.executionSourceMcpServerId}
+                value={currentValue}
                 onValueChange={(value) => {
-                  // Prevent clearing required field
-                  if (value !== null) {
-                    agentToolPatchMutation.mutate({
-                      id: row.original.id,
-                      executionSourceMcpServerId: value,
-                    });
-                  }
+                  if (value === null) return;
+
+                  const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
+                  agentToolPatchMutation.mutate({
+                    id: row.original.id,
+                    executionSourceMcpServerId: isDynamic ? null : value,
+                    useDynamicTeamCredential: isDynamic,
+                  });
                 }}
                 catalogId={row.original.tool.catalogId ?? ""}
                 className="h-8 w-[200px] text-xs"
@@ -550,17 +559,23 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             );
           }
 
+          // Show dynamic value if useDynamicTeamCredential is true
+          const currentValue = row.original.useDynamicTeamCredential
+            ? DYNAMIC_CREDENTIAL_VALUE
+            : row.original.credentialSourceMcpServerId;
+
           return (
             <TokenSelect
-              value={row.original.credentialSourceMcpServerId}
+              value={currentValue}
               onValueChange={(value) => {
-                // Prevent clearing required field
-                if (value !== null) {
-                  agentToolPatchMutation.mutate({
-                    id: row.original.id,
-                    credentialSourceMcpServerId: value,
-                  });
-                }
+                if (value === null) return;
+
+                const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
+                agentToolPatchMutation.mutate({
+                  id: row.original.id,
+                  credentialSourceMcpServerId: isDynamic ? null : value,
+                  useDynamicTeamCredential: isDynamic,
+                });
               }}
               catalogId={row.original.tool.catalogId ?? ""}
               className="h-8 w-[200px] text-xs"

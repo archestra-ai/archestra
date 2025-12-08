@@ -12,6 +12,8 @@ import {
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
 } from "@/llm-metrics";
 import {
   AgentModel,
@@ -25,7 +27,7 @@ import {
   constructResponseSchema,
   UuidIdSchema,
 } from "@/types";
-import { PROXY_API_PREFIX } from "./common";
+import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";
 
@@ -313,7 +315,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   },
                 };
                 reply.raw.write(
-                  `event: content_block_delta\ndata: ${JSON.stringify(startEvent)}\n\n`,
+                  `event: content_block_delta\ndata: ${JSON.stringify(
+                    startEvent,
+                  )}\n\n`,
                 );
               }
             : undefined,
@@ -332,7 +336,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   },
                 };
                 reply.raw.write(
-                  `event: content_block_delta\ndata: ${JSON.stringify(progressEvent)}\n\n`,
+                  `event: content_block_delta\ndata: ${JSON.stringify(
+                    progressEvent,
+                  )}\n\n`,
                 );
               }
             : undefined,
@@ -384,6 +390,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
+        // Track timing for TTFT and tokens/sec metrics
+        const streamStartTime = Date.now();
+        let firstChunkTime: number | undefined;
+
         // Handle streaming response with span to measure LLM call duration
         const messageStream = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
@@ -422,6 +432,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           for await (const event of messageStream) {
+            // Capture time to first token on first event
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+              reportTimeToFirstToken(
+                "anthropic",
+                resolvedAgent,
+                model,
+                ttftSeconds,
+              );
+            }
+
             events.push(event);
 
             // Stream message_start event immediately (contains message metadata)
@@ -560,7 +582,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             };
             reply.raw.write(
-              `event: content_block_start\ndata: ${JSON.stringify(startEvent)}\n\n`,
+              `event: content_block_start\ndata: ${JSON.stringify(
+                startEvent,
+              )}\n\n`,
             );
 
             const refusalEvent = {
@@ -572,7 +596,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             };
             reply.raw.write(
-              `event: content_block_delta\ndata: ${JSON.stringify(refusalEvent)}\n\n`,
+              `event: content_block_delta\ndata: ${JSON.stringify(
+                refusalEvent,
+              )}\n\n`,
             );
 
             const stopEvent = {
@@ -580,7 +606,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               index: 0,
             };
             reply.raw.write(
-              `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
+              `event: content_block_stop\ndata: ${JSON.stringify(
+                stopEvent,
+              )}\n\n`,
             );
             reportBlockedTools(
               "anthropic",
@@ -671,7 +699,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           fastify.log.info("Streaming message_delta event");
           reply.raw.write(
-            `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
+            `event: message_delta\ndata: ${JSON.stringify(
+              messageDeltaEvent,
+            )}\n\n`,
           );
           1;
 
@@ -735,6 +765,19 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (messageStartEvent.message.usage) {
               reportLLMTokens("anthropic", resolvedAgent, tokenUsage, model);
+
+              // Report tokens per second if we have output tokens and timing
+              if (tokenUsage.output && firstChunkTime) {
+                const totalDurationSeconds =
+                  (Date.now() - streamStartTime) / 1000;
+                reportTokensPerSecond(
+                  "anthropic",
+                  resolvedAgent,
+                  model,
+                  tokenUsage.output,
+                  totalDurationSeconds,
+                );
+              }
             }
 
             const baselineCost = await utils.costOptimization.calculateCost(
@@ -1000,7 +1043,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         } else {
           // Headers not sent yet, send as SSE format string with 200 status
           // (streaming responses need 200 OK, error is in the stream content)
-          const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
+          const sseError = `event: error\ndata: ${JSON.stringify(
+            errorEvent,
+          )}\n\n`;
           return reply.status(200).send(sseError);
         }
         return reply;
@@ -1023,6 +1068,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${API_PREFIX}/v1${MESSAGES_SUFFIX}`,
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.AnthropicMessagesWithDefaultAgent,
         description: "Send a message to Anthropic using the default agent",
@@ -1051,6 +1097,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${API_PREFIX}/:agentId/v1${MESSAGES_SUFFIX}`,
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.AnthropicMessagesWithAgent,
         description:

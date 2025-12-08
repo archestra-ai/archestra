@@ -1,6 +1,5 @@
 import type { Permissions } from "@shared";
 import type React from "react";
-import type { ReactElement } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -14,7 +13,11 @@ type WithPermissionsProps = {
 } & (
   | {
       noPermissionHandle: "tooltip";
-      children: ({ isDisabled }: { isDisabled: boolean }) => ReactElement;
+      children: ({
+        hasPermission,
+      }: {
+        hasPermission: boolean | undefined;
+      }) => React.ReactNode;
     }
   | {
       noPermissionHandle: "hide";
@@ -27,12 +30,12 @@ export function WithPermissions({
   permissions,
   noPermissionHandle,
 }: WithPermissionsProps) {
-  const { data: hasPermission } = useHasPermissions(permissions);
+  const { data: hasPermission, isPending } = useHasPermissions(permissions);
 
   // if has permission, return children as is
   if (hasPermission) {
     return typeof children === "function"
-      ? children({ isDisabled: false })
+      ? children({ hasPermission: true })
       : children;
   }
 
@@ -48,7 +51,7 @@ export function WithPermissions({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="cursor-not-allowed">
-            {children({ isDisabled: true })}
+            {children({ hasPermission: isPending ? undefined : false })}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>

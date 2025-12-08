@@ -1,4 +1,3 @@
-import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 
@@ -574,6 +573,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       makeAdmin,
       makeOrganization,
       makeTeam,
+      makeTeamMember,
       makeAgent,
       makeTool,
       makeAgentTool,
@@ -584,20 +584,17 @@ describe("AgentToolModel.findAllPaginated", () => {
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
-      const agent1 = await makeAgent({ name: "Agent 1", teams: [team1.id] });
-      const agent2 = await makeAgent({ name: "Agent 2", teams: [team2.id] });
+      const agent1 = await makeAgent({
+        name: "Agent 1",
+        teams: [team1.id],
+      });
+      const agent2 = await makeAgent({
+        name: "Agent 2",
+        teams: [team2.id],
+      });
 
       // Add user to team1 via team membership
-      await db
-        .insert(schema.teamMembersTable)
-        .values({
-          id: crypto.randomUUID(),
-          teamId: team1.id,
-          userId: user.id,
-          role: "member",
-          createdAt: new Date(),
-        })
-        .returning();
+      await makeTeamMember(team1.id, user.id);
 
       const tool = await makeTool();
 

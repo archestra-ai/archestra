@@ -93,8 +93,14 @@ export function useCreateProfile() {
       const response = await createAgent({ body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens for the new profile
+      if (data?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["profileTokens", data.id],
+        });
+      }
     },
   });
 }
@@ -112,8 +118,12 @@ export function useUpdateProfile() {
       const response = await updateAgent({ path: { id }, body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
+      queryClient.invalidateQueries({
+        queryKey: ["profileTokens", variables.id],
+      });
     },
   });
 }

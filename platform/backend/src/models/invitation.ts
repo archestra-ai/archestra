@@ -11,14 +11,61 @@ import MemberModel from "./member";
 import SessionModel from "./session";
 
 class InvitationModel {
+  /**
+   * Get an invitation by its ID
+   */
   static async getById(invitationId: string) {
+    logger.debug(
+      { invitationId },
+      "InvitationModel.getById: fetching invitation",
+    );
     const [invitation] = await db
       .select()
       .from(schema.invitationsTable)
       .where(eq(schema.invitationsTable.id, invitationId))
       .limit(1);
-
+    logger.debug(
+      { invitationId, found: !!invitation },
+      "InvitationModel.getById: completed",
+    );
     return invitation;
+  }
+
+  /**
+   * Find all invitations for a given email address (case-insensitive)
+   * Used to auto-accept pending invitations on sign-in
+   */
+  static async findByEmail(email: string) {
+    logger.debug(
+      { email },
+      "InvitationModel.findByEmail: fetching invitations",
+    );
+    const invitations = await db
+      .select()
+      .from(schema.invitationsTable)
+      .where(eq(schema.invitationsTable.email, email.toLowerCase()));
+    logger.debug(
+      { email, count: invitations.length },
+      "InvitationModel.findByEmail: completed",
+    );
+    return invitations;
+  }
+
+  /**
+   * Find the first pending invitation for an email address
+   */
+  static async findPendingByEmail(email: string) {
+    logger.debug(
+      { email },
+      "InvitationModel.findPendingByEmail: fetching pending invitation",
+    );
+    const invitations = await InvitationModel.findByEmail(email);
+    const pending = invitations.find((inv) => inv.status === "pending");
+    logger.debug(
+      { email, found: !!pending },
+      "InvitationModel.findPendingByEmail: completed",
+    );
+    return pending;
   }
 
   /**
@@ -31,6 +78,10 @@ class InvitationModel {
     user: BetterAuthSessionUser,
     invitationId: string,
   ) {
+    logger.debug(
+      { sessionId, userId: user.id, invitationId },
+      "InvitationModel.accept: processing invitation",
+    );
     logger.info(
       `🔗 Processing invitation ${invitationId} for user ${user.email}`,
     );
@@ -60,6 +111,10 @@ class InvitationModel {
       logger.info(
         `✅ Invitation accepted: user ${user.email} added to organization ${organizationId} as ${role}`,
       );
+      logger.debug(
+        { invitationId, organizationId, role },
+        "InvitationModel.accept: completed successfully",
+      );
     } catch (error) {
       logger.error(
         { err: error },
@@ -68,17 +123,35 @@ class InvitationModel {
     }
   }
 
+  /**
+   * Update an invitation with partial data
+   */
   static async patch(invitationId: string, data: Partial<UpdateInvitation>) {
-    return await db
+    logger.debug(
+      { invitationId, data },
+      "InvitationModel.patch: updating invitation",
+    );
+    const result = await db
       .update(schema.invitationsTable)
       .set(data)
       .where(eq(schema.invitationsTable.id, invitationId));
+    logger.debug({ invitationId }, "InvitationModel.patch: completed");
+    return result;
   }
 
+  /**
+   * Delete an invitation by its ID
+   */
   static async delete(invitationId: string) {
-    return await db
+    logger.debug(
+      { invitationId },
+      "InvitationModel.delete: deleting invitation",
+    );
+    const result = await db
       .delete(schema.invitationsTable)
       .where(eq(schema.invitationsTable.id, invitationId));
+    logger.debug({ invitationId }, "InvitationModel.delete: completed");
+    return result;
   }
 }
 

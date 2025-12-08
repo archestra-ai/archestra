@@ -350,7 +350,9 @@ function SsoProvidersSettingsContent() {
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <div className={`p-2 rounded-lg ${config.bgColor}`}>
+                  <div
+                    className={`p-2 rounded-lg ${config.bgColor} text-gray-900`}
+                  >
                     <SsoProviderIcon
                       providerId={config.providerId || config.id}
                       size={24}

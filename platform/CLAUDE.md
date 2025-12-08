@@ -154,6 +154,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
 ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
 ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default), "K8S", or "AWS"
+ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2  # Options: "1" or "2" (default: "2") - KV secrets engine version
 
 # Vault Token Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set)
 ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for TOKEN auth
@@ -162,7 +163,7 @@ ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for TOKEN auth
 ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=  # Required for K8S auth: Vault role bound to K8s service account
 ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH=  # Optional: Path to SA token (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
 ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT=  # Optional: Vault K8S auth mount point (default: kubernetes)
-ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=  # Optional: Path prefix for secrets in Vault KV v2 (default: secret/data/archestra)
+ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=  # Optional: Path prefix for secrets (default: "secret/data/archestra" for v2, "secret/archestra" for v1)
 ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH=  # Optional: Path prefix for secret metadata in Vault KV v2 (default: secretPath with /data/ replaced by /metadata/)
 
 # Vault AWS IAM Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=AWS)

@@ -1,5 +1,3 @@
-import { inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
 import logger from "@/logging";
 import { AgentTeamModel, OrganizationModel, TeamModel } from "@/models";
 
@@ -24,10 +22,7 @@ export async function shouldApplyToonCompression(
 
   if (agentTeamIds.length > 0) {
     // Get organizationId from agent's first team
-    const teams = await db
-      .select()
-      .from(schema.teamsTable)
-      .where(inArray(schema.teamsTable.id, agentTeamIds));
+    const teams = await TeamModel.findByIds(agentTeamIds);
     if (teams.length > 0 && teams[0].organizationId) {
       organizationId = teams[0].organizationId;
       logger.info(
@@ -37,13 +32,10 @@ export async function shouldApplyToonCompression(
     }
   } else {
     // If agent has no teams, use fallback to first organization in database
-    const existingOrgs = await db
-      .select({ id: schema.organizationsTable.id })
-      .from(schema.organizationsTable)
-      .limit(1);
+    const firstOrg = await OrganizationModel.getFirst();
 
-    if (existingOrgs.length > 0) {
-      organizationId = existingOrgs[0].id;
+    if (firstOrg) {
+      organizationId = firstOrg.id;
       logger.info(
         { agentId, organizationId },
         "TOON compression: agent has no teams - using fallback organization",

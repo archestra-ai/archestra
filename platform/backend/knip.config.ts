@@ -16,8 +16,6 @@ const config: KnipConfig = {
     "@shared",
     // Used in logging.ts
     "pino-pretty",
-    // Used in upload-sentry-sourcemaps.sh
-    "@sentry/cli",
   ],
   ignoreBinaries: [
     // biome is in root package.json

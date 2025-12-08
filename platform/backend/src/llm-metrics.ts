@@ -25,6 +25,8 @@ let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
 let llmBlockedToolCounter: client.Counter<string>;
 let llmCostTotal: client.Counter<string>;
+let llmTimeToFirstToken: client.Histogram<string>;
+let llmTokensPerSecond: client.Histogram<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -50,7 +52,9 @@ export function initializeMetrics(labelKeys: string[]): void {
     llmRequestDuration &&
     llmTokensCounter &&
     llmBlockedToolCounter &&
-    llmCostTotal
+    llmCostTotal &&
+    llmTimeToFirstToken &&
+    llmTokensPerSecond
   ) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
@@ -73,6 +77,12 @@ export function initializeMetrics(labelKeys: string[]): void {
     }
     if (llmCostTotal) {
       client.register.removeSingleMetric("llm_cost_total");
+    }
+    if (llmTimeToFirstToken) {
+      client.register.removeSingleMetric("llm_time_to_first_token_seconds");
+    }
+    if (llmTokensPerSecond) {
+      client.register.removeSingleMetric("llm_tokens_per_second");
     }
   } catch (_error) {
     // Ignore errors if metrics don't exist
@@ -117,8 +127,26 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
   });
 
+  llmTimeToFirstToken = new client.Histogram({
+    name: "llm_time_to_first_token_seconds",
+    help: "Time to first token in seconds (streaming latency)",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    // Buckets optimized for TTFT - typically faster than full response
+    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+  });
+
+  llmTokensPerSecond = new client.Histogram({
+    name: "llm_tokens_per_second",
+    help: "Output tokens per second throughput",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    // Buckets for tokens/sec throughput - typical range 10-200 tokens/sec
+    buckets: [5, 10, 25, 50, 75, 100, 150, 200, 300],
+  });
+
   logger.info(
-    `Metrics initialized with ${nextLabelKeys.length} agent label keys: ${nextLabelKeys.join(", ")}`,
+    `Metrics initialized with ${
+      nextLabelKeys.length
+    } agent label keys: ${nextLabelKeys.join(", ")}`,
   );
 }
 
@@ -221,6 +249,67 @@ export function reportLLMCost(
     return;
   }
   llmCostTotal.inc(buildMetricLabels(agent, { provider }, model), cost);
+}
+
+/**
+ * Reports time to first token (TTFT) for streaming LLM requests.
+ * This metric helps application developers understand streaming latency
+ * and choose models with lower initial response times.
+ * @param provider The LLM provider
+ * @param agent The agent/profile making the request
+ * @param model The model name
+ * @param ttftSeconds Time to first token in seconds
+ */
+export function reportTimeToFirstToken(
+  provider: SupportedProvider,
+  agent: Agent,
+  model: string | undefined,
+  ttftSeconds: number,
+): void {
+  if (!llmTimeToFirstToken) {
+    logger.warn("LLM metrics not initialized, skipping TTFT reporting");
+    return;
+  }
+  if (ttftSeconds <= 0) {
+    logger.warn("Invalid TTFT value, must be positive");
+    return;
+  }
+  llmTimeToFirstToken.observe(
+    buildMetricLabels(agent, { provider }, model),
+    ttftSeconds,
+  );
+}
+
+/**
+ * Reports tokens per second throughput for LLM requests.
+ * This metric allows comparing model response speeds and helps
+ * developers choose models for latency-sensitive applications.
+ * @param provider The LLM provider
+ * @param agent The agent/profile making the request
+ * @param model The model name
+ * @param outputTokens Number of output tokens generated
+ * @param durationSeconds Total request duration in seconds
+ */
+export function reportTokensPerSecond(
+  provider: SupportedProvider,
+  agent: Agent,
+  model: string | undefined,
+  outputTokens: number,
+  durationSeconds: number,
+): void {
+  if (!llmTokensPerSecond) {
+    logger.warn("LLM metrics not initialized, skipping tokens/sec reporting");
+    return;
+  }
+  if (durationSeconds <= 0 || outputTokens <= 0) {
+    // Skip reporting if no output tokens or invalid duration
+    return;
+  }
+  const tokensPerSecond = outputTokens / durationSeconds;
+  llmTokensPerSecond.observe(
+    buildMetricLabels(agent, { provider }, model),
+    tokensPerSecond,
+  );
 }
 
 /**

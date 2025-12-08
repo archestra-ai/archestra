@@ -10,6 +10,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   SessionModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
@@ -18,6 +19,7 @@ import type {
   Agent,
   AgentTool,
   InsertAccount,
+  InsertAgent,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
@@ -30,6 +32,7 @@ import type {
   InsertTeam,
   InsertUser,
   OrganizationRole,
+  TeamMember,
   Tool,
   ToolInvocation,
   TrustedData,
@@ -48,6 +51,7 @@ interface TestFixtures {
   makeAdmin: typeof makeAdmin;
   makeOrganization: typeof makeOrganization;
   makeTeam: typeof makeTeam;
+  makeTeamMember: typeof makeTeamMember;
   makeAgent: typeof makeAgent;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
@@ -148,15 +152,32 @@ async function makeTeam(
 }
 
 /**
+ * Creates a test team member using the TeamModel
+ */
+async function makeTeamMember(
+  teamId: string,
+  userId: string,
+  overrides: { role?: string; syncedFromSso?: boolean } = {},
+): Promise<TeamMember> {
+  return await TeamModel.addMember(
+    teamId,
+    userId,
+    overrides.role ?? MEMBER_ROLE_NAME,
+    overrides.syncedFromSso ?? false,
+  );
+}
+
+/**
  * Creates a test agent using the Agent model
  */
-async function makeAgent(
-  overrides: Partial<Pick<Agent, "name" | "teams" | "labels">> = {},
-): Promise<Agent> {
-  return await AgentModel.create({
+async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
+  const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
     teams: [],
     labels: [],
+  };
+  return await AgentModel.create({
+    ...defaults,
     ...overrides,
   });
 }
@@ -673,6 +694,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeTeam: async ({}, use) => {
     await use(makeTeam);
+  },
+  makeTeamMember: async ({}, use) => {
+    await use(makeTeamMember);
   },
   makeAgent: async ({}, use) => {
     await use(makeAgent);

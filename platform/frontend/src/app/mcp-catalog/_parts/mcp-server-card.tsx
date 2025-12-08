@@ -347,6 +347,7 @@ export function McpServerCard({
           size="sm"
           variant="link"
           className="h-7 text-xs"
+          data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
           Manage
         </Button>
@@ -580,6 +581,7 @@ export function McpServerCard({
                 responseModifierTemplate: null,
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
+                useDynamicTeamCredential: false,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,
@@ -629,7 +631,7 @@ export function McpServerCard({
 
   return (
     <Card
-      className="flex flex-col relative pt-4"
+      className="flex flex-col relative pt-4 h-full"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
       <CardHeader>
@@ -670,7 +672,7 @@ export function McpServerCard({
           {userIsMcpServerAdmin && manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
+      <CardContent className="flex flex-col gap-2 flex-grow">
         {isRemoteVariant ? remoteCardContent : localCardContent}
       </CardContent>
       {dialogs}

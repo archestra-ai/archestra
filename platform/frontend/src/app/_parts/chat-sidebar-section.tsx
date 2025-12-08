@@ -64,7 +64,6 @@ function getConversationDisplayTitle(
   return "New chat";
 }
 
-/** Reusable AI sparkle icon with consistent styling */
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
     <Sparkles

@@ -6,6 +6,7 @@ import { Copy, Key, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useProfile, useUpdateProfile } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   useProfileTokens,
   useRotateProfileToken,
@@ -37,7 +38,13 @@ interface ProfileTokenManagerProps {
 }
 
 export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
-  const { data: tokens, isLoading } = useProfileTokens(profileId);
+  const { data: hasProfileAdminPermission } = useHasPermissions({
+    profile: ["admin"],
+  });
+  const { data: tokens, isLoading } = useProfileTokens(
+    profileId,
+    hasProfileAdminPermission,
+  );
   const { data: profile } = useProfile(profileId);
   const { data: teams } = useQuery({
     queryKey: ["teams"],

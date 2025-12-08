@@ -4,11 +4,14 @@ import { toast } from "sonner";
 
 const { getProfileTokens, rotateProfileToken } = archestraApiSdk;
 
-export function useProfileTokens(profileId: string | undefined) {
+export function useProfileTokens(
+  profileId: string | undefined,
+  hasProfileAdminPermission: boolean,
+) {
   return useQuery({
     queryKey: ["profileTokens", profileId],
     queryFn: async () => {
-      if (!profileId) return [];
+      if (!profileId || !hasProfileAdminPermission) return [];
       const response = await getProfileTokens({ path: { profileId } });
       return response.data ?? [];
     },

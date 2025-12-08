@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useProfileTokens } from "@/lib/profile-token.query";
 
@@ -26,7 +27,10 @@ interface McpConnectionInstructionsProps {
 export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
-  const { data: tokens } = useProfileTokens(agentId);
+  const { data: hasProfileAdminPermission } = useHasPermissions({
+    profile: ["admin"],
+  });
+  const { data: tokens } = useProfileTokens(agentId, hasProfileAdminPermission);
 
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedAuth, setCopiedAuth] = useState(false);
@@ -76,7 +80,16 @@ export function McpConnectionInstructions({
     setTimeout(() => setCopiedUrl(false), 2000);
   }, [mcpUrl]);
 
-  const handleCopyAuth = useCallback(async () => {
+  const handleCopyAuthAsNonProfileAdmin = async () => {
+    await navigator.clipboard.writeText(
+      `Authorization: Bearer ${tokenForDisplay}`,
+    );
+    setCopiedAuth(true);
+    toast.success("Authorization header copied");
+    setTimeout(() => setCopiedAuth(false), 2000);
+  };
+
+  const handleCopyAuthAsProfileAdmin = useCallback(async () => {
     if (!selectedToken) {
       toast.error("No token selected");
       return;
@@ -103,7 +116,29 @@ export function McpConnectionInstructions({
     }
   }, [agentId, selectedToken]);
 
-  const handleCopyConfig = useCallback(async () => {
+  const handleCopyConfigAsNonProfileAdmin = async () => {
+    const fullConfig = JSON.stringify(
+      {
+        mcpServers: {
+          archestra: {
+            url: mcpUrl,
+            headers: {
+              Authorization: `Bearer ${tokenForDisplay}`,
+            },
+          },
+        },
+      },
+      null,
+      2,
+    );
+
+    await navigator.clipboard.writeText(fullConfig);
+    setCopiedConfig(true);
+    toast.success("Configuration copied");
+    setTimeout(() => setCopiedConfig(false), 2000);
+  };
+
+  const handleCopyConfigAsProfileAdmin = useCallback(async () => {
     if (!selectedToken) {
       toast.error("No token selected");
       return;
@@ -196,7 +231,15 @@ export function McpConnectionInstructions({
             <CodeText className="text-sm break-all">
               Authorization: Bearer {tokenForDisplay}
             </CodeText>
-            <Button variant="ghost" size="icon" onClick={handleCopyAuth}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={
+                hasProfileAdminPermission
+                  ? handleCopyAuthAsProfileAdmin
+                  : handleCopyAuthAsNonProfileAdmin
+              }
+            >
               {copiedAuth ? (
                 <Check className="h-4 w-4 text-green-500" />
               ) : (
@@ -224,7 +267,11 @@ export function McpConnectionInstructions({
               variant="ghost"
               size="icon"
               className="absolute top-2 right-2"
-              onClick={handleCopyConfig}
+              onClick={
+                hasProfileAdminPermission
+                  ? handleCopyConfigAsProfileAdmin
+                  : handleCopyConfigAsNonProfileAdmin
+              }
               disabled={isCopyingConfig}
             >
               {isCopyingConfig ? (

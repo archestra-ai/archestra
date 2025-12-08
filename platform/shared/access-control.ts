@@ -245,6 +245,12 @@ export const RouteId = {
   GetTeamExternalGroups: "getTeamExternalGroups",
   AddTeamExternalGroup: "addTeamExternalGroup",
   RemoveTeamExternalGroup: "removeTeamExternalGroup",
+  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
+  GetTeamVaultFolder: "getTeamVaultFolder",
+  SetTeamVaultFolder: "setTeamVaultFolder",
+  DeleteTeamVaultFolder: "deleteTeamVaultFolder",
+  CheckTeamVaultFolderConnectivity: "checkTeamVaultFolderConnectivity",
+  ListTeamVaultFolderSecrets: "listTeamVaultFolderSecrets",
 
   // Role Routes
   GetRoles: "getRoles",
@@ -623,6 +629,23 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.RemoveTeamExternalGroup]: {
     team: ["update"],
+  },
+  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
+  // Note: Additional team admin check is done in route handlers
+  [RouteId.GetTeamVaultFolder]: {
+    team: ["read"],
+  },
+  [RouteId.SetTeamVaultFolder]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeamVaultFolder]: {
+    team: ["update"],
+  },
+  [RouteId.CheckTeamVaultFolderConnectivity]: {
+    team: ["update"],
+  },
+  [RouteId.ListTeamVaultFolderSecrets]: {
+    team: ["read"],
   },
   [RouteId.GetRoles]: {
     organization: ["read"],

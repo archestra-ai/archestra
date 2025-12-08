@@ -37,6 +37,21 @@ local_resource(
   auto_init=False
 )
 
+# HashiCorp Vault in Docker (manual trigger)
+# Start with: tilt trigger vault-docker
+# Uses dev mode: auto-unsealed, in-memory storage, root token: dev-root-token
+# KV v2 engine already enabled at secret/ by default
+# .env: ARCHESTRA_SECRETS_MANAGER=Vault, ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200,
+#       ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token
+local_resource(
+  'vault-docker',
+  serve_cmd='docker compose -f docker-compose.vault.yml up',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
 # HashiCorp Vault in K8s (manual trigger)
 # Start with: tilt trigger vault
 load('ext://helm_remote', 'helm_remote')

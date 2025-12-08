@@ -2555,6 +2555,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "is_organization_token": {
+          "name": "is_organization_token",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "name": {
           "name": "name",
           "type": "varchar(256)",

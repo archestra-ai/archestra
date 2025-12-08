@@ -41,6 +41,7 @@
     "@fastify/swagger": "^9.6.1",
     "@google/genai": "^1.29.1",
     "@kubernetes/client-node": "^1.4.0",
+    "dockerode": "^4.0.6",
     "@kubiks/otel-drizzle": "^2.1.0",
     "@modelcontextprotocol/sdk": "^1.24.0",
     "@opentelemetry/api": "^1.9.0",
@@ -85,6 +86,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
     "@sentry/cli": "^2.47.0",
+    "@types/dockerode": "^3.3.37",
     "@types/jmespath": "^0.15.2",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.10.1",

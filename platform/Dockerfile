@@ -72,6 +72,9 @@ ENV ARCHESTRA_VERSION=${VERSION}
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_ANALYTICS="enabled"
 ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
+# Docker runtime is enabled by default for Docker deployments (no K8s config)
+# MCP servers will run as sibling Docker containers when Docker socket is mounted
+ENV ARCHESTRA_ORCHESTRATOR_DOCKER_ENABLED="true"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
 ENV ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="false"
 ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"

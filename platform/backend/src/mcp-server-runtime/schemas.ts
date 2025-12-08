@@ -1,11 +1,15 @@
 import { z } from "zod";
 
-export type K8sRuntimeStatus =
+// Common runtime status (used by both K8s and Docker)
+export type RuntimeStatus =
   | "not_initialized"
   | "initializing"
   | "running"
   | "error"
   | "stopped";
+
+// K8s-specific types (kept for backward compatibility)
+export type K8sRuntimeStatus = RuntimeStatus;
 
 export type K8sPodState =
   | "not_created"
@@ -25,6 +29,38 @@ export interface K8sPodStatusSummary {
 export interface K8sRuntimeStatusSummary {
   status: K8sRuntimeStatus;
   mcpServers: Record<string, K8sPodStatusSummary>;
+}
+
+// Docker-specific types
+export type DockerRuntimeStatus = RuntimeStatus;
+
+export type DockerPodState =
+  | "not_created"
+  | "pending"
+  | "running"
+  | "failed"
+  | "succeeded";
+
+export interface DockerPodStatusSummary {
+  state: DockerPodState;
+  message: string;
+  error: string | null;
+  containerName: string | null;
+  containerId: string | null;
+}
+
+export interface DockerRuntimeStatusSummary {
+  status: DockerRuntimeStatus;
+  mcpServers: Record<string, DockerPodStatusSummary>;
+}
+
+// Unified runtime status (can be either K8s or Docker)
+export type RuntimeType = "kubernetes" | "docker" | "none";
+
+export interface UnifiedRuntimeStatusSummary {
+  runtimeType: RuntimeType;
+  status: RuntimeStatus;
+  mcpServers: Record<string, K8sPodStatusSummary | DockerPodStatusSummary>;
 }
 
 export const AvailableToolAnalysisSchema = z.object({

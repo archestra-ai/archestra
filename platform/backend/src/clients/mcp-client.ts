@@ -17,6 +17,7 @@ import type {
   CommonToolResult,
   InternalMcpCatalog,
 } from "@/types";
+import { DockerAttachTransport } from "./docker-attach-transport";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
@@ -289,7 +290,7 @@ class McpClient {
         await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
 
       if (usesStreamableHttp) {
-        // HTTP transport
+        // HTTP transport (works for both K8s and Docker)
         const url =
           McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
@@ -303,18 +304,43 @@ class McpClient {
         });
       }
 
-      // Stdio transport - use K8s attach!
-      const k8sPod = McpServerRuntimeManager.getPod(targetMcpServerId);
-      if (!k8sPod) {
-        throw new Error("Pod not found for MCP server");
-      }
+      // Stdio transport - check runtime type and use appropriate transport
+      const runtimeType = McpServerRuntimeManager.currentRuntimeType;
 
-      return new K8sAttachTransport({
-        k8sAttach: k8sPod.k8sAttachClient,
-        namespace: k8sPod.k8sNamespace,
-        podName: k8sPod.k8sPodName,
-        containerName: "mcp-server",
-      });
+      if (runtimeType === "kubernetes") {
+        // K8s runtime - use K8s attach transport
+        const k8sPod = McpServerRuntimeManager.getK8sPod(targetMcpServerId);
+        if (!k8sPod) {
+          throw new Error("K8s pod not found for MCP server");
+        }
+
+        return new K8sAttachTransport({
+          k8sAttach: k8sPod.k8sAttachClient,
+          namespace: k8sPod.k8sNamespace,
+          podName: k8sPod.k8sPodName,
+          containerName: "mcp-server",
+        });
+      } else if (runtimeType === "docker") {
+        // Docker runtime - use Docker attach transport
+        const dockerPod =
+          McpServerRuntimeManager.getDockerPod(targetMcpServerId);
+        if (!dockerPod) {
+          throw new Error("Docker container not found for MCP server");
+        }
+
+        const containerId = dockerPod.id;
+        if (!containerId) {
+          throw new Error("Docker container ID not found");
+        }
+
+        return new DockerAttachTransport({
+          docker: dockerPod.dockerClient,
+          containerId,
+          containerName: dockerPod.name,
+        });
+      } else {
+        throw new Error("No runtime available for local MCP server");
+      }
     }
 
     // Remote server

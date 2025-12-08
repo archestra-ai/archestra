@@ -256,6 +256,29 @@ export default {
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
     },
+    docker: {
+      /**
+       * Enable Docker runtime for MCP servers.
+       * When enabled, MCP servers will run as Docker containers instead of K8s pods.
+       * This is useful for Docker deployments where K8s is not available.
+       *
+       * Set to "true" to enable, "auto" to auto-detect (default), or "false" to disable.
+       * When set to "auto", Docker will be used if K8s is not configured and Docker socket is available.
+       */
+      enabled:
+        process.env.ARCHESTRA_ORCHESTRATOR_DOCKER_ENABLED === "true" ||
+        process.env.ARCHESTRA_ORCHESTRATOR_DOCKER_ENABLED === "auto" ||
+        // Default to true if no K8s config is specified (for Docker deployments)
+        (!process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG &&
+          process.env
+            .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER !==
+            "true"),
+      /**
+       * Path to Docker socket.
+       * Defaults to /var/run/docker.sock on Linux/macOS or //./pipe/docker_engine on Windows.
+       */
+      socketPath: process.env.ARCHESTRA_ORCHESTRATOR_DOCKER_SOCKET_PATH,
+    },
   },
   observability: {
     otel: {

@@ -1,9 +1,7 @@
-import { ADMIN_ROLE_NAME } from '@shared';
-import {
-  predefinedPermissionsMap,
-} from "@shared/access-control.ee";
+import { ADMIN_ROLE_NAME } from "@shared";
+import { predefinedPermissionsMap } from "@shared/access-control.ee";
+import { getUserPermissions } from "@/models/user.ee";
 import { beforeEach, describe, expect, test } from "@/test";
-import { getUserPermissions } from '@/models/user.ee';
 
 describe("getUserPermissions", () => {
   let testOrgId: string;
@@ -54,10 +52,7 @@ describe("getUserPermissions", () => {
   test("should return empty permissions for non-existent user", async () => {
     const nonExistentUserId = crypto.randomUUID();
 
-    const result = await getUserPermissions(
-      nonExistentUserId,
-      testOrgId,
-    );
+    const result = await getUserPermissions(nonExistentUserId, testOrgId);
 
     expect(result).toEqual({});
   });
@@ -88,4 +83,3 @@ describe("getUserPermissions", () => {
     expect(result).toEqual({});
   });
 });
-

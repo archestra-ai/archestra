@@ -11,7 +11,8 @@ import {
 } from "@/types";
 
 const { hasPermission } = config.enterpriseLicenseActivated
-  ? await import("@/auth/utils.ee")
+  ? // biome-ignore lint/style/noRestrictedImports: dynamic import for conditional EE loading
+    await import("@/auth/utils.ee")
   : await import("@/auth/utils");
 
 const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {

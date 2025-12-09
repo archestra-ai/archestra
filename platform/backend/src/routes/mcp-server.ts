@@ -115,62 +115,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
 
-      // If externalVaultSecret is provided (BYOS flow), create a secret reference
-      if (externalVaultSecret && !secretId) {
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "BYOS (Bring Your Own Secrets) is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
-          );
-        }
-
-        // Use the standard createSecret interface with __vaultPath
-        // When BYOS_VAULT is configured, secretManager is a BYOSVaultSecretManager
-        const secret = await secretManager.createSecret(
-          { __vaultPath: externalVaultSecret },
-          `${serverData.name}-vault-secret`,
-        );
-        secretId = secret.id;
-        createdSecretId = secret.id;
-        logger.info(
-          { secretId: secret.id, vaultPath: externalVaultSecret },
-          "Created BYOS external vault secret reference",
-        );
-      }
-
-      // If accessToken is provided (PAT flow), create a secret for it
-      if (accessToken && !secretId) {
-        const secret = await secretManager.createSecret(
-          { access_token: accessToken },
-          `${serverData.name}-token`,
-        );
-        secretId = secret.id;
-        createdSecretId = secret.id;
-      }
-
-      // Validate connection if secretId is provided
-      if (secretId) {
-        const isValid = await McpServerModel.validateConnection(
-          serverData.name,
-          serverData.catalogId ?? undefined,
-          secretId,
-        );
-
-        if (!isValid) {
-          // Clean up the secret we just created if validation fails
-          if (createdSecretId) {
-            await secretManager.deleteSecret(createdSecretId);
-          }
-
-          throw new ApiError(
-            400,
-            "Failed to connect to MCP server with provided credentials",
-          );
-        }
-      }
-
-      // Fetch catalog item to get server type
+      // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
       if (serverData.catalogId) {
         catalogItem = await InternalMcpCatalogModel.findById(
@@ -183,12 +128,68 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
+      }
 
-        // Validate required environment variables for local servers
-        if (
-          catalogItem.serverType === "local" &&
-          catalogItem.localConfig?.environment
-        ) {
+      // For REMOTE servers: create secrets and validate connection
+      if (catalogItem?.serverType === "remote") {
+        // If externalVaultSecret is provided (BYOS flow), create a secret reference
+        if (externalVaultSecret && !secretId) {
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "BYOS (Bring Your Own Secrets) is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            );
+          }
+
+          const secret = await secretManager.createSecret(
+            { __vaultPath: externalVaultSecret },
+            `${serverData.name}-vault-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+          logger.info(
+            { secretId: secret.id, vaultPath: externalVaultSecret },
+            "Created BYOS external vault secret reference for remote server",
+          );
+        }
+
+        // If accessToken is provided (PAT flow), create a secret for it
+        if (accessToken && !secretId) {
+          const secret = await secretManager.createSecret(
+            { access_token: accessToken },
+            `${serverData.name}-token`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        // Validate connection for remote servers
+        if (secretId) {
+          const isValid = await McpServerModel.validateConnection(
+            serverData.name,
+            serverData.catalogId ?? undefined,
+            secretId,
+          );
+
+          if (!isValid) {
+            // Clean up the secret we just created if validation fails
+            if (createdSecretId) {
+              await secretManager.deleteSecret(createdSecretId);
+            }
+
+            throw new ApiError(
+              400,
+              "Failed to connect to MCP server with provided credentials",
+            );
+          }
+        }
+      }
+
+      // For LOCAL servers: validate env vars and create secrets (no connection validation, since pod will be started later)
+      if (catalogItem?.serverType === "local") {
+        // Validate required environment variables
+        if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
             (env) => env.promptOnInstallation && env.required,
           );
@@ -213,11 +214,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // For local servers, filter out secret-type env vars and store in database
-        if (
-          catalogItem.serverType === "local" &&
-          catalogItem.localConfig?.environment
-        ) {
+        // Handle BYOS external vault secret for local servers
+        if (externalVaultSecret && !secretId) {
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "BYOS (Bring Your Own Secrets) is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            );
+          }
+
+          const secret = await secretManager.createSecret(
+            { __vaultPath: externalVaultSecret },
+            `${serverData.name}-vault-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+          logger.info(
+            { secretId: secret.id, vaultPath: externalVaultSecret },
+            "Created BYOS external vault secret reference for local server",
+          );
+        }
+
+        // Collect and store secret-type env vars (if not using BYOS)
+        if (!secretId && catalogItem.localConfig?.environment) {
           const secretEnvVars: Record<string, string> = {};
 
           // Collect all secret-type env vars (both static and prompted)

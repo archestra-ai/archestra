@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
+import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -15,7 +16,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { VaultSecretSelector } from "@/components/vault-secret-selector";
 import { useFeatureFlag } from "@/lib/features.hook";
 
 type CatalogItem =
@@ -239,7 +239,7 @@ export function LocalServerInstallDialog({
 
                 {/* BYOS mode: Only vault selection allowed */}
                 {showByosOption ? (
-                  <VaultSecretSelector
+                  <ExternalSecretSelector
                     selectedTeamId={selectedTeamId}
                     selectedSecretPath={selectedSecretPath}
                     onTeamChange={setSelectedTeamId}

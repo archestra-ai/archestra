@@ -6,6 +6,7 @@ import { AlertCircle, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
+import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -26,7 +27,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { VaultSecretSelector } from "@/components/vault-secret-selector";
 import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
@@ -87,9 +87,9 @@ export function McpCatalogForm({
   const currentServerType = form.watch("serverType");
   const environmentVars = form.watch("localConfig.environment") || [];
 
-  // Get secret-type env var keys for BYOS hint
-  const secretEnvVarKeys = environmentVars
-    .filter((env) => env.type === "secret")
+  // Get NON-prompted secret-type env var keys for BYOS hint (these are stored with the catalog)
+  const nonPromptedSecretEnvVarKeys = environmentVars
+    .filter((env) => env.type === "secret" && !env.promptOnInstallation)
     .map((env) => env.key)
     .filter((key) => key); // Filter out empty keys
 
@@ -279,17 +279,6 @@ export function McpCatalogForm({
                 )}
               />
 
-              {/* BYOS: Vault Secret Selector for Local Config Secrets - only shown when there are secret-type env vars */}
-              {showByosOption && secretEnvVarKeys.length > 0 && (
-                <VaultSecretSelector
-                  selectedTeamId={localConfigVaultTeamId}
-                  selectedSecretPath={localConfigVaultSecretPath}
-                  onTeamChange={setLocalConfigVaultTeamId}
-                  onSecretChange={setLocalConfigVaultSecretPath}
-                  expectedKeyHint={secretEnvVarKeys.join(", ")}
-                />
-              )}
-
               <EnvironmentVariablesFormField
                 control={form.control}
                 fields={fields}
@@ -297,7 +286,21 @@ export function McpCatalogForm({
                 remove={remove}
                 fieldNamePrefix="localConfig.environment"
                 form={form}
+                useExternalSecretsManager={showByosOption}
               />
+
+              {/* BYOS: Vault Secret Selector for Local Config Secrets - only shown when there are NON-prompted secret-type env vars and not in edit mode */}
+              {mode === "create" &&
+                showByosOption &&
+                nonPromptedSecretEnvVarKeys.length > 0 && (
+                  <ExternalSecretSelector
+                    selectedTeamId={localConfigVaultTeamId}
+                    selectedSecretPath={localConfigVaultSecretPath}
+                    onTeamChange={setLocalConfigVaultTeamId}
+                    onSecretChange={setLocalConfigVaultSecretPath}
+                    expectedKeyHint={nonPromptedSecretEnvVarKeys.join(", ")}
+                  />
+                )}
 
               <FormField
                 control={form.control}
@@ -492,9 +495,9 @@ export function McpCatalogForm({
                   )}
                 />
 
-                {/* BYOS: Vault Secret Selector for OAuth Client Secret */}
-                {showByosOption ? (
-                  <VaultSecretSelector
+                {/* BYOS: External Secret Selector for OAuth Client Secret - only shown in create mode */}
+                {mode === "create" && showByosOption ? (
+                  <ExternalSecretSelector
                     selectedTeamId={oauthVaultTeamId}
                     selectedSecretPath={oauthVaultSecretPath}
                     onTeamChange={setOauthVaultTeamId}

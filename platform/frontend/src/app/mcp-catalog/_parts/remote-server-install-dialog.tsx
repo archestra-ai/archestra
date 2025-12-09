@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
 import { useState } from "react";
+import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { VaultSecretSelector } from "@/components/vault-secret-selector";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
 
@@ -311,7 +311,7 @@ export function RemoteServerInstallDialog({
           {/* Config fields - either BYOS vault selector or manual entry */}
           {hasConfig ? (
             showByosOption ? (
-              <VaultSecretSelector
+              <ExternalSecretSelector
                 selectedTeamId={vaultTeamId}
                 selectedSecretPath={vaultSecretPath}
                 onTeamChange={setVaultTeamId}

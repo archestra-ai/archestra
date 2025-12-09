@@ -3,6 +3,7 @@
 import { CheckCircle2, Key, Loader2, RotateCcw } from "lucide-react";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { VaultSecretSelector } from "@/components/vault-secret-selector";
 import {
   useChatSettings,
   useUpdateChatSettings,
@@ -197,7 +197,7 @@ function ChatSettingsContent() {
               ) : (
                 <>
                   {/* Show selector when no secret configured */}
-                  <VaultSecretSelector
+                  <ExternalSecretSelector
                     selectedTeamId={vaultTeamId}
                     selectedSecretPath={vaultSecretPath}
                     onTeamChange={setVaultTeamId}

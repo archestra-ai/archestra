@@ -499,10 +499,7 @@ export class VaultSecretManager implements SecretManager {
       throw error;
     }
 
-    throw new ApiError(
-      500,
-      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
-    );
+    throw new ApiError(500, extractVaultErrorMessage(error));
   }
 
   private getVaultPath(name: string, id: string): string {
@@ -987,34 +984,7 @@ export class BYOSVaultSecretManager implements SecretManager {
       throw error;
     }
 
-    // Extract status code and error message from Vault response
-    const vaultErr = error as {
-      response?: { statusCode?: number; body?: { errors?: string[] } };
-    };
-    const statusCode = vaultErr.response?.statusCode;
-    const vaultErrors = vaultErr.response?.body?.errors;
-    const vaultMessage = vaultErrors?.length
-      ? vaultErrors.join(", ")
-      : undefined;
-
-    // Map Vault status codes to appropriate HTTP status codes and messages
-    if (statusCode === 403) {
-      throw new ApiError(
-        403,
-        vaultMessage ||
-          "Access denied. Archestra does not have permission to read this secret from Vault.",
-      );
-    }
-
-    if (statusCode === 404) {
-      throw new ApiError(404, vaultMessage || "Secret not found in Vault.");
-    }
-
-    throw new ApiError(
-      500,
-      vaultMessage ||
-        "An error occurred while accessing external Vault secrets. Please try again later or contact your administrator.",
-    );
+    throw new ApiError(500, extractVaultErrorMessage(error));
   }
 
   // ============================================================

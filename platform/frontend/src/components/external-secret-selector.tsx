@@ -10,8 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useFeatureFlag } from "@/lib/features.hook";
-import { useTeams } from "@/lib/team.query";
+import { useTeamsWithVaultFolders } from "@/lib/team.query";
 import {
   useTeamVaultFolder,
   useTeamVaultFolderSecrets,
@@ -19,7 +25,7 @@ import {
   type VaultSecretListItem,
 } from "@/lib/team-vault-folder.query";
 
-interface VaultSecretSelectorProps {
+interface ExternalSecretSelectorProps {
   selectedTeamId: string | null;
   selectedSecretPath: string | null;
   onTeamChange: (teamId: string | null) => void;
@@ -29,16 +35,17 @@ interface VaultSecretSelectorProps {
   expectedKeyHint?: string;
 }
 
-export function VaultSecretSelector({
+export function ExternalSecretSelector({
   selectedTeamId,
   selectedSecretPath,
   onTeamChange,
   onSecretChange,
   disabled = false,
   expectedKeyHint,
-}: VaultSecretSelectorProps) {
+}: ExternalSecretSelectorProps) {
   const byosEnabled = useFeatureFlag("byosEnabled");
-  const { data: teams, isLoading: isLoadingTeams } = useTeams();
+  const { data: teamsWithVaultPaths, isLoading: isLoadingTeams } =
+    useTeamsWithVaultFolders();
   const {
     data: vaultFolder,
     isLoading: isLoadingVaultFolder,
@@ -62,8 +69,7 @@ export function VaultSecretSelector({
     return null;
   }
 
-  const teamsWithPotentialVault = teams || [];
-  const isLoading = isLoadingTeams || isLoadingVaultFolder || isLoadingSecrets;
+  const teams = teamsWithVaultPaths || [];
 
   // Parse expected keys and check which ones are present
   const expectedKeys = expectedKeyHint
@@ -93,37 +99,55 @@ export function VaultSecretSelector({
 
   return (
     <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
-      <span className="font-medium">Select external secret</span>
+      <span className="font-medium">Select external secret from Vault</span>
 
       {/* Show expected keys hint at the top */}
       {expectedKeyHint && (
         <p className="text-xs text-muted-foreground">
-          These secrets are expected -{" "}
+          Archestra expects the following keys to exist in this secret:{" "}
           <code className="font-mono bg-muted px-1 rounded">
             {expectedKeyHint}
           </code>
-          . Make sure these keys exist in the Vault secret.
         </p>
       )}
 
       {/* Team selector */}
       <div className="space-y-2">
         <Label htmlFor="vault-team">Team</Label>
+        <p className="text-xs text-muted-foreground">
+          Only teams where you are an admin and have a Vault folder configured
+          are shown.
+        </p>
         <Select
           value={selectedTeamId || "none"}
           onValueChange={handleTeamChange}
           disabled={disabled || isLoadingTeams}
         >
-          <SelectTrigger id="vault-team">
+          <SelectTrigger id="vault-team" className="w-64">
             <SelectValue placeholder="Select a team..." />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">-- Select a team --</SelectItem>
-            {teamsWithPotentialVault.map((team) => (
-              <SelectItem key={team.id} value={team.id}>
-                {team.name}
-              </SelectItem>
-            ))}
+            <TooltipProvider delayDuration={300}>
+              {teams.map((team) => (
+                <Tooltip key={team.id}>
+                  <TooltipTrigger asChild>
+                    <SelectItem value={team.id}>{team.name}</SelectItem>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    {team.vaultPath ? (
+                      <span className="font-mono text-xs">
+                        {team.vaultPath}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        No Vault folder configured
+                      </span>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </TooltipProvider>
           </SelectContent>
         </Select>
       </div>
@@ -174,7 +198,7 @@ export function VaultSecretSelector({
               onValueChange={handleSecretChange}
               disabled={disabled}
             >
-              <SelectTrigger id="vault-secret">
+              <SelectTrigger id="vault-secret" className="w-64">
                 <SelectValue placeholder="Select a secret..." />
               </SelectTrigger>
               <SelectContent>
@@ -189,14 +213,14 @@ export function VaultSecretSelector({
                 ))}
               </SelectContent>
             </Select>
-          ) : (
+          ) : Array.isArray(secrets) ? (
             <Alert variant="default">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
                 No secrets found in the configured Vault folder.
               </AlertDescription>
             </Alert>
-          )}
+          ) : null}
 
           {/* Key validation feedback */}
           {selectedSecretPath &&
@@ -223,20 +247,13 @@ export function VaultSecretSelector({
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Missing keys:{" "}
+                  Secret has missing keys:{" "}
                   <code className="font-mono bg-destructive/10 px-1 rounded">
                     {missingKeys.join(", ")}
                   </code>
                 </AlertDescription>
               </Alert>
             ) : null)}
-        </div>
-      )}
-
-      {isLoading && selectedTeamId && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading...
         </div>
       )}
     </div>

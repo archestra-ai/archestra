@@ -45,6 +45,8 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   };
   showLabel?: boolean;
   showDescription?: boolean;
+  /** When true, non-prompted secret values will be sourced from external secrets manager (Vault) */
+  useExternalSecretsManager?: boolean;
 }
 
 export function EnvironmentVariablesFormField<
@@ -58,6 +60,7 @@ export function EnvironmentVariablesFormField<
   form,
   showLabel = true,
   showDescription = true,
+  useExternalSecretsManager = false,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   return (
     <div className="space-y-1">
@@ -208,56 +211,98 @@ export function EnvironmentVariablesFormField<
                     </FormItem>
                   )}
                 />
-                {!promptOnInstallation ? (
-                  <FormField
-                    control={control}
-                    name={
-                      `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
-                    }
-                    render={({ field }) => {
-                      const envType = form.watch(
-                        `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
-                      );
+                {(() => {
+                  const envType = form.watch(
+                    `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
+                  );
 
-                      // Boolean type: render checkbox with label
-                      if (envType === "boolean") {
-                        // Normalize empty/undefined values to "false"
-                        const normalizedValue =
-                          field.value === "true" ? "true" : "false";
-                        if (field.value !== normalizedValue) {
-                          field.onChange(normalizedValue);
+                  // If prompted at installation, show placeholder text
+                  if (promptOnInstallation) {
+                    return (
+                      <div className="flex items-center h-10">
+                        <p className="text-xs text-muted-foreground">
+                          Prompted at installation
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  // If using external secrets manager and this is a secret type, show placeholder
+                  if (useExternalSecretsManager && envType === "secret") {
+                    return (
+                      <div className="flex items-center h-10">
+                        <p className="text-xs text-muted-foreground">
+                          External secrets manager
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  // Otherwise show the value input
+                  return (
+                    <FormField
+                      control={control}
+                      name={
+                        `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
+                      }
+                      render={({ field }) => {
+                        // Boolean type: render checkbox with label
+                        if (envType === "boolean") {
+                          // Normalize empty/undefined values to "false"
+                          const normalizedValue =
+                            field.value === "true" ? "true" : "false";
+                          if (field.value !== normalizedValue) {
+                            field.onChange(normalizedValue);
+                          }
+
+                          return (
+                            <FormItem>
+                              <FormControl>
+                                <div className="flex items-center gap-2 h-10">
+                                  <Checkbox
+                                    checked={normalizedValue === "true"}
+                                    onCheckedChange={(checked) =>
+                                      field.onChange(checked ? "true" : "false")
+                                    }
+                                  />
+                                  <span className="text-sm">
+                                    {normalizedValue === "true"
+                                      ? "True"
+                                      : "False"}
+                                  </span>
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
                         }
 
-                        return (
-                          <FormItem>
-                            <FormControl>
-                              <div className="flex items-center gap-2 h-10">
-                                <Checkbox
-                                  checked={normalizedValue === "true"}
-                                  onCheckedChange={(checked) =>
-                                    field.onChange(checked ? "true" : "false")
-                                  }
+                        // Number type: render number input
+                        if (envType === "number") {
+                          return (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="font-mono"
+                                  {...field}
                                 />
-                                <span className="text-sm">
-                                  {normalizedValue === "true"
-                                    ? "True"
-                                    : "False"}
-                                </span>
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }
 
-                      // Number type: render number input
-                      if (envType === "number") {
+                        // String/Secret types: render input
                         return (
                           <FormItem>
                             <FormControl>
                               <Input
-                                type="number"
-                                placeholder="0"
+                                type={
+                                  envType === "secret" ? "password" : "text"
+                                }
+                                placeholder="your-value"
                                 className="font-mono"
                                 {...field}
                               />
@@ -265,31 +310,10 @@ export function EnvironmentVariablesFormField<
                             <FormMessage />
                           </FormItem>
                         );
-                      }
-
-                      // String/Secret types: render input
-                      return (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              type={envType === "secret" ? "password" : "text"}
-                              placeholder="your-value"
-                              className="font-mono"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center h-10">
-                    <p className="text-xs text-muted-foreground">
-                      Prompted at installation
-                    </p>
-                  </div>
-                )}
+                      }}
+                    />
+                  );
+                })()}
                 <FormField
                   control={control}
                   name={

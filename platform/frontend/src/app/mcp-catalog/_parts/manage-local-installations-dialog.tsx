@@ -67,22 +67,22 @@ export function ManageLocalInstallationsDialog({
   const { data: allServers } = useMcpServers();
   const { data: allTeams } = useTeams();
 
-  type UserWithTeams = {
+  type UserWithTeam = {
     userId: string;
     email: string;
     createdAt: string;
     serverId: string;
-    teams: Array<{ teamId: string; name: string; createdAt: string }>;
+    team: { teamId: string; name: string; createdAt: string } | null;
   };
 
   // Find all local servers with the same catalogId and aggregate their user details
-  const userInstallations = useMemo((): UserWithTeams[] => {
+  const userInstallations = useMemo((): UserWithTeam[] => {
     if (!server?.catalogId || !allServers) {
       // Transform base userDetails to include required fields
       return (server?.userDetails || []).map((ud) => ({
         ...ud,
         serverId: server?.id || "",
-        teams: server?.teamDetails || [],
+        team: server?.teamDetails || null,
       }));
     }
 
@@ -92,7 +92,7 @@ export function ManageLocalInstallationsDialog({
     );
 
     // Aggregate user details from all servers
-    const aggregatedUserDetails: UserWithTeams[] = [];
+    const aggregatedUserDetails: UserWithTeam[] = [];
 
     for (const srv of localServers) {
       if (srv.userDetails) {
@@ -101,12 +101,12 @@ export function ManageLocalInstallationsDialog({
           if (
             !aggregatedUserDetails.some((ud) => ud.userId === userDetail.userId)
           ) {
-            // Get teams assigned to this user's server
-            const teamsForServer = srv.teamDetails || [];
+            // Get team assigned to this user's server (single team now)
+            const teamForServer = srv.teamDetails || null;
             aggregatedUserDetails.push({
               ...userDetail,
               serverId: srv.id,
-              teams: teamsForServer,
+              team: teamForServer,
             });
           }
         }
@@ -149,10 +149,10 @@ export function ManageLocalInstallationsDialog({
     (userId: string, teamId: string) => {
       if (!liveServer?.catalogId) return;
 
-      // Pass userId to grant access to the specific user's server/pod
+      // Now takes single teamId instead of array
       grantTeamAccessMutation.mutate({
         catalogId: liveServer.catalogId,
-        teamIds: [teamId],
+        teamId,
         userId,
       });
     },
@@ -168,13 +168,6 @@ export function ManageLocalInstallationsDialog({
     },
     [revokeTeamAccessMutation],
   );
-
-  const getUnassignedTeamsForUser = (
-    userTeams: Array<{ teamId: string; name: string; createdAt: string }>,
-  ) => {
-    const assignedTeamIds = new Set(userTeams.map((t) => t.teamId));
-    return allTeams?.filter((team) => !assignedTeamIds.has(team.id)) || [];
-  };
 
   // Get teams that a user belongs to (based on team membership)
   const getUserMembershipTeams = useCallback(
@@ -229,7 +222,7 @@ export function ManageLocalInstallationsDialog({
                     <TableHead>Installed on</TableHead>
                     <TableHead>
                       <div className="flex items-center gap-1">
-                        Granted for teams
+                        Granted for team
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
@@ -248,9 +241,8 @@ export function ManageLocalInstallationsDialog({
                 </TableHeader>
                 <TableBody>
                   {userInstallations.map((installation) => {
-                    const unassignedTeams = getUnassignedTeamsForUser(
-                      installation.teams,
-                    );
+                    // All teams are available since each server can only have one team
+                    const availableTeams = allTeams || [];
 
                     return (
                       <TableRow
@@ -308,37 +300,33 @@ export function ManageLocalInstallationsDialog({
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            {installation.teams.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1">
-                                {installation.teams.map((team) => (
-                                  <Badge
-                                    key={team.teamId}
-                                    variant="secondary"
-                                    className="flex items-center gap-1 pr-1 h-6"
+                            {installation.team ? (
+                              <div className="flex items-center gap-1">
+                                <Badge
+                                  variant="secondary"
+                                  className="flex items-center gap-1 pr-1 h-6"
+                                >
+                                  <span>{installation.team.name}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleRevokeTeamAccess(
+                                        installation.serverId,
+                                        installation.team?.teamId ?? "",
+                                      )
+                                    }
+                                    disabled={
+                                      revokeTeamAccessMutation.isPending
+                                    }
+                                    className="h-auto p-0.5 ml-0.5 hover:bg-destructive/20"
                                   >
-                                    <span>{team.name}</span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        handleRevokeTeamAccess(
-                                          installation.serverId,
-                                          team.teamId,
-                                        )
-                                      }
-                                      disabled={
-                                        revokeTeamAccessMutation.isPending
-                                      }
-                                      className="h-auto p-0.5 ml-0.5 hover:bg-destructive/20"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </Badge>
-                                ))}
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </Badge>
                               </div>
-                            )}
-                            {unassignedTeams.length > 0 && (
+                            ) : availableTeams.length > 0 ? (
                               <Select
                                 value=""
                                 onValueChange={(teamId) =>
@@ -353,10 +341,10 @@ export function ManageLocalInstallationsDialog({
                                   className="h-6 w-[130px] text-xs"
                                   data-testid={E2eTestId.CredentialTeamSelect}
                                 >
-                                  <SelectValue placeholder="Add team..." />
+                                  <SelectValue placeholder="Select team..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {unassignedTeams.map((team) => (
+                                  {availableTeams.map((team) => (
                                     <SelectItem
                                       key={team.id}
                                       value={team.id}
@@ -367,13 +355,11 @@ export function ManageLocalInstallationsDialog({
                                   ))}
                                 </SelectContent>
                               </Select>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                No teams available
+                              </span>
                             )}
-                            {installation.teams.length === 0 &&
-                              unassignedTeams.length === 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  No teams available
-                                </span>
-                              )}
                           </div>
                         </TableCell>
                         <TableCell>

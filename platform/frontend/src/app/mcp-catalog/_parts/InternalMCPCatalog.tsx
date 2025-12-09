@@ -181,7 +181,6 @@ export function InternalMCPCatalog({
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      teams: [],
     });
     setInstallingItemId(null);
   };
@@ -207,7 +206,6 @@ export function InternalMCPCatalog({
       const result = await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
-        teams: [],
         dontShowToast: true,
       });
       // Track the installed server for polling
@@ -220,14 +218,13 @@ export function InternalMCPCatalog({
     }
   };
 
-  const handleNoAuthConfirm = async (teams: string[] = []) => {
+  const handleNoAuthConfirm = async () => {
     if (!noAuthCatalogItem) return;
 
     setInstallingItemId(noAuthCatalogItem.id);
     await installMutation.mutateAsync({
       name: noAuthCatalogItem.name,
       catalogId: noAuthCatalogItem.id,
-      teams,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
@@ -243,7 +240,6 @@ export function InternalMCPCatalog({
     const result = await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
-      teams: [],
       environmentValues: installResult.environmentValues,
       externalVaultSecret: installResult.externalVaultSecret,
       dontShowToast: true,
@@ -277,13 +273,12 @@ export function InternalMCPCatalog({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
-      teams: result.teams,
       externalVaultSecret: result.externalVaultSecret,
     });
     setInstallingItemId(null);
   };
 
-  const handleOAuthConfirm = async (teams: string[] = []) => {
+  const handleOAuthConfirm = async () => {
     if (!selectedCatalogItem) return;
 
     try {
@@ -304,10 +299,9 @@ export function InternalMCPCatalog({
 
       const { authorizationUrl, state } = await response.json();
 
-      // Store state and teams in session storage for the callback
+      // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);
       sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
-      sessionStorage.setItem("oauth_teams", JSON.stringify(teams));
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
@@ -369,38 +363,10 @@ export function InternalMCPCatalog({
       }
     }
 
-    // Combine all unique teams
-    const allTeams = new Set<string>();
-    const allTeamDetails: Array<{
-      teamId: string;
-      name: string;
-      createdAt: string;
-      serverId: string; // Track which server this team belongs to
-    }> = [];
-
-    for (const server of servers) {
-      if (server.teams) {
-        for (const teamId of server.teams) {
-          allTeams.add(teamId);
-        }
-      }
-      if (server.teamDetails) {
-        for (const teamDetail of server.teamDetails) {
-          // Only add if not already present
-          if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
-            allTeamDetails.push({
-              ...teamDetail,
-              serverId: server.id, // Include the actual server ID
-            });
-          }
-        }
-      }
-    }
-
     aggregated.users = Array.from(allUsers);
     aggregated.userDetails = allUserDetails;
-    aggregated.teams = Array.from(allTeams);
-    aggregated.teamDetails = allTeamDetails;
+    // Note: teamDetails is now a single object per server (many-to-one),
+    // so we use the base server's teamDetails as-is
 
     return aggregated;
   };
@@ -661,8 +627,6 @@ export function InternalMCPCatalog({
           closeDialog("oauth");
           setSelectedCatalogItem(null);
         }}
-        catalogId={selectedCatalogItem?.id}
-        installedServers={installedServers}
       />
 
       <ReinstallConfirmationDialog

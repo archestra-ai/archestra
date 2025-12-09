@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
+import { Info, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
 import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -16,15 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useFeatureFlag } from "@/lib/features.hook";
-import { useTeams } from "@/lib/team.query";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -46,7 +38,6 @@ type UserConfigType = Record<
 
 export interface RemoteServerInstallResult {
   metadata: Record<string, unknown>;
-  teams: string[];
   /** External Vault secret path for BYOS */
   externalVaultSecret?: string;
 }
@@ -60,7 +51,6 @@ interface RemoteServerInstallDialogProps {
   ) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
-  isTeamMode?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -69,37 +59,14 @@ export function RemoteServerInstallDialog({
   onConfirm,
   catalogItem,
   isInstalling,
-  isTeamMode = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
-  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   // BYOS (Bring Your Own Secrets) state
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
   const [vaultSecretPath, setVaultSecretPath] = useState<string | null>(null);
 
-  const { data: teams } = useTeams();
   const byosEnabled = useFeatureFlag("byosEnabled");
-
-  const handleAddTeam = (teamId: string) => {
-    if (teamId && !assignedTeamIds.includes(teamId)) {
-      setAssignedTeamIds([...assignedTeamIds, teamId]);
-      setSelectedTeamId("");
-    }
-  };
-
-  const handleRemoveTeam = (teamId: string) => {
-    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-  };
-
-  const unassignedTeams = !teams
-    ? []
-    : teams.filter((team) => !assignedTeamIds.includes(team.id));
-
-  const getTeamById = (teamId: string) => {
-    return teams?.find((team) => team.id === teamId);
-  };
 
   const handleConfirm = async () => {
     if (!catalogItem) {
@@ -114,7 +81,6 @@ export function RemoteServerInstallDialog({
       try {
         await onConfirm(catalogItem, {
           metadata: {},
-          teams: assignedTeamIds,
           externalVaultSecret: vaultSecretPath,
         });
         resetForm();
@@ -157,7 +123,6 @@ export function RemoteServerInstallDialog({
 
       await onConfirm(catalogItem, {
         metadata,
-        teams: assignedTeamIds,
       });
       resetForm();
       onClose();
@@ -168,8 +133,6 @@ export function RemoteServerInstallDialog({
 
   const resetForm = () => {
     setConfigValues({});
-    setAssignedTeamIds([]);
-    setSelectedTeamId("");
     setVaultTeamId(null);
     setVaultSecretPath(null);
   };
@@ -194,14 +157,12 @@ export function RemoteServerInstallDialog({
   // Check if config is valid:
   // - BYOS mode: vault must be selected
   // - Non-BYOS mode: manual values must be filled
-  const isConfigValid = showByosOption
+  const isValid = showByosOption
     ? !!vaultSecretPath
     : !hasConfig ||
       Object.entries(userConfig)
         .filter(([_, cfg]) => cfg.required)
         .every(([fieldName]) => configValues[fieldName]?.trim());
-
-  const isValid = isConfigValid && (!isTeamMode || assignedTeamIds.length > 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -209,13 +170,9 @@ export function RemoteServerInstallDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2">
             <div className="flex items-end gap-2">
-              {isTeamMode ? (
-                <Building2 className="h-5 w-5" />
-              ) : (
-                <User className="h-5 w-5" />
-              )}
+              <User className="h-5 w-5" />
               <span>
-                {isTeamMode ? "Team" : "Personal"} Authentication
+                Install Server
                 <span className="text-muted-foreground ml-2 font-normal">
                   {catalogItem.name}
                 </span>
@@ -231,73 +188,6 @@ export function RemoteServerInstallDialog({
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
-          {isTeamMode && (
-            <>
-              <Alert className="mb-2">
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Admin only: You are configuring shared credentials
-                </AlertDescription>
-              </Alert>
-
-              <div className="grid gap-2">
-                <Label htmlFor="assign-team">
-                  Select Teams <span className="text-destructive">*</span>
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Choose which teams will have access to this authentication.
-                </p>
-                <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                  <SelectTrigger id="assign-team">
-                    <SelectValue placeholder="Select a team to assign" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams?.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No teams available
-                      </div>
-                    ) : unassignedTeams.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        All teams are already assigned
-                      </div>
-                    ) : (
-                      unassignedTeams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {assignedTeamIds.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {assignedTeamIds.map((teamId) => {
-                      const team = getTeamById(teamId);
-                      return (
-                        <Badge
-                          key={teamId}
-                          variant="secondary"
-                          className="flex items-center gap-1 pr-1"
-                        >
-                          <span>{team?.name || teamId}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveTeam(teamId)}
-                            className="h-auto p-0.5 ml-1 hover:bg-destructive/20"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )}
-
           {hasOAuth && (
             <Alert>
               <Info className="h-4 w-4" />

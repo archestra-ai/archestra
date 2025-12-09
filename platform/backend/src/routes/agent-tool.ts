@@ -500,13 +500,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 ownerId: z.string().nullable(),
                 ownerEmail: z.string().nullable(),
                 teamDetails: z
-                  .array(
-                    z.object({
-                      teamId: z.string(),
-                      name: z.string(),
-                      createdAt: z.coerce.date(),
-                    }),
-                  )
+                  .object({
+                    teamId: z.string(),
+                    name: z.string(),
+                    createdAt: z.coerce.date(),
+                  })
+                  .nullable()
                   .optional(),
               }),
             ),

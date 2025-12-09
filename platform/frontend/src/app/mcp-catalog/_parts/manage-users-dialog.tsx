@@ -73,27 +73,27 @@ export function ManageUsersDialog({
     return allServers.filter((s) => s.catalogId === server.catalogId);
   }, [allServers, server?.catalogId]);
 
-  type UserWithTeams = {
+  type UserWithTeam = {
     userId: string;
     email: string;
     createdAt: string;
     serverId: string;
-    teams: Array<{ teamId: string; name: string; createdAt: string }>;
+    team: { teamId: string; name: string; createdAt: string } | null;
   };
 
   // Aggregate user details with their associated server info
-  const userDetails = useMemo((): UserWithTeams[] => {
+  const userDetails = useMemo((): UserWithTeam[] => {
     if (!server?.catalogId || !allServers) {
       // Transform base userDetails to include required fields
       return (server?.userDetails || []).map((ud) => ({
         ...ud,
         serverId: server?.id || "",
-        teams: server?.teamDetails || [],
+        team: server?.teamDetails || null,
       }));
     }
 
     // Aggregate user details from all servers
-    const aggregatedUserDetails: UserWithTeams[] = [];
+    const aggregatedUserDetails: UserWithTeam[] = [];
 
     for (const srv of serversForCatalog) {
       if (srv.userDetails) {
@@ -102,12 +102,12 @@ export function ManageUsersDialog({
           if (
             !aggregatedUserDetails.some((ud) => ud.userId === userDetail.userId)
           ) {
-            // Get teams assigned to this user's server
-            const teamsForServer = srv.teamDetails || [];
+            // Get team assigned to this user's server (single team now)
+            const teamForServer = srv.teamDetails || null;
             aggregatedUserDetails.push({
               ...userDetail,
               serverId: srv.id,
-              teams: teamsForServer,
+              team: teamForServer,
             });
           }
         }
@@ -151,9 +151,10 @@ export function ManageUsersDialog({
     (userId: string, teamId: string) => {
       if (!liveServer?.catalogId) return;
 
+      // Now takes single teamId instead of array
       grantTeamAccessMutation.mutate({
         catalogId: liveServer.catalogId,
-        teamIds: [teamId],
+        teamId,
         userId,
       });
     },
@@ -169,22 +170,6 @@ export function ManageUsersDialog({
     },
     [revokeTeamAccessMutation],
   );
-
-  // Collect all team IDs assigned to any credential in this catalog
-  const allAssignedTeamIds = useMemo(() => {
-    const teamIds = new Set<string>();
-    for (const user of userDetails) {
-      for (const team of user.teams) {
-        teamIds.add(team.teamId);
-      }
-    }
-    return teamIds;
-  }, [userDetails]);
-
-  const getUnassignedTeamsForUser = () => {
-    // Filter out teams already assigned to ANY credential (global uniqueness per catalog)
-    return allTeams?.filter((team) => !allAssignedTeamIds.has(team.id)) || [];
-  };
 
   // Get teams that a user belongs to (based on team membership)
   const getUserMembershipTeams = useCallback(
@@ -217,8 +202,8 @@ export function ManageUsersDialog({
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage user credentials and team access for this MCP server. Add
-            teams to share credentials with team members.
+            Manage user credentials and team access for this MCP server. Assign
+            a team to share credentials with team members.
           </DialogDescription>
         </DialogHeader>
 
@@ -236,7 +221,7 @@ export function ManageUsersDialog({
                     <TableHead>Date</TableHead>
                     <TableHead>
                       <div className="flex items-center gap-1">
-                        Granted for teams
+                        Granted for team
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
@@ -255,7 +240,8 @@ export function ManageUsersDialog({
                 </TableHeader>
                 <TableBody>
                   {userDetails.map((user) => {
-                    const unassignedTeams = getUnassignedTeamsForUser();
+                    // All teams are available since each server can only have one team
+                    const availableTeams = allTeams || [];
 
                     return (
                       <TableRow key={user.userId}>
@@ -305,37 +291,33 @@ export function ManageUsersDialog({
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            {user.teams.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1">
-                                {user.teams.map((team) => (
-                                  <Badge
-                                    key={team.teamId}
-                                    variant="secondary"
-                                    className="flex items-center gap-1 pr-1 h-6"
+                            {user.team ? (
+                              <div className="flex items-center gap-1">
+                                <Badge
+                                  variant="secondary"
+                                  className="flex items-center gap-1 pr-1 h-6"
+                                >
+                                  <span>{user.team.name}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleRevokeTeamAccess(
+                                        user.serverId,
+                                        user.team?.teamId ?? "",
+                                      )
+                                    }
+                                    disabled={
+                                      revokeTeamAccessMutation.isPending
+                                    }
+                                    className="h-auto p-0.5 ml-0.5 hover:bg-destructive/20"
                                   >
-                                    <span>{team.name}</span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        handleRevokeTeamAccess(
-                                          user.serverId,
-                                          team.teamId,
-                                        )
-                                      }
-                                      disabled={
-                                        revokeTeamAccessMutation.isPending
-                                      }
-                                      className="h-auto p-0.5 ml-0.5 hover:bg-destructive/20"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </Badge>
-                                ))}
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </Badge>
                               </div>
-                            )}
-                            {unassignedTeams.length > 0 && (
+                            ) : availableTeams.length > 0 ? (
                               <Select
                                 value=""
                                 onValueChange={(teamId) =>
@@ -344,10 +326,10 @@ export function ManageUsersDialog({
                                 disabled={grantTeamAccessMutation.isPending}
                               >
                                 <SelectTrigger className="h-6 w-[130px] text-xs">
-                                  <SelectValue placeholder="Add team..." />
+                                  <SelectValue placeholder="Select team..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {unassignedTeams.map((team) => (
+                                  {availableTeams.map((team) => (
                                     <SelectItem
                                       key={team.id}
                                       value={team.id}
@@ -358,13 +340,11 @@ export function ManageUsersDialog({
                                   ))}
                                 </SelectContent>
                               </Select>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                No teams available
+                              </span>
                             )}
-                            {user.teams.length === 0 &&
-                              unassignedTeams.length === 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  No teams available
-                                </span>
-                              )}
                           </div>
                         </TableCell>
                         <TableCell>

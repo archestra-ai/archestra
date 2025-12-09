@@ -8,7 +8,6 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  McpServerTeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secretsmanager";
@@ -779,20 +778,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GrantTeamMcpServerAccess,
         description:
-          "Grant team(s) access to an MCP server using specified user's credentials",
+          "Set team access for an MCP server using specified user's credentials",
         tags: ["MCP Server"],
         params: z.object({
           catalogId: UuidIdSchema,
         }),
         body: z.object({
-          teamIds: z.array(z.string()).min(1),
+          teamId: z.string(),
           userId: z.string().optional(), // Optional: specify which user's credentials to use
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (
-      { params: { catalogId }, body: { teamIds, userId: targetUserId }, user },
+      { params: { catalogId }, body: { teamId, userId: targetUserId }, user },
       reply,
     ) => {
       // Use the specified userId or default to current user
@@ -813,8 +812,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, errorMsg);
       }
 
-      // Assign teams to the MCP server
-      await McpServerTeamModel.assignTeamsToMcpServer(targetServer.id, teamIds);
+      // Set the team on the MCP server (replaces any existing team)
+      await McpServerModel.setTeam(targetServer.id, teamId);
 
       return reply.send({ success: true });
     },
@@ -825,7 +824,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.RevokeTeamMcpServerAccess,
-        description: "Revoke a team's access to an MCP server (admin only)",
+        description: "Revoke team access from an MCP server",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -842,52 +841,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      // When there are multiple installations (personal + team auth), we need to find
-      // the actual server that has this team. Check all servers with the same catalogId.
-      if (!mcpServer.catalogId) {
-        throw new ApiError(404, "MCP server has no catalog ID");
+      // Check if this server actually has this team
+      if (mcpServer.teamId !== teamId) {
+        throw new ApiError(404, "Team access not found for this server");
       }
 
-      const allServersForCatalog = await McpServerModel.findByCatalogId(
-        mcpServer.catalogId,
-      );
-
-      // Find which server actually has this team
-      let targetServerId: string | null = null;
-      for (const server of allServersForCatalog) {
-        const teams = await McpServerTeamModel.getTeamsForMcpServer(server.id);
-        if (teams.includes(teamId)) {
-          targetServerId = server.id;
-          break;
-        }
-      }
-
-      if (!targetServerId) {
-        throw new ApiError(404, "Team access not found");
-      }
-
-      // Get the target server to check if we should delete it entirely
-      const targetServer = await McpServerModel.findById(targetServerId);
-      if (!targetServer) {
-        throw new ApiError(404, "Target server not found");
-      }
-
-      // If this is a team-only installation (only one team, no users), delete the entire server
-      const isTeamOnlyInstallation =
-        targetServer.teams?.length === 1 &&
-        targetServer.teams[0] === teamId &&
-        (!targetServer.users || targetServer.users.length === 0);
-
-      if (isTeamOnlyInstallation) {
-        // Delete the entire MCP server (which will cascade delete the secret)
-        await McpServerModel.delete(targetServerId);
-      } else {
-        // Otherwise, just remove the team from the junction table
-        await McpServerTeamModel.removeTeamFromMcpServer(
-          targetServerId,
-          teamId,
-        );
-      }
+      // Remove the team assignment by setting teamId to null
+      await McpServerModel.setTeam(mcpServerId, null);
 
       return reply.send({ success: true });
     },
@@ -899,7 +859,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RevokeAllTeamsMcpServerAccess,
         description:
-          "Revoke all team access from current user's MCP server credentials",
+          "Revoke team access from current user's MCP server credentials",
         tags: ["MCP Server"],
         params: z.object({
           catalogId: UuidIdSchema,
@@ -918,8 +878,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server installation not found");
       }
 
-      // Remove all team assignments from this server
-      await McpServerTeamModel.syncMcpServerTeams(userServer.id, []);
+      // Remove team assignment from this server
+      await McpServerModel.setTeam(userServer.id, null);
 
       return reply.send({ success: true });
     },

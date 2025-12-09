@@ -589,6 +589,13 @@
       "when": 1765297029901,
       "tag": "0083_rich_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1765298973344,
+      "tag": "0084_free_sway",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,8 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Building2, Info, X } from "lucide-react";
-import { useCallback, useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Building2 } from "lucide-react";
+import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,16 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useTeams } from "@/lib/team.query";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -31,7 +19,7 @@ type CatalogItem =
 interface NoAuthInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onInstall: (teams: string[]) => Promise<void>;
+  onInstall: () => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
 }
@@ -43,51 +31,11 @@ export function NoAuthInstallDialog({
   catalogItem,
   isInstalling,
 }: NoAuthInstallDialogProps) {
-  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
-  });
-
-  const { data: teams } = useTeams();
-
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !assignedTeamIds.includes(teamId)) {
-        setAssignedTeamIds([...assignedTeamIds, teamId]);
-        setSelectedTeamId("");
-      }
-    },
-    [assignedTeamIds],
-  );
-
-  const handleRemoveTeam = useCallback(
-    (teamId: string) => {
-      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-    },
-    [assignedTeamIds],
-  );
-
-  const unassignedTeams = !teams
-    ? []
-    : teams.filter((team) => !assignedTeamIds.includes(team.id));
-
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return teams?.find((team) => team.id === teamId);
-    },
-    [teams],
-  );
-
   const handleInstall = useCallback(async () => {
-    await onInstall(assignedTeamIds);
-    setAssignedTeamIds([]);
-    setSelectedTeamId("");
-  }, [onInstall, assignedTeamIds]);
+    await onInstall();
+  }, [onInstall]);
 
   const handleClose = useCallback(() => {
-    setAssignedTeamIds([]);
-    setSelectedTeamId("");
     onClose();
   }, [onClose]);
 
@@ -104,78 +52,10 @@ export function NoAuthInstallDialog({
             <span>Install {catalogItem.name}</span>
           </DialogTitle>
           <DialogDescription>
-            This MCP server doesn't require authentication.
-            {userIsMcpServerAdmin
-              ? " You can optionally assign it to specific teams."
-              : " Click Install to proceed."}
+            This MCP server doesn't require authentication. Click Install to
+            proceed.
           </DialogDescription>
         </DialogHeader>
-
-        {userIsMcpServerAdmin && (
-          <div className="grid gap-4 py-4">
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                You can assign this server to specific teams or leave it
-                unassigned.
-              </AlertDescription>
-            </Alert>
-
-            <div className="grid gap-2">
-              <Label htmlFor="assign-team">Select Teams (Optional)</Label>
-              <p className="text-sm text-muted-foreground">
-                Choose which teams will have access to this server.
-              </p>
-              <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                <SelectTrigger id="assign-team">
-                  <SelectValue placeholder="Select a team to assign" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams?.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No teams available
-                    </div>
-                  ) : unassignedTeams.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      All teams are already assigned
-                    </div>
-                  ) : (
-                    unassignedTeams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {assignedTeamIds.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {assignedTeamIds.map((teamId) => {
-                    const team = getTeamById(teamId);
-                    return (
-                      <Badge
-                        key={teamId}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        <span>{team?.name || teamId}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveTeam(teamId)}
-                          className="h-auto p-0.5 ml-1 hover:bg-destructive/20"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         <DialogFooter>
           <Button

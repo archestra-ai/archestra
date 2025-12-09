@@ -694,12 +694,12 @@ export const restartMcpServer = <ThrowOnError extends boolean = false>(options: 
 export const revokeUserMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeUserMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeUserMcpServerAccessResponses, RevokeUserMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/catalog/{catalogId}/user/{userId}', ...options });
 
 /**
- * Revoke all team access from current user's MCP server credentials
+ * Revoke team access from current user's MCP server credentials
  */
 export const revokeAllTeamsMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeAllTeamsMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeAllTeamsMcpServerAccessResponses, RevokeAllTeamsMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/catalog/{catalogId}/teams', ...options });
 
 /**
- * Grant team(s) access to an MCP server using specified user's credentials
+ * Set team access for an MCP server using specified user's credentials
  */
 export const grantTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<GrantTeamMcpServerAccessData, ThrowOnError>) => (options.client ?? client).post<GrantTeamMcpServerAccessResponses, GrantTeamMcpServerAccessErrors, ThrowOnError>({
     url: '/api/mcp_server/catalog/{catalogId}/teams',
@@ -711,7 +711,7 @@ export const grantTeamMcpServerAccess = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Revoke a team's access to an MCP server (admin only)
+ * Revoke team access from an MCP server
  */
 export const revokeTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeTeamMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeTeamMcpServerAccessResponses, RevokeTeamMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/team/{teamId}', ...options });
 

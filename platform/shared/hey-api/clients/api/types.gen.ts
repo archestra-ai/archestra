@@ -9939,6 +9939,7 @@ export type GetMcpServersResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -9946,18 +9947,17 @@ export type GetMcpServersResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     }>;
 };
 
@@ -9969,10 +9969,10 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         ownerId?: string | null;
+        teamId?: string | null;
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
-        teams?: Array<string>;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -10059,6 +10059,7 @@ export type InstallMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10066,18 +10067,17 @@ export type InstallMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     };
 };
 
@@ -10241,6 +10241,7 @@ export type GetMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10248,18 +10249,17 @@ export type GetMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     };
 };
 
@@ -10761,7 +10761,7 @@ export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAcces
 
 export type GrantTeamMcpServerAccessData = {
     body: {
-        teamIds: Array<string>;
+        teamId: string;
         userId?: string;
     };
     path: {

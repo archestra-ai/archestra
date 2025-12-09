@@ -137,16 +137,16 @@ export function useGrantTeamMcpServerAccess() {
   return useMutation({
     mutationFn: async ({
       catalogId,
-      teamIds,
+      teamId,
       userId,
     }: {
       catalogId: string;
-      teamIds: string[];
+      teamId: string;
       userId?: string;
     }) => {
       await archestraApiSdk.grantTeamMcpServerAccess({
         path: { catalogId },
-        body: { teamIds, userId },
+        body: { teamId, userId },
       });
     },
     onSuccess: async () => {

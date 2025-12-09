@@ -17,7 +17,6 @@ export { default as limitsTable } from "./limit";
 export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
-export { default as mcpServerTeamsTable } from "./mcp-server-team";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";

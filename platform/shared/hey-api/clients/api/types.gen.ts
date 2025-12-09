@@ -3832,11 +3832,11 @@ export type GetAgentAvailableTokensResponses = {
             catalogId: string | null;
             ownerId: string | null;
             ownerEmail: string | null;
-            teamDetails?: Array<{
+            teamDetails?: {
                 teamId: string;
                 name: string;
                 createdAt: string;
-            }>;
+            } | null;
         }>;
     };
 };
@@ -5815,7 +5815,6 @@ export type GetChatSettingsResponses = {
         anthropicApiKeySecretId: string | null;
         createdAt: string;
         updatedAt: string;
-        externalVaultSecretPath?: string | null;
     };
 };
 
@@ -5825,7 +5824,6 @@ export type UpdateChatSettingsData = {
     body?: {
         anthropicApiKey?: string;
         resetApiKey?: boolean;
-        externalVaultSecret?: string;
     };
     path?: never;
     query?: never;
@@ -5901,7 +5899,6 @@ export type UpdateChatSettingsResponses = {
         anthropicApiKeySecretId: string | null;
         createdAt: string;
         updatedAt: string;
-        externalVaultSecretPath?: string | null;
     };
 };
 

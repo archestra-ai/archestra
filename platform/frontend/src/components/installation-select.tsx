@@ -114,17 +114,11 @@ export function InstallationSelect({
                   {server.ownerEmail || "Unknown owner"}
                 </span>
               </div>
-              {server.teamDetails && server.teamDetails.length > 0 && (
+              {server.teamDetails && (
                 <div className="flex gap-1 flex-wrap">
-                  {server.teamDetails.map((team) => (
-                    <Badge
-                      key={team.teamId}
-                      variant="secondary"
-                      className="text-xs"
-                    >
-                      {team.name}
-                    </Badge>
-                  ))}
+                  <Badge variant="secondary" className="text-xs">
+                    {server.teamDetails.name}
+                  </Badge>
                 </div>
               )}
             </div>

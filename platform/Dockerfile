@@ -80,7 +80,9 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17 and supervisord
-    apk add --no-cache postgresql17 postgresql17-contrib su-exec && \
+    apk add --no-cache postgresql17 postgresql17-contrib su-exec iptables ip6tables conntrack-tools && \
+    # Install k3s for embedded Kubernetes (v1.28.5)
+    curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_START=true INSTALL_K3S_VERSION=v1.28.5+k3s1 INSTALL_K3S_BIN_DIR=/usr/local/bin sh - && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
     rm -rf /usr/local/lib/node_modules/npm && \
@@ -98,6 +100,7 @@ RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinu
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
+    mkdir -p /root/.kube && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 # Mark PostgreSQL data directory as a volume for data persistence
@@ -142,7 +145,7 @@ pidfile=/var/run/supervisord.pid
 
 [program:backend]
 directory=/app/backend
-command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.mjs"
+command=/bin/sh -c "sleep 15 && pnpm db:migrate && node dist/server.mjs"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -167,6 +170,22 @@ priority=20
 # NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
 environment=NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
+EOF
+
+# Create k3s program configuration (to be conditionally included)
+RUN cat > /etc/supervisord.k3s.conf <<'EOF'
+
+[program:k3s]
+command=/usr/local/bin/k3s server --disable=traefik --write-kubeconfig-mode=644 --write-kubeconfig=/root/.kube/config --data-dir=/app/data/k3s
+user=root
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=0
+startsecs=10
 EOF
 
 # Create postgres program configuration (to be conditionally included)
@@ -261,6 +280,31 @@ else
     POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
     POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
 fi
+
+# Detect Kubernetes mode (embedded vs external)
+USE_EXTERNAL_K8S=false
+if [ -n "$EXTERNAL_K8S_CONFIG" ]; then
+    USE_EXTERNAL_K8S=true
+fi
+
+if [ "$USE_EXTERNAL_K8S" = "false" ]; then
+    echo "Using embedded k3s for MCP orchestration"
+    
+    # Append k3s program to supervisord config
+    cat /etc/supervisord.k3s.conf >> /etc/supervisord.conf
+    
+    # Wait for k3s to be ready (will happen after supervisord starts)
+    echo "k3s will start automatically via supervisord"
+else
+    echo "Using external Kubernetes cluster"
+    
+    # Decode base64 kubeconfig and write to /root/.kube/config
+    mkdir -p /root/.kube
+    echo "$EXTERNAL_K8S_CONFIG" | base64 -d > /root/.kube/config
+    chmod 600 /root/.kube/config
+    echo "External kubeconfig written to /root/.kube/config"
+fi
+
 
 # Update supervisord config with actual environment variables
 sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${EFFECTIVE_DATABASE_URL}\"|" /etc/supervisord.conf

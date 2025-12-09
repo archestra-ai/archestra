@@ -91,7 +91,7 @@ describe("InteractionModel", () => {
     });
   });
 
-  describe("getAllInteractionsForAgent", () => {
+  describe("getAllInteractionsForProfile", () => {
     test("returns all interactions for a specific agent", async () => {
       // Create another agent
       const otherAgent = await AgentModel.create({
@@ -155,7 +155,7 @@ describe("InteractionModel", () => {
       });
 
       const agentInteractions =
-        await InteractionModel.getAllInteractionsForAgent(profileId);
+        await InteractionModel.getAllInteractionsForProfile(profileId);
       expect(agentInteractions).toHaveLength(1);
       expect(agentInteractions[0].profileId).toBe(profileId);
     });
@@ -394,6 +394,241 @@ describe("InteractionModel", () => {
         false,
       );
       expect(found).toBeNull();
+    });
+  });
+
+  describe("findAllPaginated filters", () => {
+    test("filters by profileId", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent2 = await AgentModel.create({ name: "Agent 2", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent2.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { profileId: agent1.id },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
+    });
+
+    test("filters by externalAgentId", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
+
+      const agent = await AgentModel.create({ name: "Agent", teams: [] });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId: "my-app-prod",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId: "my-app-staging",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        // No externalAgentId
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r3",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { externalAgentId: "my-app-prod" },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].externalAgentId).toBe("my-app-prod");
+    });
+
+    test("filters by both profileId and externalAgentId", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
+      const agent2 = await AgentModel.create({ name: "Agent 2", teams: [] });
+
+      // Agent 1 with external ID
+      await InteractionModel.create({
+        profileId: agent1.id,
+        externalAgentId: "my-app",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Agent 1 without external ID
+      await InteractionModel.create({
+        profileId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Agent 2 with same external ID
+      await InteractionModel.create({
+        profileId: agent2.id,
+        externalAgentId: "my-app",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r3",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { profileId: agent1.id, externalAgentId: "my-app" },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
+      expect(interactions.data[0].externalAgentId).toBe("my-app");
+    });
+
+    test("filters respect access control for non-admin users", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const accessibleAgent = await AgentModel.create({
+        name: "Accessible Agent",
+        teams: [team.id],
+      });
+      const inaccessibleAgent = await AgentModel.create({
+        name: "Inaccessible Agent",
+        teams: [],
+      });
+
+      // Interaction for accessible agent
+      await InteractionModel.create({
+        profileId: accessibleAgent.id,
+        externalAgentId: "my-app",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Interaction for inaccessible agent with same external ID
+      await InteractionModel.create({
+        profileId: inaccessibleAgent.id,
+        externalAgentId: "my-app",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // User should only see the accessible agent's interaction
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        user.id,
+        false,
+        { externalAgentId: "my-app" },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].profileId).toBe(accessibleAgent.id);
     });
   });
 });

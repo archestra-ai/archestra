@@ -123,7 +123,7 @@ class InteractionModel {
     switch (sorting?.sortBy) {
       case "createdAt":
         return direction(schema.interactionsTable.createdAt);
-      case "agentId":
+      case "profileId":
         return direction(schema.interactionsTable.profileId);
       case "model":
         // Extract model from the JSONB request column
@@ -166,7 +166,7 @@ class InteractionModel {
     return interaction as Interaction;
   }
 
-  static async getAllInteractionsForAgent(
+  static async getAllInteractionsForProfile(
     profileId: string,
     whereClauses?: SQL[],
   ) {
@@ -185,7 +185,7 @@ class InteractionModel {
   /**
    * Get all interactions for a profile with pagination and sorting support
    */
-  static async getAllInteractionsForAgentPaginated(
+  static async getAllInteractionsForProfilePaginated(
     profileId: string,
     pagination: PaginationQuery,
     sorting?: SortingQuery,

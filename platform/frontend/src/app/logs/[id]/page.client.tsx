@@ -69,7 +69,9 @@ function LogDetail({
   }
 
   const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = initialData?.agents?.find((a) => a.id === interaction.profileId);
+  const agent = initialData?.agents?.find(
+    (a) => a.id === interaction.profileId,
+  );
   const toolsUsed = interaction.getToolNamesUsed();
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();

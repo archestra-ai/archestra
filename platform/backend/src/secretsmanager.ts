@@ -995,12 +995,18 @@ export class BYOSVaultSecretManager implements SecretManager {
   // ============================================================
 
   /**
-   * Create a secret that references an external Vault path.
+   * Create a secret that references an external Vault path, or falls back to DB storage.
    *
-   * For BYOS, the secretValue should contain a special `__vaultPath` key
+   * Convetnion is that secrets that are stored in external Vault should contain a special `__vaultPath` key
    * that specifies where to fetch the actual secret from external Vault.
+   * It's a hack because SecretsManager interface is designed to receive JSON object with k-v pairs.
+   * But external Vault secrets requres path to Vault secret, which contains kv pairs.
+   * Another reason is that we supporting BYOS feature not for every secret at the moment, so we need a way to fallback to DB storage.
+   * 
+   * TLDR - if you want store secret reference to external Vault, you need to add `__vaultPath` key to the secret value.
+   * Otherwise, use usual { key: value } object, e.g. { client_secret: "1234567890" }
    *
-   * @param secretValue - Should contain `__vaultPath` key with the Vault path
+   * @param secretValue - Optionally contains `__vaultPath` key with the Vault path
    * @param name - Human-readable name for the secret
    */
   async createSecret(
@@ -1009,13 +1015,21 @@ export class BYOSVaultSecretManager implements SecretManager {
   ): Promise<SelectSecret> {
     const vaultPath = secretValue.__vaultPath as string | undefined;
 
+    // If no __vaultPath provided, fall back to DB storage
+    // This allows non-MCP secrets (like API keys) to work normally
     if (!vaultPath) {
-      throw new ApiError(
-        400,
-        "BYOS secrets require a __vaultPath in the secret value",
+      logger.info(
+        { name },
+        "BYOSVaultSecretManager.createSecret: no __vaultPath provided, falling back to DB storage",
       );
+      return await SecretModel.create({
+        name,
+        secret: secretValue,
+        isVault: false,
+      });
     }
 
+    // BYOS behavior: create reference to external vault secret
     logger.info(
       { name, vaultPath },
       "BYOSVaultSecretManager.createSecret: creating reference to external vault secret",

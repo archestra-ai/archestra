@@ -44,7 +44,7 @@ import * as routes from "./routes";
 const eeRoutes = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional schema
     await import("./routes/index.ee")
-  : [];
+  : ({} as Record<string, never>);
 
 const {
   api: {
@@ -133,7 +133,7 @@ export const createFastifyInstance = () =>
       const statusCode = 500;
 
       this.log.error(
-        { error: message, statusCode },
+        { error: message, statusCode, stack: error.stack },
         "HTTP 50x request error occurred",
       );
 

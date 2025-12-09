@@ -1,0 +1,21 @@
+{{- if .Values.archestra.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  {{- if not (kindIs "invalid" .Values.archestra.podDisruptionBudget.minAvailable) }}
+  minAvailable: {{ .Values.archestra.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if not (kindIs "invalid" .Values.archestra.podDisruptionBudget.maxUnavailable) }}
+  maxUnavailable: {{ .Values.archestra.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  {{- if .Values.archestra.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ .Values.archestra.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -42,7 +42,7 @@ metadata:
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.archestra.replicaCount }}
   selector:
     matchLabels:
       {{- include "archestra-platform.selectorLabels" . | nindent 6 }}

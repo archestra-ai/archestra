@@ -33,8 +33,7 @@ export default function AppearanceSettingsPage() {
     setPreviewFont,
     applyThemeOnUI,
     applyFontOnUI,
-    saveTheme,
-    saveFont,
+    saveAppearance,
     logo,
     DEFAULT_THEME,
     DEFAULT_FONT,
@@ -100,8 +99,10 @@ export default function AppearanceSettingsPage() {
             <PermissionButton
               permissions={{ organization: ["update"] }}
               onClick={() => {
-                saveTheme?.(currentUITheme || DEFAULT_THEME);
-                saveFont?.(currentUIFont || DEFAULT_FONT);
+                saveAppearance?.(
+                  currentUITheme || DEFAULT_THEME,
+                  currentUIFont || DEFAULT_FONT,
+                );
                 setHasChanges(false);
               }}
               disabled={updateAppearanceSettingsMutation.isPending}

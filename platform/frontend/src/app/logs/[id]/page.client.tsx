@@ -99,7 +99,7 @@ function LogDetail({
       </div>
       <Divider className="my-6" />
       <div>
-        <div>
+        <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Metadata</h2>
           <div className="border border-border rounded-lg p-6 bg-card">
             <div className="grid grid-cols-2 gap-x-12 gap-y-6">
@@ -216,7 +216,7 @@ function LogDetail({
           </div>
         </div>
 
-        <div>
+        <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Conversation</h2>
           <div className="border border-border rounded-lg bg-card overflow-hidden">
             <ChatBotDemo
@@ -273,7 +273,10 @@ function LogDetail({
               </AccordionItem>
             )}
 
-            <AccordionItem value="response" className="border rounded-lg">
+            <AccordionItem
+              value="response"
+              className="border rounded-lg !border-b"
+            >
               <AccordionTrigger className="px-6 py-4 hover:no-underline">
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>

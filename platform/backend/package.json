@@ -69,7 +69,6 @@
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",
     "handlebars": "^4.7.8",
-    "jmespath": "^0.16.0",
     "jwt-decode": "^4.0.0",
     "lodash-es": "^4.17.21",
     "node-vault": "^0.10.9",
@@ -85,7 +84,6 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
     "@sentry/cli": "^2.47.0",
-    "@types/jmespath": "^0.15.2",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.6",

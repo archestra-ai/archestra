@@ -7,7 +7,7 @@ import { LoadingSpinner } from "@/components/loading";
 
 function AccountSettingsContent() {
   return (
-    <div>
+    <div className="space-y-6">
       <ApiKeysCard
         classNames={{
           base: "w-full",

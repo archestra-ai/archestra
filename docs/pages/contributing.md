@@ -33,9 +33,10 @@ We encourage the use of AI tools while working on your contribution! However, as
 
 We sometimes have to reject contributions that show signs of unreviewed AI-generated code, such as:
 
-1. Hard-to-read descriptions and comments.
+1. Massive AI-generated descriptions and comments.
 2. Code that doesn't follow the existing patterns and conventions of the project.
 3. Code that doesn't follow reasonable clean code best practices.
-4. Or other noticeable signs of rushed or unreviewed AI generation.
+4. Code that was not tested before contribution.
+5. Or other noticeable signs of rushed or unreviewed AI generation.
 
 From our perspective, carefully reviewing such a contribution can take longer than implementing the feature ourselves. For this reason, we may close the pull request. If this happens to you, please don't be discouraged. We kindly ask that you rework your changes and reopen the pull request when you're ready.

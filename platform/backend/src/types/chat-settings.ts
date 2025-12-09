@@ -3,7 +3,7 @@ import {
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
-import { z } from "zod";
+import type { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectChatSettingsSchema = createSelectSchema(

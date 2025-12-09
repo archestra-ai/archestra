@@ -1002,7 +1002,7 @@ export class BYOSVaultSecretManager implements SecretManager {
    * It's a hack because SecretsManager interface is designed to receive JSON object with k-v pairs.
    * But external Vault secrets requres path to Vault secret, which contains kv pairs.
    * Another reason is that we supporting BYOS feature not for every secret at the moment, so we need a way to fallback to DB storage.
-   * 
+   *
    * TLDR - if you want store secret reference to external Vault, you need to add `__vaultPath` key to the secret value.
    * Otherwise, use usual { key: value } object, e.g. { client_secret: "1234567890" }
    *

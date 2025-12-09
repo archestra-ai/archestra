@@ -198,7 +198,7 @@ export const auth: any = betterAuth({
        * Trust SSO providers for automatic account linking
        * This allows existing users to sign in with SSO without manual linking
        *
-       * Combines default trusted providers from @shared with additional ones
+       * Combines default trusted providers from @archestra/shared with additional ones
        * configured via ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS env var
        */
       trustedProviders: [

@@ -152,7 +152,7 @@ export const getTrustedOrigins = (): string[] => {
 
 /**
  * Parse additional trusted SSO provider IDs from environment variable.
- * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
+ * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @archestra/shared.
  *
  * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
  * Whitespace around each provider ID is trimmed.

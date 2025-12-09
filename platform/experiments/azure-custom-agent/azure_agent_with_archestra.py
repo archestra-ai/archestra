@@ -6,15 +6,19 @@ Demonstrates routing Azure OpenAI calls through Archestra's security layer
 import os
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Azure OpenAI credentials (from your deployment)
 AZURE_OPENAI_ENDPOINT = "https://anna-mist70qg-eastus2.openai.azure.com"
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")  # Set this env var
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")  # Optional if using Azure CLI
 AZURE_OPENAI_DEPLOYMENT = "gpt-4o-mini"  # Your deployment name
 AZURE_OPENAI_API_VERSION = "2024-12-01-preview"
+
+# Authentication method: "api_key" or "azure_cli"
+AZURE_AUTH_METHOD = os.getenv("AZURE_AUTH_METHOD", "api_key")
 
 # Archestra proxy configuration
 ARCHESTRA_PROXY_URL = "http://localhost:9000/v1/openai"
@@ -99,12 +103,28 @@ def create_client(use_proxy=False):
         )
     else:
         print(f"⚠️  Direct connection to Azure OpenAI (no security)")
-        # Direct Azure OpenAI connection
-        client = AzureOpenAI(
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
-            api_key=AZURE_OPENAI_KEY,
-            api_version=AZURE_OPENAI_API_VERSION
-        )
+
+        # Choose authentication method
+        if AZURE_AUTH_METHOD == "azure_cli":
+            print(f"🔐 Using Azure CLI authentication (DefaultAzureCredential)")
+            # Use Azure CLI / Managed Identity authentication
+            token_provider = get_bearer_token_provider(
+                DefaultAzureCredential(),
+                "https://cognitiveservices.azure.com/.default"
+            )
+            client = AzureOpenAI(
+                azure_endpoint=AZURE_OPENAI_ENDPOINT,
+                azure_ad_token_provider=token_provider,
+                api_version=AZURE_OPENAI_API_VERSION
+            )
+        else:
+            print(f"🔑 Using API key authentication")
+            # Direct Azure OpenAI connection with API key
+            client = AzureOpenAI(
+                azure_endpoint=AZURE_OPENAI_ENDPOINT,
+                api_key=AZURE_OPENAI_KEY,
+                api_version=AZURE_OPENAI_API_VERSION
+            )
 
     return client
 
@@ -190,9 +210,13 @@ Please retrieve the account details for customers CUST-001, CUST-002, and CUST-0
 
 if __name__ == "__main__":
     # Check environment variables
-    if not AZURE_OPENAI_KEY:
+    if AZURE_AUTH_METHOD == "api_key" and not AZURE_OPENAI_KEY:
         print("❌ Error: Set AZURE_OPENAI_KEY environment variable")
+        print("   Or set AZURE_AUTH_METHOD=azure_cli and run 'az login'")
         exit(1)
+
+    if AZURE_AUTH_METHOD == "azure_cli":
+        print("ℹ️  Make sure you've run 'az login' before running this script")
 
     if USE_ARCHESTRA and not ARCHESTRA_AGENT_ID:
         print("❌ Error: Set ARCHESTRA_AGENT_ID when using proxy")

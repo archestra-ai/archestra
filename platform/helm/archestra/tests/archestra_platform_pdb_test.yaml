@@ -1,0 +1,205 @@
+suite: test archestra platform -- PodDisruptionBudget
+templates:
+  - pod-disruption-budget.yaml
+tests:
+  - it: should not create PDB when disabled
+    set:
+      archestra.podDisruptionBudget.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when enabled without minAvailable or maxUnavailable
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: null
+      archestra.podDisruptionBudget.maxUnavailable: null
+    asserts:
+      - failedTemplate:
+          errorMessage: "PodDisruptionBudget is enabled but neither minAvailable nor maxUnavailable is set. At least one must be specified."
+
+  - it: should fail when both minAvailable and maxUnavailable are set
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+      archestra.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: "PodDisruptionBudget cannot have both minAvailable and maxUnavailable set. Only one can be specified."
+
+  - it: should create PDB with correct metadata when enabled
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: apiVersion
+          value: policy/v1
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform$
+
+  - it: should have common labels
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+    asserts:
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should have correct selector labels
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+    release:
+      name: "test-release"
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: archestra-platform
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: "test-release"
+
+  - it: should configure minAvailable as integer
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - isNull:
+          path: spec.maxUnavailable
+
+  - it: should configure minAvailable as percentage
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: "50%"
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: "50%"
+
+  - it: should configure maxUnavailable as integer
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - isNull:
+          path: spec.minAvailable
+
+  - it: should configure maxUnavailable as percentage
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.maxUnavailable: "25%"
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "25%"
+
+  - it: should not have minAvailable when only maxUnavailable is set
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: null
+      archestra.podDisruptionBudget.maxUnavailable: 2
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 2
+      - isNull:
+          path: spec.minAvailable
+
+  - it: should not have maxUnavailable when only minAvailable is set
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 2
+      archestra.podDisruptionBudget.maxUnavailable: null
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - isNull:
+          path: spec.maxUnavailable
+
+  - it: should configure unhealthyPodEvictionPolicy as IfHealthyBudget
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: IfHealthyBudget
+    asserts:
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: IfHealthyBudget
+
+  - it: should configure unhealthyPodEvictionPolicy as AlwaysAllow
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    asserts:
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: AlwaysAllow
+
+  - it: should not have unhealthyPodEvictionPolicy when not set
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: null
+    asserts:
+      - isNull:
+          path: spec.unhealthyPodEvictionPolicy
+
+  - it: should configure minAvailable with high availability value
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 3
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 3
+
+  - it: should configure maxUnavailable with zero value
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.maxUnavailable: 0
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+
+  - it: should configure typical production setup with minAvailable and unhealthyPodEvictionPolicy
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 2
+      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: IfHealthyBudget
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: IfHealthyBudget
+
+  - it: should configure typical production setup with maxUnavailable percentage
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.maxUnavailable: "33%"
+      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "33%"
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: AlwaysAllow

@@ -1,7 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Loader2, Search, Server } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Search,
+  Server,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -69,6 +75,9 @@ export function AssignToolsDialog({
   // Track search query and origin filter
   const [searchQuery, setSearchQuery] = useState("");
   const [originFilter, setOriginFilter] = useState("all");
+
+  // Track expanded tools
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
   // Get unique origins from internal MCP catalog that have at least one tool
   const uniqueOrigins = useMemo(() => {
@@ -146,6 +155,18 @@ export function AssignToolsDialog({
       }
       // Add the tool
       return [...prev, { toolId, credentialsSourceId: undefined }];
+    });
+  }, []);
+
+  const handleToggleExpand = useCallback((toolId: string) => {
+    setExpandedTools((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(toolId)) {
+        newSet.delete(toolId);
+      } else {
+        newSet.add(toolId);
+      }
+      return newSet;
     });
   }, []);
 
@@ -318,18 +339,17 @@ export function AssignToolsDialog({
           <DialogTitle>Assign tools to {agent.name} profile</DialogTitle>
           <DialogDescription>
             Select which MCP server tools this profile can access.
-            <br />
-            <div className="text-muted-foreground mt-2">
-              Don't see the tool you need? Go to{" "}
-              <Link
-                href="/mcp-catalog/registry"
-                className="text-primary underline"
-              >
-                MCP Registry
-              </Link>{" "}
-              to install an MCP server.
-            </div>
           </DialogDescription>
+          <p className="text-muted-foreground text-sm mt-2">
+            Don't see the tool you need? Go to{" "}
+            <Link
+              href="/mcp-catalog/registry"
+              className="text-primary underline"
+            >
+              MCP Registry
+            </Link>{" "}
+            to install an MCP server.
+          </p>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -396,98 +416,116 @@ export function AssignToolsDialog({
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredTools.map((tool) => (
-                <div
-                  key={tool.id}
-                  className="flex items-start space-x-3 rounded-lg border p-4 hover:bg-muted/50 transition-colors"
-                >
-                  <Checkbox
-                    id={`tool-${tool.id}`}
-                    checked={selectedTools.some((t) => t.toolId === tool.id)}
-                    onCheckedChange={() => handleToggleTool(tool.id)}
-                    disabled={isSaving}
-                  />
-                  <div className="flex-1 space-y-1">
-                    <Label
-                      htmlFor={`tool-${tool.id}`}
-                      className="text-sm font-medium leading-none cursor-pointer mb-2"
-                    >
-                      {tool.name}
-                    </Label>
-                    {selectedTools.some((t) => t.toolId === tool.id) &&
-                      (() => {
-                        const mcpCatalogItem = internalMcpCatalogItems?.find(
-                          (item) => item.id === tool.catalogId,
-                        );
-                        const catalogId = tool.catalogId ?? "";
-                        const isLocalServer =
-                          mcpCatalogItem?.serverType === "local";
-                        const selectedTool = selectedTools.find(
-                          (t) => t.toolId === tool.id,
-                        );
-
-                        // Determine value to show - use dynamic constant if useDynamicTeamCredential is true
-                        const displayValue =
-                          selectedTool?.useDynamicTeamCredential
-                            ? DYNAMIC_CREDENTIAL_VALUE
-                            : isLocalServer
-                              ? selectedTool?.executionSourceId
-                              : selectedTool?.credentialsSourceId;
-
-                        return (
-                          <div className="flex flex-col gap-1 mt-4">
-                            {isLocalServer ? (
-                              <>
-                                <span className="text-xs text-muted-foreground">
-                                  Credential to use:
-                                </span>
-                                <InstallationSelect
-                                  catalogId={catalogId}
-                                  onValueChange={(executionSourceId) =>
-                                    handleExecutionSourceChange(
-                                      tool.id,
-                                      executionSourceId ?? undefined,
-                                    )
-                                  }
-                                  value={displayValue ?? undefined}
-                                  className="mb-4"
-                                  shouldSetDefaultValue
-                                />
-                              </>
+              {filteredTools.map((tool) => {
+                const isExpanded = expandedTools.has(tool.id);
+                return (
+                  <div
+                    key={tool.id}
+                    className="flex items-start space-x-3 rounded-lg border p-4 hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      id={`tool-${tool.id}`}
+                      checked={selectedTools.some((t) => t.toolId === tool.id)}
+                      onCheckedChange={() => handleToggleTool(tool.id)}
+                      disabled={isSaving}
+                    />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Label
+                          htmlFor={`tool-${tool.id}`}
+                          className="text-sm font-medium leading-none cursor-pointer mb-2 flex-1"
+                        >
+                          {tool.name}
+                        </Label>
+                        {tool.description && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleExpand(tool.id)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4" />
                             ) : (
-                              <>
-                                <span className="text-xs text-muted-foreground">
-                                  Credential to use:
-                                </span>
-                                <TokenSelect
-                                  catalogId={catalogId}
-                                  onValueChange={(credentialsSourceId) =>
-                                    handleCredentialsSourceChange(
-                                      tool.id,
-                                      credentialsSourceId ?? undefined,
-                                    )
-                                  }
-                                  value={displayValue ?? undefined}
-                                  className="mb-4"
-                                  shouldSetDefaultValue
-                                />
-                              </>
+                              <ChevronRight className="h-4 w-4" />
                             )}
-                          </div>
-                        );
-                      })()}
-                    {tool.description && (
-                      <p className="text-sm text-muted-foreground">
-                        {tool.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Server className="h-3 w-3" />
-                      <span>MCP Server Tool</span>
+                          </button>
+                        )}
+                      </div>
+                      {selectedTools.some((t) => t.toolId === tool.id) &&
+                        (() => {
+                          const mcpCatalogItem = internalMcpCatalogItems?.find(
+                            (item) => item.id === tool.catalogId,
+                          );
+                          const catalogId = tool.catalogId ?? "";
+                          const isLocalServer =
+                            mcpCatalogItem?.serverType === "local";
+                          const selectedTool = selectedTools.find(
+                            (t) => t.toolId === tool.id,
+                          );
+
+                          // Determine value to show - use dynamic constant if useDynamicTeamCredential is true
+                          const displayValue =
+                            selectedTool?.useDynamicTeamCredential
+                              ? DYNAMIC_CREDENTIAL_VALUE
+                              : isLocalServer
+                                ? selectedTool?.executionSourceId
+                                : selectedTool?.credentialsSourceId;
+
+                          return (
+                            <div className="flex flex-col gap-1 mt-4">
+                              {isLocalServer ? (
+                                <>
+                                  <span className="text-xs text-muted-foreground">
+                                    Credential to use:
+                                  </span>
+                                  <InstallationSelect
+                                    catalogId={catalogId}
+                                    onValueChange={(executionSourceId) =>
+                                      handleExecutionSourceChange(
+                                        tool.id,
+                                        executionSourceId ?? undefined,
+                                      )
+                                    }
+                                    value={displayValue ?? undefined}
+                                    className="mb-4"
+                                    shouldSetDefaultValue
+                                  />
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-xs text-muted-foreground">
+                                    Credential to use:
+                                  </span>
+                                  <TokenSelect
+                                    catalogId={catalogId}
+                                    onValueChange={(credentialsSourceId) =>
+                                      handleCredentialsSourceChange(
+                                        tool.id,
+                                        credentialsSourceId ?? undefined,
+                                      )
+                                    }
+                                    value={displayValue ?? undefined}
+                                    className="mb-4"
+                                    shouldSetDefaultValue
+                                  />
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      {isExpanded && tool.description && (
+                        <p className="text-sm text-muted-foreground whitespace-pre-line">
+                          {tool.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Server className="h-3 w-3" />
+                        <span>MCP Server Tool</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

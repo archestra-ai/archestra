@@ -370,17 +370,17 @@ test.describe("SSO Role Mapping E2E", () => {
     // Expand the Role Mapping accordion
     await page.getByText("Role Mapping (Optional)").click();
 
-    // Wait for accordion to expand
-    await expect(page.getByLabel("Data Source")).toBeVisible();
+    // Wait for accordion to expand - look for the Add Rule button
+    await expect(page.getByRole("button", { name: "Add Rule" })).toBeVisible();
 
     // Add a rule to map archestra-admins group to admin role
     await page.getByRole("button", { name: "Add Rule" }).click();
 
-    // Fill in the JMESPath expression
+    // Fill in the Handlebars template
     // Keycloak sends groups as an array, so we check if 'archestra-admins' is in it
     await page
-      .getByLabel("JMESPath Expression")
-      .fill("contains(groups || `[]`, 'archestra-admins')");
+      .getByLabel("Handlebars Template")
+      .fill('{{#includes groups "archestra-admins"}}true{{/includes}}');
 
     // Select admin role
     await page
@@ -448,7 +448,7 @@ test.describe("SSO Role Mapping E2E", () => {
         ssoPage.getByText("Roles", { exact: true }).first(),
       ).toBeVisible({ timeout: 10000 });
 
-      // Success! The admin user was mapped to admin role via JMESPath
+      // Success! The admin user was mapped to admin role via Handlebars template
     } finally {
       await ssoContext.close();
     }

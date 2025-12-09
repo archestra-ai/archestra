@@ -39,13 +39,13 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 ### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, profile_id, profile_name, and status code
-- `llm_tokens_total` - Token consumption by provider, profile_id, profile_name, and type (input/output)
-- `llm_blocked_tool_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, profile_id, and profile_name
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, profile_id, profile_name, and model. Helps developers choose models with lower initial response latency.
-- `llm_tokens_per_second` - Output tokens per second throughput, by provider, profile_id, profile_name, and model. Allows comparing model response speeds for latency-sensitive applications.
+- `llm_request_duration_seconds` - LLM API request duration by provider, agent_id, profile_id, profile_name, and status code
+- `llm_tokens_total` - Token consumption by provider, agent_id, profile_id, profile_name, and type (input/output)
+- `llm_blocked_tool_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, agent_id, profile_id, and profile_name
+- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, profile_id, profile_name, and model. Helps developers choose models with lower initial response latency.
+- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, profile_id, profile_name, and model. Allows comparing model response speeds for latency-sensitive applications.
 
-> **Note:** The `agent_id` and `agent_name` labels are deprecated and will be removed in a future release. Please migrate your dashboards and alerts to use `profile_id` and `profile_name` instead. During the transition period, both label variants are emitted.
+> **Note:** The `agent_id` label contains the external agent ID passed via the `X-Archestra-Agent-Id` header. This allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. Use `profile_id` and `profile_name` for the internal Archestra profile identifier.
 
 ### Process Metrics
 
@@ -128,8 +128,6 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 - `profile.id` - The ID of the profile handling the request
 - `profile.name` - The name of the profile handling the request
 - `profile.<label_key>` - Custom profile labels (e.g., `environment=production`, `team=data-science`)
-
-> **Note:** The `agent.id`, `agent.name`, and `agent.<label_key>` span attributes are deprecated and will be removed in a future release. Please migrate your trace queries to use the `profile.*` attributes instead. During the transition period, both attribute variants are emitted.
 
 **Span Names:**
 
@@ -254,5 +252,3 @@ Here are some PromQL queries for Grafana charts to get you started:
   ```promql
   sum(rate(llm_tokens_per_second_sum[5m])) by (provider, model) / sum(rate(llm_tokens_per_second_count[5m])) by (provider, model)
   ```
-
-> **Note:** The `agent_name` label in PromQL queries is deprecated. Please migrate to `profile_name` for new dashboards and alerts.

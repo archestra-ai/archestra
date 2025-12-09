@@ -250,11 +250,11 @@ Optional configuration:
 
 ## Role Mapping
 
-Archestra supports automatic role assignment based on user attributes from your identity provider using [JMESPath](https://jmespath.org/examples.html) expressions. This allows you to map SSO groups, roles, or other claims to Archestra roles (e.g., Admin, Member, or any custom role you've defined).
+Archestra supports automatic role assignment based on user attributes from your identity provider using [Handlebars](https://handlebarsjs.com/) templates. This allows you to map SSO groups, roles, or other claims to Archestra roles (e.g., Admin, Member, or any custom role you've defined).
 
 ### How Role Mapping Works
 
-1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider (via OIDC userinfo/token claims or SAML assertions)
+1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider's ID token (for OIDC) or SAML assertions
 2. These attributes are evaluated against your configured mapping rules in order
 3. The first rule that matches determines the user's Archestra role
 4. If no rules match, the user is assigned the configured default role (or "Member" if not specified)
@@ -263,36 +263,64 @@ Archestra supports automatic role assignment based on user attributes from your 
 
 When creating or editing an SSO provider, expand the **Role Mapping (Optional)** section:
 
-1. **Data Source**: Choose which SSO data to evaluate:
+1. **Mapping Rules**: Add one or more rules. Each rule has:
 
-   - **Combined (Token + UserInfo)**: Merges ID token claims and userinfo (default, recommended)
-   - **UserInfo Only**: Only use OIDC userinfo endpoint data
-   - **ID Token Only**: Only use ID token claims
+   - **Handlebars Template**: A template that renders to a non-empty string when the rule should match
+   - **Archestra Role**: The role to assign when the template matches
 
-2. **Mapping Rules**: Add one or more rules. Each rule has:
+2. **Default Role**: The role assigned when no rules match (defaults to "member")
 
-   - **JMESPath Expression**: A [JMESPath](https://jmespath.org/) expression that evaluates to a truthy value when the rule should match
-   - **Archestra Role**: The role to assign when the expression matches
+3. **Strict Mode**: When enabled, denies user login if no mapping rules match. This is useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default role.
 
-3. **Default Role**: The role assigned when no rules match (defaults to "member")
+4. **Skip Role Sync**: When enabled, the user's role is only determined on their first login. Subsequent logins will not update their role, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
 
-4. **Strict Mode**: When enabled, denies user login if no mapping rules match. This is useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default role.
+### Handlebars Template Examples
 
-5. **Skip Role Sync**: When enabled, the user's role is only determined on their first login. Subsequent logins will not update their role, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
+Handlebars templates should render to any non-empty string (like "true") when the rule matches. The following custom helpers are available:
 
-### JMESPath Expression Examples
+| Helper | Description |
+|--------|-------------|
+| `includes` | Check if an array includes a value (case-insensitive) |
+| `equals` | Check if two values are equal (case-insensitive for strings) |
+| `contains` | Check if a string contains a substring (case-insensitive) |
+| `and` | Logical AND - true if all values are truthy |
+| `or` | Logical OR - true if any value is truthy |
+| `exists` | True if the value is not null/undefined |
+| `notEquals` | Check if two values are not equal |
 
-JMESPath is a query language for JSON. Here are common patterns:
+**Example Templates:**
 
-| Expression                                                          | Description                                 |
-| ------------------------------------------------------------------- | ------------------------------------------- |
-| `contains(groups \|\| \`[]\`, 'admins')`                            | Match if "admins" is in the groups array    |
-| `role == 'administrator'`                                           | Match if role claim equals "administrator"  |
-| `roles[?@ == 'platform-admin'] \| [0]`                              | Match if "platform-admin" is in roles array |
-| `department == 'IT' && title != null`                               | Match IT department users with a title set  |
-| `contains(groups \|\| \`[]\`, 'team-leads') \|\| role == 'manager'` | Match team leads OR managers                |
+| Template | Description |
+|----------|-------------|
+| `{{#includes groups "admins"}}true{{/includes}}` | Match if "admins" is in the groups array |
+| `{{#equals role "administrator"}}true{{/equals}}` | Match if role claim equals "administrator" |
+| `{{#each roles}}{{#equals this "platform-admin"}}true{{/equals}}{{/each}}` | Match if "platform-admin" is in roles array |
+| `{{#and department title}}{{#equals department "IT"}}true{{/equals}}{{/and}}` | Match IT department users with a title set |
+| `{{#with (json roles)}}{{#each this}}{{#equals this.name "admin"}}true{{/equals}}{{/each}}{{/with}}` | Match role name in JSON string claim (see below) |
 
-> **Tip**: Use `|| \`[]\`` when checking arrays to handle null/missing values gracefully.
+> **Tip**: Templates should output any non-empty string when matching. The text "true" is commonly used but any output works.
+
+#### Handling JSON String Claims
+
+Some identity providers (like Okta) may send complex claims as JSON strings rather than native arrays. For example:
+
+```json
+{
+  "roles": "[{\"name\":\"Application Administrator\"},{\"name\":\"archestra-admin\"}]"
+}
+```
+
+To parse and match against JSON string claims, use the `json` helper with `#with`:
+
+```handlebars
+{{#with (json roles)}}{{#each this}}{{#equals this.name "archestra-admin"}}true{{/equals}}{{/each}}{{/with}}
+```
+
+This template:
+1. Parses the JSON string into an array using `(json roles)`
+2. Sets the parsed array as context using `#with`
+3. Iterates through each role object using `#each`
+4. Checks if any role's `name` property matches
 
 ### Provider-Specific Configuration
 
@@ -310,8 +338,8 @@ Okta can send groups in the ID token. Configure a Groups claim:
 
 Example mapping rule:
 
-```
-contains(groups || `[]`, 'Archestra-Admins')
+```handlebars
+{{#includes groups "Archestra-Admins"}}true{{/includes}}
 ```
 
 #### Microsoft Entra ID (Azure AD)
@@ -325,8 +353,8 @@ Entra ID can include group memberships. Configure group claims:
 
 Example mapping rule (using group object IDs):
 
-```
-contains(groups || `[]`, 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
+```handlebars
+{{#includes groups "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}}true{{/includes}}
 ```
 
 Or configure group names in Entra ID's optional claims.
@@ -346,19 +374,19 @@ Keycloak can send groups via a protocol mapper:
 
 Example mapping rule:
 
-```
-contains(groups || `[]`, 'archestra-admins')
+```handlebars
+{{#includes groups "archestra-admins"}}true{{/includes}}
 ```
 
 #### Generic SAML
 
-For SAML providers, ensure your IdP sends group/role attributes in the SAML assertion. Configure attribute mappers to include these in the assertion, then reference them in your JMESPath expressions.
+For SAML providers, ensure your IdP sends group/role attributes in the SAML assertion. Configure attribute mappers to include these in the assertion, then reference them in your Handlebars templates.
 
 The attribute names depend on your IdP's configuration. Common examples:
 
-```
-contains(groups || `[]`, 'admins')
-contains(memberOf || `[]`, 'CN=Admins,OU=Groups,DC=example,DC=com')
+```handlebars
+{{#includes groups "admins"}}true{{/includes}}
+{{#includes memberOf "CN=Admins,OU=Groups,DC=example,DC=com"}}true{{/includes}}
 ```
 
 ### Troubleshooting Role Mapping
@@ -367,7 +395,7 @@ contains(memberOf || `[]`, 'CN=Admins,OU=Groups,DC=example,DC=com')
 
 1. Check your IdP's configuration to ensure the expected claims/attributes are being sent
 2. Use your IdP's token introspection or SAML assertion viewer to verify the actual data
-3. Ensure your JMESPath expression syntax is correct (test at [jmespath.org](https://jmespath.org/))
+3. Ensure your Handlebars template syntax is correct
 4. Rules are evaluated in order - ensure your most specific rules come first
 
 **Missing groups claim:**
@@ -375,11 +403,11 @@ contains(memberOf || `[]`, 'CN=Admins,OU=Groups,DC=example,DC=com')
 - For OIDC: Verify your IdP is configured to include groups in the token/userinfo
 - For SAML: Check that group attributes are included in the assertion and properly mapped
 
-**Expression always returns false:**
+**Template always returns empty:**
 
-- Check for typos in claim/attribute names (they are case-sensitive)
-- Use the "combined" data source to ensure you're checking both token and userinfo
-- Handle null/missing arrays with `|| \`[]\`` fallback
+- Check for typos in claim/attribute names (they are case-sensitive in the template)
+- Ensure your IdP is sending the expected claims in the ID token
+- The `includes` helper handles null/undefined arrays gracefully
 
 ## Team Synchronization
 
@@ -388,7 +416,7 @@ Archestra supports automatic team membership synchronization based on user group
 ### How Team Sync Works
 
 1. Admin configures an Archestra team and links it to one or more external IdP groups
-2. When a user logs in via SSO, their group memberships are extracted from the SSO token (typically from the `groups` claim)
+2. When a user logs in via SSO, their group memberships are extracted from the SSO token
 3. Archestra compares the user's IdP groups against the external groups linked to each team
 4. **Added**: Users in a linked group are automatically added to the team
 5. **Removed**: Users no longer in any linked group are automatically removed (if they were added via sync)
@@ -396,11 +424,88 @@ Archestra supports automatic team membership synchronization based on user group
 
 ### Configuring Team Sync
 
+When creating or editing an SSO provider, expand the **Team Sync Configuration (Optional)** section to configure how groups are extracted from SSO tokens.
+
+#### Team Sync Settings
+
+1. **Enable Team Sync**: When enabled (default), users are automatically added/removed from Archestra teams based on their SSO group memberships.
+
+2. **Groups Handlebars Template**: A [Handlebars](https://handlebarsjs.com/) template to extract group identifiers from the ID token claims. Should render to a comma-separated list or JSON array. Leave empty to use default extraction.
+
+#### Default Group Extraction
+
+If no custom Handlebars template is configured, Archestra automatically checks these common claim names in order:
+- `groups`, `group`, `memberOf`, `member_of`, `roles`, `role`, `teams`, `team`
+
+The first claim that contains non-empty group data is used.
+
+#### Custom Handlebars Templates
+
+For identity providers with non-standard ID token formats, you can use Handlebars templates to extract group identifiers from complex claim structures. The template should render to either a comma-separated list or a JSON array.
+
+**Available Helpers:**
+
+| Helper | Description |
+|--------|-------------|
+| `json` | Convert value to JSON string, or parse JSON string to object |
+| `pluck` | Extract a property from each item in an array |
+
+**Common Examples:**
+
+| Template | Description |
+|----------|-------------|
+| `{{#each groups}}{{this}},{{/each}}` | Simple flat array: `["admin", "users"]` |
+| `{{#each roles}}{{this.name}},{{/each}}` | Extract names from objects: `[{name: "admin"}]` |
+| `{{{json (pluck roles "name")}}}` | Extract names as JSON array using pluck helper |
+| `{{#each user.memberships.groups}}{{this}},{{/each}}` | Nested path to groups |
+| `{{#with (json roles)}}{{#each this}}{{this.name}},{{/each}}{{/with}}` | Parse JSON string claim, then extract names |
+
+**Enterprise IdP Example (Array of Objects):**
+
+If your IdP sends roles as an array of objects:
+```json
+{
+  "roles": [
+    {"name": "Application Administrator", "attributes": []},
+    {"name": "n8n_access", "attributes": []}
+  ]
+}
+```
+
+Use the template: `{{#each roles}}{{this.name}},{{/each}}` to extract `["Application Administrator", "n8n_access"]`
+
+Or use the pluck helper: `{{{json (pluck roles "name")}}}` for a cleaner JSON array output.
+
+**Enterprise IdP Example (JSON String Claim):**
+
+Some IdPs (like Okta) may send complex claims as JSON **strings** rather than native arrays:
+```json
+{
+  "roles": "[{\"name\":\"Application Administrator\"},{\"name\":\"n8n_access\"}]"
+}
+```
+
+For JSON string claims, first parse the string using the `json` helper:
+
+```handlebars
+{{#with (json roles)}}{{#each this}}{{this.name}},{{/each}}{{/with}}
+```
+
+Or combine `json` and `pluck` helpers:
+
+```handlebars
+{{{json (pluck (json roles) "name")}}}
+```
+
+### Linking Teams to External Groups
+
+After configuring how groups are extracted:
+
 1. Navigate to **Settings > Teams**
 2. Create a team or select an existing team
 3. Click the **link icon** (Configure SSO Team Sync) button next to the team
 4. In the dialog, enter the external group identifier(s) to link:
-   - For OIDC/OAuth: The group name as it appears in the `groups` claim (e.g., `engineering`, `archestra-admins`)
+   - The group name as extracted by your Handlebars template or default extraction
    - For LDAP-style groups: The full DN (e.g., `cn=admins,ou=groups,dc=example,dc=com`)
    - For Azure AD: The group object ID or display name
 5. Click **Add** to create the mapping
@@ -409,7 +514,7 @@ Archestra supports automatic team membership synchronization based on user group
 ### Group Identifier Matching
 
 - Group matching is **case-insensitive** (e.g., `Engineering` matches `engineering`)
-- The identifier must exactly match what your IdP sends in the token
+- The identifier must exactly match what your Handlebars template extracts
 - A single team can be linked to multiple external groups
 - Multiple teams can share the same external group mapping
 
@@ -429,6 +534,8 @@ Ensure your Keycloak client has a groups mapper:
 
 Users must be assigned to groups in Keycloak for team sync to work.
 
+**Handlebars Template**: Not required (uses default `groups` claim)
+
 #### Okta
 
 Configure a Groups claim in your authorization server:
@@ -436,6 +543,10 @@ Configure a Groups claim in your authorization server:
 1. Go to **Security > API > Authorization Servers**
 2. Select your authorization server and go to **Claims**
 3. Add/edit the `groups` claim to include in the ID token
+
+If your Okta sends roles as objects with a `name` property:
+
+**Handlebars Template**: `{{#each roles}}{{this.name}},{{/each}}`
 
 #### Microsoft Entra ID (Azure AD)
 
@@ -446,9 +557,11 @@ Configure group claims in your App Registration:
 3. Choose whether to include all groups or specific security groups
 4. Note: Group Object IDs are returned by default; configure optional claims for group names
 
+**Handlebars Template**: Not required (uses default `groups` claim)
+
 #### Generic SAML
 
-For SAML providers, ensure group attributes are included in the SAML assertion. The attribute name must match what you configure as external group identifiers.
+For SAML providers, ensure group attributes are included in the SAML assertion. The attribute name must match the claim name used by your Handlebars template or one of the default claim names.
 
 ### Example: Development Team Setup
 
@@ -462,14 +575,30 @@ Let's say you have a Keycloak group called `dev-team` and want all members to au
 
 Now, when users with the `dev-team` group log in via SSO, they'll automatically be added to the Development team.
 
+### Example: Complex Roles Setup
+
+If your IdP sends roles as objects (e.g., `roles: [{name: "admin"}, {name: "viewer"}]`):
+
+1. Edit your SSO provider configuration
+2. Expand **Team Sync Configuration**
+3. Set **Groups Handlebars Template** to: `{{#each roles}}{{this.name}},{{/each}}`
+4. Save the provider
+5. Link your teams to group identifiers like `admin` or `viewer`
+
 ### Troubleshooting Team Sync
 
 **Users not being added to teams:**
 
-1. Verify your IdP is sending the `groups` claim in the SSO token
-2. Check that the group identifier in Archestra exactly matches the IdP group name
-3. Ensure the enterprise license is activated
-4. Check backend logs for sync errors
+1. Check that **Enable Team Sync** is enabled in your SSO provider settings
+2. Verify your Handlebars template extracts the expected groups from the ID token
+3. Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect your ID token claims
+4. Check that the group identifier in Archestra exactly matches the extracted group name
+5. Ensure your IdP is configured to include group claims in the ID token (not just userinfo)
+6. Check backend logs for sync errors
+
+**Testing your Handlebars template:**
+
+You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input.
 
 **Users not being removed from teams:**
 
@@ -477,9 +606,9 @@ Now, when users with the `dev-team` group log in via SSO, they'll automatically 
 - Members added manually are never removed
 - Verify the user's IdP groups have actually changed
 
-**Checking SSO token groups:**
+**Checking ID token groups:**
 
-Use your IdP's token introspection or a JWT decoder to inspect the ID token and verify the `groups` claim contains the expected values.
+Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect the ID token and verify the groups claim contains the expected values. Role mapping and team sync both use ID token claims exclusively.
 
 ## User Provisioning
 

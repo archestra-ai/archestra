@@ -6958,12 +6958,16 @@ export type GetInteractionsData = {
     path?: never;
     query?: {
         /**
-         * Filter by agent ID
+         * Filter by profile ID (internal Archestra profile)
          */
-        agentId?: string;
+        profileId?: string;
+        /**
+         * Filter by external agent ID (from X-Archestra-Agent-Id header)
+         */
+        externalAgentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -7035,7 +7039,8 @@ export type GetInteractionsResponses = {
     200: {
         data: Array<{
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -7051,7 +7056,8 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -7067,7 +7073,8 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -7094,6 +7101,81 @@ export type GetInteractionsResponses = {
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetUniqueExternalAgentIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/external-agent-ids';
+};
+
+export type GetUniqueExternalAgentIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+
+export type GetUniqueExternalAgentIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
 
 export type GetInteractionData = {
     body?: never;
@@ -7169,7 +7251,8 @@ export type GetInteractionResponses = {
      */
     200: {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -7185,7 +7268,8 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -7201,7 +7285,8 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -13661,9 +13746,12 @@ export type GetSsoProvidersResponses = {
                 role: string;
             }>;
             defaultRole?: string;
-            dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
         };
         userId: string | null;
         providerId: string;
@@ -13773,9 +13861,12 @@ export type CreateSsoProviderData = {
                 role: string;
             }>;
             defaultRole?: string;
-            dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
         };
         userId?: string | null;
         providerId: string;
@@ -13948,9 +14039,12 @@ export type CreateSsoProviderResponses = {
                 role: string;
             }>;
             defaultRole?: string;
-            dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
         };
         userId: string | null;
         providerId: string;
@@ -14211,9 +14305,12 @@ export type GetSsoProviderResponses = {
                 role: string;
             }>;
             defaultRole?: string;
-            dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
         };
         userId: string | null;
         providerId: string;
@@ -14323,9 +14420,12 @@ export type UpdateSsoProviderData = {
                 role: string;
             }>;
             defaultRole?: string;
-            dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
         };
         providerId?: string;
         domain?: string;
@@ -14499,9 +14599,12 @@ export type UpdateSsoProviderResponses = {
                 role: string;
             }>;
             defaultRole?: string;
-            dataSource?: 'userInfo' | 'token' | 'combined';
             strictMode?: boolean;
             skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
         };
         userId: string | null;
         providerId: string;

@@ -4,6 +4,7 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getObservableGenAI } from "@/llm-metrics";
+import logger from "@/logging";
 import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 
 import {
@@ -56,12 +57,26 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: string,
     agentId?: string,
     stream = false,
+    externalAgentId?: string,
   ) => {
+    logger.debug(
+      {
+        agentId,
+        model,
+        stream,
+        contentsCount: body.contents?.length || 0,
+        hasTools: !!body.tools,
+      },
+      "[GeminiProxy] handleGenerateContent: request received",
+    );
+
     let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
+      logger.debug({ agentId }, "[GeminiProxy] Resolving explicit agent by ID");
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
+        logger.debug({ agentId }, "[GeminiProxy] Agent not found");
         return reply.status(404).send({
           error: {
             message: `Agent with ID ${agentId} not found`,
@@ -72,16 +87,29 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
+      logger.debug(
+        { userAgent: headers["user-agent"] },
+        "[GeminiProxy] Resolving default agent by user-agent",
+      );
       resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
 
     const resolvedAgentId = resolvedAgent.id;
+    logger.debug(
+      {
+        resolvedAgentId,
+        agentName: resolvedAgent.name,
+        wasExplicit: !!agentId,
+      },
+      "[GeminiProxy] Agent resolved",
+    );
     const { "x-goog-api-key": geminiApiKey } = headers;
     const genAI = getObservableGenAI(
       new GoogleGenAI({ apiKey: geminiApiKey }),
       resolvedAgent,
+      externalAgentId,
     );
 
     // Use the model from the URL path or default to gemini-pro
@@ -89,6 +117,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     try {
       // Check if current usage limits are already exceeded
+      logger.debug({ resolvedAgentId }, "[GeminiProxy] Checking usage limits");
       const limitViolation =
         await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
 
@@ -99,6 +128,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           {
             resolvedAgentId,
             reason: "token_cost_limit_exceeded",
+            contentMessage,
           },
           "Gemini request blocked due to token cost limit",
         );
@@ -112,6 +142,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
+      logger.debug({ resolvedAgentId }, "[GeminiProxy] Limit check passed");
 
       // TODO: Persist tools if present
       // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
@@ -123,8 +154,21 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // );
 
       // Convert to common format and evaluate trusted data policies
+      logger.debug(
+        { contentsCount: body.contents?.length || 0 },
+        "[GeminiProxy] Converting contents to common format",
+      );
       const commonMessages = utils.adapters.gemini.toCommonFormat(
         body.contents || [],
+      );
+      logger.debug(
+        { commonMessageCount: commonMessages.length },
+        "[GeminiProxy] Contents converted to common format",
+      );
+
+      logger.debug(
+        { resolvedAgentId },
+        "[GeminiProxy] Evaluating trusted data policies",
       );
       const { toolResultUpdates, contextIsTrusted: _contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
@@ -138,6 +182,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       // Apply updates back to Gemini contents
+      logger.debug(
+        { updateCount: Object.keys(toolResultUpdates).length },
+        "[GeminiProxy] Applying tool result updates",
+      );
       const filteredContents = utils.adapters.gemini.applyUpdates(
         body.contents || [],
         toolResultUpdates,
@@ -149,7 +197,16 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         contents: filteredContents,
       };
 
+      logger.debug(
+        { filteredContentsCount: filteredContents.length },
+        "[GeminiProxy] Contents filtered after trusted data evaluation",
+      );
+
       if (stream) {
+        logger.debug(
+          { modelName },
+          "[GeminiProxy] Streaming not supported yet",
+        );
         // reply.header("Content-Type", "text/event-stream");
         // reply.header("Cache-Control", "no-cache");
         // reply.header("Connection", "keep-alive");
@@ -248,7 +305,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         //   // Store the complete interaction
         //   await InteractionModel.create({
-        //     agentId: resolvedAgentId,
+        //     profileId: resolvedAgentId,
         //     type: "gemini:generateContent",
         //     request: body,
         //     response: accumulatedResponse,
@@ -264,6 +321,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Streaming is not supported for Gemini. Coming soon!",
         );
       } else {
+        logger.debug(
+          { modelName },
+          "[GeminiProxy] Starting non-streaming request",
+        );
         // Non-streaming response with span to measure LLM call duration
         const response = await utils.tracing.startActiveLlmSpan(
           "gemini.generateContent",
@@ -304,7 +365,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         //     // Store the interaction with refusal
         //     await InteractionModel.create({
-        //       agentId: resolvedAgentId,
+        //       profileId: resolvedAgentId,
         //       type: "gemini:generateContent",
         //       request: body,
         //       response: refusalResponse,
@@ -319,8 +380,18 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
           : { input: null, output: null };
 
+        logger.debug(
+          {
+            resolvedAgentId,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+          },
+          "[GeminiProxy] Response received, storing interaction",
+        );
+
         await InteractionModel.create({
-          agentId: resolvedAgentId,
+          profileId: resolvedAgentId,
+          externalAgentId,
           type: "gemini:generateContent",
           request: body,
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
@@ -391,6 +462,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -398,6 +472,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         undefined,
         false,
+        externalAgentId,
       );
     },
   );
@@ -423,6 +498,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -430,6 +508,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         undefined,
         true,
+        externalAgentId,
       );
     },
   );
@@ -457,6 +536,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -464,6 +546,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         request.params.agentId,
         false,
+        externalAgentId,
       );
     },
   );
@@ -491,6 +574,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -498,6 +584,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         request.params.agentId,
         true,
+        externalAgentId,
       );
     },
   );

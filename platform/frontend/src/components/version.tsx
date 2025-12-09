@@ -7,7 +7,7 @@ export function Version() {
   const { data } = useHealth();
   const pathname = usePathname();
 
-  if (pathname.startsWith("/chat")) {
+  if (pathname.startsWith("/chat/")) {
     return null;
   }
 

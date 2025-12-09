@@ -36,6 +36,7 @@ frontend_env_vars = get_frontend_env()
 local_resource(
   'pnpm-install',
   cmd='CI=true pnpm install',
+  cmd_bat='set CI=true && pnpm install',
   deps=[
     '../frontend/package.json',
     '../backend/package.json',
@@ -48,6 +49,7 @@ if is_prod:
   local_resource(
     dev_resource_name,
     cmd='rm -rf frontend/.next && pnpm build',
+    cmd_bat='if exist frontend\\.next rd /s /q frontend\\.next && pnpm build',
     serve_cmd='pnpm start',
     labels=['dev'],
     resource_deps=['db-migrate'],

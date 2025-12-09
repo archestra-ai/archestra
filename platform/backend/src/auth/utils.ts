@@ -7,17 +7,17 @@ export async function hasPermission(
 ): Promise<{ success: boolean; error: Error | null }> {
   const { hasPermission } = config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: conditional EE import
-    await import("./utils.ee")
+      await import("./utils.ee")
     : {
-      hasPermission: async (
-        _permissions: Permissions,
-        _requestHeaders: IncomingHttpHeaders,
-      ): Promise<{ success: boolean; error: Error | null }> => {
-        return {
-          success: true, // Always allow - no permission check in non-enterprise version
-          error: null,
-        };
-      },
-    };
+        hasPermission: async (
+          _permissions: Permissions,
+          _requestHeaders: IncomingHttpHeaders,
+        ): Promise<{ success: boolean; error: Error | null }> => {
+          return {
+            success: true, // Always allow - no permission check in non-enterprise version
+            error: null,
+          };
+        },
+      };
   return hasPermission.apply(null, args);
 }

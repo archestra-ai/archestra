@@ -1,7 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Permissions } from "@archestra/shared";
+import logger from "@/logging";
 import { auth as betterAuth } from "./better-auth";
-import logger from '@/logging';
 
 export const hasPermission = async (
   permissions: Permissions,

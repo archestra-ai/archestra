@@ -201,13 +201,10 @@ export const SsoProviderSamlConfigSchema = z
 
 /**
  * Role Mapping Configuration Schema
- * Supports JMESPath expressions for mapping SSO attributes to Archestra roles
- *
- * Similar to Grafana's role mapping:
- * https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/generic-oauth/#configure-role-mapping
+ * Supports Handlebars expressions for mapping SSO attributes to Archestra roles
  */
 export const SsoRoleMappingRuleSchema = z.object({
-  /** JMESPath expression to evaluate against userInfo/token claims */
+  /** Handlebars expression to evaluate against userInfo/token claims */
   expression: z.string().min(1, "Expression is required"),
   /** Archestra role to assign when expression evaluates to true */
   role: z.string().min(1, "Role is required"),
@@ -225,12 +222,6 @@ export const SsoRoleMappingConfigSchema = z.object({
    */
   defaultRole: z.string().optional(),
   /**
-   * Path to extract the data object for JMESPath evaluation.
-   * Options: "userInfo" (OIDC userinfo), "token" (ID token claims), "combined" (merged)
-   * Default: "combined"
-   */
-  dataSource: z.enum(["userInfo", "token", "combined"]).optional(),
-  /**
    * Strict mode: If enabled, denies user login when no role mapping rule matches.
    * Without strict mode, users who don't match any rule are assigned the default role.
    * Default: false
@@ -247,6 +238,36 @@ export const SsoRoleMappingConfigSchema = z.object({
 export type SsoRoleMappingRule = z.infer<typeof SsoRoleMappingRuleSchema>;
 export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
 
+/**
+ * Team Sync Configuration Schema
+ * Supports Handlebars expressions for extracting group identifiers from SSO claims
+ * for automatic team membership synchronization.
+ *
+ * This allows flexibility in how groups are extracted from different IdP token formats.
+ */
+export const SsoTeamSyncConfigSchema = z.object({
+  /**
+   * Handlebars expression to extract group identifiers from ID token claims.
+   * The expression should evaluate to an array of strings (group identifiers).
+   *
+   * Examples:
+   * - `{{#each groups}}{{this}},{{/each}}` - Simple array claim: ["admin", "users"]
+   * - `{{#each roles}}{{this.name}},{{/each}}` - Extract names from array of objects
+   * - `{{{json (pluck (json roles) "name")}}}` - Parse JSON string and extract names
+   *
+   * If not configured, falls back to checking common claim names:
+   * groups, group, memberOf, member_of, roles, role, teams, team
+   */
+  groupsExpression: z.string().optional(),
+  /**
+   * Whether team sync is enabled for this provider.
+   * Default: true (team sync is enabled)
+   */
+  enabled: z.boolean().optional(),
+});
+
+export type SsoTeamSyncConfig = z.infer<typeof SsoTeamSyncConfigSchema>;
+
 // Form schemas for UI
 export const SsoProviderFormSchema = z
   .object({
@@ -257,6 +278,7 @@ export const SsoProviderFormSchema = z
     oidcConfig: SsoProviderOidcConfigSchema.optional(),
     samlConfig: SsoProviderSamlConfigSchema.optional(),
     roleMapping: SsoRoleMappingConfigSchema.optional(),
+    teamSyncConfig: SsoTeamSyncConfigSchema.optional(),
   })
   .refine(
     (data) => {

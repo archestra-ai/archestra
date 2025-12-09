@@ -107,6 +107,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY shared/package.json shared/
 COPY docker-banner.sh ./
 
 # Install production dependencies for both workspaces
@@ -121,6 +122,9 @@ COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/
 COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
+
+# Copy built shared package
+COPY --from=builder /app/shared/dist ./shared/dist
 
 # Create base supervisord configuration (without postgres)
 #

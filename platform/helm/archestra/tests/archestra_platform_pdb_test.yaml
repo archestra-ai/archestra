@@ -18,6 +18,15 @@ tests:
       - failedTemplate:
           errorMessage: "PodDisruptionBudget is enabled but neither minAvailable nor maxUnavailable is set. At least one must be specified."
 
+  - it: should fail when both minAvailable and maxUnavailable are set
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: 1
+      archestra.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: "PodDisruptionBudget cannot have both minAvailable and maxUnavailable set. Only one can be specified."
+
   - it: should create PDB with correct metadata when enabled
     set:
       archestra.podDisruptionBudget.enabled: true

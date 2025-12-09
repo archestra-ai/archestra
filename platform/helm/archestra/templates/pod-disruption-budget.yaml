@@ -4,6 +4,9 @@
 {{- if and (not $minAvailableSet) (not $maxUnavailableSet) }}
 {{- fail "PodDisruptionBudget is enabled but neither minAvailable nor maxUnavailable is set. At least one must be specified." }}
 {{- end }}
+{{- if and $minAvailableSet $maxUnavailableSet }}
+{{- fail "PodDisruptionBudget cannot have both minAvailable and maxUnavailable set. Only one can be specified." }}
+{{- end }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

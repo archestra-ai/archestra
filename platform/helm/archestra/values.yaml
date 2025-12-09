@@ -8,6 +8,8 @@ archestra:
   imagePullPolicy: IfNotPresent
 
   # Number of pod replicas for the Archestra Platform deployment
+  # Note: This value is ignored when horizontalPodAutoscaler.enabled is true,
+  # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
   # Deployment strategy configuration for the Deployment

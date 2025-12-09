@@ -65,6 +65,24 @@ tests:
           path: spec.replicas
           value: 4
 
+  - it: should not have replicas field when HPA is enabled
+    documentIndex: 1
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+    asserts:
+      - isNull:
+          path: spec.replicas
+
+  - it: should have replicas field when HPA is disabled
+    documentIndex: 1
+    set:
+      archestra.horizontalPodAutoscaler.enabled: false
+      archestra.replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
   - it: should not configure deployment strategy by default
     documentIndex: 1
     asserts:

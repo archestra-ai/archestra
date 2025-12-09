@@ -31,6 +31,9 @@ export interface TestFixtures {
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
   waitForAgentTool: typeof waitForAgentTool;
+  getTeamByName: typeof getTeamByName;
+  addTeamMember: typeof addTeamMember;
+  removeTeamMember: typeof removeTeamMember;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -357,6 +360,69 @@ const waitForAgentTool = async (
   );
 };
 
+/**
+ * Get a team by name (includes members)
+ */
+export const getTeamByName = async (
+  request: APIRequestContext,
+  teamName: string,
+): Promise<{
+  id: string;
+  name: string;
+  members: Array<{ userId: string; email: string }>;
+}> => {
+  const teamsResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/teams",
+  });
+  const teams = await teamsResponse.json();
+  const team = teams.find((t: { name: string }) => t.name === teamName);
+  if (!team) {
+    throw new Error(`Team '${teamName}' not found`);
+  }
+
+  // Get team members
+  const membersResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/teams/${team.id}/members`,
+  });
+  const members = await membersResponse.json();
+
+  return { ...team, members };
+};
+
+/**
+ * Add a member to a team
+ */
+const addTeamMember = async (
+  request: APIRequestContext,
+  teamId: string,
+  userId: string,
+  role: "member" | "owner" = "member",
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/teams/${teamId}/members`,
+    data: { userId, role },
+  });
+
+/**
+ * Remove a member from a team
+ */
+export const removeTeamMember = async (
+  request: APIRequestContext,
+  teamId: string,
+  userId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/teams/${teamId}/members/${userId}`,
+  });
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -406,6 +472,15 @@ export const test = base.extend<TestFixtures>({
   },
   waitForAgentTool: async ({}, use) => {
     await use(waitForAgentTool);
+  },
+  getTeamByName: async ({}, use) => {
+    await use(getTeamByName);
+  },
+  addTeamMember: async ({}, use) => {
+    await use(addTeamMember);
+  },
+  removeTeamMember: async ({}, use) => {
+    await use(removeTeamMember);
   },
   /**
    * Admin request - same auth as default `request` fixture

@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { TeamVaultFolder } from "@/types";

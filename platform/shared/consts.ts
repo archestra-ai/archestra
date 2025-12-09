@@ -20,8 +20,16 @@ export const E2eTestId = {
   CredentialOwnerEmail: "credential-owner-email",
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
+  ManageToolsButton: "manage-tools-button",
   ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
   McpServerCard: "mcp-server-card",
+  McpToolsDialog: "mcp-tools-dialog",
+  InstallationSelect: "installation-select",
+  ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
+  ConnectAgentButton: "connect-agent-button",
+  ProfileTeamBadge: "profile-team-badge",
+  EditAgentButton: "edit-agent-button",
+  RemoveTeamBadge: "remove-team-badge",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

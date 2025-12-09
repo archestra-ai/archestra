@@ -584,8 +584,14 @@ describe("AgentToolModel.findAllPaginated", () => {
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
-      const agent1 = await makeAgent({ name: "Agent 1", teams: [team1.id] });
-      const agent2 = await makeAgent({ name: "Agent 2", teams: [team2.id] });
+      const agent1 = await makeAgent({
+        name: "Agent 1",
+        teams: [team1.id],
+      });
+      const agent2 = await makeAgent({
+        name: "Agent 2",
+        teams: [team2.id],
+      });
 
       // Add user to team1 via team membership
       await makeTeamMember(team1.id, user.id);

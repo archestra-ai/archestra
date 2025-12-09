@@ -514,6 +514,7 @@ class ToolModel {
       mcpServerId: string | null;
       credentialSourceMcpServerId: string | null;
       executionSourceMcpServerId: string | null;
+      useDynamicTeamCredential: boolean;
       catalogId: string | null;
       catalogName: string | null;
     }>
@@ -534,6 +535,8 @@ class ToolModel {
           schema.agentToolsTable.credentialSourceMcpServerId,
         executionSourceMcpServerId:
           schema.agentToolsTable.executionSourceMcpServerId,
+        useDynamicTeamCredential:
+          schema.agentToolsTable.useDynamicTeamCredential,
         mcpServerId: schema.mcpServersTable.id,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,

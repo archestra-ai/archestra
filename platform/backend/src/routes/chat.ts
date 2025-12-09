@@ -49,9 +49,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { id: conversationId, messages }, user, organizationId },
+      { body: { id: conversationId, messages }, user, organizationId, headers },
       reply,
     ) => {
+      const { success: userIsProfileAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
       // Get conversation
       const conversation = await ConversationModel.findById(
         conversationId,
@@ -65,7 +69,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fetch MCP tools, agent prompts, and chat settings in parallel
       const [mcpTools, prompt, chatSettings] = await Promise.all([
-        getChatMcpTools(conversation.agentId),
+        getChatMcpTools(conversation.agentId, user.id, userIsProfileAdmin),
         PromptModel.findById(conversation.promptId),
         ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
@@ -134,9 +138,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Stream with AI SDK
-      const result = streamText({
+      // Build streamText config conditionally
+      const streamTextConfig: Parameters<typeof streamText>[0] = {
         model: anthropic(conversation.selectedModel),
-        system: systemPrompt,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),
@@ -150,7 +154,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream finished",
           );
         },
-      });
+      };
+
+      // Only include system property if we have actual content
+      if (systemPrompt) {
+        streamTextConfig.system = systemPrompt;
+      }
+
+      const result = streamText(streamTextConfig);
 
       // Convert to UI message stream response (Response object)
       const response = result.toUIMessageStreamResponse({
@@ -332,7 +343,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
-      const mcpTools = await getChatMcpTools(agentId);
+      const mcpTools = await getChatMcpTools(agentId, user.id, isAgentAdmin);
 
       // Convert AI SDK Tool format to simple array for frontend
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({

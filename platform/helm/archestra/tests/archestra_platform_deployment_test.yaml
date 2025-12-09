@@ -56,6 +56,15 @@ tests:
           path: spec.replicas
           value: 1
 
+  - it: should allow configuring replica count
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 4
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 4
+
   - it: should not configure deployment strategy by default
     documentIndex: 1
     asserts:

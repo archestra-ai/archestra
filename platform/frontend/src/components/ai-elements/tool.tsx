@@ -10,7 +10,9 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
+import { createContext, useContext, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,13 +23,36 @@ import { CodeBlock } from "./code-block";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
-export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible
-    defaultOpen={false}
-    className={cn("not-prose mb-4 w-full rounded-md border", className)}
-    {...props}
-  />
-);
+const ToolContext = createContext<{ hasOpened: boolean }>({ hasOpened: false });
+
+export const Tool = ({
+  className,
+  onOpenChange,
+  children,
+  ...props
+}: ToolProps) => {
+  const [hasOpened, setHasOpened] = useState(
+    props.defaultOpen || props.open || false,
+  );
+
+  const handleOpenChange = (open: boolean) => {
+    if (open) setHasOpened(true);
+    onOpenChange?.(open);
+  };
+
+  return (
+    <ToolContext.Provider value={{ hasOpened }}>
+      <Collapsible
+        defaultOpen={false}
+        className={cn("not-prose mb-4 w-full rounded-md border", className)}
+        onOpenChange={handleOpenChange}
+        {...props}
+      >
+        {children}
+      </Collapsible>
+    </ToolContext.Provider>
+  );
+};
 
 export type ToolHeaderProps = {
   title?: string;
@@ -108,15 +133,25 @@ export const ToolHeader = ({
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
-export const ToolContent = ({ className, ...props }: ToolContentProps) => (
-  <CollapsibleContent
-    className={cn(
-      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-      className,
-    )}
-    {...props}
-  />
-);
+export const ToolContent = ({
+  className,
+  children,
+  ...props
+}: ToolContentProps) => {
+  const { hasOpened } = useContext(ToolContext);
+
+  return (
+    <CollapsibleContent
+      className={cn(
+        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+        className,
+      )}
+      {...props}
+    >
+      {hasOpened ? children : null}
+    </CollapsibleContent>
+  );
+};
 
 export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
@@ -151,6 +186,8 @@ export const ToolOutput = ({
   conversations,
   ...props
 }: ToolOutputProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (!(output || errorText || conversations)) {
     return null;
   }
@@ -200,13 +237,50 @@ export const ToolOutput = ({
 
   let Output = <div>{output as ReactNode}</div>;
 
-  if (typeof output === "object") {
+  if (typeof output === "object" || typeof output === "string") {
+    const codeString =
+      typeof output === "object" ? JSON.stringify(output, null, 2) : output;
+    const lines = codeString.split("\n");
+    const MAX_LINES = 50;
+    const isLarge = lines.length > MAX_LINES;
+
+    const displayCode =
+      isExpanded || !isLarge
+        ? codeString
+        : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${
+            lines.length - MAX_LINES
+          } more lines)`;
+
     Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+      <div className="relative group">
+        <CodeBlock code={displayCode} language="json" />
+        {isLarge && (
+          <div
+            className={cn(
+              "absolute bottom-4 left-0 right-0 flex justify-center transition-all duration-200",
+              !isExpanded &&
+                "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
+            )}
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+              className="h-7 text-xs shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
+            >
+              {isExpanded
+                ? "Show Less"
+                : `Show ${lines.length - MAX_LINES} more lines`}
+            </Button>
+          </div>
+        )}
+      </div>
     );
-  } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
   }
+
   return (
     <div className={cn("space-y-2 p-4", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">

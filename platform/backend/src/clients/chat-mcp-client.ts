@@ -1,22 +1,25 @@
+import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { jsonSchema, type Tool } from "ai";
+import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
+import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
 
 /**
- * MCP Gateway URL (internal)
- * Chat connects to the same MCP Gateway that LLM Proxy uses
+ * MCP Gateway base URL (internal)
+ * Chat connects to the new MCP Gateway endpoint with profile ID in path
  */
-const MCP_GATEWAY_URL = "http://localhost:9000/v1/mcp";
+const MCP_GATEWAY_BASE_URL = "http://localhost:9000/v1/mcp";
 
 /**
- * Client cache per agent
- * Key: agentId, Value: MCP Client
+ * Client cache per agent + user combination
+ * Key: `${agentId}:${userId}`, Value: MCP Client
  */
 const clientCache = new Map<string, Client>();
 
 /**
- * Tool cache per agent with TTL to avoid hammering MCP Gateway
+ * Tool cache per agent + user with TTL to avoid hammering MCP Gateway
  */
 const TOOL_CACHE_TTL_MS = 30_000; // 30 seconds
 const toolCache = new Map<
@@ -24,82 +27,201 @@ const toolCache = new Map<
   { tools: Record<string, Tool>; expiresAt: number }
 >();
 
+/**
+ * Generate cache key from agentId and userId
+ */
+function getCacheKey(agentId: string, userId: string): string {
+  return `${agentId}:${userId}`;
+}
+
 export const __test = {
-  setCachedClient(agentId: string, client: Client) {
-    clientCache.set(agentId, client);
+  setCachedClient(cacheKey: string, client: Client) {
+    clientCache.set(cacheKey, client);
   },
-  clearToolCache(agentId?: string) {
-    if (agentId) {
-      toolCache.delete(agentId);
+  clearToolCache(cacheKey?: string) {
+    if (cacheKey) {
+      toolCache.delete(cacheKey);
     } else {
       toolCache.clear();
     }
   },
+  getCacheKey,
 };
 
 /**
- * Clear cached client for a specific agent
- * Should be called when MCP Gateway sessions are cleared
+ * Select the appropriate team token for a user based on team overlap
+ * Priority:
+ * 1. Organization token (if user is profile admin)
+ * 2. Team token where user is a member AND team is assigned to profile
  *
- * @param agentId - The agent ID whose client should be cleared
+ * @param agentId - The profile (agent) ID
+ * @param userId - The user requesting access
+ * @param userIsProfileAdmin - Whether the user has profile admin permission
+ * @returns Token value and metadata, or null if no token available
  */
-export function clearChatMcpClient(agentId: string): void {
-  logger.info(
-    { agentId, hasCachedClient: clientCache.has(agentId) },
-    "clearChatMcpClient() called - checking for cached client",
+async function selectTeamToken(
+  agentId: string,
+  userId: string,
+  userIsProfileAdmin: boolean,
+): Promise<{
+  tokenValue: string;
+  tokenId: string;
+  teamId: string | null;
+  isOrganizationToken: boolean;
+} | null> {
+  // Get all tokens
+  const tokens = await TeamTokenModel.findAll();
+
+  // If user is profile admin, use organization token (teamId is null)
+  if (userIsProfileAdmin) {
+    const orgToken = tokens.find((t) => t.isOrganizationToken);
+    if (orgToken) {
+      const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
+      if (tokenValue) {
+        logger.info(
+          {
+            agentId,
+            userId,
+            tokenId: orgToken.id,
+          },
+          "Using organization token for chat MCP client",
+        );
+        return {
+          tokenValue,
+          tokenId: orgToken.id,
+          teamId: null,
+          isOrganizationToken: true,
+        };
+      }
+    }
+  }
+
+  // Get user's team IDs
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
+  // Get profile's team IDs
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+
+  // Find intersection of user's teams and profile's teams
+  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
+
+  // Try to find a team token where user is in that team and profile is assigned to it
+  if (commonTeamIds.length > 0) {
+    for (const token of tokens) {
+      if (token.teamId && commonTeamIds.includes(token.teamId)) {
+        const tokenValue = await TeamTokenModel.getTokenValue(token.id);
+        if (tokenValue) {
+          logger.info(
+            {
+              agentId,
+              userId,
+              tokenId: token.id,
+              teamId: token.teamId,
+            },
+            "Selected team-scoped token for chat MCP client",
+          );
+          return {
+            tokenValue,
+            tokenId: token.id,
+            teamId: token.teamId,
+            isOrganizationToken: false,
+          };
+        }
+      }
+    }
+  }
+
+  logger.warn(
+    {
+      agentId,
+      userId,
+      userTeamCount: userTeamIds.length,
+      profileTeamCount: profileTeamIds.length,
+      commonTeamCount: commonTeamIds.length,
+      tokenCount: tokens.length,
+    },
+    "No valid team token found for user",
   );
 
-  const client = clientCache.get(agentId);
-  if (client) {
-    logger.info(
-      { agentId },
-      "Found cached MCP client - closing connection and removing from cache",
-    );
-
-    // Close the client connection if possible
-    try {
-      client.close();
-      logger.info({ agentId }, "Successfully closed MCP client connection");
-    } catch (error) {
-      logger.warn(
-        { agentId, error },
-        "Error closing MCP client connection (non-fatal, continuing with cache removal)",
-      );
-    }
-
-    clientCache.delete(agentId);
-    logger.info(
-      {
-        agentId,
-        remainingCachedClients: clientCache.size,
-      },
-      "Removed MCP client from cache",
-    );
-    toolCache.delete(agentId);
-  } else {
-    logger.info(
-      { agentId },
-      "No cached MCP client found for agent (already cleared or never created)",
-    );
-  }
+  return null;
 }
 
 /**
- * Get or create MCP client for the specified agent
- * Connects to internal MCP Gateway with agent-based authentication
+ * Clear cached client for a specific agent (all users)
+ * Should be called when MCP Gateway sessions are cleared
  *
- * @param agentId - The agent ID to use for authentication
+ * @param agentId - The agent ID whose clients should be cleared
+ */
+export function clearChatMcpClient(agentId: string): void {
+  logger.info(
+    { agentId },
+    "clearChatMcpClient() called - checking for cached clients",
+  );
+
+  let clearedCount = 0;
+
+  // Find and remove all cache entries for this agentId (any user)
+  for (const key of clientCache.keys()) {
+    if (key.startsWith(`${agentId}:`)) {
+      const client = clientCache.get(key);
+      if (client) {
+        try {
+          client.close();
+          logger.info(
+            { agentId, cacheKey: key },
+            "Closed MCP client connection",
+          );
+        } catch (error) {
+          logger.warn(
+            { agentId, cacheKey: key, error },
+            "Error closing MCP client connection (non-fatal)",
+          );
+        }
+        clientCache.delete(key);
+        clearedCount++;
+      }
+    }
+  }
+
+  // Clear tool cache entries for this agentId
+  for (const key of toolCache.keys()) {
+    if (key.startsWith(`${agentId}:`)) {
+      toolCache.delete(key);
+    }
+  }
+
+  logger.info(
+    {
+      agentId,
+      clearedCount,
+      remainingCachedClients: clientCache.size,
+    },
+    "Cleared MCP client cache entries for agent",
+  );
+}
+
+/**
+ * Get or create MCP client for the specified agent and user
+ * Connects to internal MCP Gateway with team token authentication
+ *
+ * @param agentId - The agent (profile) ID
+ * @param userId - The user ID for token selection
+ * @param userIsProfileAdmin - Whether the user is a profile admin
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
 export async function getChatMcpClient(
   agentId: string,
+  userId: string,
+  userIsProfileAdmin: boolean,
 ): Promise<Client | null> {
+  const cacheKey = getCacheKey(agentId, userId);
+
   // Check cache first
-  const cachedClient = clientCache.get(agentId);
+  const cachedClient = clientCache.get(cacheKey);
   if (cachedClient) {
     logger.info(
-      { agentId },
-      "✅ Returning cached MCP client for agent (existing session will be reused)",
+      { agentId, userId },
+      "✅ Returning cached MCP client for agent/user (existing session will be reused)",
     );
     return cachedClient;
   }
@@ -107,20 +229,39 @@ export async function getChatMcpClient(
   logger.info(
     {
       agentId,
-      url: MCP_GATEWAY_URL,
+      userId,
       totalCachedClients: clientCache.size,
     },
-    "🔄 No cached client found - creating new MCP client for agent via gateway (will initialize new session)",
+    "🔄 No cached client found - creating new MCP client for agent/user via gateway",
   );
 
+  // Select appropriate token for this user
+  const tokenResult = await selectTeamToken(
+    agentId,
+    userId,
+    userIsProfileAdmin,
+  );
+  if (!tokenResult) {
+    logger.error(
+      { agentId, userId },
+      "No valid team token available for user - cannot connect to MCP Gateway",
+    );
+    return null;
+  }
+
+  const { tokenValue } = tokenResult;
+
+  // Use new URL format with profileId in path
+  const mcpGatewayUrl = `${MCP_GATEWAY_BASE_URL}/${agentId}`;
+
   try {
-    // Create StreamableHTTP transport with agent authentication
+    // Create StreamableHTTP transport with profile token authentication
     const transport = new StreamableHTTPClientTransport(
-      new URL(MCP_GATEWAY_URL),
+      new URL(mcpGatewayUrl),
       {
         requestInit: {
           headers: new Headers({
-            Authorization: `Bearer ${agentId}`,
+            Authorization: `Bearer ${tokenValue}`,
             Accept: "application/json, text/event-stream",
           }),
         },
@@ -138,20 +279,24 @@ export async function getChatMcpClient(
       },
     );
 
-    logger.info({ agentId }, "Connecting to MCP Gateway...");
+    logger.info(
+      { agentId, userId, url: mcpGatewayUrl },
+      "Connecting to MCP Gateway...",
+    );
     await client.connect(transport);
 
     logger.info(
-      { agentId },
+      { agentId, userId },
       "Successfully connected to MCP Gateway (new session initialized)",
     );
 
     // Cache the client
-    clientCache.set(agentId, client);
+    clientCache.set(cacheKey, client);
 
     logger.info(
       {
         agentId,
+        userId,
         totalCachedClients: clientCache.size,
       },
       "✅ MCP client cached - subsequent requests will reuse this session",
@@ -160,8 +305,8 @@ export async function getChatMcpClient(
     return client;
   } catch (error) {
     logger.error(
-      { error, agentId, url: MCP_GATEWAY_URL },
-      "Failed to connect to MCP Gateway for agent",
+      { error, agentId, userId, url: mcpGatewayUrl },
+      "Failed to connect to MCP Gateway for agent/user",
     );
     return null;
   }
@@ -190,48 +335,74 @@ function normalizeJsonSchema(schema: any): any {
 }
 
 /**
- * Get all MCP tools for the specified agent in AI SDK Tool format
+ * Get all MCP tools for the specified agent and user in AI SDK Tool format
  * Converts MCP JSON Schema to AI SDK Schema using jsonSchema() helper
  *
  * @param agentId - The agent ID to fetch tools for
+ * @param userId - The user ID for authentication
+ * @param userIsProfileAdmin - Whether the user is a profile admin
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools(
   agentId: string,
+  userId: string,
+  userIsProfileAdmin: boolean,
 ): Promise<Record<string, Tool>> {
-  const cachedTools = toolCache.get(agentId);
+  const cacheKey = getCacheKey(agentId, userId);
+
+  const cachedTools = toolCache.get(cacheKey);
   if (cachedTools && cachedTools.expiresAt > Date.now()) {
     logger.info(
       {
         agentId,
+        userId,
         toolCount: Object.keys(cachedTools.tools).length,
       },
       "Returning cached MCP tools for chat",
     );
     return cachedTools.tools;
   } else if (cachedTools) {
-    toolCache.delete(agentId);
+    toolCache.delete(cacheKey);
   }
 
-  logger.info({ agentId }, "getChatMcpTools() called - fetching client...");
-  const client = await getChatMcpClient(agentId);
+  logger.info(
+    { agentId, userId },
+    "getChatMcpTools() called - fetching client...",
+  );
+
+  // Get token for direct tool execution (bypasses HTTP for security)
+  const teamToken = await selectTeamToken(agentId, userId, userIsProfileAdmin);
+  if (!teamToken) {
+    logger.warn(
+      { agentId, userId },
+      "No valid team token available for user - cannot execute tools",
+    );
+    return {};
+  }
+
+  // Still use MCP client for listing tools (via MCP Gateway)
+  const client = await getChatMcpClient(agentId, userId, userIsProfileAdmin);
 
   if (!client) {
-    logger.warn({ agentId }, "No MCP client available, returning empty tools");
+    logger.warn(
+      { agentId, userId },
+      "No MCP client available, returning empty tools",
+    );
     return {}; // No tools available
   }
 
   try {
-    logger.info({ agentId }, "MCP client available, listing tools...");
+    logger.info({ agentId, userId }, "MCP client available, listing tools...");
     const { tools: mcpTools } = await client.listTools();
 
     logger.info(
       {
         agentId,
+        userId,
         toolCount: mcpTools.length,
         toolNames: mcpTools.map((t) => t.name),
       },
-      "Fetched tools from MCP Gateway for agent",
+      "Fetched tools from MCP Gateway for agent/user",
     );
 
     // Convert MCP tools to AI SDK Tool format
@@ -258,19 +429,45 @@ export async function getChatMcpTools(
           // biome-ignore lint/suspicious/noExplicitAny: Tool execute function requires flexible typing for MCP integration
           execute: async (args: any) => {
             logger.info(
-              { agentId, toolName: mcpTool.name, arguments: args },
-              "Executing MCP tool from chat",
+              { agentId, userId, toolName: mcpTool.name, arguments: args },
+              "Executing MCP tool from chat (direct)",
             );
 
             try {
-              const result = await client.callTool({
+              // Execute tool directly via mcpClient to avoid the need to pass the token in the HTTP header
+              // This allows passing userId securely without risk of header spoofing
+              const toolCall = {
+                id: randomUUID(),
                 name: mcpTool.name,
                 arguments: args || {},
-              });
+              };
+
+              const result = await mcpClient.executeToolCall(
+                toolCall,
+                agentId,
+                {
+                  tokenId: teamToken.tokenId,
+                  teamId: teamToken.teamId,
+                  isOrganizationToken: teamToken.isOrganizationToken,
+                  userId, // Pass userId for user-owned server priority
+                },
+              );
+
+              // Check if MCP tool returned an error first
+              // When isError is true, throw to signal AI SDK that tool execution failed
+              // This allows AI SDK to create a tool-error part and continue the conversation
+              // Use result.error (not result.content which is null for errors)
+              if (result.isError) {
+                logger.error(
+                  { agentId, userId, toolName: mcpTool.name, result },
+                  "MCP tool execution failed",
+                );
+                throw new Error(result.error || "Tool execution failed");
+              }
 
               logger.info(
-                { agentId, toolName: mcpTool.name, result },
-                "MCP tool execution completed",
+                { agentId, userId, toolName: mcpTool.name, result },
+                "MCP tool execution completed (direct)",
               );
 
               // Convert MCP content to string for AI SDK
@@ -285,17 +482,17 @@ export async function getChatMcpTools(
                 })
                 .join("\n");
 
-              // Check if MCP tool returned an error
-              // When isError is true, throw to signal AI SDK that tool execution failed
-              // This allows AI SDK to create a tool-error part and continue the conversation
-              if (result.isError) {
-                throw new Error(content);
-              }
-
               return content;
             } catch (error) {
               logger.error(
-                { agentId, toolName: mcpTool.name, error },
+                {
+                  agentId,
+                  userId,
+                  toolName: mcpTool.name,
+                  err: error,
+                  errorMessage:
+                    error instanceof Error ? error.message : String(error),
+                },
                 "MCP tool execution failed",
               );
               throw error;
@@ -304,7 +501,7 @@ export async function getChatMcpTools(
         };
       } catch (error) {
         logger.error(
-          { agentId, toolName: mcpTool.name, error },
+          { agentId, userId, toolName: mcpTool.name, error },
           "Failed to convert MCP tool to AI SDK format, skipping",
         );
         // Skip this tool and continue with others
@@ -312,18 +509,21 @@ export async function getChatMcpTools(
     }
 
     logger.info(
-      { agentId, convertedToolCount: Object.keys(aiTools).length },
+      { agentId, userId, convertedToolCount: Object.keys(aiTools).length },
       "Successfully converted MCP tools to AI SDK Tool format",
     );
 
-    toolCache.set(agentId, {
+    toolCache.set(cacheKey, {
       tools: aiTools,
       expiresAt: Date.now() + TOOL_CACHE_TTL_MS,
     });
 
     return aiTools;
   } catch (error) {
-    logger.error({ agentId, error }, "Failed to fetch tools from MCP Gateway");
+    logger.error(
+      { agentId, userId, error },
+      "Failed to fetch tools from MCP Gateway",
+    );
     return {};
   }
 }

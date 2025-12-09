@@ -511,6 +511,26 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
 
   const providerId = ssoAccount.providerId;
 
+  // Get the SSO provider to find the organization ID and teamSyncConfig
+  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+
+  if (!ssoProvider?.organizationId) {
+    logger.debug(
+      { providerId, userEmail },
+      "SSO provider not found or has no organization, skipping team sync",
+    );
+    return;
+  }
+
+  // Check if team sync is explicitly disabled
+  if (ssoProvider.teamSyncConfig?.enabled === false) {
+    logger.debug(
+      { providerId, userEmail },
+      "Team sync is disabled for this SSO provider",
+    );
+    return;
+  }
+
   // Decode the idToken to get groups
   // Note: better-auth stores the idToken in the account table
   if (!ssoAccount.idToken) {
@@ -526,7 +546,7 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
     const idTokenClaims = jwtDecode<Record<string, unknown>>(
       ssoAccount.idToken,
     );
-    groups = extractGroupsFromClaims(idTokenClaims);
+    groups = extractGroupsFromClaims(idTokenClaims, ssoProvider.teamSyncConfig);
     logger.debug(
       {
         providerId,
@@ -548,17 +568,6 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
     logger.debug(
       { providerId, userEmail },
       "No groups found in idToken, skipping team sync",
-    );
-    return;
-  }
-
-  // Get the SSO provider to find the organization ID
-  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
-
-  if (!ssoProvider?.organizationId) {
-    logger.debug(
-      { providerId, userEmail },
-      "SSO provider not found or has no organization, skipping team sync",
     );
     return;
   }

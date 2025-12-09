@@ -84,6 +84,11 @@ export function EditSsoProviderDialog({
         issuer: provider.issuer,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
+        // Include roleMapping and teamSyncConfig if they exist on the provider
+        ...(provider.roleMapping && { roleMapping: provider.roleMapping }),
+        ...(provider.teamSyncConfig && {
+          teamSyncConfig: provider.teamSyncConfig,
+        }),
         ...(isSaml
           ? {
               samlConfig: provider.samlConfig || {

@@ -272,15 +272,28 @@ export const auth: any = betterAuth({
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
 
+  logger.debug({ path, method }, "[auth:beforeHook] Processing auth request");
+
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
+    logger.debug(
+      { email: body.email, disableInvitations: config.auth.disableInvitations },
+      "[auth:beforeHook] Processing invitation request",
+    );
     if (config.auth.disableInvitations) {
+      logger.debug(
+        "[auth:beforeHook] Invitations are disabled, blocking request",
+      );
       throw new APIError("FORBIDDEN", {
         message: "User invitations are disabled",
       });
     }
 
     if (!z.email().safeParse(body.email).success) {
+      logger.debug(
+        { email: body.email },
+        "[auth:beforeHook] Invalid email format",
+      );
       throw new APIError("BAD_REQUEST", {
         message: "Invalid email format",
       });
@@ -291,7 +304,17 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
   // Block invitation cancellation when invitations are disabled
   if (path === "/organization/cancel-invitation" && method === "POST") {
+    logger.debug(
+      {
+        invitationId: body.invitationId,
+        disableInvitations: config.auth.disableInvitations,
+      },
+      "[auth:beforeHook] Processing invitation cancellation",
+    );
     if (config.auth.disableInvitations) {
+      logger.debug(
+        "[auth:beforeHook] Invitations are disabled, blocking cancellation",
+      );
       throw new APIError("FORBIDDEN", {
         message: "User invitations are disabled",
       });
@@ -303,7 +326,13 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     const callbackURL = body.callbackURL as string | undefined;
     const invitationId = callbackURL?.split("invitationId=")[1]?.split("&")[0];
 
+    logger.debug(
+      { email: body.email, hasInvitationId: !!invitationId },
+      "[auth:beforeHook] Processing sign-up request",
+    );
+
     if (!invitationId) {
+      logger.debug("[auth:beforeHook] Sign-up without invitation ID blocked");
       throw new APIError("FORBIDDEN", {
         message:
           "Direct sign-up is disabled. You need an invitation to create an account.",
@@ -314,14 +343,23 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     const invitation = await InvitationModel.getById(invitationId);
 
     if (!invitation) {
+      logger.debug({ invitationId }, "[auth:beforeHook] Invitation not found");
       throw new APIError("BAD_REQUEST", {
         message: "Invalid invitation ID",
       });
     }
 
     const { status, expiresAt } = invitation;
+    logger.debug(
+      { invitationId, status, expiresAt },
+      "[auth:beforeHook] Invitation found, validating",
+    );
 
     if (status !== "pending") {
+      logger.debug(
+        { invitationId, status },
+        "[auth:beforeHook] Invitation not pending",
+      );
       throw new APIError("BAD_REQUEST", {
         message: `This invitation has already been ${status}`,
       });
@@ -329,6 +367,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
     // Check if invitation is expired
     if (expiresAt && expiresAt < new Date()) {
+      logger.debug(
+        { invitationId, expiresAt },
+        "[auth:beforeHook] Invitation expired",
+      );
       throw new APIError("BAD_REQUEST", {
         message:
           "The invitation link has expired, please contact your admin for a new invitation",
@@ -337,12 +379,20 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
     // Validate email matches invitation
     if (body.email && invitation.email !== body.email) {
+      logger.debug(
+        { invitationEmail: invitation.email, bodyEmail: body.email },
+        "[auth:beforeHook] Email mismatch",
+      );
       throw new APIError("BAD_REQUEST", {
         message:
           "Email address does not match the invitation. You must use the invited email address.",
       });
     }
 
+    logger.debug(
+      { invitationId },
+      "[auth:beforeHook] Invitation validated successfully",
+    );
     return ctx;
   }
 
@@ -362,11 +412,17 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 export async function handleAfterHook(ctx: HookEndpointContext) {
   const { path, method, body, context } = ctx;
 
+  logger.debug({ path, method }, "[auth:afterHook] Processing post-auth hook");
+
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {
     const invitationId = body.invitationId as string | undefined;
 
     if (invitationId) {
+      logger.debug(
+        { invitationId },
+        "[auth:afterHook] Deleting canceled invitation",
+      );
       try {
         await InvitationModel.delete(invitationId);
         logger.info(`✅ Invitation ${invitationId} deleted from database`);
@@ -382,6 +438,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
     if (userId) {
       // Delete all sessions for this user
+      logger.debug(
+        { userId },
+        "[auth:afterHook] Invalidating all sessions for removed user",
+      );
       try {
         await SessionModel.deleteAllByUserId(userId);
         logger.info(`✅ All sessions for user ${userId} invalidated`);
@@ -400,6 +460,11 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     if (newSession) {
       const { user, session } = newSession;
 
+      logger.debug(
+        { userId: user.id, email: user.email },
+        "[auth:afterHook] Processing sign-up completion",
+      );
+
       // Check if this is an invitation sign-up
       const callbackURL = body.callbackURL as string | undefined;
       const invitationId = callbackURL
@@ -408,9 +473,16 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
       // If there is no invitation ID, it means this is a direct sign-up which is not allowed
       if (!invitationId) {
+        logger.debug(
+          "[auth:afterHook] Sign-up without invitation ID, skipping",
+        );
         return;
       }
 
+      logger.debug(
+        { invitationId, userId: user.id },
+        "[auth:afterHook] Accepting invitation after sign-up",
+      );
       return await InvitationModel.accept(session, user, invitationId);
     }
   }
@@ -423,6 +495,11 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       const sessionId = newSession.session.id;
       const userId = newSession.user.id;
       const { user, session } = newSession;
+
+      logger.debug(
+        { userId, email: user.email, path },
+        "[auth:afterHook] Processing sign-in/SSO callback",
+      );
 
       // Auto-accept any pending invitations for this user's email
       try {
@@ -437,22 +514,39 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           await InvitationModel.accept(session, user, pendingInvitation.id);
           return;
         }
+        logger.debug(
+          { email: user.email },
+          "[auth:afterHook] No pending invitation found for user",
+        );
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to auto-accept invitation:");
       }
 
       try {
         if (!newSession.session.activeOrganizationId) {
+          logger.debug(
+            { userId },
+            "[auth:afterHook] No active organization, looking up first membership",
+          );
           const userMembership =
             await MemberModel.getFirstMembershipForUser(userId);
 
           if (userMembership) {
+            logger.debug(
+              { userId, organizationId: userMembership.organizationId },
+              "[auth:afterHook] Setting active organization from membership",
+            );
             await SessionModel.patch(sessionId, {
               activeOrganizationId: userMembership.organizationId,
             });
 
             logger.info(
               `✅ Active organization set for user ${newSession.user.email}`,
+            );
+          } else {
+            logger.debug(
+              { userId },
+              "[auth:afterHook] No membership found for user",
             );
           }
         }
@@ -463,6 +557,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       // SSO Team Sync: Synchronize team memberships based on SSO groups
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
+        logger.debug(
+          { userId, email: user.email },
+          "[auth:afterHook] Processing SSO team sync",
+        );
         await syncSsoTeams(userId, user.email);
       }
     }

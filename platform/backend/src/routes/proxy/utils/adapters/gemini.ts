@@ -1,3 +1,4 @@
+import logger from "@/logging";
 import type { CommonMessage, Gemini, ToolResultUpdates } from "@/types";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
@@ -6,6 +7,10 @@ type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
  * Convert Gemini contents to common format for trusted data evaluation
  */
 export function toCommonFormat(_contents: GeminiContents): CommonMessage[] {
+  logger.debug(
+    { contentsCount: _contents?.length || 0 },
+    "[adapters/gemini] toCommonFormat: starting conversion (TODO: not fully implemented)",
+  );
   const commonMessages: CommonMessage[] = [];
 
   // TODO: implement this
@@ -57,11 +62,21 @@ export function applyUpdates(
   contents: GeminiContents,
   updates: ToolResultUpdates,
 ): GeminiContents {
-  if (Object.keys(updates).length === 0) {
+  const updateCount = Object.keys(updates).length;
+  logger.debug(
+    { contentsCount: contents?.length || 0, updateCount },
+    "[adapters/gemini] applyUpdates: starting (TODO: not fully implemented)",
+  );
+
+  if (updateCount === 0) {
+    logger.debug("[adapters/gemini] applyUpdates: no updates to apply");
     return contents;
   }
 
   // TODO: implement this
+  logger.debug(
+    "[adapters/gemini] applyUpdates: updates not applied (not implemented)",
+  );
   return contents;
 }
 

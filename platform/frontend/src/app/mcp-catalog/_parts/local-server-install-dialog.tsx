@@ -124,12 +124,6 @@ export function LocalServerInstallDialog({
     onClose();
   };
 
-  // Check if there are any fields to show
-  if (promptedEnvVars.length === 0) {
-    // If no configuration is needed, don't show the dialog
-    return null;
-  }
-
   // Check if non-secret env vars are valid (always required)
   const isNonSecretValid = nonSecretEnvVars.every((env) => {
     if (!env.required) return true;

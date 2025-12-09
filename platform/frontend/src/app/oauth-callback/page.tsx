@@ -86,15 +86,20 @@ export default function OAuthCallbackPage() {
 
         const { catalogId, name, secretId } = await response.json();
 
+        // Get teamId from session storage (stored before OAuth redirect)
+        const teamId = sessionStorage.getItem("oauth_team_id");
+
         // Install the MCP server with the secret reference
         await installMutation.mutateAsync({
           name,
           catalogId,
           secretId,
+          teamId: teamId || undefined,
         });
 
-        // Clean up the processing flag after successful installation
+        // Clean up the processing flag and teamId after successful installation
         sessionStorage.removeItem(processKey);
+        sessionStorage.removeItem("oauth_team_id");
 
         // Redirect back to MCP catalog immediately
         // The mutation's onSuccess handler will show the success toast

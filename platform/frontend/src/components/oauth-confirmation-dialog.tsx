@@ -1,6 +1,8 @@
 "use client";
 
 import { ShieldCheck, User } from "lucide-react";
+import { useState } from "react";
+import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp-catalog/_parts/select-mcp-server-credential-type-and-teams";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +14,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+export interface OAuthInstallResult {
+  /** Team ID to assign the MCP server to (null for personal) */
+  teamId?: string | null;
+}
+
 interface OAuthConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serverName: string;
-  onConfirm: () => void;
+  onConfirm: (result: OAuthInstallResult) => void;
   onCancel: () => void;
 }
 
@@ -27,12 +34,15 @@ export function OAuthConfirmationDialog({
   onConfirm,
   onCancel,
 }: OAuthConfirmationDialogProps) {
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
   const handleConfirm = () => {
-    onConfirm();
+    onConfirm({ teamId: selectedTeamId });
     onOpenChange(false);
   };
 
   const handleCancel = () => {
+    setSelectedTeamId(null);
     onCancel();
     onOpenChange(false);
   };
@@ -63,6 +73,13 @@ export function OAuthConfirmationDialog({
             server will be installed with your credentials.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="py-4">
+          <SelectMcpServerCredentialTypeAndTeams
+            selectedTeamId={selectedTeamId}
+            onTeamChange={setSelectedTeamId}
+          />
+        </div>
 
         <DialogFooter className="gap-3 sm:gap-3">
           <Button variant="outline" onClick={handleCancel}>

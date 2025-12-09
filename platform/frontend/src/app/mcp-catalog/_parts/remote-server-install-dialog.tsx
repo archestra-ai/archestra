@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -40,6 +41,8 @@ export interface RemoteServerInstallResult {
   metadata: Record<string, unknown>;
   /** External Vault secret path for BYOS */
   externalVaultSecret?: string;
+  /** Team ID to assign the MCP server to (null for personal) */
+  teamId?: string | null;
 }
 
 interface RemoteServerInstallDialogProps {
@@ -62,6 +65,9 @@ export function RemoteServerInstallDialog({
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
+  // Team selection state
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
   // BYOS (Bring Your Own Secrets) state
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
   const [vaultSecretPath, setVaultSecretPath] = useState<string | null>(null);
@@ -82,6 +88,7 @@ export function RemoteServerInstallDialog({
         await onConfirm(catalogItem, {
           metadata: {},
           externalVaultSecret: vaultSecretPath,
+          teamId: selectedTeamId,
         });
         resetForm();
         onClose();
@@ -123,6 +130,7 @@ export function RemoteServerInstallDialog({
 
       await onConfirm(catalogItem, {
         metadata,
+        teamId: selectedTeamId,
       });
       resetForm();
       onClose();
@@ -133,6 +141,7 @@ export function RemoteServerInstallDialog({
 
   const resetForm = () => {
     setConfigValues({});
+    setSelectedTeamId(null);
     setVaultTeamId(null);
     setVaultSecretPath(null);
   };
@@ -188,6 +197,11 @@ export function RemoteServerInstallDialog({
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
+          <SelectMcpServerCredentialTypeAndTeams
+            selectedTeamId={selectedTeamId}
+            onTeamChange={setSelectedTeamId}
+          />
+
           {hasOAuth && (
             <Alert>
               <Info className="h-4 w-4" />

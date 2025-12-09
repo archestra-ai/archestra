@@ -4,7 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
+import {
+  OAuthConfirmationDialog,
+  type OAuthInstallResult,
+} from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHasPermissions } from "@/lib/auth.query";
@@ -31,7 +34,10 @@ import {
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
-import { NoAuthInstallDialog } from "./no-auth-install-dialog";
+import {
+  NoAuthInstallDialog,
+  type NoAuthInstallResult,
+} from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import {
   RemoteServerInstallDialog,
@@ -158,73 +164,33 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     _teamMode: boolean,
   ) => {
-    // Check if this is a remote server with user configuration
-    if (
-      catalogItem.serverType === "remote" &&
-      catalogItem.userConfig &&
-      Object.keys(catalogItem.userConfig).length > 0
-    ) {
-      setSelectedCatalogItem(catalogItem);
-      openDialog("remote-install");
-      return;
-    }
+    const hasUserConfig =
+      catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
 
-    // Check if this server requires OAuth authentication
-    if (catalogItem.oauthConfig) {
+    // Check if this server requires OAuth authentication if there is no user config
+    if (!hasUserConfig && catalogItem.oauthConfig) {
       setSelectedCatalogItem(catalogItem);
       openDialog("oauth");
       return;
     }
 
-    // For servers without configuration, install directly
-    setInstallingItemId(catalogItem.id);
-    await installMutation.mutateAsync({
-      name: catalogItem.name,
-      catalogId: catalogItem.id,
-    });
-    setInstallingItemId(null);
+    setSelectedCatalogItem(catalogItem);
+    openDialog("remote-install");
   };
 
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
-    // Check if we need to show configuration dialog
-    const hasUserConfig =
-      catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
-    const hasPromptedEnvVars = catalogItem.localConfig?.environment?.some(
-      (env) => env.promptOnInstallation === true,
-    );
-
-    if (hasUserConfig || hasPromptedEnvVars) {
-      // Show configuration dialog
-      setLocalServerCatalogItem(catalogItem);
-      openDialog("local-install");
-      return;
-    }
-
-    // No configuration needed, install directly
-    try {
-      setInstallingItemId(catalogItem.id);
-      const result = await installMutation.mutateAsync({
-        name: catalogItem.name,
-        catalogId: catalogItem.id,
-        dontShowToast: true,
-      });
-      // Track the installed server for polling
-      const installedServerId = result?.installedServer?.id;
-      if (installedServerId) {
-        setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
-      }
-    } finally {
-      setInstallingItemId(null);
-    }
+    setLocalServerCatalogItem(catalogItem);
+    openDialog("local-install");
   };
 
-  const handleNoAuthConfirm = async () => {
+  const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
     if (!noAuthCatalogItem) return;
 
     setInstallingItemId(noAuthCatalogItem.id);
     await installMutation.mutateAsync({
       name: noAuthCatalogItem.name,
       catalogId: noAuthCatalogItem.id,
+      teamId: result.teamId ?? undefined,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
@@ -275,11 +241,12 @@ export function InternalMCPCatalog({
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
       externalVaultSecret: result.externalVaultSecret,
+      teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);
   };
 
-  const handleOAuthConfirm = async () => {
+  const handleOAuthConfirm = async (result: OAuthInstallResult) => {
     if (!selectedCatalogItem) return;
 
     try {
@@ -303,6 +270,12 @@ export function InternalMCPCatalog({
       // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);
       sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
+      // Store teamId for use after OAuth callback
+      if (result.teamId) {
+        sessionStorage.setItem("oauth_team_id", result.teamId);
+      } else {
+        sessionStorage.removeItem("oauth_team_id");
+      }
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;

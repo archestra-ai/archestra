@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Building2 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,14 +12,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
+export interface NoAuthInstallResult {
+  /** Team ID to assign the MCP server to (null for personal) */
+  teamId?: string | null;
+}
+
 interface NoAuthInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onInstall: () => Promise<void>;
+  onInstall: (result: NoAuthInstallResult) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
 }
@@ -31,11 +37,14 @@ export function NoAuthInstallDialog({
   catalogItem,
   isInstalling,
 }: NoAuthInstallDialogProps) {
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
   const handleInstall = useCallback(async () => {
-    await onInstall();
-  }, [onInstall]);
+    await onInstall({ teamId: selectedTeamId });
+  }, [onInstall, selectedTeamId]);
 
   const handleClose = useCallback(() => {
+    setSelectedTeamId(null);
     onClose();
   }, [onClose]);
 
@@ -56,6 +65,13 @@ export function NoAuthInstallDialog({
             proceed.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="py-4">
+          <SelectMcpServerCredentialTypeAndTeams
+            selectedTeamId={selectedTeamId}
+            onTeamChange={setSelectedTeamId}
+          />
+        </div>
 
         <DialogFooter>
           <Button

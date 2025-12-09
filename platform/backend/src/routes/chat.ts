@@ -1,5 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { RouteId } from "@shared";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -19,6 +19,7 @@ import {
   MessageModel,
   PromptModel,
 } from "@/models";
+import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
@@ -56,6 +57,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { profile: ["admin"] },
         headers,
       );
+
+      // Extract external agent ID from incoming request headers to forward to LLM Proxy
+      const externalAgentId = getExternalAgentId(headers);
+
       // Get conversation
       const conversation = await ConversationModel.findById(
         conversationId,
@@ -105,6 +110,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
+          externalAgentId,
         },
         "Starting chat stream",
       );
@@ -132,9 +138,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Create Anthropic client pointing to LLM Proxy
       // URL format: /v1/anthropic/:agentId/v1/messages
+      // Forward external agent ID header if present
       const anthropic = createAnthropic({
         apiKey: anthropicApiKey,
         baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
+        headers: externalAgentId
+          ? {
+              [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
+            }
+          : undefined,
       });
 
       // Stream with AI SDK

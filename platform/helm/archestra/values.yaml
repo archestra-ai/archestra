@@ -12,8 +12,14 @@ archestra:
 
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
-  # When null, the default Kubernetes strategy is used
-  deploymentStrategy: null
+  # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.
+  # This ensures at least one pod is always available during updates, which is critical
+  # for GKE ingress health checks to always have healthy endpoints.
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable

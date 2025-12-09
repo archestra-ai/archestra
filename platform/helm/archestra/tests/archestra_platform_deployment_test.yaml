@@ -65,20 +65,27 @@ tests:
           path: spec.replicas
           value: 4
 
-  - it: should not configure deployment strategy by default
+  - it: should configure RollingUpdate deployment strategy with zero-downtime defaults
     documentIndex: 1
     asserts:
-      - isNull:
-          path: spec.strategy
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: 1
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 0
 
-  - it: should configure deployment strategy when provided
+  - it: should allow overriding deployment strategy
     documentIndex: 1
     set:
       archestra.deploymentStrategy:
         type: RollingUpdate
         rollingUpdate:
           maxSurge: "25%"
-          maxUnavailable: 0
+          maxUnavailable: 1
     asserts:
       - equal:
           path: spec.strategy.type
@@ -88,7 +95,15 @@ tests:
           value: "25%"
       - equal:
           path: spec.strategy.rollingUpdate.maxUnavailable
-          value: 0
+          value: 1
+
+  - it: should allow disabling deployment strategy by setting to null
+    documentIndex: 1
+    set:
+      archestra.deploymentStrategy: null
+    asserts:
+      - isNull:
+          path: spec.strategy
 
   - it: should configure container with correct image
     documentIndex: 1

@@ -490,7 +490,7 @@ export class VaultSecretManager implements SecretManager {
     context: Record<string, unknown> = {},
   ): never {
     logger.error(
-      { error, ...context },
+      { error, vaultError: extractVaultErrorMessage(error), ...context },
       `VaultSecretManager.${operationName}: failed`,
     );
 
@@ -499,7 +499,10 @@ export class VaultSecretManager implements SecretManager {
       throw error;
     }
 
-    throw new ApiError(500, extractVaultErrorMessage(error));
+    throw new ApiError(
+      500,
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+    );
   }
 
   private getVaultPath(name: string, id: string): string {
@@ -864,7 +867,7 @@ export class BYOSVaultSecretManager implements SecretManager {
         { error, tokenPath, role: this.config.k8sRole },
         "BYOSVaultSecretManager: Kubernetes authentication failed",
       );
-      throw error;
+      throw new ApiError(500, extractVaultErrorMessage(error));
     }
   }
 

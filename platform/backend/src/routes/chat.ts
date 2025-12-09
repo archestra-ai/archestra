@@ -138,9 +138,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Stream with AI SDK
-      const result = streamText({
+      // Build streamText config conditionally
+      const streamTextConfig: Parameters<typeof streamText>[0] = {
         model: anthropic(conversation.selectedModel),
-        system: systemPrompt,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),
@@ -154,7 +154,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream finished",
           );
         },
-      });
+      };
+
+      // Only include system property if we have actual content
+      if (systemPrompt) {
+        streamTextConfig.system = systemPrompt;
+      }
+
+      const result = streamText(streamTextConfig);
 
       // Convert to UI message stream response (Response object)
       const response = result.toUIMessageStreamResponse({

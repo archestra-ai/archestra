@@ -529,6 +529,7 @@ export const PromptInputTextarea = ({
     }
 
     const files: File[] = [];
+    let hasText = false;
 
     for (const item of items) {
       if (item.kind === "file") {
@@ -536,10 +537,33 @@ export const PromptInputTextarea = ({
         if (file) {
           files.push(file);
         }
+      } else if (item.type === "text/plain") {
+        hasText = true;
       }
     }
 
-    if (files.length > 0) {
+    // Sanitize to remove problematic characters
+    if (hasText && files.length === 0) {
+      event.preventDefault();
+      const text = event.clipboardData.getData("text/plain");
+
+      const sanitized = text
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally filtering control characters from pasted text to prevent ms word copy paste bug (issue #1102)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+      const target = event.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const current = target.value;
+
+      target.value =
+        current.substring(0, start) + sanitized + current.substring(end);
+      target.selectionStart = target.selectionEnd = start + sanitized.length;
+
+      const changeEvent = new Event("input", { bubbles: true });
+      target.dispatchEvent(changeEvent);
+    } else if (files.length > 0) {
       event.preventDefault();
       attachments.add(files);
     }

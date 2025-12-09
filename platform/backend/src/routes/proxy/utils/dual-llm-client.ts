@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import config from "@/config";
+import logger from "@/logging";
 import type { DualLlmMessage, SupportedProvider } from "@/types";
 
 /**
@@ -46,6 +47,7 @@ export class OpenAiDualLlmClient implements DualLlmClient {
   private model: string;
 
   constructor(apiKey: string, model = "gpt-4o") {
+    logger.debug({ model }, "[dualLlmClient] OpenAI: initializing client");
     this.client = new OpenAI({
       apiKey,
       baseURL: config.llm.openai.baseUrl,
@@ -54,13 +56,22 @@ export class OpenAiDualLlmClient implements DualLlmClient {
   }
 
   async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] OpenAI: starting chat completion",
+    );
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages,
       temperature,
     });
 
-    return response.choices[0].message.content?.trim() || "";
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] OpenAI: chat completion complete",
+    );
+    return content;
   }
 
   async chatWithSchema<T>(
@@ -76,6 +87,15 @@ export class OpenAiDualLlmClient implements DualLlmClient {
     },
     temperature = 0,
   ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] OpenAI: starting chat with schema",
+    );
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages,
@@ -87,6 +107,10 @@ export class OpenAiDualLlmClient implements DualLlmClient {
     });
 
     const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] OpenAI: chat with schema complete, parsing response",
+    );
     return JSON.parse(content) as T;
   }
 }
@@ -99,6 +123,7 @@ export class AnthropicDualLlmClient implements DualLlmClient {
   private model: string;
 
   constructor(apiKey: string, model = "claude-sonnet-4-5-20250929") {
+    logger.debug({ model }, "[dualLlmClient] Anthropic: initializing client");
     this.client = new Anthropic({
       apiKey,
       baseURL: config.llm.anthropic.baseUrl,
@@ -107,6 +132,10 @@ export class AnthropicDualLlmClient implements DualLlmClient {
   }
 
   async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Anthropic: starting chat completion",
+    );
     // Anthropic requires separate system message
     // For dual LLM, we don't use system messages in the Q&A loop
     const response = await this.client.messages.create({
@@ -118,7 +147,13 @@ export class AnthropicDualLlmClient implements DualLlmClient {
 
     // Extract text from content blocks
     const textBlock = response.content.find((block) => block.type === "text");
-    return textBlock && "text" in textBlock ? textBlock.text.trim() : "";
+    const content =
+      textBlock && "text" in textBlock ? textBlock.text.trim() : "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Anthropic: chat completion complete",
+    );
+    return content;
   }
 
   async chatWithSchema<T>(
@@ -134,6 +169,15 @@ export class AnthropicDualLlmClient implements DualLlmClient {
     },
     temperature = 0,
   ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Anthropic: starting chat with schema",
+    );
     // Anthropic doesn't have native structured output yet
     // We'll use a prompt-based approach with JSON mode
     const systemPrompt = `You must respond with valid JSON matching this schema:
@@ -164,6 +208,11 @@ Return only the JSON object, no other text.`;
     const content =
       textBlock && "text" in textBlock ? textBlock.text.trim() : "";
 
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Anthropic: chat with schema complete, parsing response",
+    );
+
     // Parse JSON response
     // Try to extract JSON from markdown code blocks if present
     const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
@@ -183,12 +232,20 @@ export function createDualLlmClient(
   provider: SupportedProvider,
   apiKey: string,
 ): DualLlmClient {
+  logger.debug(
+    { provider },
+    "[dualLlmClient] createDualLlmClient: creating client",
+  );
   switch (provider) {
     case "anthropic":
       return new AnthropicDualLlmClient(apiKey);
     case "openai":
       return new OpenAiDualLlmClient(apiKey);
     default:
+      logger.debug(
+        { provider },
+        "[dualLlmClient] createDualLlmClient: unsupported provider",
+      );
       throw new Error(`Unsupported provider: ${provider}`);
   }
 }

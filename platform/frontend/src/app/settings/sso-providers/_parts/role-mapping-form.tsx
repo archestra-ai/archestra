@@ -2,7 +2,7 @@
 
 import type { SsoProviderFormValues } from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
   Accordion,
@@ -40,39 +40,63 @@ interface RoleMappingFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
 }
 
-const JMESPATH_EXAMPLES = [
+const HANDLEBARS_EXAMPLES = [
   {
-    expression: "contains(groups || `[]`, 'admin')",
+    expression: '{{#includes groups "admin"}}true{{/includes}}',
     description: "Match if 'admin' is in the groups array",
   },
   {
-    expression: "role == 'administrator'",
+    expression: '{{#equals role "administrator"}}true{{/equals}}',
     description: "Match if role claim equals 'administrator'",
   },
   {
-    expression: "roles[?@ == 'archestra-admin'] | [0]",
+    expression:
+      '{{#each roles}}{{#equals this "archestra-admin"}}true{{/equals}}{{/each}}',
     description: "Match if 'archestra-admin' is in roles array",
   },
   {
-    expression: "department == 'IT' && title != null",
+    expression:
+      '{{#and department title}}{{#equals department "IT"}}true{{/equals}}{{/and}}',
     description: "Match IT department users with a title",
   },
 ];
 
 export function RoleMappingForm({ form }: RoleMappingFormProps) {
   const rules = form.watch("roleMapping.rules") || [];
+  const accordionContentRef = useRef<HTMLDivElement>(null);
+  const baseId = useId();
+  // Track rule IDs for stable keys. Generate initial IDs based on current rule count.
+  const [ruleIds, setRuleIds] = useState<string[]>(() =>
+    rules.map((_, i) => `${baseId}-rule-${i}`),
+  );
+
+  // Scroll the accordion content into view when expanded
+  const handleAccordionChange = useCallback((value: string) => {
+    if (value === "role-mapping") {
+      // Small delay to allow accordion animation to start
+      setTimeout(() => {
+        accordionContentRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    }
+  }, []);
 
   const addRule = useCallback(() => {
     const currentRules = form.getValues("roleMapping.rules") || [];
+    const newId = `${baseId}-rule-${Date.now()}`;
+    setRuleIds((prev) => [...prev, newId]);
     form.setValue("roleMapping.rules", [
       ...currentRules,
       { expression: "", role: "member" },
     ]);
-  }, [form]);
+  }, [form, baseId]);
 
   const removeRule = useCallback(
     (index: number) => {
       const currentRules = form.getValues("roleMapping.rules") || [];
+      setRuleIds((prev) => prev.filter((_, i) => i !== index));
       form.setValue(
         "roleMapping.rules",
         currentRules.filter((_, i) => i !== index),
@@ -85,7 +109,12 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
     <div className="space-y-6">
       <Separator />
 
-      <Accordion type="single" collapsible className="w-full">
+      <Accordion
+        type="single"
+        collapsible
+        className="w-full"
+        onValueChange={handleAccordionChange}
+      >
         <AccordionItem value="role-mapping" className="border-none">
           <AccordionTrigger className="hover:no-underline">
             <div className="flex items-center gap-2">
@@ -98,7 +127,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   <TooltipContent className="max-w-sm">
                     <p>
                       Map SSO provider attributes to Archestra roles using
-                      JMESPath expressions. Rules are evaluated in order - first
+                      Handlebars templates. Rules are evaluated in order - first
                       match wins.
                     </p>
                   </TooltipContent>
@@ -106,38 +135,10 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
               </TooltipProvider>
             </div>
           </AccordionTrigger>
-          <AccordionContent className="space-y-4 pt-4">
-            <FormField
-              control={form.control}
-              name="roleMapping.dataSource"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data Source</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || "combined"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select data source" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="combined">
-                        Combined (Token + UserInfo)
-                      </SelectItem>
-                      <SelectItem value="userInfo">UserInfo Only</SelectItem>
-                      <SelectItem value="token">ID Token Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Choose which SSO data to use for role mapping expressions.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+          <AccordionContent
+            ref={accordionContentRef}
+            className="space-y-4 pt-4"
+          >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Mapping Rules</FormLabel>
@@ -159,9 +160,9 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {rules.map(({ expression, role }, index) => (
+                  {rules.map((_, index) => (
                     <div
-                      key={`${expression}-${role}`}
+                      key={ruleIds[index] || `fallback-${index}`}
                       className="flex gap-3 items-start p-3 border rounded-md"
                     >
                       <div className="flex-1 space-y-3">
@@ -171,11 +172,11 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-xs">
-                                JMESPath Expression
+                                Handlebars Template
                               </FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="contains(groups || `[]`, 'admin')"
+                                  placeholder='{{#includes groups "admin"}}true{{/includes}}'
                                   className="font-mono text-sm"
                                   {...field}
                                 />
@@ -302,29 +303,33 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
               )}
             />
 
-            <div className="rounded-md bg-muted p-4">
-              <p className="text-sm font-medium mb-2">Example Expressions</p>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {JMESPATH_EXAMPLES.map(({ expression, description }) => (
-                  <li key={`${expression}-${description}`}>
-                    <code className="text-xs bg-background px-1 py-0.5 rounded">
-                      {expression}
-                    </code>
-                    <span className="ml-2">- {description}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs text-muted-foreground mt-3">
-                <a
-                  href="https://jmespath.org/tutorial.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  Learn more about JMESPath syntax
-                </a>
-              </p>
-            </div>
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem
+                value="examples"
+                className="!border rounded-md bg-muted/30"
+              >
+                <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                  <span className="text-sm font-medium">Example Templates</span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4 pt-0">
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
+                      <li key={`${expression}-${description}`}>
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
+                          {expression}
+                        </code>
+                        <span className="ml-2">- {description}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Templates should render to a non-empty string when the rule
+                    matches. Available helpers: includes, equals, contains, and,
+                    or, exists.
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </AccordionContent>
         </AccordionItem>
       </Accordion>

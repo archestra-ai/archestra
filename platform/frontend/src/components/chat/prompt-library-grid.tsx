@@ -11,6 +11,7 @@ import {
   Pencil,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -129,8 +130,18 @@ export function PromptLibraryGrid({
           placeholder="Search prompts by name or profile..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-9"
         />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent"
+          >
+            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -380,7 +391,7 @@ function PromptTile({
         <div className="flex items-start justify-between gap-2">
           {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
           <div
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 max-w-[calc(100%-2rem)]"
             onClick={handlePromptClick}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -391,8 +402,8 @@ function PromptTile({
             role="button"
             tabIndex={0}
           >
-            <div className="flex items-baseline gap-2">
-              <CardTitle className="text-base truncate">
+            <div className="flex items-baseline gap-2 overflow-hidden">
+              <CardTitle className="text-base truncate flex-1 min-w-0">
                 <TruncatedText
                   message={prompt.name}
                   className="text-base truncate pr-0"

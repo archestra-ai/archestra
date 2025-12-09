@@ -145,15 +145,9 @@ export class Authnz {
 
           logger.debug({ valid }, "[Authnz] API key verification result");
           return valid;
-        } catch (apiKeyError) {
+        } catch (_apiKeyError) {
           // API key verification failed, return unauthenticated
-          logger.debug(
-            {
-              error:
-                apiKeyError instanceof Error ? apiKeyError.message : "unknown",
-            },
-            "[Authnz] API key verification failed",
-          );
+          logger.debug("[Authnz] API key verification failed");
           return false;
         }
       }
@@ -199,7 +193,7 @@ export class Authnz {
     }
 
     logger.debug(
-      { routeId, requiredPermissions },
+      { routeId, permissionCount: Object.keys(requiredPermissions).length },
       "[Authnz] Checking required permissions",
     );
     return await hasPermission(requiredPermissions, request.headers);
@@ -258,7 +252,6 @@ export class Authnz {
 
           if (apiKeyResult?.valid && apiKeyResult.key?.userId) {
             logger.debug(
-              { userId: apiKeyResult.key.userId },
               "[Authnz] populateUserInfo: valid API key, fetching user data",
             );
             // Get the full user object from database using the userId from the API key
@@ -275,13 +268,9 @@ export class Authnz {
             );
             return;
           }
-        } catch (apiKeyError) {
+        } catch (_apiKeyError) {
           // API key verification failed
           logger.debug(
-            {
-              error:
-                apiKeyError instanceof Error ? apiKeyError.message : "unknown",
-            },
             "[Authnz] populateUserInfo: API key verification failed",
           );
         }

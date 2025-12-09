@@ -8,7 +8,10 @@ export const hasPermission = async (
   requestHeaders: IncomingHttpHeaders,
 ): Promise<{ success: boolean; error: Error | null }> => {
   const headers = new Headers(requestHeaders as HeadersInit);
-  logger.debug({ permissions }, "[hasPermission] Checking permissions");
+  logger.debug(
+    { permissionCount: Object.keys(permissions).length },
+    "[hasPermission] Checking permissions",
+  );
 
   try {
     const result = await betterAuth.api.hasPermission({
@@ -18,7 +21,7 @@ export const hasPermission = async (
       },
     });
     logger.debug(
-      { success: result.success, permissions },
+      { success: result.success },
       "[hasPermission] Session-based permission check result",
     );
     return result;
@@ -48,15 +51,9 @@ export const hasPermission = async (
           return { success: true, error: null };
         }
         logger.debug("[hasPermission] API key verification returned invalid");
-      } catch (apiKeyError) {
+      } catch (_apiKeyError) {
         // Not a valid API key, return original error
-        logger.debug(
-          {
-            error:
-              apiKeyError instanceof Error ? apiKeyError.message : "unknown",
-          },
-          "[hasPermission] API key verification failed",
-        );
+        logger.debug("[hasPermission] API key verification failed");
         return { success: false, error: new Error("Invalid API key") };
       }
     }

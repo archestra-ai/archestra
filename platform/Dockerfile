@@ -282,27 +282,33 @@ else
 fi
 
 # Detect Kubernetes mode (embedded vs external)
+# Priority: EXTERNAL_K8S_CONFIG > existing kubeconfig > embedded k3s
 USE_EXTERNAL_K8S=false
-if [ -n "$EXTERNAL_K8S_CONFIG" ]; then
-    USE_EXTERNAL_K8S=true
-fi
 
-if [ "$USE_EXTERNAL_K8S" = "false" ]; then
-    echo "Using embedded k3s for MCP orchestration"
-    
-    # Append k3s program to supervisord config
-    cat /etc/supervisord.k3s.conf >> /etc/supervisord.conf
-    
-    # Wait for k3s to be ready (will happen after supervisord starts)
-    echo "k3s will start automatically via supervisord"
-else
-    echo "Using external Kubernetes cluster"
-    
-    # Decode base64 kubeconfig and write to /root/.kube/config
+if [ -n "$EXTERNAL_K8S_CONFIG" ]; then
+    echo "Using external Kubernetes from EXTERNAL_K8S_CONFIG"
     mkdir -p /root/.kube
     echo "$EXTERNAL_K8S_CONFIG" | base64 -d > /root/.kube/config
     chmod 600 /root/.kube/config
-    echo "External kubeconfig written to /root/.kube/config"
+    USE_EXTERNAL_K8S=true
+elif [ -f "/root/.kube/config" ] || [ -n "$KUBECONFIG" ]; then
+    echo "Using existing kubeconfig file"
+    if [ -n "$KUBECONFIG" ] && [ -f "$KUBECONFIG" ]; then
+        mkdir -p /root/.kube
+        cp "$KUBECONFIG" /root/.kube/config
+        chmod 600 /root/.kube/config
+    fi
+    USE_EXTERNAL_K8S=true
+else
+    echo "No external Kubernetes detected"
+    echo "Using embedded k3s for MCP orchestration"
+    USE_EXTERNAL_K8S=false
+fi
+
+if [ "$USE_EXTERNAL_K8S" = "false" ]; then
+    # Append k3s program to supervisord config
+    cat /etc/supervisord.k3s.conf >> /etc/supervisord.conf
+    echo "k3s will start automatically via supervisord"
 fi
 
 

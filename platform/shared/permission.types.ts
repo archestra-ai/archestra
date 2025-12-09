@@ -7,6 +7,7 @@
  * - non-EE version: Uses these types but runtime logic always allows everything
  * - EE version: Uses these types with actual permission enforcement
  */
+import { z } from "zod";
 
 export const actions = [
   "create",
@@ -51,3 +52,8 @@ export const resources = [
 export type Resource = (typeof resources)[number];
 export type Action = (typeof actions)[number];
 export type Permissions = Partial<Record<Resource, Action[]>>;
+
+export const PermissionsSchema = z.partialRecord(
+  z.enum(resources),
+  z.array(z.enum(actions)),
+);

@@ -1,4 +1,8 @@
-import { PredefinedRoleNameSchema, RouteId } from "@archestra/shared";
+import {
+  PermissionsSchema,
+  PredefinedRoleNameSchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
@@ -9,7 +13,6 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  PermissionsSchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
 

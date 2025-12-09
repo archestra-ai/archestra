@@ -1,4 +1,4 @@
-import { actions, resources } from "@archestra/shared";
+import { PermissionsSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,11 +6,6 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-
-export const PermissionsSchema = z.partialRecord(
-  z.enum(resources),
-  z.array(z.enum(actions)),
-);
 
 export const SelectOrganizationRoleSchema = createSelectSchema(
   schema.organizationRolesTable,

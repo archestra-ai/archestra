@@ -214,17 +214,18 @@ function LogsTable({
   // Convert TanStack sorting to API format
   const sortBy = sorting[0]?.id;
   const sortDirection = sorting[0]?.desc ? "desc" : "asc";
+
   // Map UI column ids to API sort fields
-  const apiSortBy: NonNullable<
-    archestraApiTypes.GetInteractionsData["query"]
-  >["sortBy"] =
-    sortBy === "agent"
-      ? "agentId"
-      : sortBy === "request.model"
-        ? "model"
-        : sortBy === "createdAt"
-          ? "createdAt"
-          : undefined;
+  const sortByMapping: Record<
+    string,
+    NonNullable<archestraApiTypes.GetInteractionsData["query"]>["sortBy"]
+  > = {
+    agent: "profileId",
+    externalAgentId: "externalAgentId",
+    "request.model": "model",
+    createdAt: "createdAt",
+  };
+  const apiSortBy = sortBy ? sortByMapping[sortBy] : undefined;
 
   const { data: interactionsResponse } = useInteractions({
     limit: pageSize,
@@ -295,7 +296,18 @@ function LogsTable({
     {
       id: "externalAgentId",
       accessorKey: "externalAgentId",
-      header: "External Agent ID",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            External Agent ID
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
       cell: ({ row }) => {
         const externalAgentId = row.original.externalAgentId;
         if (!externalAgentId) {

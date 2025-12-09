@@ -37,7 +37,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .merge(
             createSortingQuerySchema([
               "createdAt",
-              "agentId",
+              "profileId",
+              "externalAgentId",
               "model",
             ] as const),
           ),

@@ -6967,7 +6967,7 @@ export type GetInteractionsData = {
         externalAgentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';

@@ -125,6 +125,8 @@ class InteractionModel {
         return direction(schema.interactionsTable.createdAt);
       case "profileId":
         return direction(schema.interactionsTable.profileId);
+      case "externalAgentId":
+        return direction(schema.interactionsTable.externalAgentId);
       case "model":
         // Extract model from the JSONB request column
         // Wrap in parentheses to ensure correct precedence for the JSON operator

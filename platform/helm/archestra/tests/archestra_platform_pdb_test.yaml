@@ -9,6 +9,15 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: should fail when enabled without minAvailable or maxUnavailable
+    set:
+      archestra.podDisruptionBudget.enabled: true
+      archestra.podDisruptionBudget.minAvailable: null
+      archestra.podDisruptionBudget.maxUnavailable: null
+    asserts:
+      - failedTemplate:
+          errorMessage: "PodDisruptionBudget is enabled but neither minAvailable nor maxUnavailable is set. At least one must be specified."
+
   - it: should create PDB with correct metadata when enabled
     set:
       archestra.podDisruptionBudget.enabled: true

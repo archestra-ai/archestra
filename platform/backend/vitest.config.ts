@@ -7,6 +7,15 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@shared/access-control.ee": path.resolve(
+        __dirname,
+        "../shared/access-control.ee.ts",
+      ),
+      "@shared/access-control": path.resolve(
+        __dirname,
+        "../shared/access-control.ts",
+      ),
+      "@shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },
   test: {

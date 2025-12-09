@@ -133,7 +133,7 @@ export const createFastifyInstance = () =>
       const statusCode = 500;
 
       this.log.error(
-        { error: message, statusCode, stack: error.stack },
+        { error: message, statusCode },
         "HTTP 50x request error occurred",
       );
 

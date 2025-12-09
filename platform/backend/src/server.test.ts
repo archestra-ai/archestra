@@ -350,13 +350,9 @@ describe("createFastifyInstance", () => {
         url: "/test-standard-error-logging",
       });
 
-      // Standard errors should be logged at error level with 500 status and stack
+      // Standard errors should be logged at error level with 500 status
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: "Standard error",
-          statusCode: 500,
-          stack: expect.any(String),
-        }),
+        { error: "Standard error", statusCode: 500 },
         "HTTP 50x request error occurred",
       );
 

@@ -19,10 +19,7 @@ type WithPermissionsProps = {
     }
 );
 
-const {
-  WithPermissions: WithPermissionsEE,
-  WithoutPermissions: WithoutPermissionsEE,
-} = config.enterpriseLicenseActivated
+const PermissionWrapper = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: EE-only permission components
     await import("./with-permissions.ee")
   : {
@@ -32,14 +29,12 @@ const {
           ? children({ hasPermission: true })
           : children;
       },
-      WithoutPermissions: () => {
-        // Free version: never render (user always has permissions)
-        return null;
-      },
+      // OSS version: never render (user always has permissions)
+      WithoutPermissions: () => null,
     };
 
 export function WithPermissions(props: WithPermissionsProps) {
-  return <WithPermissionsEE {...props} />;
+  return <PermissionWrapper.WithPermissions {...props} />;
 }
 
 export function WithoutPermissions({
@@ -50,8 +45,8 @@ export function WithoutPermissions({
   children: React.ReactNode;
 }) {
   return (
-    <WithoutPermissionsEE permissions={permissions}>
+    <PermissionWrapper.WithoutPermissions permissions={permissions}>
       {children}
-    </WithoutPermissionsEE>
+    </PermissionWrapper.WithoutPermissions>
   );
 }

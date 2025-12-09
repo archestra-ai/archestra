@@ -16,6 +16,7 @@ vi.mock("@/auth", () => ({
       verifyApiKey: vi.fn(),
     },
   },
+  hasPermission: vi.fn(),
 }));
 
 vi.mock("@/auth/utils", () => ({

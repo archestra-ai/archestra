@@ -90,6 +90,7 @@ export const RouteId = {
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
+  GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",

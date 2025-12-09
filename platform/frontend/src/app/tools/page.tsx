@@ -10,11 +10,16 @@ import {
   transformToolResultPolicies,
 } from "@/lib/policy.utils";
 import { getServerApiHeaders } from "@/lib/server-utils";
+import {
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+  DEFAULT_TOOLS_PAGE_SIZE,
+} from "@/lib/utils";
 import { ToolsClient } from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_PAGE_SIZE = 50;
+
 
 export type ToolsInitialData = {
   agentTools: archestraApiTypes.GetAllAgentToolsResponses["200"];
@@ -31,7 +36,7 @@ export default async function ToolsPage() {
       data: [],
       pagination: {
         currentPage: 1,
-        limit: DEFAULT_PAGE_SIZE,
+        limit: DEFAULT_TOOLS_PAGE_SIZE,
         total: 0,
         totalPages: 0,
         hasNext: false,
@@ -52,10 +57,10 @@ export default async function ToolsPage() {
           await archestraApiSdk.getAllAgentTools({
             headers,
             query: {
-              limit: DEFAULT_PAGE_SIZE,
+              limit: DEFAULT_TOOLS_PAGE_SIZE,
               offset: 0,
-              sortBy: "createdAt",
-              sortDirection: "desc",
+              sortBy: DEFAULT_SORT_BY,
+              sortDirection: DEFAULT_SORT_DIRECTION,
               excludeArchestraTools: true,
             },
           })
@@ -66,7 +71,7 @@ export default async function ToolsPage() {
         (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
       toolInvocationPolicies: transformToolInvocationPolicies(
         (await archestraApiSdk.getToolInvocationPolicies({ headers })).data ||
-          [],
+        [],
       ),
       toolResultPolicies: transformToolResultPolicies(
         (await archestraApiSdk.getTrustedDataPolicies({ headers })).data || [],

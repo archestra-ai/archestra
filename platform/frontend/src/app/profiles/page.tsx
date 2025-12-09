@@ -6,11 +6,16 @@ import {
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
+import {
+  DEFAULT_AGENTS_PAGE_SIZE,
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+} from "@/lib/utils";
 import ProfilesPage from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_PAGE_SIZE = 20;
+
 
 export default async function ProfilesPageServer() {
   let initialData: {
@@ -28,10 +33,10 @@ export default async function ProfilesPageServer() {
           await archestraApiSdk.getAgents({
             headers,
             query: {
-              limit: DEFAULT_PAGE_SIZE,
+              limit: DEFAULT_AGENTS_PAGE_SIZE,
               offset: 0,
-              sortBy: "createdAt",
-              sortDirection: "desc",
+              sortBy: DEFAULT_SORT_BY,
+              sortDirection: DEFAULT_SORT_DIRECTION,
             },
           })
         ).data || null,

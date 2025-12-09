@@ -967,23 +967,23 @@ export function AssignedToolsTable({
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             {searchQuery ||
-              agentFilter !== "all" ||
-              originFilter !== "all" ||
-              credentialFilter !== "all"
+              agentFilter !== DEFAULT_FILTER_ALL ||
+              originFilter !== DEFAULT_FILTER_ALL ||
+              credentialFilter !== DEFAULT_FILTER_ALL
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
           {(searchQuery ||
-            agentFilter !== "all" ||
-            originFilter !== "all" ||
-            credentialFilter !== "all") && (
+            agentFilter !== DEFAULT_FILTER_ALL ||
+            originFilter !== DEFAULT_FILTER_ALL ||
+            credentialFilter !== DEFAULT_FILTER_ALL) && (
               <Button
                 variant="outline"
                 onClick={() => {
                   handleSearchChange("");
-                  handleProfileFilterChange("all");
-                  handleOriginFilterChange("all");
-                  handleCredentialFilterChange("all");
+                  handleProfileFilterChange(DEFAULT_FILTER_ALL);
+                  handleOriginFilterChange(DEFAULT_FILTER_ALL);
+                  handleCredentialFilterChange(DEFAULT_FILTER_ALL);
                 }}
               >
                 Clear all filters

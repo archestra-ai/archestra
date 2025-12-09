@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -25,6 +26,8 @@ export interface LocalServerInstallResult {
   environmentValues: Record<string, string>;
   /** External Vault secret path for BYOS */
   externalVaultSecret?: string;
+  /** Team ID to assign the MCP server to (null for personal) */
+  teamId?: string | null;
 }
 
 interface LocalServerInstallDialogProps {
@@ -42,6 +45,8 @@ export function LocalServerInstallDialog({
   catalogItem,
   isInstalling,
 }: LocalServerInstallDialogProps) {
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
     catalogItem?.localConfig?.environment?.filter(
@@ -65,7 +70,6 @@ export function LocalServerInstallDialog({
   );
 
   // BYOS (Bring Your Own Secrets) state
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedSecretPath, setSelectedSecretPath] = useState<string | null>(
     null,
   );
@@ -93,10 +97,11 @@ export function LocalServerInstallDialog({
       await onConfirm({
         environmentValues: nonSecretValues,
         externalVaultSecret: selectedSecretPath || undefined,
+        teamId: selectedTeamId,
       });
     } else {
       // Non-BYOS mode: all values from form
-      await onConfirm({ environmentValues });
+      await onConfirm({ environmentValues, teamId: selectedTeamId });
     }
 
     // Reset form
@@ -161,7 +166,12 @@ export function LocalServerInstallDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <SelectMcpServerCredentialTypeAndTeams
+          selectedTeamId={selectedTeamId}
+          onTeamChange={setSelectedTeamId}
+        />
+
+        <div className="space-y-6 mt-4">
           {/* Non-secret Environment Variables (always editable) */}
           {nonSecretEnvVars.length > 0 && (
             <div className="space-y-4">

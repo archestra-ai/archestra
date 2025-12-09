@@ -242,6 +242,7 @@ export function InternalMCPCatalog({
       catalogId: localServerCatalogItem.id,
       environmentValues: installResult.environmentValues,
       externalVaultSecret: installResult.externalVaultSecret,
+      teamId: installResult.teamId ?? undefined,
       dontShowToast: true,
     });
 

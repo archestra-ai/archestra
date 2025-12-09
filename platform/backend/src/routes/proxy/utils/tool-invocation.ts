@@ -1,3 +1,4 @@
+import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
 
 /**
@@ -12,8 +13,18 @@ export const evaluatePolicies = async (
   agentId: string,
   contextIsTrusted: boolean,
 ): Promise<null | [string, string]> => {
+  logger.debug(
+    { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
+    "[toolInvocation] evaluatePolicies: starting evaluation",
+  );
+
   for (const toolCall of toolCalls) {
     const { toolCallName, toolCallArgs } = toolCall;
+
+    logger.debug(
+      { agentId, toolCallName, argsLength: toolCallArgs.length },
+      "[toolInvocation] evaluatePolicies: evaluating tool call",
+    );
 
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:
@@ -27,11 +38,21 @@ export const evaluatePolicies = async (
      */
     const toolInput = JSON.parse(toolCallArgs);
 
+    logger.debug(
+      { agentId, toolCallName, contextIsTrusted },
+      "[toolInvocation] evaluatePolicies: calling ToolInvocationPolicyModel.evaluate",
+    );
+
     const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
       agentId,
       toolCallName,
       toolInput,
       contextIsTrusted,
+    );
+
+    logger.debug(
+      { agentId, toolCallName, isAllowed, reason },
+      "[toolInvocation] evaluatePolicies: policy evaluation result",
     );
 
     const archestraMetadata = `
@@ -50,6 +71,10 @@ ${reason}`;
 ${contentMessage}`;
 
     if (!isAllowed) {
+      logger.debug(
+        { agentId, toolCallName, reason },
+        "[toolInvocation] evaluatePolicies: tool invocation blocked",
+      );
       return [refusalMessage, contentMessage];
       // TODO: return string or null, not provider specific message type
       // return {
@@ -72,5 +97,9 @@ ${contentMessage}`;
     }
   }
 
+  logger.debug(
+    { agentId, toolCallCount: toolCalls.length },
+    "[toolInvocation] evaluatePolicies: all tool calls allowed",
+  );
   return null;
 };

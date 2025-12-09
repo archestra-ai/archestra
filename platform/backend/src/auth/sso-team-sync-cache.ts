@@ -38,6 +38,10 @@ export function cacheSsoGroups(
   groups: string[],
 ): void {
   const key = getCacheKey(providerId, email);
+  logger.debug(
+    { providerId, email, organizationId, groupCount: groups.length },
+    "[ssoTeamSyncCache] Caching SSO groups",
+  );
   SSO_GROUPS_CACHE.set(key, {
     groups,
     organizationId,
@@ -56,7 +60,16 @@ export function retrieveSsoGroups(
   const key = getCacheKey(providerId, email);
   const entry = SSO_GROUPS_CACHE.get(key);
 
+  logger.debug(
+    { providerId, email, found: !!entry },
+    "[ssoTeamSyncCache] Retrieving SSO groups",
+  );
+
   if (!entry) {
+    logger.debug(
+      { providerId, email },
+      "[ssoTeamSyncCache] No cached groups found",
+    );
     return null;
   }
 
@@ -64,9 +77,24 @@ export function retrieveSsoGroups(
   SSO_GROUPS_CACHE.delete(key);
 
   // Check if expired
-  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+  const age = Date.now() - entry.timestamp;
+  if (age > CACHE_TTL_MS) {
+    logger.debug(
+      { providerId, email, ageMs: age, ttlMs: CACHE_TTL_MS },
+      "[ssoTeamSyncCache] Cached groups expired",
+    );
     return null;
   }
+
+  logger.debug(
+    {
+      providerId,
+      email,
+      groupCount: entry.groups.length,
+      organizationId: entry.organizationId,
+    },
+    "[ssoTeamSyncCache] Retrieved valid cached groups",
+  );
 
   return {
     groups: entry.groups,
@@ -189,10 +217,18 @@ export function extractGroupsFromClaims(
  */
 export function cleanupExpiredEntries(): void {
   const now = Date.now();
+  let cleaned = 0;
   for (const [key, entry] of SSO_GROUPS_CACHE.entries()) {
     if (now - entry.timestamp > CACHE_TTL_MS) {
       SSO_GROUPS_CACHE.delete(key);
+      cleaned++;
     }
+  }
+  if (cleaned > 0) {
+    logger.debug(
+      { cleanedEntries: cleaned, remainingEntries: SSO_GROUPS_CACHE.size },
+      "[ssoTeamSyncCache] Cleaned expired entries",
+    );
   }
 }
 

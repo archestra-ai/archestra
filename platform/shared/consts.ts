@@ -60,6 +60,12 @@ export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTR
 export const MCP_CATALOG_API_BASE_URL = "https://archestra.ai/mcp-catalog/api";
 
 /**
+ * Header name for external agent ID.
+ * Clients can pass this header to associate interactions with their own agent identifiers.
+ */
+export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
+
+/**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
  * - Account linking (trustedProviders)
  * - Provider registration

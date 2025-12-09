@@ -4,18 +4,18 @@ import InteractionModel from "./interaction";
 import TeamModel from "./team";
 
 describe("InteractionModel", () => {
-  let agentId: string;
+  let profileId: string;
 
   beforeEach(async ({ makeAgent }) => {
-    // Create test agent
+    // Create test profile
     const agent = await makeAgent();
-    agentId = agent.id;
+    profileId = agent.id;
   });
 
   describe("create", () => {
     test("can create an interaction", async () => {
       const interaction = await InteractionModel.create({
-        agentId,
+        profileId,
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Hello" }],
@@ -43,7 +43,7 @@ describe("InteractionModel", () => {
 
       expect(interaction).toBeDefined();
       expect(interaction.id).toBeDefined();
-      expect(interaction.agentId).toBe(agentId);
+      expect(interaction.profileId).toBe(profileId);
       expect(interaction.request).toBeDefined();
       expect(interaction.response).toBeDefined();
     });
@@ -52,7 +52,7 @@ describe("InteractionModel", () => {
   describe("findById", () => {
     test("returns interaction by id", async () => {
       const created = await InteractionModel.create({
-        agentId,
+        profileId,
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Test message" }],
@@ -101,7 +101,7 @@ describe("InteractionModel", () => {
 
       // Create interactions for both agents
       await InteractionModel.create({
-        agentId,
+        profileId,
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Agent 1 message" }],
@@ -128,7 +128,7 @@ describe("InteractionModel", () => {
       });
 
       await InteractionModel.create({
-        agentId: otherAgent.id,
+        profileId: otherAgent.id,
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Agent 2 message" }],
@@ -155,9 +155,9 @@ describe("InteractionModel", () => {
       });
 
       const agentInteractions =
-        await InteractionModel.getAllInteractionsForAgent(agentId);
+        await InteractionModel.getAllInteractionsForAgent(profileId);
       expect(agentInteractions).toHaveLength(1);
-      expect(agentInteractions[0].agentId).toBe(agentId);
+      expect(agentInteractions[0].profileId).toBe(profileId);
     });
   });
 
@@ -175,7 +175,7 @@ describe("InteractionModel", () => {
       });
 
       await InteractionModel.create({
-        agentId: agent1.id,
+        profileId: agent1.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r1",
@@ -188,7 +188,7 @@ describe("InteractionModel", () => {
       });
 
       await InteractionModel.create({
-        agentId: agent2.id,
+        profileId: agent2.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r2",
@@ -209,7 +209,7 @@ describe("InteractionModel", () => {
       expect(interactions.data).toHaveLength(2);
     });
 
-    test("member only sees interactions for accessible agents", async ({
+    test("member only sees interactions for accessible profiles", async ({
       makeUser,
       makeAdmin,
       makeOrganization,
@@ -238,7 +238,7 @@ describe("InteractionModel", () => {
       });
 
       await InteractionModel.create({
-        agentId: agent1.id,
+        profileId: agent1.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r1",
@@ -251,7 +251,7 @@ describe("InteractionModel", () => {
       });
 
       await InteractionModel.create({
-        agentId: agent2.id,
+        profileId: agent2.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r2",
@@ -270,7 +270,7 @@ describe("InteractionModel", () => {
         false,
       );
       expect(interactions.data).toHaveLength(1);
-      expect(interactions.data[0].agentId).toBe(agent1.id);
+      expect(interactions.data[0].profileId).toBe(agent1.id);
     });
 
     test("member with no access sees no interactions", async ({ makeUser }) => {
@@ -279,7 +279,7 @@ describe("InteractionModel", () => {
       const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
 
       await InteractionModel.create({
-        agentId: agent1.id,
+        profileId: agent1.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r1",
@@ -306,7 +306,7 @@ describe("InteractionModel", () => {
       const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
-        agentId: agent.id,
+        profileId: agent.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r1",
@@ -327,7 +327,7 @@ describe("InteractionModel", () => {
       expect(found?.id).toBe(interaction.id);
     });
 
-    test("findById returns interaction for user with agent access", async ({
+    test("findById returns interaction for user with profile access", async ({
       makeUser,
       makeAdmin,
       makeOrganization,
@@ -347,7 +347,7 @@ describe("InteractionModel", () => {
       });
 
       const interaction = await InteractionModel.create({
-        agentId: agent.id,
+        profileId: agent.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r1",
@@ -368,7 +368,7 @@ describe("InteractionModel", () => {
       expect(found?.id).toBe(interaction.id);
     });
 
-    test("findById returns null for user without agent access", async ({
+    test("findById returns null for user without profile access", async ({
       makeUser,
     }) => {
       const user = await makeUser();
@@ -376,7 +376,7 @@ describe("InteractionModel", () => {
       const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
-        agentId: agent.id,
+        profileId: agent.id,
         request: { model: "gpt-4", messages: [] },
         response: {
           id: "r1",

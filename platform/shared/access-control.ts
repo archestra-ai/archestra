@@ -265,6 +265,7 @@ export const RouteId = {
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
+  GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
@@ -467,6 +468,9 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetInteraction]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetUniqueExternalAgentIds]: {
     interaction: ["read"],
   },
   [RouteId.GetOperators]: {

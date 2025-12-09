@@ -1,6 +1,6 @@
 {
-  "id": "a240ca3e-9f1a-45e8-98c4-20463b789845",
-  "prevId": "4491360d-7792-4bcf-ac0a-987380b9fa89",
+  "id": "33fc3e8a-bac5-4e27-ae5c-35387eb09ba7",
+  "prevId": "878a3d5e-fa28-495d-8ec2-d9fd11315372",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -953,11 +953,17 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agent_id": {
-          "name": "agent_id",
+        "profile_id": {
+          "name": "profile_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_agent_id": {
+          "name": "external_agent_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         },
         "request": {
           "name": "request",
@@ -1044,7 +1050,22 @@
           "name": "interactions_agent_id_idx",
           "columns": [
             {
-              "expression": "agent_id",
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interactions_external_agent_id_idx": {
+          "name": "interactions_external_agent_id_idx",
+          "columns": [
+            {
+              "expression": "external_agent_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1057,12 +1078,12 @@
         }
       },
       "foreignKeys": {
-        "interactions_agent_id_agents_id_fk": {
-          "name": "interactions_agent_id_agents_id_fk",
+        "interactions_profile_id_agents_id_fk": {
+          "name": "interactions_profile_id_agents_id_fk",
           "tableFrom": "interactions",
           "tableTo": "agents",
           "columnsFrom": [
-            "agent_id"
+            "profile_id"
           ],
           "columnsTo": [
             "id"

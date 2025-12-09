@@ -69,7 +69,9 @@ function LogDetail({
   }
 
   const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = initialData?.agents?.find((a) => a.id === interaction.agentId);
+  const agent = initialData?.agents?.find(
+    (a) => a.id === interaction.profileId,
+  );
   const toolsUsed = interaction.getToolNamesUsed();
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();
@@ -108,6 +110,18 @@ function LogDetail({
                   Profile Name
                 </div>
                 <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  External Agent ID
+                </div>
+                <div className="font-medium font-mono">
+                  {dynamicInteraction.externalAgentId || (
+                    <span className="text-muted-foreground font-normal">
+                      Not set
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">

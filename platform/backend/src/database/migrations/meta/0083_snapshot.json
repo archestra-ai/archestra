@@ -1,5 +1,5 @@
 {
-  "id": "4491360d-7792-4bcf-ac0a-987380b9fa89",
+  "id": "878a3d5e-fa28-495d-8ec2-d9fd11315372",
   "prevId": "c5603374-f846-4061-a42b-12eb9ee360c2",
   "version": "7",
   "dialect": "postgresql",
@@ -953,11 +953,17 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agent_id": {
-          "name": "agent_id",
+        "profile_id": {
+          "name": "profile_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_agent_id": {
+          "name": "external_agent_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         },
         "request": {
           "name": "request",
@@ -1044,7 +1050,22 @@
           "name": "interactions_agent_id_idx",
           "columns": [
             {
-              "expression": "agent_id",
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interactions_external_agent_id_idx": {
+          "name": "interactions_external_agent_id_idx",
+          "columns": [
+            {
+              "expression": "external_agent_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1057,12 +1078,12 @@
         }
       },
       "foreignKeys": {
-        "interactions_agent_id_agents_id_fk": {
-          "name": "interactions_agent_id_agents_id_fk",
+        "interactions_profile_id_agents_id_fk": {
+          "name": "interactions_profile_id_agents_id_fk",
           "tableFrom": "interactions",
           "tableTo": "agents",
           "columnsFrom": [
-            "agent_id"
+            "profile_id"
           ],
           "columnsTo": [
             "id"
@@ -2662,12 +2683,6 @@
           "notNull": true,
           "default": false
         },
-        "vault_path": {
-          "name": "vault_path",
-          "type": "varchar(512)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3169,71 +3184,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "organization_id",
-            "team_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.team_vault_folder": {
-      "name": "team_vault_folder",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vault_path": {
-          "name": "vault_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "team_vault_folder_team_id_team_id_fk": {
-          "name": "team_vault_folder_team_id_team_id_fk",
-          "tableFrom": "team_vault_folder",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "team_vault_folder_team_id_unique": {
-          "name": "team_vault_folder_team_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
             "team_id"
           ]
         }

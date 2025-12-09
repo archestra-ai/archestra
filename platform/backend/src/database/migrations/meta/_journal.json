@@ -586,15 +586,15 @@
     {
       "idx": 83,
       "version": "7",
-      "when": 1765297029901,
-      "tag": "0083_rich_wallop",
+      "when": 1765292666507,
+      "tag": "0083_sticky_chameleon",
       "breakpoints": true
     },
     {
       "idx": 84,
       "version": "7",
-      "when": 1765298973344,
-      "tag": "0084_free_sway",
+      "when": 1765303091121,
+      "tag": "0084_sticky_karma",
       "breakpoints": true
     }
   ]

@@ -57,6 +57,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: string,
     agentId?: string,
     stream = false,
+    externalAgentId?: string,
   ) => {
     logger.debug(
       {
@@ -108,6 +109,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const genAI = getObservableGenAI(
       new GoogleGenAI({ apiKey: geminiApiKey }),
       resolvedAgent,
+      externalAgentId,
     );
 
     // Use the model from the URL path or default to gemini-pro
@@ -122,14 +124,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (limitViolation) {
         const [_refusalMessage, contentMessage] = limitViolation;
 
-        logger.debug(
-          { resolvedAgentId, contentMessage },
-          "[GeminiProxy] Request blocked due to limit violation",
-        );
         fastify.log.info(
           {
             resolvedAgentId,
             reason: "token_cost_limit_exceeded",
+            contentMessage,
           },
           "Gemini request blocked due to token cost limit",
         );
@@ -306,7 +305,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         //   // Store the complete interaction
         //   await InteractionModel.create({
-        //     agentId: resolvedAgentId,
+        //     profileId: resolvedAgentId,
         //     type: "gemini:generateContent",
         //     request: body,
         //     response: accumulatedResponse,
@@ -366,7 +365,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         //     // Store the interaction with refusal
         //     await InteractionModel.create({
-        //       agentId: resolvedAgentId,
+        //       profileId: resolvedAgentId,
         //       type: "gemini:generateContent",
         //       request: body,
         //       response: refusalResponse,
@@ -391,7 +390,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         await InteractionModel.create({
-          agentId: resolvedAgentId,
+          profileId: resolvedAgentId,
+          externalAgentId,
           type: "gemini:generateContent",
           request: body,
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
@@ -462,6 +462,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -469,6 +472,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         undefined,
         false,
+        externalAgentId,
       );
     },
   );
@@ -494,6 +498,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -501,6 +508,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         undefined,
         true,
+        externalAgentId,
       );
     },
   );
@@ -528,6 +536,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -535,6 +546,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         request.params.agentId,
         false,
+        externalAgentId,
       );
     },
   );
@@ -562,6 +574,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -569,6 +584,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.model,
         request.params.agentId,
         true,
+        externalAgentId,
       );
     },
   );

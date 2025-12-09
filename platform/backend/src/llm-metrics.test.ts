@@ -74,8 +74,7 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -87,8 +86,7 @@ describe("getObservableFetch", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -100,8 +98,7 @@ describe("getObservableFetch", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -129,8 +126,7 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -158,8 +154,7 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -181,8 +176,7 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -215,8 +209,7 @@ describe("getObservableFetch", () => {
     expect(counterInc).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -228,8 +221,7 @@ describe("getObservableFetch", () => {
     expect(counterInc).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -314,8 +306,7 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -327,8 +318,7 @@ describe("getObservableGenAI", () => {
     expect(counterInc).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -340,8 +330,7 @@ describe("getObservableGenAI", () => {
     expect(counterInc).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -366,8 +355,7 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -390,8 +378,7 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -537,8 +524,7 @@ describe("reportLLMCost", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -553,13 +539,27 @@ describe("reportLLMCost", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
       },
       0.02,
+    );
+  });
+
+  test("records cost with external agent id", () => {
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "external-123");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-123",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.05,
     );
   });
 });
@@ -579,8 +579,7 @@ describe("reportLLMTokens with model", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -592,8 +591,41 @@ describe("reportLLMTokens with model", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "output",
+      },
+      50,
+    );
+  });
+
+  test("records tokens with external agent id", () => {
+    reportLLMTokens(
+      "openai",
+      testAgent,
+      { input: 100, output: 50 },
+      "gpt-4",
+      "external-456",
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-456",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "input",
+      },
+      100,
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-456",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -619,8 +651,22 @@ describe("reportBlockedTools with model", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      3,
+    );
+  });
+
+  test("records blocked tools with external agent id", () => {
+    reportBlockedTools("openai", testAgent, 3, "gpt-4", "external-789");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-789",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -645,8 +691,7 @@ describe("reportTimeToFirstToken", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -661,8 +706,7 @@ describe("reportTimeToFirstToken", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -684,13 +728,33 @@ describe("reportTimeToFirstToken", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gemini-pro",
       },
       0.3,
+    );
+  });
+
+  test("records TTFT with external agent id", () => {
+    reportTimeToFirstToken(
+      "openai",
+      testAgent,
+      "gpt-4",
+      0.5,
+      "external-ttft-123",
+    );
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-ttft-123",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.5,
     );
   });
 });
@@ -711,8 +775,7 @@ describe("reportTokensPerSecond", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gpt-4",
@@ -728,8 +791,7 @@ describe("reportTokensPerSecond", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "unknown",
@@ -763,8 +825,7 @@ describe("reportTokensPerSecond", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "gemini-pro",
@@ -780,13 +841,35 @@ describe("reportTokensPerSecond", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
         profile_id: testAgent.id,
         profile_name: testAgent.name,
         model: "claude-3",
       },
       20,
+    );
+  });
+
+  test("records tokens per second with external agent id", () => {
+    // 100 tokens in 2 seconds = 50 tokens/sec
+    reportTokensPerSecond(
+      "openai",
+      testAgent,
+      "gpt-4",
+      100,
+      2,
+      "external-tps-123",
+    );
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-tps-123",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      50,
     );
   });
 });

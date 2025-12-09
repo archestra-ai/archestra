@@ -531,7 +531,7 @@ async function makeConversation(
  * Creates a test interaction in the database
  */
 async function makeInteraction(
-  agentId: string,
+  profileId: string,
   overrides: Partial<
     Pick<
       InsertInteraction,
@@ -542,7 +542,7 @@ async function makeInteraction(
   const [interaction] = await db
     .insert(schema.interactionsTable)
     .values({
-      agentId,
+      profileId,
       request: {
         model: "gpt-4",
         messages: [

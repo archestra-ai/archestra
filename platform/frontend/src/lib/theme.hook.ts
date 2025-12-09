@@ -50,40 +50,18 @@ export function useOrgTheme() {
     fontFromLocalStorage || fontFromBackend || DEFAULT_FONT,
   );
 
-  const applyThemeOnBackend = useCallback(
-    (themeId: OrganizationTheme) => {
+  const saveAppearance = useCallback(
+    (themeId: OrganizationTheme, fontId: OrganizationCustomFont) => {
+      setCurrentUITheme(themeId);
+      setCurrentUIFont(fontId);
       updateThemeMutation.mutate({
         theme: themeId,
-      });
-    },
-    [updateThemeMutation],
-  );
-
-  const applyFontOnBackend = useCallback(
-    (fontId: OrganizationCustomFont) => {
-      updateThemeMutation.mutate({
         customFont: fontId,
       });
-    },
-    [updateThemeMutation],
-  );
-
-  const saveTheme = useCallback(
-    (themeId: OrganizationTheme) => {
-      setCurrentUITheme(themeId);
-      applyThemeOnBackend(themeId);
       applyThemeInLocalStorage(themeId);
-    },
-    [applyThemeOnBackend],
-  );
-
-  const saveFont = useCallback(
-    (fontId: OrganizationCustomFont) => {
-      setCurrentUIFont(fontId);
-      applyFontOnBackend(fontId);
       applyFontInLocalStorage(fontId);
     },
-    [applyFontOnBackend],
+    [updateThemeMutation],
   );
 
   // whenever currentUITheme changes, apply the theme on the UI
@@ -122,8 +100,7 @@ export function useOrgTheme() {
     fontFromBackend,
     setPreviewTheme: setCurrentUITheme,
     setPreviewFont: setCurrentUIFont,
-    saveTheme,
-    saveFont,
+    saveAppearance,
     logo,
     DEFAULT_THEME,
     DEFAULT_FONT,

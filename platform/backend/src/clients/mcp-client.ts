@@ -7,6 +7,7 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
   McpToolCallModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import { secretManager } from "@/secretsmanager";
@@ -31,8 +32,20 @@ type McpToolWithServerMetadata = {
   mcpServerId: string | null;
   credentialSourceMcpServerId: string | null;
   executionSourceMcpServerId: string | null;
+  useDynamicTeamCredential: boolean;
   catalogId: string | null;
   catalogName: string | null;
+};
+
+/**
+ * Token authentication context for dynamic credential resolution
+ */
+export type TokenAuthContext = {
+  tokenId: string;
+  teamId: string | null;
+  isOrganizationToken: boolean;
+  /** Optional user ID for user-owned server priority (set when called from chat) */
+  userId?: string;
 };
 
 class McpClient {
@@ -45,6 +58,7 @@ class McpClient {
   async executeToolCall(
     toolCall: CommonToolCall,
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<CommonToolResult> {
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(toolCall, agentId);
@@ -53,43 +67,39 @@ class McpClient {
     }
     const { tool, catalogItem } = validationResult;
 
-    // Get execution context (server ID and secrets)
-    const contextResult = await this.getExecutionContext(
-      tool,
+    const targetLocalMcpServerIdResult =
+      await this.determineTargetMcpServerIdForCatalogItem({
+        tool,
+        toolCall,
+        agentId,
+        tokenAuth,
+        catalogItem,
+      });
+    if ("error" in targetLocalMcpServerIdResult) {
+      return targetLocalMcpServerIdResult.error;
+    }
+    const { targetLocalMcpServerId } = targetLocalMcpServerIdResult;
+    const secretsResult = await this.getSecretsForMcpServer({
+      targetMcpServerId: targetLocalMcpServerId,
       toolCall,
       agentId,
-    );
-    if ("error" in contextResult) {
-      return contextResult.error;
+    });
+    if ("error" in secretsResult) {
+      return secretsResult.error;
     }
-    const { targetMcpServerId, secrets } = contextResult;
+    const { secrets } = secretsResult;
 
     try {
       // Get the appropriate transport
       const transport = await this.getTransport(
         catalogItem,
-        targetMcpServerId,
+        targetLocalMcpServerId,
         secrets,
       );
 
-      // Build connection cache key:
-      // - Local servers: use targetMcpServerId (each pod needs its own connection)
-      // - Remote servers: use catalogId + secretId (credential-based caching)
-      let connectionKey: string;
-      if (catalogItem.serverType === "local") {
-        connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
-      } else {
-        let secretId: string | null = null;
-        if (tool.credentialSourceMcpServerId) {
-          const credentialSourceServer = await McpServerModel.findById(
-            tool.credentialSourceMcpServerId,
-          );
-          secretId = credentialSourceServer?.secretId || null;
-        }
-        connectionKey = secretId
-          ? `${catalogItem.id}:${secretId}`
-          : catalogItem.id;
-      }
+      // Build connection cache key using the resolved target server ID
+      // This ensures each user gets their own connection for dynamic credentials
+      const connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
 
       // Get or create client
       const client = await this.getOrCreateClient(connectionKey, transport);
@@ -229,49 +239,218 @@ class McpClient {
     return { tool, catalogItem };
   }
 
-  /**
-   * Get execution target and secrets
-   */
-  private async getExecutionContext(
-    tool: McpToolWithServerMetadata,
-    toolCall: CommonToolCall,
-    agentId: string,
-  ): Promise<
-    | { targetMcpServerId: string; secrets: Record<string, unknown> }
-    | { error: CommonToolResult }
+  // Gets secrets of a given MCP server
+  private async getSecretsForMcpServer({
+    targetMcpServerId,
+    toolCall,
+    agentId,
+  }: {
+    targetMcpServerId: string;
+    toolCall: CommonToolCall;
+    agentId: string;
+  }): Promise<
+    { secrets: Record<string, unknown> } | { error: CommonToolResult }
   > {
-    // Determine target server
-    const targetMcpServerId =
-      tool.executionSourceMcpServerId || tool.mcpServerId;
-
-    if (!targetMcpServerId) {
+    const mcpServer = await McpServerModel.findById(targetMcpServerId);
+    if (!mcpServer) {
       return {
         error: await this.createErrorResult(
           toolCall,
           agentId,
-          "No execution source specified for MCP tool",
+          `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
+          "unknown",
+        ),
+      };
+    }
+    if (mcpServer.secretId) {
+      const secret = await secretManager.getSecret(mcpServer.secretId);
+      if (secret?.secret) {
+        logger.info(
+          {
+            targetMcpServerId,
+            secretId: mcpServer.secretId,
+          },
+          `Found secrets for MCP server ${targetMcpServerId}`,
+        );
+        return { secrets: secret.secret };
+      }
+    }
+    return { secrets: {} };
+  }
+
+  // Determines the target MCP server ID for a local catalog item
+  // Since there are multiple pods for a single catalog item that can receive request
+  private async determineTargetMcpServerIdForCatalogItem({
+    tool,
+    tokenAuth,
+    toolCall,
+    agentId,
+    catalogItem,
+  }: {
+    tool: McpToolWithServerMetadata;
+    toolCall: CommonToolCall;
+    agentId: string;
+    tokenAuth?: TokenAuthContext;
+    catalogItem: InternalMcpCatalog;
+  }): Promise<
+    { targetLocalMcpServerId: string } | { error: CommonToolResult }
+  > {
+    logger.info(
+      {
+        toolName: toolCall.name,
+        tool: tool,
+        tokenAuth: tokenAuth,
+      },
+      "Determining target MCP server ID for catalog item",
+    );
+    // Static credential case: use pre-configured execution source
+    if (!tool.useDynamicTeamCredential) {
+      if (
+        catalogItem.serverType === "local" &&
+        !tool.executionSourceMcpServerId
+      ) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Execution source is required for local MCP server tools when dynamic team credential is disabled.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+      if (
+        catalogItem.serverType === "remote" &&
+        !tool.credentialSourceMcpServerId
+      ) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+      const result =
+        catalogItem.serverType === "local"
+          ? tool.executionSourceMcpServerId
+          : tool.credentialSourceMcpServerId;
+      if (!result) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogItem: catalogItem,
+          targetLocalMcpServerId: result,
+        },
+        "Determined target MCP server ID for catalog item",
+      );
+      return { targetLocalMcpServerId: result };
+    }
+
+    // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth
+    // tokenAuth are profile tokens autocreated when team is assigned to a profile
+    if (!tokenAuth) {
+      return {
+        error: await this.createErrorResult(
+          toolCall,
+          agentId,
+          "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
+          tool.mcpServerName || "unknown",
+        ),
+      };
+    }
+    if (!tool.catalogId) {
+      return {
+        error: await this.createErrorResult(
+          toolCall,
+          agentId,
+          "Dynamic team credential is enabled but tool has no catalogId.",
           tool.mcpServerName || "unknown",
         ),
       };
     }
 
-    // Load secrets
-    let secrets: Record<string, unknown> = {};
-    if (tool.credentialSourceMcpServerId) {
-      const credentialSourceServer = await McpServerModel.findById(
-        tool.credentialSourceMcpServerId,
-      );
-      if (credentialSourceServer?.secretId) {
-        const secret = await secretManager.getSecret(
-          credentialSourceServer.secretId,
+    // Get all servers for this catalog
+    const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
+
+    // Priority 1: Server owned by current user
+    if (tokenAuth.userId) {
+      const userServer = allServers.find((s) => s.ownerId === tokenAuth.userId);
+      if (userServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: userServer.id,
+            userId: tokenAuth.userId,
+          },
+          `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
         );
-        if (secret?.secret) {
-          secrets = secret.secret;
+        return { targetLocalMcpServerId: userServer.id };
+      }
+    }
+
+    // Priority 2: Server whose owner is a member of the token's team
+    if (tokenAuth.teamId) {
+      for (const server of allServers) {
+        if (server.ownerId) {
+          const ownerInTeam = await TeamModel.isUserInTeam(
+            tokenAuth.teamId,
+            server.ownerId,
+          );
+          if (ownerInTeam) {
+            logger.info(
+              {
+                toolName: toolCall.name,
+                catalogId: tool.catalogId,
+                serverId: server.id,
+                ownerId: server.ownerId,
+                teamId: tokenAuth.teamId,
+              },
+              `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
+            );
+            return { targetLocalMcpServerId: server.id };
+          }
         }
       }
     }
 
-    return { targetMcpServerId, secrets };
+    // Priority 3: Otherwise, if organization-wide token is used, use first available server
+    if (tokenAuth.isOrganizationToken && allServers.length > 0) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          serverId: allServers[0].id,
+        },
+        `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
+      );
+      return { targetLocalMcpServerId: allServers[0].id };
+    }
+
+    // No server found, throw an error
+    const context = tokenAuth.userId
+      ? `user: ${tokenAuth.userId}`
+      : tokenAuth.teamId
+        ? `team: ${tokenAuth.teamId}`
+        : "organization";
+    return {
+      error: await this.createErrorResult(
+        toolCall,
+        agentId,
+        `No installation found for catalog ${tool.catalogName || tool.catalogId} with ${context}. Ensure an MCP server installation exists.`,
+        tool.mcpServerName || "unknown",
+      ),
+    };
   }
 
   /**
@@ -279,19 +458,22 @@ class McpClient {
    */
   private async getTransport(
     catalogItem: InternalMcpCatalog,
-    targetMcpServerId: string,
+    targetLocalMcpServerId: string,
     secrets: Record<string, unknown>,
   ): Promise<
     import("@modelcontextprotocol/sdk/shared/transport.js").Transport
   > {
     if (catalogItem.serverType === "local") {
       const usesStreamableHttp =
-        await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
+        await McpServerRuntimeManager.usesStreamableHttp(
+          targetLocalMcpServerId,
+        );
 
       if (usesStreamableHttp) {
         // HTTP transport
-        const url =
-          McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
+        const url = McpServerRuntimeManager.getHttpEndpointUrl(
+          targetLocalMcpServerId,
+        );
         if (!url) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",
@@ -304,7 +486,7 @@ class McpClient {
       }
 
       // Stdio transport - use K8s attach!
-      const k8sPod = McpServerRuntimeManager.getPod(targetMcpServerId);
+      const k8sPod = McpServerRuntimeManager.getPod(targetLocalMcpServerId);
       if (!k8sPod) {
         throw new Error("Pod not found for MCP server");
       }

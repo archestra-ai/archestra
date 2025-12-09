@@ -67,3 +67,43 @@ graph TB
     style Guard fill:#fff2cc,stroke:#d6b656,stroke-width:2px
     style Modifier fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
+
+## External Agent Identification
+
+When multiple applications share the same [Profile](platform-profiles.md), you can use the `X-Archestra-Agent-Id` header to identify which application each request originates from. This allows you to:
+
+- **Reuse a single Profile** across multiple applications while maintaining distinct tracking
+- **Filter logs** by application in the LLM Proxy Logs viewer
+- **Segment metrics** by application in your observability dashboards (Prometheus, Grafana, etc.)
+
+### Usage
+
+Include the header in your LLM requests:
+
+```bash
+curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "X-Archestra-Agent-Id: my-chatbot-prod" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+The external agent ID will be:
+
+- **Stored** with each interaction in the database
+- **Displayed** in the LLM Proxy Logs table (filterable)
+- **Included** in Prometheus metrics as the `agent_id` label
+- **Available** in the interaction detail page
+
+### Example Use Cases
+
+| Scenario | Profile | X-Archestra-Agent-Id |
+|----------|---------|----------------------|
+| Multiple environments | `customer-support` | `customer-support-prod`, `customer-support-staging` |
+| Multiple applications | `shared-assistant` | `mobile-app`, `web-app`, `slack-bot` |
+| Per-customer tracking | `multi-tenant-bot` | `customer-123`, `customer-456` |
+
+This approach lets you maintain centralized security policies through Profiles while still having granular visibility into which applications are generating traffic.

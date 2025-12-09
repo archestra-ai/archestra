@@ -78,7 +78,7 @@ export function ArchestraArchitectureDiagram() {
         Below are instructions for how to connect to Archestra using a default
         profile. If you'd like to configure a specific profile, you can do so in
         the{" "}
-        <Link href="/agents" className="text-blue-500">
+        <Link href="/profiles" className="text-blue-500">
           Profiles
         </Link>{" "}
         page.

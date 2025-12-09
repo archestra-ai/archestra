@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { RoleMappingForm } from "./role-mapping-form";
+import { TeamSyncConfigForm } from "./team-sync-config-form";
 
 interface OidcConfigFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
@@ -447,6 +448,8 @@ export function OidcConfigForm({
       </div>
 
       <RoleMappingForm form={form} />
+
+      <TeamSyncConfigForm form={form} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,7 +12,11 @@ import {
 } from "@/components/ui/select";
 import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
+
+// Special value for dynamic team credential option
+export const DYNAMIC_CREDENTIAL_VALUE = "__dynamic__";
 
 interface TokenSelectProps {
   value?: string | null;
@@ -44,22 +49,29 @@ export function TokenSelect({
   // Get tokens for this catalogId from the grouped response
   const mcpServers = groupedTokens?.[catalogId] ?? [];
 
+  const staticCredentialOutsideOfGroupedTokens =
+    value &&
+    value !== DYNAMIC_CREDENTIAL_VALUE &&
+    !groupedTokens?.[catalogId]?.some((token) => token.id === value);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && mcpServers.length > 0 && !value) {
-      onValueChange(mcpServers[0].id);
+    if (shouldSetDefaultValue && !value) {
+      // Default to dynamic credential
+      onValueChange(DYNAMIC_CREDENTIAL_VALUE);
     }
-  }, [mcpServers.length]);
+  }, []);
 
-  if (!mcpServers || mcpServers.length === 0) {
-    return (
-      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-        No credentials available
-      </div>
-    );
-  }
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
+  if (staticCredentialOutsideOfGroupedTokens) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        Owner outside your team
+      </span>
+    );
   }
 
   return (
@@ -78,6 +90,16 @@ export function TokenSelect({
         <SelectValue placeholder="Select credentials..." />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span className="text-xs font-medium">Resolve at call time</span>
+          </div>
+        </SelectItem>
+        <Divider className="my-2" />
+        <div className="text-xs text-muted-foreground ml-2">
+          Static credentials
+        </div>
         {mcpServers.map((server) => (
           <SelectItem
             key={server.id}
@@ -106,12 +128,6 @@ export function TokenSelect({
             </div>
           </SelectItem>
         ))}
-
-        {mcpServers.length === 0 && (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No credentials available
-          </div>
-        )}
       </SelectContent>
     </Select>
   );

@@ -61,7 +61,12 @@ import {
   useProfilesPaginated,
   useUpdateProfile,
 } from "@/lib/agent.query";
-import { DEFAULT_AGENTS_PAGE_SIZE, formatDate } from "@/lib/utils";
+import {
+  DEFAULT_AGENTS_PAGE_SIZE,
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+  formatDate,
+} from "@/lib/utils";
 import { ProfileActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
@@ -180,8 +185,8 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const offset = pageIndex * pageSize;
 
   // Default sorting
-  const sortBy = sortByFromUrl || "createdAt";
-  const sortDirection = sortDirectionFromUrl || "desc";
+  const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
+  const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
   const { data: agentsResponse } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,

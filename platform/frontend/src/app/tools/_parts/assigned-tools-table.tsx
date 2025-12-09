@@ -53,7 +53,12 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
-import { DEFAULT_TOOLS_PAGE_SIZE } from "@/lib/utils";
+import {
+  DEFAULT_FILTER_ALL,
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+  DEFAULT_TOOLS_PAGE_SIZE,
+} from "@/lib/utils";
 import type { ToolsInitialData } from "../page";
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -133,14 +138,18 @@ export function AssignedToolsTable({
 
   // State
   const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
-  const [agentFilter, setProfileFilter] = useState(agentIdFromUrl || "all");
-  const [originFilter, setOriginFilter] = useState(originFromUrl || "all");
+  const [agentFilter, setProfileFilter] = useState(
+    agentIdFromUrl || DEFAULT_FILTER_ALL,
+  );
+  const [originFilter, setOriginFilter] = useState(
+    originFromUrl || DEFAULT_FILTER_ALL,
+  );
   const [credentialFilter, setCredentialFilter] = useState(
-    credentialFromUrl || "all",
+    credentialFromUrl || DEFAULT_FILTER_ALL,
   );
   const [sorting, setSorting] = useState<SortingState>([
     {
-      id: sortByFromUrl || "createdAt",
+      id: sortByFromUrl || DEFAULT_SORT_BY,
       desc: sortDirectionFromUrl !== "asc",
     },
   ]);
@@ -157,10 +166,10 @@ export function AssignedToolsTable({
     pageIndex === 0 &&
     pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
     !searchQuery &&
-    agentFilter === "all" &&
-    originFilter === "all" &&
-    credentialFilter === "all" &&
-    (sorting[0]?.id === "createdAt" || !sorting[0]?.id) &&
+    agentFilter === DEFAULT_FILTER_ALL &&
+    originFilter === DEFAULT_FILTER_ALL &&
+    credentialFilter === DEFAULT_FILTER_ALL &&
+    (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
   const { data: agentToolsData, isLoading } = useAllProfileTools({
@@ -958,9 +967,9 @@ export function AssignedToolsTable({
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             {searchQuery ||
-            agentFilter !== "all" ||
-            originFilter !== "all" ||
-            credentialFilter !== "all"
+              agentFilter !== "all" ||
+              originFilter !== "all" ||
+              credentialFilter !== "all"
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
@@ -968,18 +977,18 @@ export function AssignedToolsTable({
             agentFilter !== "all" ||
             originFilter !== "all" ||
             credentialFilter !== "all") && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                handleSearchChange("");
-                handleProfileFilterChange("all");
-                handleOriginFilterChange("all");
-                handleCredentialFilterChange("all");
-              }}
-            >
-              Clear all filters
-            </Button>
-          )}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  handleSearchChange("");
+                  handleProfileFilterChange("all");
+                  handleOriginFilterChange("all");
+                  handleCredentialFilterChange("all");
+                }}
+              >
+                Clear all filters
+              </Button>
+            )}
         </div>
       ) : (
         <DataTable

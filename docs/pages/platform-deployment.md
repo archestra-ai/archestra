@@ -315,20 +315,6 @@ archestra:
             periodSeconds: 15
 ```
 
-Apply via Helm:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.horizontalPodAutoscaler.enabled=true \
-  --set archestra.horizontalPodAutoscaler.minReplicas=2 \
-  --set archestra.horizontalPodAutoscaler.maxReplicas=10 \
-  --wait
-```
-
 **PodDisruptionBudget Settings**:
 
 - `archestra.podDisruptionBudget.enabled` - Enable or disable PodDisruptionBudget creation (default: false)
@@ -357,20 +343,8 @@ archestra:
     maxUnavailable: "25%"
 ```
 
-Apply via Helm:
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.podDisruptionBudget.enabled=true \
-  --set archestra.podDisruptionBudget.minAvailable=1 \
-  --wait
-```
-
 See the Kubernetes documentation for more details:
+
 - [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
 - [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
 

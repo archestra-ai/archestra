@@ -506,7 +506,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               event.content_block.type === "tool_use"
             ) {
               toolUseBlockIndices.add(event.index);
-              accumulatedToolCalls.push(event.content_block);
+              // Fix: Initialize input as empty string to avoid [object Object] concatenation bug
+              // Anthropic's API sends input as {} initially, but we need a string for delta accumulation
+              const toolCall = { ...event.content_block, input: "" };
+              accumulatedToolCalls.push(toolCall);
               fastify.log.info(
                 { eventType: event.type, index: event.index },
                 "Accumulating content_block_start (tool_use)",

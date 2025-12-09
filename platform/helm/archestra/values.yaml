@@ -12,8 +12,13 @@ archestra:
 
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
-  # When null, the default Kubernetes strategy is used
-  deploymentStrategy: null
+  # Default: RollingUpdate with maxUnavailable=0 to prevent zero-downtime deployments
+  # This ensures at least one pod is always available during deployments
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
@@ -112,6 +117,9 @@ archestra:
     # Service type - ClusterIP, NodePort, or LoadBalancer
     type: ClusterIP
     # Annotations to add to the Kubernetes Service
+    # For GKE, you can reference a BackendConfig like this:
+    #   annotations:
+    #     cloud.google.com/backend-config: '{"ports": {"9000":"archestra-backend-config"}}'
     annotations: {}
     # Node ports for NodePort service type (optional)
     # Only used when service.type is NodePort
@@ -119,6 +127,31 @@ archestra:
       backend: null
       metrics: null
       frontend: null
+
+  # GKE BackendConfig for configuring health checks and other load balancer settings
+  # This is only applicable when running on GKE with an Ingress
+  # See: https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-features#configuring_ingress_features_through_backendconfig_parameters
+  backendConfig:
+    # Enable or disable BackendConfig creation
+    enabled: false
+    # Health check configuration for the GKE Load Balancer
+    # These values override the Ingress-level health check settings
+    healthCheck:
+      # How often to check health (in seconds)
+      checkIntervalSec: 15
+      # Timeout for each health check request (in seconds)
+      timeoutSec: 10
+      # Number of consecutive successes to mark as healthy
+      healthyThreshold: 1
+      # Number of consecutive failures to mark as unhealthy
+      # Set high enough to allow for pod startup time (startup probe allows ~305s)
+      unhealthyThreshold: 10
+      # HTTP/HTTPS health check type
+      type: HTTP
+      # Path to check for health
+      requestPath: /health
+      # Port to check (backend port)
+      port: 9000
 
   # Ingress configuration
   ingress:

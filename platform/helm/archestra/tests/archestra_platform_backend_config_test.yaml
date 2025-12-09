@@ -1,0 +1,77 @@
+suite: test archestra platform -- GKE BackendConfig
+templates:
+  - backend-config.yaml
+tests:
+  - it: should not create BackendConfig when disabled
+    set:
+      archestra.backendConfig.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create BackendConfig when enabled
+    set:
+      archestra.backendConfig.enabled: true
+    asserts:
+      - isKind:
+          of: BackendConfig
+      - matchRegex:
+          path: metadata.name
+          pattern: -backend-config$
+
+  - it: should configure health check with default values
+    set:
+      archestra.backendConfig.enabled: true
+    asserts:
+      - equal:
+          path: spec.healthCheck.checkIntervalSec
+          value: 15
+      - equal:
+          path: spec.healthCheck.timeoutSec
+          value: 10
+      - equal:
+          path: spec.healthCheck.healthyThreshold
+          value: 1
+      - equal:
+          path: spec.healthCheck.unhealthyThreshold
+          value: 10
+      - equal:
+          path: spec.healthCheck.type
+          value: HTTP
+      - equal:
+          path: spec.healthCheck.requestPath
+          value: /health
+      - equal:
+          path: spec.healthCheck.port
+          value: 9000
+
+  - it: should allow customizing health check values
+    set:
+      archestra.backendConfig.enabled: true
+      archestra.backendConfig.healthCheck:
+        checkIntervalSec: 30
+        timeoutSec: 15
+        healthyThreshold: 2
+        unhealthyThreshold: 5
+        type: HTTP
+        requestPath: /api/health
+        port: 8080
+    asserts:
+      - equal:
+          path: spec.healthCheck.checkIntervalSec
+          value: 30
+      - equal:
+          path: spec.healthCheck.timeoutSec
+          value: 15
+      - equal:
+          path: spec.healthCheck.healthyThreshold
+          value: 2
+      - equal:
+          path: spec.healthCheck.unhealthyThreshold
+          value: 5
+      - equal:
+          path: spec.healthCheck.requestPath
+          value: /api/health
+      - equal:
+          path: spec.healthCheck.port
+          value: 8080

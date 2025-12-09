@@ -1,0 +1,20 @@
+{{- if .Values.archestra.backendConfig.enabled }}
+# GKE BackendConfig for configuring load balancer health checks
+# This allows fine-tuning of health check settings to prevent downtime during deployments
+# Reference: https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-features
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-backend-config
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  healthCheck:
+    checkIntervalSec: {{ .Values.archestra.backendConfig.healthCheck.checkIntervalSec }}
+    timeoutSec: {{ .Values.archestra.backendConfig.healthCheck.timeoutSec }}
+    healthyThreshold: {{ .Values.archestra.backendConfig.healthCheck.healthyThreshold }}
+    unhealthyThreshold: {{ .Values.archestra.backendConfig.healthCheck.unhealthyThreshold }}
+    type: {{ .Values.archestra.backendConfig.healthCheck.type }}
+    requestPath: {{ .Values.archestra.backendConfig.healthCheck.requestPath }}
+    port: {{ .Values.archestra.backendConfig.healthCheck.port }}
+{{- end }}

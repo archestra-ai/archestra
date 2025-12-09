@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  SsoProviderFormSchema,
-  type SsoProviderFormValues,
-} from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";

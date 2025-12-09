@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@archestra/shared";
+import { archestraApiSdk } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";

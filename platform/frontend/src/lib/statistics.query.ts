@@ -4,7 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type StatisticsTimeFrame,
-} from "@archestra/shared";
+} from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 
 const {

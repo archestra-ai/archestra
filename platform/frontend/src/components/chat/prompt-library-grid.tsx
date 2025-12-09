@@ -3,7 +3,7 @@
 import {
   type archestraApiTypes,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@archestra/shared";
+} from "@shared";
 import {
   History as HistoryIcon,
   MessageSquarePlus,

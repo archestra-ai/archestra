@@ -1,6 +1,6 @@
 "use client";
 
-import type { OrganizationTheme } from "@archestra/shared";
+import type { OrganizationTheme } from "@shared";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {

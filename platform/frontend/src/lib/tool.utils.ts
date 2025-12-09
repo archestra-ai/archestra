@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes } from "@shared";
 
 export function isMcpTool(
   tool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]["tool"],

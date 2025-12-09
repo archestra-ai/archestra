@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
+import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";

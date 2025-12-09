@@ -1,5 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@archestra/shared";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -8,7 +8,7 @@ import {
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth/utils";
+import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import logger from "@/logging";

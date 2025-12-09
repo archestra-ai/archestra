@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  archestraCatalogTypes,
-} from "@archestra/shared";
+import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";

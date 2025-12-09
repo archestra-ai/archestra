@@ -13,8 +13,8 @@ import config from "@/lib/config";
 const { allAvailableActions, editorPermissions, memberPermissions } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
-      await import("@archestra/shared/access-control.ee")
-    : await import("@archestra/shared/access-control");
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);

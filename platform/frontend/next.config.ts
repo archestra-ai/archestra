@@ -1,12 +1,18 @@
-import { MCP_CATALOG_API_BASE_URL } from "@archestra/shared";
 import { withSentryConfig } from "@sentry/nextjs";
+import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@archestra/shared"],
+  transpilePackages: ["@shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
+  turbopack: {
+    resolveAlias: {
+      "@shared/access-control.ee": "../shared/access-control.ee.ts",
+      "@shared/access-control": "../shared/access-control.ts",
+    },
+  },
   logging: {
     fetches: {
       fullUrl: true,

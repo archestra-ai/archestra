@@ -7,11 +7,11 @@ import {
   MEMBER_ROLE_NAME,
   type PredefinedRoleName,
   type Resource,
-} from "@archestra/shared";
+} from "@shared";
 import {
   allAvailableActions,
   predefinedPermissionsMap,
-} from "@archestra/shared/access-control.ee";
+} from "@shared/access-control.ee";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);

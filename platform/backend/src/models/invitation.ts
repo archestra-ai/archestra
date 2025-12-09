@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import { MEMBER_ROLE_NAME } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";

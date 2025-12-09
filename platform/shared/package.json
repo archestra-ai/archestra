@@ -1,16 +1,15 @@
 {
-  "name": "@archestra/shared",
+  "name": "@shared",
   "version": "0.0.12",
   "description": "",
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./dist/index.mjs",
-    "./access-control": "./dist/access-control.mjs",
-    "./access-control.ee": "./dist/access-control.ee.mjs"
+    ".": "./index.ts",
+    "./access-control": "./access-control.ts",
+    "./access-control.ee": "./access-control.ee.ts"
   },
   "scripts": {
-    "build": "tsdown",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
@@ -31,7 +30,6 @@
     "@hey-api/openapi-ts": "^0.88.0",
     "@types/node": "^24",
     "knip": "^5.50.0",
-    "tsdown": "^0.16.6",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }

@@ -1,4 +1,4 @@
-import type { SsoTeamSyncConfig } from "@archestra/shared";
+import type { SsoTeamSyncConfig } from "@shared";
 import logger from "@/logging";
 import { extractGroupsWithTemplate } from "@/templating";
 

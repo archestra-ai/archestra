@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
   FileText,
   Info,

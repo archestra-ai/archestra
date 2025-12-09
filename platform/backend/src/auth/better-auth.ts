@@ -1,6 +1,6 @@
-import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@archestra/shared";
 import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
+import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
@@ -48,8 +48,8 @@ const isHttps = () => {
 const { allAvailableActions, editorPermissions, memberPermissions } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
-      await import("@archestra/shared/access-control.ee")
-    : await import("@archestra/shared/access-control");
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);
@@ -198,7 +198,7 @@ export const auth: any = betterAuth({
        * Trust SSO providers for automatic account linking
        * This allows existing users to sign in with SSO without manual linking
        *
-       * Combines default trusted providers from @archestra/shared with additional ones
+       * Combines default trusted providers from @shared with additional ones
        * configured via ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS env var
        */
       trustedProviders: [

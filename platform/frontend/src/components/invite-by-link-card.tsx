@@ -6,7 +6,7 @@ import {
   E2eTestId,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
-} from "@archestra/shared";
+} from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";

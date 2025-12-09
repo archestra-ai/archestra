@@ -1,4 +1,4 @@
-import type { ErrorExtended } from "@archestra/shared";
+import type { ErrorExtended } from "@shared";
 import { AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import {

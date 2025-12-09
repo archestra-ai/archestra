@@ -2,7 +2,7 @@ import {
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
-} from "@archestra/shared";
+} from "@shared";
 import {
   useMutation,
   useQuery,

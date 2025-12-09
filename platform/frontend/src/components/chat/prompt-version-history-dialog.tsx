@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes } from "@shared";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";

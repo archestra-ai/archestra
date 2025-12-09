@@ -2,7 +2,7 @@ import {
   DEFAULT_THEME_ID,
   type OrganizationCustomFont,
   type OrganizationTheme,
-} from "@archestra/shared";
+} from "@shared";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";

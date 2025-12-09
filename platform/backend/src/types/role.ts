@@ -1,4 +1,4 @@
-import { PermissionsSchema } from "@archestra/shared";
+import { PermissionsSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,

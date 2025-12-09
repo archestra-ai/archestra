@@ -1,8 +1,8 @@
-import { RouteId } from "@archestra/shared";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { groupBy } from "lodash-es";
 import { z } from "zod";
-import { hasPermission } from "@/auth/utils";
+import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import {
   AgentModel,

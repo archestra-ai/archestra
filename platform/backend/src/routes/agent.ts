@@ -1,7 +1,7 @@
-import { RouteId } from "@archestra/shared";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth/utils";
+import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentLabelModel, AgentModel } from "@/models";
 import {

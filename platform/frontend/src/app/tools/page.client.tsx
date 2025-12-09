@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";

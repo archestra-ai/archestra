@@ -1,5 +1,5 @@
-import type { SsoRoleMappingConfig } from "@archestra/shared";
-import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import type { SsoRoleMappingConfig } from "@shared";
+import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";

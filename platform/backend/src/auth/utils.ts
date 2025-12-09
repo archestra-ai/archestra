@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@archestra/shared";
+import type { Permissions } from "@shared";
 import config from "@/config";
 
 export async function hasPermission(

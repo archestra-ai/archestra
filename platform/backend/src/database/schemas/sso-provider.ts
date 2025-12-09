@@ -3,7 +3,7 @@ import type {
   SsoProviderSamlConfig,
   SsoRoleMappingConfig,
   SsoTeamSyncConfig,
-} from "@archestra/shared";
+} from "@shared";
 import { boolean, pgTable, text } from "drizzle-orm/pg-core";
 import usersTable from "./user";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraCatalogTypes } from "@archestra/shared";
+import type { archestraCatalogTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";

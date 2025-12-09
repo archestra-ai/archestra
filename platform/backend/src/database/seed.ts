@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,

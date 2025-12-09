@@ -1,6 +1,6 @@
 /** The component to display an editable optimization rule */
 
-import type { archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";

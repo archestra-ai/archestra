@@ -39,9 +39,6 @@ importers:
       '@anthropic-ai/tokenizer':
         specifier: ^0.0.4
         version: 0.0.4
-      '@archestra/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@aws-crypto/sha256-js':
         specifier: ^5.2.0
         version: 5.2.0
@@ -117,6 +114,9 @@ importers:
       '@sentry/profiling-node':
         specifier: ^10.27.0
         version: 10.27.0
+      '@shared':
+        specifier: workspace:*
+        version: link:../shared
       '@smithy/signature-v4':
         specifier: ^5.3.5
         version: 5.3.5
@@ -226,7 +226,7 @@ importers:
 
   e2e-tests:
     dependencies:
-      '@archestra/shared':
+      '@shared':
         specifier: workspace:*
         version: link:../shared
       dotenv:
@@ -248,9 +248,6 @@ importers:
       '@ai-sdk/react':
         specifier: ^2.0.101
         version: 2.0.105(react@19.2.0)(zod@4.1.13)
-      '@archestra/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@better-auth/sso':
         specifier: 1.4.6-beta.3
         version: 1.4.6-beta.3(better-auth@1.4.6-beta.3(next@16.0.7(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))
@@ -323,6 +320,9 @@ importers:
       '@sentry/nextjs':
         specifier: ^10.27.0
         version: 10.27.0(@opentelemetry/context-async-hooks@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(next@16.0.7(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)(webpack@5.103.0)
+      '@shared':
+        specifier: workspace:*
+        version: link:../shared
       '@tanstack/react-query':
         specifier: ^5.90.10
         version: 5.90.10(react@19.2.0)
@@ -502,9 +502,6 @@ importers:
       knip:
         specifier: ^5.50.0
         version: 5.70.2(@types/node@24.10.1)(typescript@5.9.3)
-      tsdown:
-        specifier: ^0.16.6
-        version: 0.16.7(oxc-resolver@11.14.0)(typescript@5.9.3)
       tsx:
         specifier: ^4.20.6
         version: 4.20.6

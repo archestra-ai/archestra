@@ -1,4 +1,4 @@
-import type { Permissions } from "@archestra/shared";
+import type { Permissions } from "@shared";
 
 /**
  * Convert Permissions object to array of permission strings

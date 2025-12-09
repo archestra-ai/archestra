@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk, E2eTestId } from "@archestra/shared";
+import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {

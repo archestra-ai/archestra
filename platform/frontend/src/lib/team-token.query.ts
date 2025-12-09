@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@archestra/shared";
+import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 

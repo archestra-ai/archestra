@@ -1,6 +1,6 @@
 "use client";
 
-import type { OrganizationCustomFont } from "@archestra/shared";
+import type { OrganizationCustomFont } from "@shared";
 import {
   Card,
   CardContent,

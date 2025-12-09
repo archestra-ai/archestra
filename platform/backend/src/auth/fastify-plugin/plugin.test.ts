@@ -28,8 +28,7 @@ vi.mock("@/models", () => ({
   },
 }));
 
-import { betterAuth } from "@/auth";
-import { hasPermission } from "@/auth/utils";
+import { betterAuth, hasPermission } from "@/auth";
 import { UserModel } from "@/models";
 
 // Type the mocked functions

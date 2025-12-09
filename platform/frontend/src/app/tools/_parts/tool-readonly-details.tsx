@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes } from "@shared";
 
 export function ToolReadonlyDetails({
   agentTool,

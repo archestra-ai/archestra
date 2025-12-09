@@ -1,7 +1,7 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import { modelsByProvider, providerDisplayNames } from "@archestra/shared";
+import type { archestraApiTypes } from "@shared";
+import { modelsByProvider, providerDisplayNames } from "@shared";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {

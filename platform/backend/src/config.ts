@@ -1,12 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
-} from "@archestra/shared";
-import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
+} from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
 import packageJson from "../../package.json";
@@ -152,7 +152,7 @@ export const getTrustedOrigins = (): string[] => {
 
 /**
  * Parse additional trusted SSO provider IDs from environment variable.
- * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @archestra/shared.
+ * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
  *
  * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
  * Whitespace around each provider ID is trimmed.

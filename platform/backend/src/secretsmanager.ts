@@ -490,7 +490,7 @@ export class VaultSecretManager implements SecretManager {
     context: Record<string, unknown> = {},
   ): never {
     logger.error(
-      { error, ...context },
+      { error, vaultError: extractVaultErrorMessage(error), ...context },
       `VaultSecretManager.${operationName}: failed`,
     );
 
@@ -499,7 +499,10 @@ export class VaultSecretManager implements SecretManager {
       throw error;
     }
 
-    throw new ApiError(500, extractVaultErrorMessage(error));
+    throw new ApiError(
+      500,
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+    );
   }
 
   private getVaultPath(name: string, id: string): string {
@@ -864,7 +867,7 @@ export class BYOSVaultSecretManager implements SecretManager {
         { error, tokenPath, role: this.config.k8sRole },
         "BYOSVaultSecretManager: Kubernetes authentication failed",
       );
-      throw error;
+      throw new ApiError(500, extractVaultErrorMessage(error));
     }
   }
 
@@ -1028,7 +1031,7 @@ export class BYOSVaultSecretManager implements SecretManager {
     });
 
     logger.info(
-      { secretId: secret.id, vaultPath },
+      { vaultPath },
       "BYOSVaultSecretManager.createSecret: created external vault secret reference",
     );
 
@@ -1051,21 +1054,21 @@ export class BYOSVaultSecretManager implements SecretManager {
     }
 
     logger.debug(
-      { secretId, vaultPath: dbRecord.vaultPath },
+      { vaultPath: dbRecord.vaultPath },
       "BYOSVaultSecretManager.getSecret: fetching from external vault",
     );
 
     try {
       await this.ensureInitialized();
     } catch (error) {
-      this.handleVaultError(error, "getSecret", { secretId });
+      this.handleVaultError(error, "getSecret", {});
     }
 
     try {
       const secretValue = await this.getSecretFromPath(dbRecord.vaultPath);
 
       logger.info(
-        { secretId, vaultPath: dbRecord.vaultPath },
+        { vaultPath: dbRecord.vaultPath },
         "BYOSVaultSecretManager.getSecret: successfully fetched from external vault",
       );
 
@@ -1075,7 +1078,7 @@ export class BYOSVaultSecretManager implements SecretManager {
       };
     } catch (error) {
       logger.error(
-        { error, secretId, vaultPath: dbRecord.vaultPath },
+        { error, vaultPath: dbRecord.vaultPath },
         "BYOSVaultSecretManager.getSecret: failed to fetch from external vault",
       );
 
@@ -1097,7 +1100,6 @@ export class BYOSVaultSecretManager implements SecretManager {
    */
   async deleteSecret(secretId: string): Promise<boolean> {
     logger.info(
-      { secretId },
       "BYOSVaultSecretManager.deleteSecret: deleting external vault secret reference",
     );
 

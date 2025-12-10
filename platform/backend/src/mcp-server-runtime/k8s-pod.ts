@@ -429,6 +429,10 @@ export default class K8sPod {
     envMap.forEach((value, key) => {
       // If this env var is marked as "secret" type, use valueFrom.secretKeyRef
       if (secretEnvVars.has(key)) {
+        // Skip secret-type env vars with empty values (no K8s Secret will be created)
+        if (!value || value.trim() === "") {
+          return;
+        }
         const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
         env.push({
           name: key,

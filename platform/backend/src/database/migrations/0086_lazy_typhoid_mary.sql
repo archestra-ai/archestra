@@ -1,0 +1,1 @@
+ALTER TABLE "secret" ADD COLUMN "is_byos_vault" boolean DEFAULT false NOT NULL;

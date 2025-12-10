@@ -1,6 +1,5 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { groupBy } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
@@ -474,92 +473,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       clearChatMcpClient(agentTool.agentId);
 
       return reply.send(agentTool);
-    },
-  );
-
-  fastify.get(
-    "/api/agents/available-tokens",
-    {
-      schema: {
-        operationId: RouteId.GetAgentAvailableTokens,
-        description:
-          "Get MCP servers that can be used as credential sources for the specified agents' tools, grouped by catalogId",
-        tags: ["Agent Tools"],
-        querystring: z.object({
-          catalogId: UuidIdSchema.optional(),
-        }),
-        response: constructResponseSchema(
-          z.record(
-            z.string(),
-            z.array(
-              z.object({
-                id: z.string(),
-                name: z.string(),
-                serverType: z.enum(["local", "remote"]),
-                catalogId: z.string().nullable(),
-                ownerId: z.string().nullable(),
-                ownerEmail: z.string().nullable(),
-                teamDetails: z
-                  .array(
-                    z.object({
-                      teamId: z.string(),
-                      name: z.string(),
-                      createdAt: z.coerce.date(),
-                    }),
-                  )
-                  .optional(),
-              }),
-            ),
-          ),
-        ),
-      },
-    },
-    async ({ query: { catalogId }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
-
-      // Get all MCP servers accessible to the user
-      const allServers = await McpServerModel.findAll(user.id, isAgentAdmin);
-
-      // Filter by catalogId if provided, otherwise include all
-      const filteredServers = catalogId
-        ? allServers.filter((server) => server.catalogId === catalogId)
-        : allServers;
-
-      // Map servers to the response format
-      const mappedServers = filteredServers.map((server) => ({
-        id: server.id,
-        name: server.name,
-        serverType: server.serverType as "local" | "remote",
-        catalogId: server.catalogId,
-        ownerId: server.ownerId,
-        ownerEmail: server.ownerEmail ?? null,
-        teamDetails: server.teamDetails,
-      }));
-
-      // Sort servers: current user's credentials first, then others
-      const currentUserId = user.id;
-      const sortedServers = mappedServers.sort((a, b) => {
-        const aIsCurrentUser = a.ownerId === currentUserId;
-        const bIsCurrentUser = b.ownerId === currentUserId;
-
-        // Current user's credentials come first
-        if (aIsCurrentUser && !bIsCurrentUser) return -1;
-        if (!aIsCurrentUser && bIsCurrentUser) return 1;
-
-        // Keep original order otherwise
-        return 0;
-      });
-
-      // Group by catalogId
-      const groupedByCatalogId = groupBy(
-        sortedServers,
-        (server) => server.catalogId,
-      );
-
-      return reply.send(groupedByCatalogId);
     },
   );
 };

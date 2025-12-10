@@ -589,6 +589,27 @@
       "when": 1765292666507,
       "tag": "0083_sticky_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1765303091121,
+      "tag": "0084_sticky_karma",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1765320804258,
+      "tag": "0085_demonic_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1765321233694,
+      "tag": "0086_lazy_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }

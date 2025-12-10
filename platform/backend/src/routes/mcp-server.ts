@@ -8,10 +8,9 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  McpServerTeamModel,
   ToolModel,
 } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -31,18 +30,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMcpServers,
         description: "Get all installed MCP servers",
         tags: ["MCP Server"],
+        querystring: z.object({
+          catalogId: z.string().optional(),
+        }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
-    async ({ user, headers }, reply) => {
+    async ({ user, headers, query }, reply) => {
+      const { catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServer: ["admin"] },
         headers,
       );
-      const allServers = await McpServerModel.findAll(
-        user.id,
-        isMcpServerAdmin,
-      );
+      let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
+
+      // Filter by catalogId if provided
+      if (catalogId) {
+        allServers = allServers.filter((s) => s.catalogId === catalogId);
+      }
 
       return reply.send(allServers);
     },
@@ -85,6 +90,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
+          // When true, environmentValues and userConfigValues contain vault references in "path#key" format
+          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -94,6 +101,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentIds,
         secretId,
         accessToken,
+        isByosVault,
         userConfigValues,
         environmentValues,
         ...restDataFromRequestBody
@@ -112,38 +120,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
 
-      // If accessToken is provided (PAT flow), create a secret for it
-      if (accessToken && !secretId) {
-        const secret = await secretManager.createSecret(
-          { access_token: accessToken },
-          `${serverData.name}-token`,
-        );
-        secretId = secret.id;
-        createdSecretId = secret.id;
-      }
-
-      // Validate connection if secretId is provided
-      if (secretId) {
-        const isValid = await McpServerModel.validateConnection(
-          serverData.name,
-          serverData.catalogId ?? undefined,
-          secretId,
-        );
-
-        if (!isValid) {
-          // Clean up the secret we just created if validation fails
-          if (createdSecretId) {
-            await secretManager.deleteSecret(createdSecretId);
-          }
-
-          throw new ApiError(
-            400,
-            "Failed to connect to MCP server with provided credentials",
-          );
-        }
-      }
-
-      // Fetch catalog item to get server type
+      // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
       if (serverData.catalogId) {
         catalogItem = await InternalMcpCatalogModel.findById(
@@ -157,11 +134,114 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
-        // Validate required environment variables for local servers
-        if (
-          catalogItem.serverType === "local" &&
-          catalogItem.localConfig?.environment
-        ) {
+        // Reject personal installations when BYOS is enabled
+        if (isByosEnabled() && !serverData.teamId) {
+          throw new ApiError(
+            400,
+            "Personal MCP server installations are not allowed when BYOS is enabled. Please select a team.",
+          );
+        }
+
+        // Validate no duplicate installations for this catalog item
+        const existingServers = await McpServerModel.findByCatalogId(
+          serverData.catalogId,
+        );
+
+        // Check for duplicate personal installation (same user, no team)
+        if (!serverData.teamId) {
+          const existingPersonal = existingServers.find(
+            (s) => s.ownerId === user.id && !s.teamId,
+          );
+          if (existingPersonal) {
+            throw new ApiError(
+              400,
+              "You already have a personal installation of this MCP server",
+            );
+          }
+        }
+
+        // Check for duplicate team installation (same team)
+        if (serverData.teamId) {
+          const existingTeam = existingServers.find(
+            (s) => s.teamId === serverData.teamId,
+          );
+          if (existingTeam) {
+            throw new ApiError(
+              400,
+              "This team already has an installation of this MCP server",
+            );
+          }
+        }
+      }
+
+      // For REMOTE servers: create secrets and validate connection
+      if (catalogItem?.serverType === "remote") {
+        // If isByosVault flag is set, use vault references from userConfigValues
+        if (isByosVault && userConfigValues && !secretId) {
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "BYOS (Bring Your Own Secrets) is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            );
+          }
+
+          // userConfigValues already contains vault references in "path#key" format
+          const secret = await secretManager.createSecret(
+            userConfigValues as Record<string, unknown>,
+            `${serverData.name}-vault-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+          logger.info(
+            { keyCount: Object.keys(userConfigValues).length },
+            "Created BYOS vault secret with per-field references for remote server",
+          );
+        }
+
+        // If accessToken is provided (PAT flow), create a secret for it
+        // Not allowed when BYOS is enabled - use vault secrets instead
+        if (accessToken && !secretId) {
+          if (isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual PAT token input is not allowed when BYOS is enabled. Please use Vault secrets instead.",
+            );
+          }
+          const secret = await secretManager.createSecret(
+            { access_token: accessToken },
+            `${serverData.name}-token`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        // Validate connection for remote servers
+        if (secretId) {
+          const isValid = await McpServerModel.validateConnection(
+            serverData.name,
+            serverData.catalogId ?? undefined,
+            secretId,
+          );
+
+          if (!isValid) {
+            // Clean up the secret we just created if validation fails
+            if (createdSecretId) {
+              secretManager.deleteSecret(createdSecretId);
+            }
+
+            throw new ApiError(
+              400,
+              "Failed to connect to MCP server with provided credentials",
+            );
+          }
+        }
+      }
+
+      // For LOCAL servers: validate env vars and create secrets (no connection validation, since pod will be started later)
+      if (catalogItem?.serverType === "local") {
+        // Validate required environment variables
+        if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
             (env) => env.promptOnInstallation && env.required,
           );
@@ -186,11 +266,45 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // For local servers, filter out secret-type env vars and store in database
-        if (
-          catalogItem.serverType === "local" &&
-          catalogItem.localConfig?.environment
-        ) {
+        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
+          if (!isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "BYOS (Bring Your Own Secrets) is not enabled. " +
+                "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            );
+          }
+
+          // Collect secret env vars with vault references from environmentValues
+          const secretEnvVars: Record<string, string> = {};
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (envDef.type === "secret") {
+              const value = envDef.promptOnInstallation
+                ? environmentValues?.[envDef.key]
+                : envDef.value;
+              if (value) {
+                // Value should already be in "path#key" format from frontend
+                secretEnvVars[envDef.key] = value;
+              }
+            }
+          }
+
+          if (Object.keys(secretEnvVars).length > 0) {
+            const secret = await secretManager.createSecret(
+              secretEnvVars,
+              `${serverData.name}-vault-secret`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+            logger.info(
+              { keyCount: Object.keys(secretEnvVars).length },
+              "Created BYOS vault secret with per-field references for local server",
+            );
+          }
+        }
+        // Collect and store secret-type env vars (not allowed when BYOS is enabled)
+        else if (!secretId && catalogItem.localConfig?.environment) {
           const secretEnvVars: Record<string, string> = {};
 
           // Collect all secret-type env vars (both static and prompted)
@@ -214,6 +328,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
+            // Not allowed when BYOS is enabled - use vault secrets instead
+            if (isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Manual secret input is not allowed when BYOS is enabled. Please use Vault secrets instead.",
+              );
+            }
             const secret = await secretManager.createSecret(
               secretEnvVars,
               `mcp-server-${serverData.name}-env`,
@@ -480,12 +601,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         try {
           await secretManager.deleteSecret(mcpServer.secretId);
           logger.info(
-            { secretId: mcpServer.secretId, mcpServerId },
+            { mcpServerId },
             "Deleted database secret for local MCP server",
           );
         } catch (error) {
           logger.error(
-            { err: error, secretId: mcpServer.secretId },
+            { err: error, mcpServerId },
             "Failed to delete database secret",
           );
           // Continue with MCP server deletion even if secret deletion fails
@@ -687,194 +808,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `Failed to restart MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
       }
-    },
-  );
-
-  fastify.delete(
-    "/api/mcp_server/catalog/:catalogId/user/:userId",
-    {
-      schema: {
-        operationId: RouteId.RevokeUserMcpServerAccess,
-        description:
-          "Revoke a user's personal access to an MCP server by finding their personal-auth installation",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-          userId: z.string(),
-        }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { catalogId, userId } }, reply) => {
-      // Find all servers with this catalogId
-      const serversForCatalog = await McpServerModel.findByCatalogId(catalogId);
-
-      // Find the server owned by this user
-      const userServer = serversForCatalog.find((s) => s.ownerId === userId);
-
-      if (!userServer) {
-        throw new ApiError(
-          404,
-          "MCP server installation not found for this user",
-        );
-      }
-
-      // Delete the server (which will cascade delete the secret and mcp_server_user entries)
-      await McpServerModel.delete(userServer.id);
-
-      return reply.send({ success: true });
-    },
-  );
-
-  fastify.post(
-    "/api/mcp_server/catalog/:catalogId/teams",
-    {
-      schema: {
-        operationId: RouteId.GrantTeamMcpServerAccess,
-        description:
-          "Grant team(s) access to an MCP server using specified user's credentials",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        body: z.object({
-          teamIds: z.array(z.string()).min(1),
-          userId: z.string().optional(), // Optional: specify which user's credentials to use
-        }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async (
-      { params: { catalogId }, body: { teamIds, userId: targetUserId }, user },
-      reply,
-    ) => {
-      // Use the specified userId or default to current user
-      const ownerIdToUse = targetUserId || user.id;
-
-      // Find all servers with this catalogId
-      const serversForCatalog = await McpServerModel.findByCatalogId(catalogId);
-
-      // Find the server owned by the specified user
-      const targetServer = serversForCatalog.find(
-        (s) => s.ownerId === ownerIdToUse,
-      );
-
-      if (!targetServer) {
-        const errorMsg = targetUserId
-          ? `Credentials not found for the specified user.`
-          : `You must connect first before granting team access.`;
-        throw new ApiError(404, errorMsg);
-      }
-
-      // Assign teams to the MCP server
-      await McpServerTeamModel.assignTeamsToMcpServer(targetServer.id, teamIds);
-
-      return reply.send({ success: true });
-    },
-  );
-
-  fastify.delete(
-    "/api/mcp_server/:id/team/:teamId",
-    {
-      schema: {
-        operationId: RouteId.RevokeTeamMcpServerAccess,
-        description: "Revoke a team's access to an MCP server (admin only)",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-          teamId: z.string(),
-        }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { id: mcpServerId, teamId } }, reply) => {
-      // Get the MCP server
-      const mcpServer = await McpServerModel.findById(mcpServerId);
-
-      if (!mcpServer) {
-        throw new ApiError(404, "MCP server not found");
-      }
-
-      // When there are multiple installations (personal + team auth), we need to find
-      // the actual server that has this team. Check all servers with the same catalogId.
-      if (!mcpServer.catalogId) {
-        throw new ApiError(404, "MCP server has no catalog ID");
-      }
-
-      const allServersForCatalog = await McpServerModel.findByCatalogId(
-        mcpServer.catalogId,
-      );
-
-      // Find which server actually has this team
-      let targetServerId: string | null = null;
-      for (const server of allServersForCatalog) {
-        const teams = await McpServerTeamModel.getTeamsForMcpServer(server.id);
-        if (teams.includes(teamId)) {
-          targetServerId = server.id;
-          break;
-        }
-      }
-
-      if (!targetServerId) {
-        throw new ApiError(404, "Team access not found");
-      }
-
-      // Get the target server to check if we should delete it entirely
-      const targetServer = await McpServerModel.findById(targetServerId);
-      if (!targetServer) {
-        throw new ApiError(404, "Target server not found");
-      }
-
-      // If this is a team-only installation (only one team, no users), delete the entire server
-      const isTeamOnlyInstallation =
-        targetServer.teams?.length === 1 &&
-        targetServer.teams[0] === teamId &&
-        (!targetServer.users || targetServer.users.length === 0);
-
-      if (isTeamOnlyInstallation) {
-        // Delete the entire MCP server (which will cascade delete the secret)
-        await McpServerModel.delete(targetServerId);
-      } else {
-        // Otherwise, just remove the team from the junction table
-        await McpServerTeamModel.removeTeamFromMcpServer(
-          targetServerId,
-          teamId,
-        );
-      }
-
-      return reply.send({ success: true });
-    },
-  );
-
-  fastify.delete(
-    "/api/mcp_server/catalog/:catalogId/teams",
-    {
-      schema: {
-        operationId: RouteId.RevokeAllTeamsMcpServerAccess,
-        description:
-          "Revoke all team access from current user's MCP server credentials",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { catalogId }, user }, reply) => {
-      // Find all servers with this catalogId
-      const serversForCatalog = await McpServerModel.findByCatalogId(catalogId);
-
-      // Find the server owned by current user
-      const userServer = serversForCatalog.find((s) => s.ownerId === user.id);
-
-      if (!userServer) {
-        throw new ApiError(404, "MCP server installation not found");
-      }
-
-      // Remove all team assignments from this server
-      await McpServerTeamModel.syncMcpServerTeams(userServer.id, []);
-
-      return reply.send({ success: true });
     },
   );
 };

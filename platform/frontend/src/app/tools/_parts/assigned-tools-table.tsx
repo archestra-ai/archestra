@@ -11,7 +11,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
-import { InstallationSelect } from "@/components/installation-select";
 import { LoadingSpinner } from "@/components/loading";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
@@ -532,37 +531,12 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           );
           const isLocalServer = mcpCatalogItem?.serverType === "local";
 
-          // Show InstallationSelect for local servers, TokenSelect for remote
-          if (isLocalServer) {
-            // Show dynamic value if useDynamicTeamCredential is true
-            const currentValue = row.original.useDynamicTeamCredential
-              ? DYNAMIC_CREDENTIAL_VALUE
-              : row.original.executionSourceMcpServerId;
-
-            return (
-              <InstallationSelect
-                value={currentValue}
-                onValueChange={(value) => {
-                  if (value === null) return;
-
-                  const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
-                  agentToolPatchMutation.mutate({
-                    id: row.original.id,
-                    executionSourceMcpServerId: isDynamic ? null : value,
-                    useDynamicTeamCredential: isDynamic,
-                  });
-                }}
-                catalogId={row.original.tool.catalogId ?? ""}
-                className="h-8 w-[200px] text-xs"
-                shouldSetDefaultValue={false}
-              />
-            );
-          }
-
           // Show dynamic value if useDynamicTeamCredential is true
           const currentValue = row.original.useDynamicTeamCredential
             ? DYNAMIC_CREDENTIAL_VALUE
-            : row.original.credentialSourceMcpServerId;
+            : isLocalServer
+              ? row.original.executionSourceMcpServerId
+              : row.original.credentialSourceMcpServerId;
 
           return (
             <TokenSelect
@@ -573,7 +547,11 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                 const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
                 agentToolPatchMutation.mutate({
                   id: row.original.id,
-                  credentialSourceMcpServerId: isDynamic ? null : value,
+                  ...(isLocalServer
+                    ? { executionSourceMcpServerId: isDynamic ? null : value }
+                    : {
+                        credentialSourceMcpServerId: isDynamic ? null : value,
+                      }),
                   useDynamicTeamCredential: isDynamic,
                 });
               }}

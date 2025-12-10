@@ -1,11 +1,8 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { E2eTestId } from "@shared";
 import { format } from "date-fns";
-import { Info, Trash, User, X } from "lucide-react";
-import { useCallback, useMemo } from "react";
-import { WithoutPermissions } from "@/components/roles/with-permissions";
-import { Badge } from "@/components/ui/badge";
+import { Trash, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,13 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -30,358 +20,105 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  useGrantTeamMcpServerAccess,
-  useMcpServers,
-  useRevokeTeamMcpServerAccess,
-  useRevokeUserMcpServerAccess,
-} from "@/lib/mcp-server.query";
-import { useTeams } from "@/lib/team.query";
+import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  server:
-    | archestraApiTypes.GetMcpServersResponses["200"][number]
-    | null
-    | undefined;
   label?: string;
+  catalogId: string;
 }
 
 export function ManageUsersDialog({
   isOpen,
   onClose,
-  server,
   label,
+  catalogId,
 }: ManageUsersDialogProps) {
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
-
   // Subscribe to live mcp-servers query to get fresh data
-  const { data: allServers } = useMcpServers();
-  const { data: allTeams } = useTeams();
+  const { data: allServers } = useMcpServers({ catalogId });
 
-  // Find all servers with the same catalogId
-  const serversForCatalog = useMemo(() => {
-    if (!server?.catalogId || !allServers) return [];
-    return allServers.filter((s) => s.catalogId === server.catalogId);
-  }, [allServers, server?.catalogId]);
+  // Use the first server for display purposes
+  const firstServer = allServers?.[0];
 
-  type UserWithTeams = {
-    userId: string;
-    email: string;
-    createdAt: string;
-    serverId: string;
-    teams: Array<{ teamId: string; name: string; createdAt: string }>;
+  const deleteMcpServerMutation = useDeleteMcpServer();
+
+  const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
+    await deleteMcpServerMutation.mutateAsync({
+      id: mcpServer.id,
+      name: mcpServer.name,
+    });
   };
 
-  // Aggregate user details with their associated server info
-  const userDetails = useMemo((): UserWithTeams[] => {
-    if (!server?.catalogId || !allServers) {
-      // Transform base userDetails to include required fields
-      return (server?.userDetails || []).map((ud) => ({
-        ...ud,
-        serverId: server?.id || "",
-        teams: server?.teamDetails || [],
-      }));
-    }
-
-    // Aggregate user details from all servers
-    const aggregatedUserDetails: UserWithTeams[] = [];
-
-    for (const srv of serversForCatalog) {
-      if (srv.userDetails) {
-        for (const userDetail of srv.userDetails) {
-          // Only add if not already present
-          if (
-            !aggregatedUserDetails.some((ud) => ud.userId === userDetail.userId)
-          ) {
-            // Get teams assigned to this user's server
-            const teamsForServer = srv.teamDetails || [];
-            aggregatedUserDetails.push({
-              ...userDetail,
-              serverId: srv.id,
-              teams: teamsForServer,
-            });
-          }
-        }
-      }
-    }
-
-    return aggregatedUserDetails;
-  }, [
-    allServers,
-    server?.catalogId,
-    server?.userDetails,
-    server?.id,
-    server?.teamDetails,
-    serversForCatalog,
-  ]);
-
-  // Use the first server for operations that need a server ID
-  const liveServer = useMemo(() => {
-    if (!server?.catalogId || !allServers) return server;
-    return allServers.find((s) => s.catalogId === server.catalogId) || server;
-  }, [allServers, server]);
-
-  const revokeAccessMutation = useRevokeUserMcpServerAccess();
-  const grantTeamAccessMutation = useGrantTeamMcpServerAccess();
-  const revokeTeamAccessMutation = useRevokeTeamMcpServerAccess();
-
-  const handleRevoke = useCallback(
-    async (userId: string) => {
-      if (!liveServer?.catalogId) return;
-
-      // Use catalogId to find and delete the user's server
-      await revokeAccessMutation.mutateAsync({
-        catalogId: liveServer.catalogId,
-        userId,
-      });
-    },
-    [liveServer, revokeAccessMutation],
-  );
-
-  const handleGrantTeamAccess = useCallback(
-    (userId: string, teamId: string) => {
-      if (!liveServer?.catalogId) return;
-
-      grantTeamAccessMutation.mutate({
-        catalogId: liveServer.catalogId,
-        teamIds: [teamId],
-        userId,
-      });
-    },
-    [liveServer, grantTeamAccessMutation],
-  );
-
-  const handleRevokeTeamAccess = useCallback(
-    async (serverId: string, teamId: string) => {
-      await revokeTeamAccessMutation.mutateAsync({
-        serverId,
-        teamId,
-      });
-    },
-    [revokeTeamAccessMutation],
-  );
-
-  // Collect all team IDs assigned to any credential in this catalog
-  const allAssignedTeamIds = useMemo(() => {
-    const teamIds = new Set<string>();
-    for (const user of userDetails) {
-      for (const team of user.teams) {
-        teamIds.add(team.teamId);
-      }
-    }
-    return teamIds;
-  }, [userDetails]);
-
-  const getUnassignedTeamsForUser = () => {
-    // Filter out teams already assigned to ANY credential (global uniqueness per catalog)
-    return allTeams?.filter((team) => !allAssignedTeamIds.has(team.id)) || [];
-  };
-
-  // Get teams that a user belongs to (based on team membership)
-  const getUserMembershipTeams = useCallback(
-    (userId: string) => {
-      if (!allTeams) return [];
-      return allTeams.filter((team) =>
-        team.members?.some((member) => member.userId === userId),
-      );
-    },
-    [allTeams],
-  );
-
-  if (!liveServer) {
+  if (!firstServer) {
     return null;
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px]">
+      <DialogContent
+        className="sm:max-w-[700px]"
+        data-testid={E2eTestId.ManageCredentialsDialog}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             Manage credentials
-            <WithoutPermissions permissions={{ profile: ["admin"] }}>
-              {" "}
-              of your team
-            </WithoutPermissions>
             <span className="text-muted-foreground font-normal">
-              {label || liveServer.name}
+              {label || firstServer.name}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage user credentials and team access for this MCP server. Add
-            teams to share credentials with team members.
+            Manage credentials for this MCP Registry item.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
-          {userDetails.length === 0 ? (
+          {allServers?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No users have authenticated to this server yet.
+              No credentials available for this server.
             </div>
           ) : (
             <div className="rounded-md border">
-              <Table>
+              <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Owner</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>
-                      <div className="flex items-center gap-1">
-                        Granted for teams
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>
-                              Users without <code>profile:admin</code>{" "}
-                              permission can only assign teams they belong to
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TableHead>
+                    <TableHead>Created At</TableHead>
                     <TableHead className="w-[120px]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {userDetails.map((user) => {
-                    const unassignedTeams = getUnassignedTeamsForUser();
-
-                    return (
-                      <TableRow key={user.userId}>
-                        <TableCell className="font-medium">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              {user.email}
-                              {currentUserId === user.userId && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-                                >
-                                  You
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {(() => {
-                                const membershipTeams = getUserMembershipTeams(
-                                  user.userId,
-                                );
-                                if (membershipTeams.length === 0) {
-                                  return (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] px-1 py-0 h-4 text-muted-foreground"
-                                    >
-                                      No team
-                                    </Badge>
-                                  );
-                                }
-                                return membershipTeams.map((team) => (
-                                  <Badge
-                                    key={team.id}
-                                    variant="outline"
-                                    className="text-[12px] px-2 py-2 h-4"
-                                  >
-                                    {team.name}
-                                  </Badge>
-                                ));
-                              })()}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {format(new Date(user.createdAt), "PPp")}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            {user.teams.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1">
-                                {user.teams.map((team) => (
-                                  <Badge
-                                    key={team.teamId}
-                                    variant="secondary"
-                                    className="flex items-center gap-1 pr-1 h-6"
-                                  >
-                                    <span>{team.name}</span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        handleRevokeTeamAccess(
-                                          user.serverId,
-                                          team.teamId,
-                                        )
-                                      }
-                                      disabled={
-                                        revokeTeamAccessMutation.isPending
-                                      }
-                                      className="h-auto p-0.5 ml-0.5 hover:bg-destructive/20"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            {unassignedTeams.length > 0 && (
-                              <Select
-                                value=""
-                                onValueChange={(teamId) =>
-                                  handleGrantTeamAccess(user.userId, teamId)
-                                }
-                                disabled={grantTeamAccessMutation.isPending}
-                              >
-                                <SelectTrigger className="h-6 w-[130px] text-xs">
-                                  <SelectValue placeholder="Add team..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {unassignedTeams.map((team) => (
-                                    <SelectItem
-                                      key={team.id}
-                                      value={team.id}
-                                      className="cursor-pointer"
-                                    >
-                                      {team.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                            {user.teams.length === 0 &&
-                              unassignedTeams.length === 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  No teams available
-                                </span>
-                              )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            onClick={() => handleRevoke(user.userId)}
-                            disabled={revokeAccessMutation.isPending}
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                          >
-                            <Trash className="mr-1 h-3 w-3" />
-                            Revoke
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {allServers?.map((mcpServer) => (
+                    <TableRow
+                      key={mcpServer.id}
+                      data-testid={E2eTestId.CredentialRow}
+                      data-server-id={mcpServer.id}
+                    >
+                      <TableCell className="font-medium">
+                        <span data-testid={E2eTestId.CredentialOwnerEmail}>
+                          {mcpServer.teamId
+                            ? mcpServer.teamDetails?.name || "Team"
+                            : mcpServer.ownerEmail || "Unknown"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {format(new Date(mcpServer.createdAt), "PPp")}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          onClick={() => handleRevoke(mcpServer)}
+                          disabled={deleteMcpServerMutation.isPending}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                        >
+                          <Trash className="mr-1 h-3 w-3" />
+                          Revoke
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>

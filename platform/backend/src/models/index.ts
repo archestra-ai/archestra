@@ -13,7 +13,6 @@ export { default as InvitationModel } from "./invitation";
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";
-export { default as McpServerTeamModel } from "./mcp-server-team";
 export { default as McpServerUserModel } from "./mcp-server-user";
 export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";

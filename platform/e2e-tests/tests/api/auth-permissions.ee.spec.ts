@@ -1,4 +1,5 @@
-import { allAvailableActions, type Permissions } from "@shared";
+import type { Permissions } from "@shared";
+import { allAvailableActions } from "@shared/access-control.ee";
 import {
   type APIRequestContext,
   expect,

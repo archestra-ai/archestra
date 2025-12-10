@@ -64,6 +64,26 @@ local_resource(
     echo "❌ Migration failed after 30 attempts"
     exit 1
   ''',
+  # Windows batch equivalent with retry logic
+  cmd_bat='''
+@echo off
+setlocal enabledelayedexpansion
+set count=0
+:retry
+set /a count+=1
+pnpm db:migrate 2>nul && (
+  echo Migration completed successfully
+  tilt trigger pnpm-dev
+  exit /b 0
+)
+if !count! lss 30 (
+  echo Waiting for PostgreSQL... ^(attempt !count!/30^)
+  timeout /t 2 /nobreak >nul
+  goto retry
+)
+echo Migration failed after 30 attempts
+exit /b 1
+  ''',
   dir='../backend',
   deps=['../backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],

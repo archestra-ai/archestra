@@ -19,6 +19,7 @@ import type {
   Agent,
   AgentTool,
   InsertAccount,
+  InsertAgent,
   InsertConversation,
   InsertInteraction,
   InsertInternalMcpCatalog,
@@ -169,13 +170,14 @@ async function makeTeamMember(
 /**
  * Creates a test agent using the Agent model
  */
-async function makeAgent(
-  overrides: Partial<Pick<Agent, "name" | "teams" | "labels">> = {},
-): Promise<Agent> {
-  return await AgentModel.create({
+async function makeAgent(overrides: Partial<InsertAgent> = {}): Promise<Agent> {
+  const defaults: InsertAgent = {
     name: `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
     teams: [],
     labels: [],
+  };
+  return await AgentModel.create({
+    ...defaults,
     ...overrides,
   });
 }
@@ -529,7 +531,7 @@ async function makeConversation(
  * Creates a test interaction in the database
  */
 async function makeInteraction(
-  agentId: string,
+  profileId: string,
   overrides: Partial<
     Pick<
       InsertInteraction,
@@ -540,7 +542,7 @@ async function makeInteraction(
   const [interaction] = await db
     .insert(schema.interactionsTable)
     .values({
-      agentId,
+      profileId,
       request: {
         model: "gpt-4",
         messages: [

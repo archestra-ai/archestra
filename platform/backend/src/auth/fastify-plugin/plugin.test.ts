@@ -19,6 +19,10 @@ vi.mock("@/auth", () => ({
   hasPermission: vi.fn(),
 }));
 
+vi.mock("@/auth/utils", () => ({
+  hasPermission: vi.fn(),
+}));
+
 vi.mock("@/models", () => ({
   UserModel: {
     getById: vi.fn(),

@@ -1,16 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-
 import {
   type Action,
   ADMIN_ROLE_NAME,
-  allAvailableActions,
   MEMBER_ROLE_NAME,
   type PredefinedRoleName,
-  predefinedPermissionsMap,
   type Resource,
 } from "@shared";
+import {
+  allAvailableActions,
+  predefinedPermissionsMap,
+} from "@shared/access-control.ee";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);

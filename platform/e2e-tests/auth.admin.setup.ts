@@ -1,4 +1,8 @@
-import { expect, test as setup } from "@playwright/test";
+import {
+  type APIRequestContext,
+  expect,
+  test as setup,
+} from "@playwright/test";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -18,7 +22,7 @@ function sleep(ms: number): Promise<void> {
  * Handles rate limiting (429) with exponential backoff retry
  */
 async function signInAdmin(
-  request: Parameters<Parameters<typeof setup>[1]>[0]["page"]["request"],
+  request: APIRequestContext,
   email: string,
   password: string,
 ): Promise<boolean> {

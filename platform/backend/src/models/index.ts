@@ -20,13 +20,16 @@ export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
-export { default as OrganizationRoleModel } from "./organization-role";
 export { default as PromptModel } from "./prompt";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as SsoProviderModel } from "./sso-provider";
 export { default as StatisticsModel } from "./statistics";
 export { default as TeamModel } from "./team";
+export {
+  default as TeamTokenModel,
+  isArchestraPrefixedToken,
+} from "./team-token";
 export { default as TokenPriceModel } from "./token-price";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";

@@ -17,18 +17,29 @@
  * Editor can see options that belong to his team / teams
  */
 
-import type { Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 import {
   ADMIN_EMAIL,
+  DEFAULT_PROFILE_NAME,
+  DEFAULT_TEAM_NAME,
   E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   MEMBER_EMAIL,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
+import {
+  callMcpTool,
+  getOrgTokenForProfile,
+  getTeamTokenForProfile,
+  initializeMcpSession,
+  makeApiRequest,
+} from "../api/mcp-gateway-utils";
 
 const TEST_SERVER_NAME = "internal-dev-test-server";
+const TEST_TOOL_NAME = `${TEST_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
 
 test.describe("Credentials Management", () => {
   test.describe.configure({ mode: "serial" });
@@ -52,7 +63,7 @@ test.describe("Credentials Management", () => {
     ]);
   });
 
-  test("Each user installs test server with their credentials", async ({
+  test("Setup: Each user installs test server with their credentials", async ({
     adminPage,
     editorPage,
     memberPage,
@@ -67,7 +78,7 @@ test.describe("Credentials Management", () => {
     ]);
   });
 
-  test.describe("Check who can see which credentials", () => {
+  test.describe("Check who can see which credentials in Local Installations dialog", () => {
     test("Member cannot see Manage credentials button (lacks permissions)", async ({
       memberPage,
       goToMemberPage,
@@ -159,7 +170,9 @@ test.describe("Credentials Management", () => {
     });
   });
 
-  test("Admin grants their credential to Marketing Team", async ({
+  test("When Admin grants their credential to Marketing Team, Editor can now see Admin's credential", async ({
+    editorPage,
+    goToEditorPage,
     adminPage,
     goToAdminPage,
   }) => {
@@ -177,12 +190,7 @@ test.describe("Credentials Management", () => {
       .getByTestId(E2eTestId.CredentialRow)
       .filter({ has: adminPage.getByText(ADMIN_EMAIL) });
     await expect(row.getByText(MARKETING_TEAM_NAME)).toBeVisible();
-  });
 
-  test("Editor can now see Admin's credential after team grant", async ({
-    editorPage,
-    goToEditorPage,
-  }) => {
     await openLocalInstallationsDialog(editorPage, goToEditorPage);
 
     const visibleEmails = await getVisibleCredentialEmails(editorPage);
@@ -193,7 +201,301 @@ test.describe("Credentials Management", () => {
     expect(visibleEmails).toContain(MEMBER_EMAIL);
     expect(visibleEmails.length).toBe(3);
   });
+
+  test.describe("Static credential selection", () => {
+    test("Choose admin static credential and verify that tool call used admin's credential", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
+        page: adminPage,
+        goTo: goToAdminPage,
+      });
+      await adminPage
+        .getByLabel("admin@example.comMarketing")
+        .getByText("admin@example.com")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+      await adminPage.waitForTimeout(2_000);
+
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Admin",
+        tokenToUse: "org-token",
+      });
+    });
+
+    test("Choose editor static credential and verify that tool call used editor's credential", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
+        page: adminPage,
+        goTo: goToAdminPage,
+      });
+      await adminPage
+        .getByLabel("Resolve at call time")
+        .getByText("Resolve at call time")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+      await adminPage.waitForTimeout(2_000);
+
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Editor",
+        tokenToUse: "org-token",
+      });
+    });
+  });
+
+  test.describe("Dynamic credential selection", () => {
+    test.describe.configure({ mode: "serial" });
+    /**
+     * Default state is that Admin and Editor installed the test server with their own credentials
+     * Admin is in Default team, Editor is in Engineering team
+     * Expected behavior is that:
+     * - when Admin invokes tool, it should use their own credential
+     * - when Editor invokes tool, it should use their own credential
+     */
+
+    // At first we assign Engineering team to Default Profile so that chat can use Engineering team token to connect to mcp gateway
+    test("Assign Engineering team to Default Profile and assign tool to Default Profile", async ({
+      adminPage,
+      goToAdminPage,
+    }) => {
+      await goToAdminPage("/profiles");
+
+      await adminPage.waitForLoadState("networkidle");
+
+      // Check if already assigned and skip if it is
+      const engineeringTeamBadgeVisible = await adminPage
+        .getByTestId(`${E2eTestId.ProfileTeamBadge}-${ENGINEERING_TEAM_NAME}`)
+        .isVisible();
+      if (!engineeringTeamBadgeVisible) {
+        await adminPage
+          .getByTestId(`${E2eTestId.EditAgentButton}-${DEFAULT_PROFILE_NAME}`)
+          .click();
+        await adminPage.getByText("Select a team to assign").click();
+        await adminPage
+          .getByRole("option", { name: ENGINEERING_TEAM_NAME })
+          .click();
+        await adminPage.getByRole("button", { name: "Update profile" }).click();
+        await adminPage.waitForLoadState("networkidle");
+      }
+
+      await adminPage
+        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
+        .click();
+      await adminPage.waitForLoadState("networkidle");
+
+      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
+        page: adminPage,
+        goTo: goToAdminPage,
+      });
+      await adminPage
+        .getByLabel("Resolve at call time")
+        .getByText("Resolve at call time")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+    });
+
+    test("Admin invokes tool using Default Team token and verifies that it used Admin's credential", async ({
+      request,
+    }) => {
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Admin",
+        tokenToUse: "default-team",
+      });
+    });
+
+    test("Editor invokes tool using Engineering Team token and verifies that it used Editor's credential", async ({
+      request,
+    }) => {
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Editor",
+        tokenToUse: "engineering-team",
+      });
+    });
+
+    // /**
+    //  * Then we unassign Engineering team from Default profile
+    //  * In this case Editor should not be able to invoke tool
+    //  * and Admin should be able to invoke tool with by conencting to gateway with Default Team token.
+    //  */
+    test("Remove Editor from Engineering team and verify that Editor cannot invoke tool", async ({
+      goToAdminPage,
+      adminPage,
+      request,
+    }) => {
+      await goToAdminPage("/profiles");
+
+      await adminPage.waitForLoadState("networkidle");
+
+      // Check if already unassigned and skip if it is
+      const engineeringTeamBadgeVisible = await adminPage
+        .getByTestId(`${E2eTestId.ProfileTeamBadge}-${ENGINEERING_TEAM_NAME}`)
+        .isVisible();
+      await adminPage.waitForTimeout(2_000);
+      if (engineeringTeamBadgeVisible) {
+        await adminPage
+          .getByTestId(`${E2eTestId.EditAgentButton}-${DEFAULT_PROFILE_NAME}`)
+          .click();
+        await adminPage
+          .getByTestId(`${E2eTestId.RemoveTeamBadge}-${ENGINEERING_TEAM_NAME}`)
+          .click();
+        await adminPage.getByRole("button", { name: "Update profile" }).click();
+        await adminPage.waitForLoadState("networkidle");
+      }
+
+      try {
+        await verifyToolCallResultViaApi({
+          request,
+          expectedText: "Editor",
+          tokenToUse: "engineering-team",
+        });
+      } catch (error) {
+        expect((error as Error).message).toContain("Invalid token");
+      }
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Admin",
+        tokenToUse: "default-team",
+      });
+    });
+
+    /**
+     * Now we unassign Default Team from Default profile
+     * In this case Admin should not be able to invoke tool using Default Team token
+     * but should be able to invoke tool using org-wide token
+     */
+    test("Uninstall test server as Admin and verify that Admin can invoke tool with Editor's credential", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToAdminPage("/profiles");
+      await adminPage.waitForLoadState("networkidle");
+
+      const defaultTeamBadgeVisible = await adminPage
+        .getByTestId(`${E2eTestId.ProfileTeamBadge}-${DEFAULT_TEAM_NAME}`)
+        .isVisible();
+      await adminPage.waitForTimeout(2_000);
+      if (defaultTeamBadgeVisible) {
+        await adminPage
+          .getByTestId(`${E2eTestId.EditAgentButton}-${DEFAULT_PROFILE_NAME}`)
+          .click();
+        await adminPage
+          .getByTestId(`${E2eTestId.RemoveTeamBadge}-${DEFAULT_TEAM_NAME}`)
+          .click();
+        await adminPage.getByRole("button", { name: "Update profile" }).click();
+        await adminPage.waitForLoadState("networkidle");
+      }
+
+      await adminPage
+        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
+        .click();
+      await adminPage.waitForLoadState("networkidle");
+
+      try {
+        await verifyToolCallResultViaApi({
+          request,
+          expectedText: "Admin",
+          tokenToUse: "default-team",
+        });
+      } catch (error) {
+        expect((error as Error).message).toContain("Invalid token");
+      }
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "AnySuccessText",
+        tokenToUse: "org-token",
+      });
+    });
+  });
 });
+
+async function goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
+  page,
+  goTo,
+}: {
+  page: Page;
+  goTo: GoToPageFn;
+}) {
+  await goTo("/mcp-catalog/registry");
+  await page.waitForLoadState("networkidle");
+  const manageToolsButton = page.getByTestId(
+    `${E2eTestId.ManageToolsButton}-${TEST_SERVER_NAME}`,
+  );
+  await manageToolsButton.click();
+  await page
+    .getByRole("button", { name: "Assign Tool to Profiles" })
+    .first()
+    .click();
+  await page.getByRole("checkbox").first().click();
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("combobox").click();
+  await page.waitForLoadState("networkidle");
+}
+
+async function verifyToolCallResultViaApi({
+  request,
+  expectedText,
+  tokenToUse,
+}: {
+  request: APIRequestContext;
+  expectedText: "Admin" | "Editor" | "AnySuccessText";
+  tokenToUse: "default-team" | "engineering-team" | "org-token";
+}) {
+  // API verification: call tool via MCP Gateway and verify it returns "Admin"
+  // (the value Admin used when installing the server)
+  const defaultProfileResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/agents/default",
+  });
+  const defaultProfile = await defaultProfileResponse.json();
+
+  let token: string;
+  if (tokenToUse === "default-team") {
+    token = await getTeamTokenForProfile(request, DEFAULT_TEAM_NAME);
+  } else if (tokenToUse === "engineering-team") {
+    token = await getTeamTokenForProfile(request, ENGINEERING_TEAM_NAME);
+  } else {
+    token = await getOrgTokenForProfile(request);
+  }
+
+  const sessionId = await initializeMcpSession(request, {
+    profileId: defaultProfile.id,
+    token,
+  });
+
+  const toolResult = await callMcpTool(request, {
+    profileId: defaultProfile.id,
+    token,
+    sessionId,
+    toolName: TEST_TOOL_NAME,
+  });
+
+  const textContent = toolResult.content.find((c) => c.type === "text");
+  if (expectedText === "AnySuccessText") {
+    return;
+  }
+  if (!textContent?.text?.includes(expectedText)) {
+    throw new Error(
+      `Expected tool result to contain "${expectedText}" but got "${textContent?.text}"`,
+    );
+  }
+}
 
 /**
  * Install the test MCP server for a user with their name as ARCHESTRA_TEST value

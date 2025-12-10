@@ -1,13 +1,35 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { vi } from "vitest";
+import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 
 describe("chat-mcp-client tool caching", () => {
-  test("reuses cached tool definitions for the same agent", async () => {
-    const agentId = "agent-cache-test";
-    chatClient.clearChatMcpClient(agentId);
-    chatClient.__test.clearToolCache(agentId);
+  test("reuses cached tool definitions for the same agent and user", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    // Create real test data using fixtures
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      teams: [team.id],
+    });
+
+    // Add user to team as a member
+    await makeTeamMember(team.id, user.id);
+
+    // Create team token for the team
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+
+    chatClient.clearChatMcpClient(agent.id);
+    chatClient.__test.clearToolCache(cacheKey);
 
     const mockClient = {
       listTools: vi.fn().mockResolvedValue({
@@ -23,16 +45,20 @@ describe("chat-mcp-client tool caching", () => {
       close: vi.fn(),
     };
 
-    chatClient.__test.setCachedClient(agentId, mockClient as unknown as Client);
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
 
-    const first = await chatClient.getChatMcpTools(agentId);
+    const first = await chatClient.getChatMcpTools(agent.id, user.id, false);
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
-    const second = await chatClient.getChatMcpTools(agentId);
+    const second = await chatClient.getChatMcpTools(agent.id, user.id, false);
 
     expect(second).toBe(first);
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);
-    chatClient.clearChatMcpClient(agentId);
-    chatClient.__test.clearToolCache(agentId);
+
+    chatClient.clearChatMcpClient(agent.id);
+    chatClient.__test.clearToolCache(cacheKey);
   });
 });

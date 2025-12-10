@@ -1,7 +1,7 @@
 "use client";
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Plus, Settings, Trash2, Users } from "lucide-react";
+import { Key, Link2, Plus, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
+import { type TeamToken, useTokens } from "@/lib/team-token.query";
+import { WithPermissions } from "../roles/with-permissions";
 import { TeamExternalGroupsDialog } from "./team-external-groups-dialog";
 import { TeamMembersDialog } from "./team-members-dialog";
+import { TokenManagerDialog } from "./token-manager-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
 
@@ -45,9 +48,16 @@ export function TeamsList() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
+  // Token management state
+  const [selectedToken, setSelectedToken] = useState<TeamToken | null>(null);
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+
   // Form state
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
+
+  // Tokens query
+  const { data: tokens, isLoading: tokensLoading } = useTokens();
 
   const { data: teams, isLoading } = useQuery({
     queryKey: ["teams"],
@@ -65,6 +75,7 @@ export function TeamsList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
       setCreateDialogOpen(false);
       setTeamName("");
       setTeamDescription("");
@@ -83,6 +94,7 @@ export function TeamsList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
       setDeleteDialogOpen(false);
       setTeamToDelete(null);
       toast.success("Team deleted successfully");
@@ -173,6 +185,26 @@ export function TeamsList() {
                       permissions={{ team: ["update"] }}
                       variant="outline"
                       size="sm"
+                      disabled={tokensLoading}
+                      onClick={() => {
+                        const teamToken = tokens?.find(
+                          (t) => t.team?.id === team.id,
+                        );
+                        if (teamToken) {
+                          setSelectedToken(teamToken);
+                          setTokenDialogOpen(true);
+                        } else {
+                          toast.error("No token found for this team");
+                        }
+                      }}
+                    >
+                      <Key className="mr-2 h-4 w-4" />
+                      Manage Token
+                    </PermissionButton>
+                    <PermissionButton
+                      permissions={{ team: ["update"] }}
+                      variant="outline"
+                      size="sm"
                       onClick={() => {
                         setSelectedTeam(team);
                         setMembersDialogOpen(true);
@@ -218,6 +250,66 @@ export function TeamsList() {
           )}
         </CardContent>
       </Card>
+
+      {/* Organization Token Section */}
+      <WithPermissions
+        permissions={{ team: ["update"] }}
+        noPermissionHandle="hide"
+      >
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Organization Token</CardTitle>
+                <CardDescription>
+                  Organization-wide authentication token for MCP Gateway access
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {tokensLoading ? (
+              <p className="text-sm text-muted-foreground">Loading token...</p>
+            ) : (
+              (() => {
+                const orgToken = tokens?.find((t) => t.isOrganizationToken);
+                if (!orgToken) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Key className="mb-4 h-12 w-12 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        No organization token available. It will be
+                        automatically created.
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="flex-1">
+                      <p className="font-mono text-sm text-muted-foreground">
+                        {orgToken.tokenStart}...
+                      </p>
+                    </div>
+                    <PermissionButton
+                      permissions={{ team: ["update"] }}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedToken(orgToken);
+                        setTokenDialogOpen(true);
+                      }}
+                    >
+                      <Key className="mr-2 h-4 w-4" />
+                      Manage Token
+                    </PermissionButton>
+                  </div>
+                );
+              })()
+            )}
+          </CardContent>
+        </Card>
+      </WithPermissions>
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-3xl">
@@ -304,6 +396,14 @@ export function TeamsList() {
             team={selectedTeam}
           />
         </>
+      )}
+
+      {selectedToken && (
+        <TokenManagerDialog
+          open={tokenDialogOpen}
+          onOpenChange={setTokenDialogOpen}
+          token={selectedToken}
+        />
       )}
     </>
   );

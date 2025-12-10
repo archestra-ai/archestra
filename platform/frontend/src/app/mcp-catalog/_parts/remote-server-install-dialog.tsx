@@ -166,7 +166,7 @@ export function RemoteServerInstallDialog({
   const hasOAuth = !!catalogItem.oauthConfig;
 
   // Check if BYOS feature is available (enterprise license + Vault configured)
-  const showByosOption = byosEnabled && hasConfig;
+  const showByosOption = byosEnabled && hasConfig && selectedTeamId;
 
   // Check if config is valid:
   // - BYOS mode: vault path AND key must be selected

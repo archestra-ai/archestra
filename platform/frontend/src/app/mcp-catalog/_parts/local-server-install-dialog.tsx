@@ -81,7 +81,7 @@ export function LocalServerInstallDialog({
   );
 
   // Check if BYOS feature is available (enterprise license + Vault configured)
-  const showByosOption = useFeatureFlag("byosEnabled");
+  const showByosOption = useFeatureFlag("byosEnabled") && selectedTeamId;
 
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));

@@ -8,12 +8,7 @@ import {
 } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import {
-  AgentModel,
-  AgentTeamModel,
-  TeamModel,
-  TeamTokenModel,
-} from "@/models";
+import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
 
 /**
  * MCP Gateway base URL (internal)

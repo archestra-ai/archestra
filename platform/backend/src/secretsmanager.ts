@@ -1009,7 +1009,7 @@ export class BYOSVaultSecretManager implements SecretManager {
     name: string,
   ): Promise<SelectSecret> {
     logger.info(
-      { name, keys: Object.keys(secretValue) },
+      { name, keyCount: Object.keys(secretValue).length },
       "BYOSVaultSecretManager.createSecret: creating BYOS secret with vault references",
     );
 
@@ -1020,7 +1020,7 @@ export class BYOSVaultSecretManager implements SecretManager {
     });
 
     logger.info(
-      { secretId: secret.id, keys: Object.keys(secretValue) },
+      { keyCount: Object.keys(secretValue).length },
       "BYOSVaultSecretManager.createSecret: created BYOS secret",
     );
 
@@ -1052,7 +1052,7 @@ export class BYOSVaultSecretManager implements SecretManager {
     }
 
     logger.debug(
-      { secretId, keys: Object.keys(vaultReferences) },
+      { keyCount: Object.keys(vaultReferences).length },
       "BYOSVaultSecretManager.getSecret: resolving vault references",
     );
 
@@ -1067,7 +1067,7 @@ export class BYOSVaultSecretManager implements SecretManager {
         await this.resolveVaultReferences(vaultReferences);
 
       logger.info(
-        { secretId, keys: Object.keys(resolvedSecrets) },
+        { keyCount: Object.keys(resolvedSecrets).length },
         "BYOSVaultSecretManager.getSecret: successfully resolved vault references",
       );
 
@@ -1077,7 +1077,7 @@ export class BYOSVaultSecretManager implements SecretManager {
       };
     } catch (error) {
       logger.error(
-        { error, secretId },
+        { error },
         "BYOSVaultSecretManager.getSecret: failed to resolve vault references",
       );
 
@@ -1620,6 +1620,21 @@ export function isByosEnabled(): boolean {
     getSecretsManagerType() === SecretsManagerType.BYOS_VAULT &&
     config.enterpriseLicenseActivated
   );
+}
+
+/**
+ * Get the Vault KV version when BYOS is enabled
+ * @returns "1" or "2" if BYOS is enabled, null otherwise
+ */
+export function getByosVaultKvVersion(): VaultKvVersion | null {
+  if (!isByosEnabled()) {
+    return null;
+  }
+  const kvVersionEnv = process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION;
+  if (kvVersionEnv === "1" || kvVersionEnv === "2") {
+    return kvVersionEnv;
+  }
+  return DEFAULT_KV_VERSION;
 }
 
 /**

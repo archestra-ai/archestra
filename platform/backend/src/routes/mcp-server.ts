@@ -194,7 +194,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { secretId: secret.id, keys: Object.keys(userConfigValues) },
+            { keyCount: Object.keys(userConfigValues).length },
             "Created BYOS vault secret with per-field references for remote server",
           );
         }
@@ -298,7 +298,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             secretId = secret.id;
             createdSecretId = secret.id;
             logger.info(
-              { secretId: secret.id, keys: Object.keys(secretEnvVars) },
+              { keyCount: Object.keys(secretEnvVars).length },
               "Created BYOS vault secret with per-field references for local server",
             );
           }
@@ -601,12 +601,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         try {
           await secretManager.deleteSecret(mcpServer.secretId);
           logger.info(
-            { secretId: mcpServer.secretId, mcpServerId },
+            { mcpServerId },
             "Deleted database secret for local MCP server",
           );
         } catch (error) {
           logger.error(
-            { err: error, secretId: mcpServer.secretId },
+            { err: error, mcpServerId },
             "Failed to delete database secret",
           );
           // Continue with MCP server deletion even if secret deletion fails

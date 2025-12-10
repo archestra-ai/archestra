@@ -1058,7 +1058,14 @@ export const setTeamVaultFolder = <ThrowOnError extends boolean = false>(options
 /**
  * Check connectivity to a team's Vault folder
  */
-export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = false>(options: Options<CheckTeamVaultFolderConnectivityData, ThrowOnError>) => (options.client ?? client).post<CheckTeamVaultFolderConnectivityResponses, CheckTeamVaultFolderConnectivityErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder/check-connectivity', ...options });
+export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = false>(options: Options<CheckTeamVaultFolderConnectivityData, ThrowOnError>) => (options.client ?? client).post<CheckTeamVaultFolderConnectivityResponses, CheckTeamVaultFolderConnectivityErrors, ThrowOnError>({
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * List secrets available in a team's Vault folder

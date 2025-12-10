@@ -138,10 +138,30 @@ export const auth: any = betterAuth({
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
         getRole: async (data) => {
+          logger.debug(
+            {
+              providerId: data.provider?.providerId,
+              userId: data.user?.id,
+              userEmail: data.user?.email,
+            },
+            "SSO getRole callback: Invoking SsoProviderModel.resolveSsoRole",
+          );
+
           // Cast to the expected union type (better-auth expects "member" | "admin")
-          return (await SsoProviderModel.resolveSsoRole(data)) as
+          const resolvedRole = (await SsoProviderModel.resolveSsoRole(data)) as
             | "member"
             | "admin";
+
+          logger.debug(
+            {
+              providerId: data.provider?.providerId,
+              userId: data.user?.id,
+              resolvedRole,
+            },
+            "SSO getRole callback: Role resolved successfully",
+          );
+
+          return resolvedRole;
         },
       },
       defaultOverrideUserInfo: true,

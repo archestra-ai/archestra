@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
 import {
   useCheckTeamVaultFolderConnectivity,
   useDeleteTeamVaultFolder,
@@ -53,6 +53,7 @@ export function TeamVaultFolderDialog({
   } | null>(null);
 
   const byosEnabled = useFeatureFlag("byosEnabled");
+  const vaultKvVersion = useFeatureValue("byosVaultKvVersion");
   const { data: existingFolder, isLoading } = useTeamVaultFolder(
     open ? team.id : null,
   );
@@ -89,8 +90,12 @@ export function TeamVaultFolderDialog({
 
   const handleCheckConnectivity = async () => {
     setConnectivityResult(null);
+    const pathToTest = vaultPath.trim();
     try {
-      const result = await checkConnectivityMutation.mutateAsync(team.id);
+      const result = await checkConnectivityMutation.mutateAsync({
+        teamId: team.id,
+        vaultPath: pathToTest,
+      });
       setConnectivityResult(result);
     } catch (error) {
       setConnectivityResult({
@@ -161,7 +166,11 @@ export function TeamVaultFolderDialog({
                 <Label htmlFor="vault-path">Vault Path</Label>
                 <Input
                   id="vault-path"
-                  placeholder="secret/data/engineering"
+                  placeholder={
+                    vaultKvVersion === "1"
+                      ? "kv/teams/engineering"
+                      : "kv/data/teams/engineering"
+                  }
                   value={vaultPath}
                   onChange={(e) => {
                     setVaultPath(e.target.value);
@@ -169,11 +178,44 @@ export function TeamVaultFolderDialog({
                   }}
                   className="font-mono"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter the Vault path where your team's secrets are stored.
-                  Team admins will be able to browse and select secrets from
-                  this path when installing MCP servers.
-                </p>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p>
+                    Archestra is configured to use{" "}
+                    <strong>
+                      {vaultKvVersion === "1" ? "KV v1" : "KV v2"}
+                    </strong>
+                    .{" "}
+                    {vaultKvVersion === "1" ? (
+                      <>
+                        For KV v1, use the format{" "}
+                        <code className="bg-muted px-1 rounded">
+                          {"<mount>/<path>"}
+                        </code>{" "}
+                        (e.g.,{" "}
+                        <code className="bg-muted px-1 rounded">
+                          kv/teams/engineering
+                        </code>
+                        ).
+                      </>
+                    ) : (
+                      <>
+                        For KV v2, use the format{" "}
+                        <code className="bg-muted px-1 rounded">
+                          {"<mount>/data/<path>"}
+                        </code>{" "}
+                        (e.g.,{" "}
+                        <code className="bg-muted px-1 rounded">
+                          kv/data/teams/engineering
+                        </code>
+                        ).
+                      </>
+                    )}
+                  </p>
+                  <p>
+                    Team admins will be able to browse and select secrets from
+                    this path when installing MCP servers.
+                  </p>
+                </div>
               </div>
 
               {/* Action buttons */}
@@ -198,32 +240,32 @@ export function TeamVaultFolderDialog({
                   )}
                 </Button>
 
-                {hasExistingFolder && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={handleCheckConnectivity}
-                      disabled={checkConnectivityMutation.isPending}
-                    >
-                      {checkConnectivityMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        "Test Connection"
-                      )}
-                    </Button>
+                {vaultPath.trim() && (
+                  <Button
+                    variant="outline"
+                    onClick={handleCheckConnectivity}
+                    disabled={checkConnectivityMutation.isPending}
+                  >
+                    {checkConnectivityMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Testing...
+                      </>
+                    ) : (
+                      "Test Connection"
+                    )}
+                  </Button>
+                )}
 
-                    <Button
-                      variant="outline"
-                      onClick={handleDelete}
-                      disabled={deleteFolderMutation.isPending}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                      Remove
-                    </Button>
-                  </>
+                {hasExistingFolder && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDelete}
+                    disabled={deleteFolderMutation.isPending}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                    Remove
+                  </Button>
                 )}
               </div>
 
@@ -270,10 +312,6 @@ export function TeamVaultFolderDialog({
                     <li>
                       <strong>Install with Vault secrets:</strong> Select a
                       secret from Vault when installing an MCP server
-                    </li>
-                    <li>
-                      <strong>Fresh on startup:</strong> Secrets are fetched
-                      from Vault each time the MCP server pod starts
                     </li>
                     <li>
                       <strong>Access control:</strong> Only team admins can

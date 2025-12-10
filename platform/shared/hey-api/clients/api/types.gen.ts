@@ -6514,6 +6514,7 @@ export type GetFeaturesResponses = {
     200: {
         'orchestrator-k8s-runtime': boolean;
         byosEnabled: boolean;
+        byosVaultKvVersion: '1' | '2';
     };
 };
 
@@ -15414,7 +15415,9 @@ export type SetTeamVaultFolderResponses = {
 export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
 
 export type CheckTeamVaultFolderConnectivityData = {
-    body?: never;
+    body?: {
+        vaultPath?: string;
+    };
     path: {
         teamId: string;
     };

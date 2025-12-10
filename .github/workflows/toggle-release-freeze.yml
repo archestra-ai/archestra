@@ -1,0 +1,127 @@
+name: Toggle Release Freeze
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_freeze:
+        description: "Set RELEASE_FREEZE to block/unblock release-please PR merges"
+        required: true
+        type: choice
+        options:
+          - "false"
+          - "true"
+        default: "false"
+
+permissions:
+  contents: read
+
+jobs:
+  toggle-release-freeze:
+    name: Toggle Release Freeze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Generate a token
+        id: generate-token
+        uses: ./.github/actions/generate-release-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Set RELEASE_FREEZE variable
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RELEASE_FREEZE_VALUE: ${{ inputs.release_freeze }}
+        run: |
+          echo "Setting RELEASE_FREEZE to: $RELEASE_FREEZE_VALUE"
+
+          # Check if variable exists
+          if gh variable list | grep -q "^RELEASE_FREEZE"; then
+            # Update existing variable
+            gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
+            echo "✅ Updated RELEASE_FREEZE variable to: $RELEASE_FREEZE_VALUE"
+          else
+            # Create new variable
+            gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
+            echo "✅ Created RELEASE_FREEZE variable with value: $RELEASE_FREEZE_VALUE"
+          fi
+
+          if [ "$RELEASE_FREEZE_VALUE" = "true" ]; then
+            echo ""
+            echo "❄️ Release freeze is now ACTIVE"
+            echo "Release-please PRs will be blocked from merging until this is set to 'false'"
+          else
+            echo ""
+            echo "🚀 Release freeze is now INACTIVE"
+            echo "Release-please PRs can now be merged normally"
+          fi
+
+      - name: Notify and block open release-please PRs
+        if: inputs.release_freeze == 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          echo "Looking for open release-please PRs..."
+
+          # Find open PRs with branches starting with "release-please--"
+          RELEASE_PRS=$(gh pr list --state open --json number,headRefName --jq '.[] | select(.headRefName | startswith("release-please--")) | .number')
+
+          if [ -z "$RELEASE_PRS" ]; then
+            echo "No open release-please PRs found."
+            exit 0
+          fi
+
+          echo "Found open release-please PRs: $RELEASE_PRS"
+
+          for PR_NUMBER in $RELEASE_PRS; do
+            echo "Requesting changes on PR #$PR_NUMBER to block merging..."
+            gh pr review "$PR_NUMBER" --request-changes --body "## ❄️ Release Freeze Enabled
+
+          A release freeze has just been activated. This PR cannot be merged until the freeze is lifted.
+
+          The freeze was enabled manually via the **Toggle Release Freeze** workflow.
+
+          ### How to unfreeze
+
+          1. Go to **Actions** → **Toggle Release Freeze** → **Run workflow**
+          2. Select \`false\` from the dropdown
+          3. Click **Run workflow**
+
+          Once the freeze is lifted, this review will be dismissed automatically.
+
+          ---
+          *This review was posted automatically when the release freeze was enabled.*"
+            echo "✅ Blocked PR #$PR_NUMBER"
+          done
+
+      - name: Dismiss freeze reviews on release-please PRs
+        if: inputs.release_freeze == 'false'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          echo "Looking for open release-please PRs to unblock..."
+
+          # Find open PRs with branches starting with "release-please--"
+          RELEASE_PRS=$(gh pr list --state open --json number,headRefName --jq '.[] | select(.headRefName | startswith("release-please--")) | .number')
+
+          if [ -z "$RELEASE_PRS" ]; then
+            echo "No open release-please PRs found."
+            exit 0
+          fi
+
+          echo "Found open release-please PRs: $RELEASE_PRS"
+
+          for PR_NUMBER in $RELEASE_PRS; do
+            echo "Approving PR #$PR_NUMBER to dismiss freeze block..."
+            gh pr review "$PR_NUMBER" --approve --body "## 🚀 Release Freeze Lifted
+
+          The release freeze has been lifted. This PR can now be merged.
+
+          ---
+          *This approval was posted automatically when the release freeze was disabled.*"
+            echo "✅ Unblocked PR #$PR_NUMBER"
+          done

@@ -20,10 +20,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-freeze-check:
+    name: Release Freeze Check
+    # Only run on release-please PRs (branch name starts with "release-please--")
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check if release is frozen
+        id: check-freeze
+        env:
+          RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
+        run: |
+          if [ "$RELEASE_FREEZE" = "true" ]; then
+            echo "frozen=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frozen=false" >> "$GITHUB_OUTPUT"
+            echo "✅ No release freeze active. Release-please PR can proceed."
+          fi
+
+      - name: Post freeze comment to PR
+        if: steps.check-freeze.outputs.frozen == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "## ❄️ Release Freeze Active
+
+          A release freeze is currently in effect. This PR cannot be merged until the freeze is lifted.
+
+          ### How to unfreeze
+
+          1. Go to **Actions** → **Toggle Release Freeze** → **Run workflow**
+          2. Select \`false\` from the dropdown
+          3. Click **Run workflow**
+
+          Alternatively, set the \`RELEASE_FREEZE\` repository variable to \`false\` in:
+          **Settings** → **Secrets and variables** → **Actions** → **Variables**
+
+          ---
+          *This comment was posted automatically by the Release Freeze Check workflow.*"
+
+      - name: Fail if frozen
+        if: steps.check-freeze.outputs.frozen == 'true'
+        run: |
+          echo "::error::❄️ Release freeze is active. Merging release-please PRs is blocked."
+          exit 1
+
   lint-pr-title:
     name: PR Title Linter
     if: github.event_name == 'pull_request'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:

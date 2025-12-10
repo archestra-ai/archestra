@@ -90,10 +90,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
-          // For BYOS (Bring Your Own Secrets) - path to the access token secret in the external Vault
-          accessTokenExternalSecretPath: z.string().optional(),
-          // For BYOS - the key within the Vault secret to use for access_token
-          accessTokenExternalSecretKey: z.string().optional(),
+          // When true, environmentValues and userConfigValues contain vault references in "path#key" format
+          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -103,8 +101,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentIds,
         secretId,
         accessToken,
-        accessTokenExternalSecretPath,
-        accessTokenExternalSecretKey,
+        isByosVault,
         userConfigValues,
         environmentValues,
         ...restDataFromRequestBody
@@ -179,8 +176,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For REMOTE servers: create secrets and validate connection
       if (catalogItem?.serverType === "remote") {
-        // If accessTokenExternalSecretPath is provided (BYOS flow), create a secret reference
-        if (accessTokenExternalSecretPath && !secretId) {
+        // If isByosVault flag is set, use vault references from userConfigValues
+        if (isByosVault && userConfigValues && !secretId) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -189,24 +186,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
-          if (!accessTokenExternalSecretKey) {
-            throw new ApiError(
-              400,
-              "accessTokenExternalSecretKey is required when using accessTokenExternalSecretPath",
-            );
-          }
-
-          // Create secret with path#key format for the access_token
-          const vaultReference = `${accessTokenExternalSecretPath}#${accessTokenExternalSecretKey}`;
+          // userConfigValues already contains vault references in "path#key" format
           const secret = await secretManager.createSecret(
-            { access_token: vaultReference },
+            userConfigValues as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { secretId: secret.id, vaultReference },
-            "Created BYOS vault secret reference for remote server",
+            { secretId: secret.id, keys: Object.keys(userConfigValues) },
+            "Created BYOS vault secret with per-field references for remote server",
           );
         }
 
@@ -277,8 +266,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Handle BYOS external vault secret for local servers
-        if (accessTokenExternalSecretPath && !secretId) {
+        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
+        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -287,30 +276,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
-          if (!accessTokenExternalSecretKey) {
-            throw new ApiError(
-              400,
-              "accessTokenExternalSecretKey is required when using accessTokenExternalSecretPath",
-            );
+          // Collect secret env vars with vault references from environmentValues
+          const secretEnvVars: Record<string, string> = {};
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (envDef.type === "secret") {
+              const value = envDef.promptOnInstallation
+                ? environmentValues?.[envDef.key]
+                : envDef.value;
+              if (value) {
+                // Value should already be in "path#key" format from frontend
+                secretEnvVars[envDef.key] = value;
+              }
+            }
           }
 
-          // Create secret with path#key format
-          // The vault key becomes the Archestra secret key, pointing to the vault reference
-          const vaultReference = `${accessTokenExternalSecretPath}#${accessTokenExternalSecretKey}`;
-          const secret = await secretManager.createSecret(
-            { [accessTokenExternalSecretKey]: vaultReference },
-            `${serverData.name}-vault-secret`,
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-          logger.info(
-            { secretId: secret.id, vaultReference },
-            "Created BYOS external vault secret reference for local server",
-          );
+          if (Object.keys(secretEnvVars).length > 0) {
+            const secret = await secretManager.createSecret(
+              secretEnvVars,
+              `${serverData.name}-vault-secret`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+            logger.info(
+              { secretId: secret.id, keys: Object.keys(secretEnvVars) },
+              "Created BYOS vault secret with per-field references for local server",
+            );
+          }
         }
-
         // Collect and store secret-type env vars (not allowed when BYOS is enabled)
-        if (!secretId && catalogItem.localConfig?.environment) {
+        else if (!secretId && catalogItem.localConfig?.environment) {
           const secretEnvVars: Record<string, string> = {};
 
           // Collect all secret-type env vars (both static and prompted)

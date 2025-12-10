@@ -9979,8 +9979,7 @@ export type InstallMcpServerData = {
         };
         agentIds?: Array<string>;
         accessToken?: string;
-        accessTokenExternalSecretPath?: string;
-        accessTokenExternalSecretKey?: string;
+        isByosVault?: boolean;
     };
     path?: never;
     query?: never;

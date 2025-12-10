@@ -24,12 +24,10 @@ type CatalogItem =
 
 export interface LocalServerInstallResult {
   environmentValues: Record<string, string>;
-  /** External Vault path to access token secret for BYOS */
-  accessTokenExternalSecretPath?: string;
-  /** External Vault secret key for access token (the key within the secret to use) */
-  accessTokenExternalSecretKey?: string;
   /** Team ID to assign the MCP server to (null for personal) */
   teamId?: string | null;
+  /** Whether environmentValues contains BYOS vault references in path#key format */
+  isByosVault?: boolean;
 }
 
 interface LocalServerInstallDialogProps {
@@ -74,18 +72,32 @@ export function LocalServerInstallDialog({
     }, {}),
   );
 
-  // BYOS (Bring Your Own Secrets) state - vault uses the same teamId as MCP server
-  const [selectedSecretPath, setSelectedSecretPath] = useState<string | null>(
-    null,
-  );
-  const [selectedSecretKey, setSelectedSecretKey] = useState<string | null>(
-    null,
-  );
+  // BYOS (Bring Your Own Secrets) state - per-field vault references
+  const [vaultSecrets, setVaultSecrets] = useState<
+    Record<string, { path: string | null; key: string | null }>
+  >({});
 
   const byosEnabled = useFeatureFlag("byosEnabled");
 
   // Show vault selector only for team installations when BYOS is enabled
   const useVaultSecrets = credentialType === "team" && byosEnabled;
+
+  // Helper to update vault secret for a specific field
+  const updateVaultSecret = (
+    fieldName: string,
+    prop: "path" | "key",
+    value: string | null,
+  ) => {
+    setVaultSecrets((prev) => ({
+      ...prev,
+      [fieldName]: {
+        ...prev[fieldName],
+        [prop]: value,
+        // Reset key when path changes
+        ...(prop === "path" ? { key: null } : {}),
+      },
+    }));
+  };
 
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
@@ -94,31 +106,36 @@ export function LocalServerInstallDialog({
   const handleInstall = async () => {
     if (!catalogItem) return;
 
-    // Vault mode (team + BYOS): secrets from vault, non-secrets from form
-    if (
-      useVaultSecrets &&
-      secretEnvVars.length > 0 &&
-      selectedSecretPath &&
-      selectedSecretKey
-    ) {
-      // Include only non-secret env var values (secret ones come from vault)
-      const nonSecretValues: Record<string, string> = {};
-      for (const env of nonSecretEnvVars) {
+    const finalEnvironmentValues: Record<string, string> = {};
+
+    // Add non-secret env var values (always from form)
+    for (const env of nonSecretEnvVars) {
+      if (environmentValues[env.key]) {
+        finalEnvironmentValues[env.key] = environmentValues[env.key];
+      }
+    }
+
+    // Add secret env var values
+    for (const env of secretEnvVars) {
+      if (useVaultSecrets) {
+        // BYOS mode: use vault reference in path#key format
+        const vaultRef = vaultSecrets[env.key];
+        if (vaultRef?.path && vaultRef?.key) {
+          finalEnvironmentValues[env.key] = `${vaultRef.path}#${vaultRef.key}`;
+        }
+      } else {
+        // Non-BYOS mode: use manual value
         if (environmentValues[env.key]) {
-          nonSecretValues[env.key] = environmentValues[env.key];
+          finalEnvironmentValues[env.key] = environmentValues[env.key];
         }
       }
-
-      await onConfirm({
-        environmentValues: nonSecretValues,
-        accessTokenExternalSecretPath: selectedSecretPath,
-        accessTokenExternalSecretKey: selectedSecretKey,
-        teamId: selectedTeamId,
-      });
-    } else {
-      // Non-BYOS mode: all values from form
-      await onConfirm({ environmentValues, teamId: selectedTeamId });
     }
+
+    await onConfirm({
+      environmentValues: finalEnvironmentValues,
+      teamId: selectedTeamId,
+      isByosVault: useVaultSecrets && secretEnvVars.length > 0,
+    });
 
     // Reset form
     resetForm();
@@ -133,8 +150,7 @@ export function LocalServerInstallDialog({
     );
     setSelectedTeamId(null);
     setCredentialType(byosEnabled ? "team" : "personal");
-    setSelectedSecretPath(null);
-    setSelectedSecretKey(null);
+    setVaultSecrets({});
   };
 
   const handleClose = () => {
@@ -153,12 +169,16 @@ export function LocalServerInstallDialog({
   });
 
   // Check if secrets are valid:
-  // - Vault mode (team + BYOS): vault path AND key must be selected
+  // - Vault mode (team + BYOS): each required secret field must have vault path AND key selected
   // - Manual mode (personal or BYOS disabled): manual secret values must be filled
   const isSecretsValid =
     secretEnvVars.length === 0 ||
     (useVaultSecrets
-      ? !!selectedSecretPath && !!selectedSecretKey
+      ? secretEnvVars.every((env) => {
+          if (!env.required) return true;
+          const vaultRef = vaultSecrets[env.key];
+          return vaultRef?.path && vaultRef?.key;
+        })
       : secretEnvVars.every((env) => {
           if (!env.required) return true;
           const value = environmentValues[env.key];
@@ -183,16 +203,6 @@ export function LocalServerInstallDialog({
           onTeamChange={setSelectedTeamId}
           catalogId={catalogItem?.id}
           onCredentialTypeChange={setCredentialType}
-          vaultSecretSelector={
-            <InlineVaultSecretSelector
-              teamId={selectedTeamId}
-              selectedSecretPath={selectedSecretPath}
-              selectedSecretKey={selectedSecretKey}
-              onSecretPathChange={setSelectedSecretPath}
-              onSecretKeyChange={setSelectedSecretKey}
-              disabled={isInstalling}
-            />
-          }
         />
 
         <div className="space-y-6 mt-4">
@@ -271,53 +281,49 @@ export function LocalServerInstallDialog({
               <div className="space-y-4">
                 <h3 className="text-sm font-medium">Secrets</h3>
 
-                {/* Vault mode (team + BYOS): vault selection */}
-                {useVaultSecrets ? (
-                  <div className="space-y-2">
-                    <Label>Select External Secret</Label>
-                    <InlineVaultSecretSelector
-                      teamId={selectedTeamId}
-                      selectedSecretPath={selectedSecretPath}
-                      selectedSecretKey={selectedSecretKey}
-                      onSecretPathChange={setSelectedSecretPath}
-                      onSecretKeyChange={setSelectedSecretKey}
-                      disabled={isInstalling}
-                    />
+                {secretEnvVars.map((env) => (
+                  <div key={env.key} className="space-y-2 mb-4">
+                    <Label htmlFor={`env-${env.key}`}>
+                      {env.key}
+                      {env.required && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
+                    </Label>
+                    {env.description && (
+                      <p className="text-xs text-muted-foreground">
+                        {env.description}
+                      </p>
+                    )}
+
+                    {/* BYOS mode: vault selector for each secret field */}
+                    {useVaultSecrets ? (
+                      <InlineVaultSecretSelector
+                        teamId={selectedTeamId}
+                        selectedSecretPath={vaultSecrets[env.key]?.path ?? null}
+                        selectedSecretKey={vaultSecrets[env.key]?.key ?? null}
+                        onSecretPathChange={(path) =>
+                          updateVaultSecret(env.key, "path", path)
+                        }
+                        onSecretKeyChange={(key) =>
+                          updateVaultSecret(env.key, "key", key)
+                        }
+                        disabled={isInstalling}
+                      />
+                    ) : (
+                      <Input
+                        id={`env-${env.key}`}
+                        type="password"
+                        value={environmentValues[env.key] || ""}
+                        onChange={(e) =>
+                          handleEnvVarChange(env.key, e.target.value)
+                        }
+                        placeholder={`Enter value for ${env.key}`}
+                        className="font-mono"
+                        disabled={isInstalling}
+                      />
+                    )}
                   </div>
-                ) : (
-                  /* Non-BYOS mode: Manual secret entry */
-                  <>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Enter secret values
-                    </p>
-                    {secretEnvVars.map((env) => (
-                      <div key={env.key} className="space-y-2 mb-4">
-                        <Label htmlFor={`env-${env.key}`}>
-                          {env.key}
-                          {env.required && (
-                            <span className="text-destructive ml-1">*</span>
-                          )}
-                        </Label>
-                        {env.description && (
-                          <p className="text-xs text-muted-foreground">
-                            {env.description}
-                          </p>
-                        )}
-                        <Input
-                          id={`env-${env.key}`}
-                          type="password"
-                          value={environmentValues[env.key] || ""}
-                          onChange={(e) =>
-                            handleEnvVarChange(env.key, e.target.value)
-                          }
-                          placeholder={`Enter value for ${env.key}`}
-                          className="font-mono"
-                          disabled={isInstalling}
-                        />
-                      </div>
-                    ))}
-                  </>
-                )}
+                ))}
               </div>
             </>
           )}

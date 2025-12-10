@@ -39,12 +39,10 @@ type UserConfigType = Record<
 
 export interface RemoteServerInstallResult {
   metadata: Record<string, unknown>;
-  /** External Vault path to access token secret for BYOS */
-  accessTokenExternalSecretPath?: string;
-  /** External Vault secret key for access token (the key within the secret to use) */
-  accessTokenExternalSecretKey?: string;
   /** Team ID to assign the MCP server to (null for personal) */
   teamId?: string | null;
+  /** Whether metadata contains BYOS vault references in path#key format */
+  isByosVault?: boolean;
 }
 
 interface RemoteServerInstallDialogProps {
@@ -73,11 +71,29 @@ export function RemoteServerInstallDialog({
     "personal",
   );
 
-  // BYOS (Bring Your Own Secrets) state - vault uses the same teamId as MCP server
-  const [vaultSecretPath, setVaultSecretPath] = useState<string | null>(null);
-  const [vaultSecretKey, setVaultSecretKey] = useState<string | null>(null);
+  // BYOS (Bring Your Own Secrets) state - per-field vault references
+  const [vaultSecrets, setVaultSecrets] = useState<
+    Record<string, { path: string | null; key: string | null }>
+  >({});
 
   const byosEnabled = useFeatureFlag("byosEnabled");
+
+  // Helper to update vault secret for a specific field
+  const updateVaultSecret = (
+    fieldName: string,
+    prop: "path" | "key",
+    value: string | null,
+  ) => {
+    setVaultSecrets((prev) => ({
+      ...prev,
+      [fieldName]: {
+        ...prev[fieldName],
+        [prop]: value,
+        // Reset key when path changes
+        ...(prop === "path" ? { key: null } : {}),
+      },
+    }));
+  };
 
   // Show vault selector only for team installations when BYOS is enabled
   const useVaultSecrets = credentialType === "team" && byosEnabled;
@@ -90,56 +106,39 @@ export function RemoteServerInstallDialog({
     const userConfig =
       (catalogItem.userConfig as UserConfigType | null | undefined) || {};
 
-    // If vault secret is selected, use that instead of manual values
-    if (vaultSecretPath && vaultSecretKey) {
-      try {
-        await onConfirm(catalogItem, {
-          metadata: {},
-          accessTokenExternalSecretPath: vaultSecretPath,
-          accessTokenExternalSecretKey: vaultSecretKey,
-          teamId: selectedTeamId,
-        });
-        resetForm();
-        onClose();
-      } catch (_error) {
-        // Error handling is done in the parent component
-      }
-      return;
-    }
-
-    // Validate required fields only when not using vault secret
-    const requiredFields = Object.entries(userConfig).filter(
-      ([_, config]) => config.required,
-    );
-
-    for (const [fieldName, _] of requiredFields) {
-      if (!configValues[fieldName]?.trim()) {
-        return;
-      }
-    }
-
     try {
-      // Convert values to appropriate types based on config
       const metadata: Record<string, unknown> = {};
-      for (const [fieldName, value] of Object.entries(configValues)) {
-        const configField = userConfig[fieldName];
-        if (!configField) continue;
 
-        switch (configField.type) {
-          case "number":
-            metadata[fieldName] = Number(value);
-            break;
-          case "boolean":
-            metadata[fieldName] = value === "true";
-            break;
-          default:
-            metadata[fieldName] = value;
+      for (const [fieldName, fieldConfig] of Object.entries(userConfig)) {
+        // For BYOS mode, sensitive fields use vault references
+        if (useVaultSecrets && fieldConfig.sensitive) {
+          const vaultRef = vaultSecrets[fieldName];
+          if (vaultRef?.path && vaultRef?.key) {
+            // Store as path#key format for BYOS vault resolution
+            metadata[fieldName] = `${vaultRef.path}#${vaultRef.key}`;
+          }
+        } else {
+          // Non-sensitive fields or non-BYOS mode: use manual value
+          const value = configValues[fieldName];
+          if (value !== undefined && value !== "") {
+            switch (fieldConfig.type) {
+              case "number":
+                metadata[fieldName] = Number(value);
+                break;
+              case "boolean":
+                metadata[fieldName] = value === "true";
+                break;
+              default:
+                metadata[fieldName] = value;
+            }
+          }
         }
       }
 
       await onConfirm(catalogItem, {
         metadata,
         teamId: selectedTeamId,
+        isByosVault: useVaultSecrets,
       });
       resetForm();
       onClose();
@@ -152,8 +151,7 @@ export function RemoteServerInstallDialog({
     setConfigValues({});
     setSelectedTeamId(null);
     setCredentialType(byosEnabled ? "team" : "personal");
-    setVaultSecretPath(null);
-    setVaultSecretKey(null);
+    setVaultSecrets({});
   };
 
   const handleClose = () => {
@@ -170,26 +168,32 @@ export function RemoteServerInstallDialog({
   const hasConfig = Object.keys(userConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
 
-  const getShowManualConfig = () => {
-    // Personal installation - show manual config if it exists
-    if (!selectedTeamId) {
-      return hasConfig;
-    } else {
-      // Team installation - show manual config if it exists and BYOS is disabled
-      return hasConfig && !byosEnabled;
-    }
-  };
+  // Get sensitive and non-sensitive required fields
+  const sensitiveRequiredFields = Object.entries(userConfig).filter(
+    ([_, cfg]) => cfg.required && cfg.sensitive,
+  );
+  const nonSensitiveRequiredFields = Object.entries(userConfig).filter(
+    ([_, cfg]) => cfg.required && !cfg.sensitive,
+  );
 
-  // Check if config is valid:
-  // - Vault mode (team + BYOS): vault path AND key must be selected
-  // - Manual mode (personal or BYOS disabled): manual values must be filled
-  const isValid =
-    useVaultSecrets && hasConfig
-      ? !!vaultSecretPath && !!vaultSecretKey
-      : !hasConfig ||
-        Object.entries(userConfig)
-          .filter(([_, cfg]) => cfg.required)
-          .every(([fieldName]) => configValues[fieldName]?.trim());
+  // Check if non-sensitive required fields are valid (always need manual input)
+  const isNonSensitiveValid = nonSensitiveRequiredFields.every(([fieldName]) =>
+    configValues[fieldName]?.trim(),
+  );
+
+  // Check if sensitive required fields are valid:
+  // - BYOS mode: vault path AND key must be selected for each
+  // - Normal mode: manual values must be filled
+  const isSensitiveValid = useVaultSecrets
+    ? sensitiveRequiredFields.every(
+        ([fieldName]) =>
+          vaultSecrets[fieldName]?.path && vaultSecrets[fieldName]?.key,
+      )
+    : sensitiveRequiredFields.every(([fieldName]) =>
+        configValues[fieldName]?.trim(),
+      );
+
+  const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -220,16 +224,6 @@ export function RemoteServerInstallDialog({
             onTeamChange={setSelectedTeamId}
             catalogId={catalogItem?.id}
             onCredentialTypeChange={setCredentialType}
-            vaultSecretSelector={
-              <InlineVaultSecretSelector
-                teamId={selectedTeamId}
-                selectedSecretPath={vaultSecretPath}
-                selectedSecretKey={vaultSecretKey}
-                onSecretPathChange={setVaultSecretPath}
-                onSecretKeyChange={setVaultSecretKey}
-                disabled={isInstalling}
-              />
-            }
           />
 
           {hasOAuth && (
@@ -242,8 +236,8 @@ export function RemoteServerInstallDialog({
             </Alert>
           )}
 
-          {/* Config fields - vault selector for team+BYOS, manual entry otherwise */}
-          {getShowManualConfig() ? (
+          {/* Config fields - always show when config exists */}
+          {hasConfig && (
             <div className="space-y-4">
               {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
                 <div key={fieldName} className="grid gap-2">
@@ -253,7 +247,27 @@ export function RemoteServerInstallDialog({
                       <span className="text-red-500"> *</span>
                     )}
                   </Label>
-                  {fieldConfig.type === "boolean" ? (
+                  {fieldConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {fieldConfig.description}
+                    </p>
+                  )}
+
+                  {/* BYOS mode: vault selector for sensitive fields */}
+                  {fieldConfig.sensitive && useVaultSecrets ? (
+                    <InlineVaultSecretSelector
+                      teamId={selectedTeamId}
+                      selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
+                      selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
+                      onSecretPathChange={(path) =>
+                        updateVaultSecret(fieldName, "path", path)
+                      }
+                      onSecretKeyChange={(key) =>
+                        updateVaultSecret(fieldName, "key", key)
+                      }
+                      disabled={isInstalling}
+                    />
+                  ) : fieldConfig.type === "boolean" ? (
                     <select
                       id={fieldName}
                       value={configValues[fieldName] || "false"}
@@ -296,7 +310,7 @@ export function RemoteServerInstallDialog({
                 </div>
               ))}
             </div>
-          ) : null}
+          )}
 
           {catalogItem.serverUrl && (
             <div className="rounded-md bg-muted p-4">

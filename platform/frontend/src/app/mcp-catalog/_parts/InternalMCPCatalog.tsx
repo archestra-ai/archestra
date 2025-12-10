@@ -207,9 +207,7 @@ export function InternalMCPCatalog({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       environmentValues: installResult.environmentValues,
-      accessTokenExternalSecretPath:
-        installResult.accessTokenExternalSecretPath,
-      accessTokenExternalSecretKey: installResult.accessTokenExternalSecretKey,
+      isByosVault: installResult.isByosVault,
       teamId: installResult.teamId ?? undefined,
       dontShowToast: true,
     });
@@ -231,8 +229,10 @@ export function InternalMCPCatalog({
   ) => {
     setInstallingItemId(catalogItem.id);
 
-    // Extract access_token from metadata if present and pass as accessToken
+    // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
+    // For BYOS mode: metadata contains vault references, pass via userConfigValues
     const accessToken =
+      !result.isByosVault &&
       result.metadata?.access_token &&
       typeof result.metadata.access_token === "string"
         ? result.metadata.access_token
@@ -242,8 +242,10 @@ export function InternalMCPCatalog({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
-      accessTokenExternalSecretPath: result.accessTokenExternalSecretPath,
-      accessTokenExternalSecretKey: result.accessTokenExternalSecretKey,
+      ...(result.isByosVault && {
+        userConfigValues: result.metadata as Record<string, string>,
+      }),
+      isByosVault: result.isByosVault,
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);

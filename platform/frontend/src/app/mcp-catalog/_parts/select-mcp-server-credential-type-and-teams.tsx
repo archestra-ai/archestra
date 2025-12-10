@@ -28,7 +28,6 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   catalogId?: string;
   /** Callback when credential type changes (personal vs team) */
   onCredentialTypeChange?: (type: "personal" | "team") => void;
-  vaultSecretSelector?: React.ReactNode;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -36,7 +35,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
   onTeamChange,
   catalogId,
   onCredentialTypeChange,
-  vaultSecretSelector,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const byosEnabled = useFeatureFlag("byosEnabled");
@@ -227,8 +225,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
               No teams available. Create a team first to share this server.
             </p>
           )}
-
-          {byosEnabled && selectedTeamId && vaultSecretSelector}
         </div>
       )}
     </div>

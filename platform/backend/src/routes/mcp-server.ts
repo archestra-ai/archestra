@@ -303,9 +303,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
-        // Collect and store secret-type env vars (not allowed when BYOS is enabled)
+        // Collect and store secret-type env vars
+        // When BYOS is enabled, only static (non-prompted) secrets are allowed to be stored in DB
+        // User-prompted secrets must use Vault references via the isByosVault flow above
         else if (!secretId && catalogItem.localConfig?.environment) {
           const secretEnvVars: Record<string, string> = {};
+          let hasPromptedSecrets = false;
 
           // Collect all secret-type env vars (both static and prompted)
           for (const envDef of catalogItem.localConfig.environment) {
@@ -315,6 +318,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               if (envDef.promptOnInstallation) {
                 // Prompted during installation - get from environmentValues
                 value = environmentValues?.[envDef.key];
+                if (value) {
+                  hasPromptedSecrets = true;
+                }
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -326,15 +332,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
 
+          // Block user-prompted secrets when BYOS is enabled (they should use Vault)
+          // Static secrets from catalog are allowed since they're not manual user input
+          if (hasPromptedSecrets && isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual secret input is not allowed when BYOS is enabled. Please use Vault secrets instead.",
+            );
+          }
+
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
-            // Not allowed when BYOS is enabled - use vault secrets instead
-            if (isByosEnabled()) {
-              throw new ApiError(
-                400,
-                "Manual secret input is not allowed when BYOS is enabled. Please use Vault secrets instead.",
-              );
-            }
             const secret = await secretManager.createSecret(
               secretEnvVars,
               `mcp-server-${serverData.name}-env`,

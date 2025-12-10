@@ -1,0 +1,89 @@
+name: Release Freeze Review
+description: Request changes or approve release-please PRs based on freeze status
+inputs:
+  action:
+    description: "Action to perform: 'freeze' to request changes, 'unfreeze' to approve"
+    required: true
+  app-id:
+    description: The GitHub App ID for the release freeze checker
+    required: true
+  private-key:
+    description: The GitHub App private key for the release freeze checker
+    required: true
+  pr-number:
+    description: "PR number to review. If not provided, finds the open release-please PR automatically."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Generate a token
+      id: generate-token
+      uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Find or validate release-please PR
+      id: find-pr
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+      run: |
+        if [ -n "$INPUT_PR_NUMBER" ]; then
+          echo "Using provided PR number: $INPUT_PR_NUMBER"
+          echo "pr_number=$INPUT_PR_NUMBER" >> "$GITHUB_OUTPUT"
+        else
+          echo "Looking for open release-please PR..."
+          PR_NUMBER=$(gh pr list --state open --json number,headRefName --jq '.[] | select(.headRefName | startswith("release-please--")) | .number' | head -1)
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open release-please PR found."
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found release-please PR: #$PR_NUMBER"
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+    - name: Request changes (freeze)
+      if: inputs.action == 'freeze' && steps.find-pr.outputs.pr_number != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
+      run: |
+        echo "Requesting changes on PR #$PR_NUMBER to block merging..."
+        gh pr review "$PR_NUMBER" --request-changes --body "## ❄️ Release Freeze Active
+
+        A release freeze is currently in effect. This PR cannot be merged until the freeze is lifted.
+
+        ### How to unfreeze
+
+        1. Go to **Actions** → **Toggle Release Freeze** → **Run workflow**
+        2. Select \`false\` from the dropdown
+        3. Click **Run workflow**
+
+        Once the freeze is lifted, this review will be dismissed automatically.
+
+        ---
+        *This review was posted automatically by the release freeze system.*"
+        echo "✅ Requested changes on PR #$PR_NUMBER"
+
+    - name: Approve (unfreeze)
+      if: inputs.action == 'unfreeze' && steps.find-pr.outputs.pr_number != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
+      run: |
+        echo "Approving PR #$PR_NUMBER to dismiss freeze block..."
+        gh pr review "$PR_NUMBER" --approve --body "## 🚀 Release Freeze Lifted
+
+        The release freeze has been lifted. This PR can now be merged.
+
+        ---
+        *This approval was posted automatically when the release freeze was disabled.*"
+        echo "✅ Approved PR #$PR_NUMBER"

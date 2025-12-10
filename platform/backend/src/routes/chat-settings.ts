@@ -2,11 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ChatSettingsModel } from "@/models";
-import {
-  DbSecretsManager,
-  isByosEnabled,
-  secretManager,
-} from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -50,29 +46,30 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let secretId = settings.anthropicApiKeySecretId;
 
-      // Use DB secrets manager for chat API keys when BYOS is enabled
-      // because BYOS doesn't support chat API keys yet (it's designed for external Vault references)
-      const secrets = isByosEnabled() ? new DbSecretsManager() : secretManager;
+      // Use forceDB when BYOS is enabled because chat API keys are user-provided values,
+      // not vault references that BYOS expects
+      const forceDB = isByosEnabled();
 
       // Handle reset API key request
       if (body.resetApiKey === true) {
         // Delete the secret from storage (Vault/DB)
         if (secretId) {
-          await secrets.deleteSecret(secretId);
+          await secretManager.deleteSecret(secretId);
         }
         secretId = null;
       } else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
         // If API key is provided, create or update secret
         if (secretId) {
           // Update existing secret
-          await secrets.updateSecret(secretId, {
+          await secretManager.updateSecret(secretId, {
             anthropicApiKey: body.anthropicApiKey,
           });
         } else {
           // Create new secret
-          const secret = await secrets.createSecret(
+          const secret = await secretManager.createSecret(
             { anthropicApiKey: body.anthropicApiKey },
             "chatapikey",
+            forceDB,
           );
           secretId = secret.id;
         }

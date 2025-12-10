@@ -183,6 +183,16 @@ export function LocalServerInstallDialog({
           onTeamChange={setSelectedTeamId}
           catalogId={catalogItem?.id}
           onCredentialTypeChange={setCredentialType}
+          vaultSecretSelector={
+            <InlineVaultSecretSelector
+              teamId={selectedTeamId}
+              selectedSecretPath={selectedSecretPath}
+              selectedSecretKey={selectedSecretKey}
+              onSecretPathChange={setSelectedSecretPath}
+              onSecretKeyChange={setSelectedSecretKey}
+              disabled={isInstalling}
+            />
+          }
         />
 
         <div className="space-y-6 mt-4">

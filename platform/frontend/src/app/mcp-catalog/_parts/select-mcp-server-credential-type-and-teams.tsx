@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   catalogId?: string;
   /** Callback when credential type changes (personal vs team) */
   onCredentialTypeChange?: (type: "personal" | "team") => void;
+  vaultSecretSelector?: React.ReactNode;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -34,8 +36,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
   onTeamChange,
   catalogId,
   onCredentialTypeChange,
+  vaultSecretSelector,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
+  const byosEnabled = useFeatureFlag("byosEnabled");
   const { data: installedServers } = useMcpServers();
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
@@ -212,6 +216,8 @@ export function SelectMcpServerCredentialTypeAndTeams({
               No teams available. Create a team first to share this server.
             </p>
           )}
+
+          {byosEnabled && selectedTeamId && vaultSecretSelector}
         </div>
       )}
     </div>

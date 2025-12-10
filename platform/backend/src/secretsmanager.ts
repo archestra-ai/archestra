@@ -1077,7 +1077,7 @@ export class BYOSVaultSecretManager implements SecretManager {
       };
     } catch (error) {
       logger.error(
-        { error, secretId },
+        { error },
         "BYOSVaultSecretManager.getSecret: failed to resolve vault references",
       );
 

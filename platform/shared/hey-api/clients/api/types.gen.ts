@@ -7291,6 +7291,7 @@ export type GetInternalMcpCatalogResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7370,6 +7371,7 @@ export type CreateInternalMcpCatalogItemData = {
         name: string;
         version?: string | null;
         description?: string | null;
+        instructions?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
@@ -7515,6 +7517,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7745,6 +7748,7 @@ export type GetInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7824,6 +7828,7 @@ export type UpdateInternalMcpCatalogItemData = {
         name?: string;
         version?: string | null;
         description?: string | null;
+        instructions?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
@@ -7971,6 +7976,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;

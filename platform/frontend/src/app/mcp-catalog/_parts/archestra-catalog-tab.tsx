@@ -252,6 +252,7 @@ export function ArchestraCatalogTab({
     await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
+      instructions: server.instructions,
       serverType: server.server.type,
       serverUrl:
         server.server.type === "remote" ? server.server.url : undefined,

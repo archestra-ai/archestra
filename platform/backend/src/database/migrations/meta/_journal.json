@@ -610,6 +610,13 @@
       "when": 1765321233694,
       "tag": "0086_lazy_typhoid_mary",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1765391728106,
+      "tag": "0087_perfect_rictor",
+      "breakpoints": true
     }
   ]
 }

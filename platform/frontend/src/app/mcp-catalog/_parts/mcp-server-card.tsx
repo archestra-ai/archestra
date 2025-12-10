@@ -118,6 +118,7 @@ export function McpServerCard({
   const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
     installedServer?.id ?? null,
   );
+  const isByosEnabled = useFeatureFlag("byosEnabled");
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
@@ -153,9 +154,11 @@ export function McpServerCard({
       teams?.filter((t) => !teamsWithInstallation.includes(t.id)) ?? [];
 
     // Can create new installation if:
-    // - Personal installation not yet created, OR
+    // - Personal installation not yet created AND byos is not enabled
     // - There are teams available without this server
-    return !hasPersonalInstallation || availableTeams.length > 0;
+    return (
+      (!hasPersonalInstallation && !isByosEnabled) || availableTeams.length > 0
+    );
   })();
 
   // Dialog state
@@ -386,40 +389,36 @@ export function McpServerCard({
           {isInstalling ? "Reconnecting..." : "Reconnect Required"}
         </PermissionButton>
       )}
-      {/* Show Connect button when:
-          - Server requires auth AND user can create new installation, OR
-          - Server doesn't require auth AND no installation exists yet */}
-      {(requiresAuth || (!requiresAuth && !installedServer)) &&
-        !isInstalling && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
-                    onClick={onInstallRemoteServer}
-                    disabled={isInstalling || !canCreateNewInstallation}
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    {isInstalling ? "Connecting..." : "Connect"}
-                  </PermissionButton>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {!canCreateNewInstallation
-                    ? "All connect options exhausted (personal and all teams)"
-                    : requiresAuth
-                      ? "Provide your credentials to connect this server"
-                      : "Install this server to your organization"}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+      {!isInstalling && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="w-full">
+                <PermissionButton
+                  permissions={{ mcpServer: ["create"] }}
+                  onClick={onInstallRemoteServer}
+                  disabled={isInstalling || !canCreateNewInstallation}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <User className="mr-2 h-4 w-4" />
+                  {isInstalling ? "Connecting..." : "Connect"}
+                </PermissionButton>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>
+                {!canCreateNewInstallation
+                  ? "All connect options exhausted (personal and all teams)"
+                  : requiresAuth
+                    ? "Provide your credentials to connect this server"
+                    : "Install this server to your organization"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </>
   );
 

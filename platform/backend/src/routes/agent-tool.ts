@@ -4,6 +4,7 @@ import { groupBy } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
@@ -13,6 +14,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentToolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
@@ -543,6 +545,84 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(groupedByCatalogId);
+    },
+  );
+
+  fastify.post(
+    "/api/agent-tools/auto-configure-policies",
+    {
+      schema: {
+        operationId: RouteId.AutoConfigureAgentToolPolicies,
+        description:
+          "Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis",
+        tags: ["Agent Tools"],
+        body: z.object({
+          agentToolIds: z.array(z.string().uuid()).min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            results: z.array(
+              z.object({
+                agentToolId: z.string().uuid(),
+                success: z.boolean(),
+                config: z
+                  .object({
+                    allowUsageWhenUntrustedDataIsPresent: z.boolean(),
+                    toolResultTreatment: z.enum([
+                      "trusted",
+                      "sanitize_with_dual_llm",
+                      "untrusted",
+                    ]),
+                    reasoning: z.string(),
+                  })
+                  .optional(),
+                error: z.string().optional(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId, user }, reply) => {
+      const { agentToolIds } = body;
+
+      logger.info(
+        { organizationId, userId: user.id, count: agentToolIds.length },
+        "POST /api/agent-tools/auto-configure-policies: request received",
+      );
+
+      // Check if service is available for this organization
+      const available =
+        await agentToolAutoPolicyService.isAvailable(organizationId);
+      if (!available) {
+        logger.warn(
+          { organizationId, userId: user.id },
+          "POST /api/agent-tools/auto-configure-policies: service not available",
+        );
+        throw new ApiError(
+          503,
+          "Auto-policy requires Anthropic API key to be configured in chat settings",
+        );
+      }
+
+      const result =
+        await agentToolAutoPolicyService.configurePoliciesForAgentTools(
+          agentToolIds,
+          organizationId,
+        );
+
+      logger.info(
+        {
+          organizationId,
+          userId: user.id,
+          success: result.success,
+          resultsCount: result.results.length,
+        },
+        "POST /api/agent-tools/auto-configure-policies: completed",
+      );
+
+      return reply.send(result);
     },
   );
 };

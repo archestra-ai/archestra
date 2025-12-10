@@ -166,6 +166,7 @@ export const RouteId = {
   GetAllAgentTools: "getAllAgentTools",
   UpdateAgentTool: "updateAgentTool",
   GetAgentAvailableTokens: "getAgentAvailableTokens",
+  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
 
   // Features Routes
   GetFeatures: "getFeatures",
@@ -406,6 +407,10 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["update"],
   },
   [RouteId.UpdateAgentTool]: {
+    profile: ["update"],
+    tool: ["update"],
+  },
+  [RouteId.AutoConfigureAgentToolPolicies]: {
     profile: ["update"],
     tool: ["update"],
   },

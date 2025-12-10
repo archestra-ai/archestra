@@ -30,7 +30,7 @@ importers:
   backend:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: ^2.0.47
+        specifier: ^2.0.51
         version: 2.0.51(zod@4.1.13)
       '@anthropic-ai/sdk':
         specifier: ^0.71.0
@@ -114,7 +114,7 @@ importers:
         specifier: ^2.0.0
         version: 2.0.1
       ai:
-        specifier: ^5.0.101
+        specifier: ^5.0.105
         version: 5.0.105(zod@4.1.13)
       better-auth:
         specifier: 1.4.4-beta.3

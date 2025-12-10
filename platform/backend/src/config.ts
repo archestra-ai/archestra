@@ -194,7 +194,7 @@ export default {
       apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
       baseUrl:
         process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
-        "https://api.anthropic.com",
+        "https://api.anthropic.com/v1",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
@@ -203,7 +203,7 @@ export default {
         : undefined,
     },
     defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-3-5-haiku-20241022",
   },
   features: {
     /**

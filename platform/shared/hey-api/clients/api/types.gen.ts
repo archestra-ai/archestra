@@ -3820,6 +3820,95 @@ export type GetAgentAvailableTokensResponses = {
 
 export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
+export type AutoConfigureAgentToolPoliciesData = {
+    body: {
+        agentToolIds: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-tools/auto-configure-policies';
+};
+
+export type AutoConfigureAgentToolPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AutoConfigureAgentToolPoliciesError = AutoConfigureAgentToolPoliciesErrors[keyof AutoConfigureAgentToolPoliciesErrors];
+
+export type AutoConfigureAgentToolPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        results: Array<{
+            agentToolId: string;
+            success: boolean;
+            config?: {
+                allowUsageWhenUntrustedDataIsPresent: boolean;
+                toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+                reasoning: string;
+            };
+            error?: string;
+        }>;
+    };
+};
+
+export type AutoConfigureAgentToolPoliciesResponse = AutoConfigureAgentToolPoliciesResponses[keyof AutoConfigureAgentToolPoliciesResponses];
+
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
     headers: {

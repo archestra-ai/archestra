@@ -6,7 +6,14 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Search,
+  Unplug,
+  Wand2,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -39,6 +46,7 @@ import {
 import { useProfiles } from "@/lib/agent.query";
 import {
   useAllProfileTools,
+  useAutoConfigurePolicies,
   useBulkUpdateProfileTools,
   useProfileToolPatchMutation,
   useUnassignTool,
@@ -86,6 +94,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
+  const autoConfigureMutation = useAutoConfigurePolicies();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
@@ -305,6 +314,39 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     },
     [selectedTools, bulkUpdateMutation, invocationPolicies, resultPolicies],
   );
+
+  const handleAutoConfigurePolicies = useCallback(async () => {
+    const agentToolIds = selectedTools.map((tool) => tool.id);
+
+    if (agentToolIds.length === 0) {
+      return;
+    }
+
+    try {
+      const result = await autoConfigureMutation.mutateAsync(agentToolIds);
+
+      const successCount = result.results.filter(
+        (r: { success: boolean }) => r.success,
+      ).length;
+      const failureCount = result.results.filter(
+        (r: { success: boolean }) => !r.success,
+      ).length;
+
+      if (failureCount === 0) {
+        toast.success(`Policies configured for ${successCount} tool(s)`);
+      } else {
+        toast.warning(
+          `Configured ${successCount} tool(s), failed ${failureCount}`,
+        );
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to auto-configure policies";
+      toast.error(errorMessage);
+    }
+  }, [selectedTools, autoConfigureMutation]);
 
   const clearSelection = useCallback(() => {
     setRowSelection({});
@@ -894,6 +936,36 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             </ButtonGroup>
           </div>
           <div className="ml-2 h-4 w-px bg-border" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PermissionButton
+                permissions={{ profile: ["update"], tool: ["update"] }}
+                size="sm"
+                variant="outline"
+                onClick={handleAutoConfigurePolicies}
+                disabled={
+                  !hasSelection ||
+                  isBulkUpdating ||
+                  autoConfigureMutation.isPending
+                }
+              >
+                {autoConfigureMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Configuring...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-4 w-4" />
+                    Auto-Configure
+                  </>
+                )}
+              </PermissionButton>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Automatically configure security policies using AI analysis</p>
+            </TooltipContent>
+          </Tooltip>
           <Button
             size="sm"
             variant="ghost"

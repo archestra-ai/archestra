@@ -129,7 +129,7 @@ ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and re
 
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
-ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
+ARCHESTRA_CHAT_DEFAULT_MODEL=claude-3-5-haiku-20241022  # Optional, defaults to claude-3-5-haiku-20241022
 
 # Kubernetes (for MCP server runtime)
 # Local MCP servers require EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG OR ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER

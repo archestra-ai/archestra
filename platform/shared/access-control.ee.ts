@@ -290,18 +290,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
-  [RouteId.RevokeUserMcpServerAccess]: {
-    mcpServer: ["delete"],
-  },
-  [RouteId.GrantTeamMcpServerAccess]: {
-    mcpServer: ["create"],
-  },
-  [RouteId.RevokeTeamMcpServerAccess]: {
-    mcpServer: ["delete"],
-  },
-  [RouteId.RevokeAllTeamsMcpServerAccess]: {
-    mcpServer: ["delete"],
-  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },

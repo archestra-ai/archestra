@@ -20,11 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  useDeleteMcpServer,
-  useMcpServers,
-  useRevokeUserMcpServerAccess,
-} from "@/lib/mcp-server.query";
+import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -45,28 +41,14 @@ export function ManageUsersDialog({
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
 
-  const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
   const deleteMcpServerMutation = useDeleteMcpServer();
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
-    if (mcpServer.teamId) {
-      // Team credential - delete the entire MCP server
-      await deleteMcpServerMutation.mutateAsync({
-        id: mcpServer.id,
-        name: mcpServer.name,
-      });
-    } else {
-      // Personal credential - revoke user access
-      if (!mcpServer.catalogId || !mcpServer.ownerId) return;
-      await revokeUserAccessMutation.mutateAsync({
-        catalogId: mcpServer.catalogId,
-        userId: mcpServer.ownerId,
-      });
-    }
+    await deleteMcpServerMutation.mutateAsync({
+      id: mcpServer.id,
+      name: mcpServer.name,
+    });
   };
-
-  const isRevoking =
-    revokeUserAccessMutation.isPending || deleteMcpServerMutation.isPending;
 
   if (!firstServer) {
     return null;
@@ -87,7 +69,7 @@ export function ManageUsersDialog({
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage credentials for this MCP server.
+            Manage credentials for this MCP Registry item.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,7 +108,7 @@ export function ManageUsersDialog({
                       <TableCell>
                         <Button
                           onClick={() => handleRevoke(mcpServer)}
-                          disabled={isRevoking}
+                          disabled={deleteMcpServerMutation.isPending}
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"

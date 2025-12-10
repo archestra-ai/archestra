@@ -31,9 +31,14 @@ export interface SecretManager {
    * Create a new secret
    * @param secretValue - The secret value as JSON
    * @param name - Human-readable name to identify the secret in external storage
+   * @param forceDB - When true, store in database even if using external secret manager (e.g., for OAuth tokens)
    * @returns The created secret with generated ID
    */
-  createSecret(secretValue: SecretValue, name: string): Promise<SelectSecret>;
+  createSecret(
+    secretValue: SecretValue,
+    name: string,
+    forceDB?: boolean,
+  ): Promise<SelectSecret>;
 
   /**
    * Delete a secret by ID
@@ -201,7 +206,9 @@ export class DbSecretsManager implements SecretManager {
   async createSecret(
     secretValue: SecretValue,
     name: string,
+    _forceDB?: boolean,
   ): Promise<SelectSecret> {
+    // forceDB is ignored for DbSecretsManager since it always uses DB
     return await SecretModel.create({
       name,
       secret: secretValue,
@@ -567,7 +574,20 @@ export class VaultSecretManager implements SecretManager {
   async createSecret(
     secretValue: SecretValue,
     name: string,
+    forceDB?: boolean,
   ): Promise<SelectSecret> {
+    // If forceDB is true, store directly in database (e.g., for OAuth tokens)
+    if (forceDB) {
+      logger.info(
+        { name },
+        "VaultSecretManager.createSecret: forceDB=true, storing in database",
+      );
+      return await SecretModel.create({
+        name,
+        secret: secretValue,
+      });
+    }
+
     try {
       await this.ensureInitialized();
     } catch (error) {
@@ -1003,11 +1023,27 @@ export class BYOSVaultSecretManager implements SecretManager {
    * @param secretValue - Key-value pairs where values are vault references (path#key format)
    *                      e.g., { "access_token": "secret/data/api-keys#my_token" }
    * @param name - Human-readable name for the secret
+   * @param forceDB - When true, store actual values in DB instead of treating as vault references
    */
   async createSecret(
     secretValue: SecretValue,
     name: string,
+    forceDB?: boolean,
   ): Promise<SelectSecret> {
+    // If forceDB is true, store directly in database without isByosVault flag
+    if (forceDB) {
+      logger.info(
+        { name, keyCount: Object.keys(secretValue).length },
+        "BYOSVaultSecretManager.createSecret: forceDB=true, storing actual values in database",
+      );
+      return await SecretModel.create({
+        name,
+        secret: secretValue,
+        isByosVault: false,
+        isVault: false,
+      });
+    }
+
     logger.info(
       { name, keyCount: Object.keys(secretValue).length },
       "BYOSVaultSecretManager.createSecret: creating BYOS secret with vault references",
@@ -1169,14 +1205,6 @@ export class BYOSVaultSecretManager implements SecretManager {
       return null;
     }
 
-    if (dbRecord.isVault) {
-      throw new ApiError(
-        400,
-        "Cannot update BYOS external vault secrets. Update the secret directly in your external Vault.",
-      );
-    }
-
-    // For non-BYOS secrets, delegate to the DB model
     return await SecretModel.update(secretId, { secret: _secretValue });
   }
 

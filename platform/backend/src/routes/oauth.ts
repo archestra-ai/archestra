@@ -5,7 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -650,17 +650,64 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenData = await tokenResponse.json();
       }
 
-      // Create secret entry with the OAuth tokens
-      const secret = await secretManager.createSecret(
+      // Log the token data to help debug issues
+      logger.info(
         {
-          access_token: tokenData.access_token,
-          ...(tokenData.refresh_token && {
-            refresh_token: tokenData.refresh_token,
-          }),
-          ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
-          token_type: "Bearer",
+          hasAccessToken: !!tokenData.access_token,
+          hasRefreshToken: !!tokenData.refresh_token,
+          hasExpiresIn: !!tokenData.expires_in,
+          tokenDataKeys: Object.keys(tokenData),
         },
+        "OAuth callback: received token data",
+      );
+
+      // Validate that we actually received an access token
+      // Some OAuth providers return 200 with error in body, or MCP SDK might return error object
+      if (!tokenData.access_token) {
+        // Cast to unknown first to access potential error fields
+        const errorData = tokenData as unknown as {
+          error?: string;
+          error_description?: string;
+        };
+        const errorMsg =
+          errorData.error_description ||
+          errorData.error ||
+          "No access token received";
+        logger.error(
+          {
+            tokenDataKeys: Object.keys(tokenData),
+            error: errorData.error,
+            errorDescription: errorData.error_description,
+          },
+          "OAuth callback: token exchange did not return access_token",
+        );
+        throw new ApiError(400, `OAuth token exchange failed: ${errorMsg}`);
+      }
+
+      // Create secret entry with the OAuth tokens
+      // Use forceDB=true when BYOS is enabled because OAuth tokens are generated values,
+      // not user-provided vault references
+      const secretPayload = {
+        access_token: tokenData.access_token,
+        ...(tokenData.refresh_token && {
+          refresh_token: tokenData.refresh_token,
+        }),
+        ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
+        token_type: "Bearer",
+      };
+
+      logger.info(
+        {
+          secretPayloadKeys: Object.keys(secretPayload),
+          isByosEnabled: isByosEnabled(),
+        },
+        "OAuth callback: creating secret with payload",
+      );
+
+      const secret = await secretManager.createSecret(
+        secretPayload,
         `${catalogItem.name}-oauth`,
+        isByosEnabled(), // forceDB: store in DB when BYOS is enabled
       );
 
       // Clean up used state
@@ -671,8 +718,11 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         catalogId: oauthState.catalogId,
         name: catalogItem.name,
         accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        expiresIn: tokenData.expires_in,
+        // Only include optional fields if they have truthy values (avoid null which fails schema validation)
+        ...(tokenData.refresh_token && {
+          refreshToken: tokenData.refresh_token,
+        }),
+        ...(tokenData.expires_in && { expiresIn: tokenData.expires_in }),
         secretId: secret.id,
       });
     },

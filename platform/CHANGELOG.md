@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.27](https://github.com/archestra-ai/archestra/compare/platform-v0.6.26...platform-v0.6.27) (2025-12-10)
+
+
+### Miscellaneous Chores
+
+* add more debug logging for SSO provider role mapping ([#1501](https://github.com/archestra-ai/archestra/issues/1501)) ([2da2dae](https://github.com/archestra-ai/archestra/commit/2da2daeb7195623c4ca812076c881699df9b0364))
+
 ## [0.6.26](https://github.com/archestra-ai/archestra/compare/platform-v0.6.25...platform-v0.6.26) (2025-12-10)
 
 

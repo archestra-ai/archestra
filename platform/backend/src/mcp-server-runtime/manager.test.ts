@@ -1,42 +1,103 @@
 import { vi } from "vitest";
-import { describe, expect, test, beforeEach } from "@/test";
+import * as fs from "node:fs";
+import type * as originalConfigModule from "@/config";
+import { beforeEach, describe, expect, test } from "@/test";
 
-// Mock fs module before importing manager
-vi.mock("node:fs", () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
+// Mock fs module first
+vi.mock("node:fs");
+
+// Mock @kubernetes/client-node
+vi.mock("@kubernetes/client-node", () => {
+  class MockKubeConfig {
+    clusters: any[] = [];
+    contexts: any[] = [];
+    users: any[] = [];
+    
+    loadFromString(content: string) {
+      try {
+        const parsed = JSON.parse(content);
+        // Simulate the real KubeConfig behavior: populate arrays from parsed content
+        this.clusters = parsed.clusters || [];
+        this.contexts = parsed.contexts || [];
+        this.users = parsed.users || [];
+      } catch {
+        throw new Error("Failed to parse kubeconfig");
+      }
+    }
+    
+    loadFromCluster() {}
+    loadFromFile() {}
+    loadFromDefault() {}
+    makeApiClient() {}
+  }
+
+  return {
+    KubeConfig: MockKubeConfig,
+    CoreV1Api: vi.fn(),
+    Attach: vi.fn(),
+    Log: vi.fn(),
+  };
+});
+
+// Mock the dependencies before importing the manager
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof originalConfigModule>();
+  return {
+    default: {
+      ...actual.default,
+      orchestrator: {
+        kubernetes: {
+          namespace: "test-namespace",
+          kubeconfig: undefined,
+          loadKubeconfigFromCurrentCluster: false,
+        },
+      },
+    },
+  };
+});
+
+vi.mock("@/models/internal-mcp-catalog", () => ({
+  default: {},
 }));
 
-// Tests that match the actual manager.ts implementation
+vi.mock("@/models/mcp-server", () => ({
+  default: {},
+}));
+
+vi.mock("./k8s-pod", () => ({
+  default: vi.fn(),
+}));
+
 describe("validateKubeconfig", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  test("should not validate when no path provided", async () => {
+  test("should not throw when no path provided", async () => {
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig(undefined)).not.toThrow();
   });
 
   test("should throw error when kubeconfig file does not exist", async () => {
-    const fs = await import("node:fs");
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
     const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/nonexistent/path")).toThrow();
+    expect(() => validateKubeconfig("/nonexistent/path")).toThrow(
+      /❌ Kubeconfig file not found/
+    );
   });
 
   test("should throw error when kubeconfig file cannot be parsed", async () => {
-    const fs = await import("node:fs");
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue("invalid yaml content");
 
     const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/path")).toThrow();
+    expect(() => validateKubeconfig("/path")).toThrow(
+      /❌ Malformed kubeconfig: could not parse YAML/
+    );
   });
 
   test("should throw error when clusters field is missing", async () => {
-    const fs = await import("node:fs");
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
       contexts: [],
@@ -44,11 +105,12 @@ describe("validateKubeconfig", () => {
     }));
 
     const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/path")).toThrow();
+    expect(() => validateKubeconfig("/path")).toThrow(
+      /❌ Invalid kubeconfig: clusters section missing/
+    );
   });
 
   test("should throw error when clusters[0] is missing", async () => {
-    const fs = await import("node:fs");
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
       clusters: [],
@@ -57,53 +119,59 @@ describe("validateKubeconfig", () => {
     }));
 
     const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/path")).toThrow();
+    expect(() => validateKubeconfig("/path")).toThrow(
+      /❌ Invalid kubeconfig: clusters section missing/
+    );
   });
 
-  test("should throw error when cluster fields are missing", async () => {
-    const fs = await import("node:fs");
+  test("should throw error when cluster name or server is missing", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
       clusters: [{}],
-      contexts: [],
-      users: []
+      contexts: [{ name: "test" }],
+      users: [{ name: "test" }]
     }));
 
     const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/path")).toThrow();
+    expect(() => validateKubeconfig("/path")).toThrow(
+      /❌ Invalid kubeconfig: cluster entry is missing required fields/
+    );
   });
 
   test("should throw error when contexts field is missing", async () => {
-    const fs = await import("node:fs");
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-      clusters: [{ cluster: { server: "https://test.com", name: "test" } }],
+      clusters: [{ name: "test", server: "https://test.com" }],
+      contexts: [],
+      users: [{ name: "test" }]
+    }));
+
+    const { validateKubeconfig } = await import("./manager");
+    expect(() => validateKubeconfig("/path")).toThrow(
+      /❌ Invalid kubeconfig: contexts section missing/
+    );
+  });
+
+  test("should throw error when users field is missing", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+      clusters: [{ name: "test", server: "https://test.com" }],
+      contexts: [{ name: "test" }],
       users: []
     }));
 
     const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/path")).toThrow();
-  });
-
-  test("should throw error when users field is missing", async () => {
-    const fs = await import("node:fs");
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-      clusters: [{ cluster: { server: "https://test.com", name: "test" } }],
-      contexts: []
-    }));
-
-    const { validateKubeconfig } = await import("./manager");
-    expect(() => validateKubeconfig("/path")).toThrow();
+    expect(() => validateKubeconfig("/path")).toThrow(
+      /❌ Invalid kubeconfig: users section missing/
+    );
   });
 
   test("should not throw error when kubeconfig is valid", async () => {
-    const fs = await import("node:fs");
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-      clusters: [{ cluster: { server: "https://test.com", name: "test" }, name: "test" }],
-      contexts: [{ name: "test", context: { cluster: "test", user: "test" } }],
-      users: [{ name: "test", user: {} }]
+      clusters: [{ name: "test", server: "https://test.com" }],
+      contexts: [{ name: "test" }],
+      users: [{ name: "test" }]
     }));
 
     const { validateKubeconfig } = await import("./manager");
@@ -128,3 +196,5 @@ describe("McpServerRuntimeManager", () => {
     expect(manager.default).toBeDefined();
   });
 });
+
+

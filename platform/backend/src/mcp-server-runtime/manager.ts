@@ -25,23 +25,18 @@ const {
  */
 export function validateKubeconfig(path?: string) {
   /**
-   * CASE 1 — No kubeconfig provided:
-
+   * CASE 1 — No kubeconfig provided
    */
   if (!path) {
-    logger.info("No kubeconfig env var set — using default kubeconfig. Skipping validation.");
     return;
   }
 
   /**
-   * CASE 2 — Developer explicitly provided a custom kubeconfig:
-
+   * CASE 2 — Developer explicitly provided a custom kubeconfig
    */
 
   if (!fs.existsSync(path)) {
-    throw new Error(
-      `❌ Kubeconfig file not found at ${path}.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Kubeconfig file not found at ${path}`);
   }
 
   const content = fs.readFileSync(path, "utf8");
@@ -51,44 +46,32 @@ export function validateKubeconfig(path?: string) {
   try {
     kc.loadFromString(content);
   } catch {
-    throw new Error(
-      `❌ Malformed kubeconfig: could not parse YAML.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Malformed kubeconfig: could not parse YAML`);
   }
 
   // Structural validation
   if (!kc.clusters || kc.clusters.length === 0) {
-    throw new Error(
-      `❌ Invalid kubeconfig: clusters section missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Invalid kubeconfig: clusters section missing`);
   }
 
   const c0 = kc.clusters[0];
   if (!c0) {
-    throw new Error(
-      `❌ Invalid kubeconfig: clusters[0] is missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Invalid kubeconfig: clusters[0] is missing`);
   }
 
   if (!c0.name || !c0.server) {
-    throw new Error(
-      `❌ Invalid kubeconfig: cluster entry is missing required fields.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Invalid kubeconfig: cluster entry is missing required fields`);
   }
 
   if (!kc.contexts || kc.contexts.length === 0) {
-    throw new Error(
-      `❌ Invalid kubeconfig: contexts section missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Invalid kubeconfig: contexts section missing`);
   }
 
   if (!kc.users || kc.users.length === 0) {
-    throw new Error(
-      `❌ Invalid kubeconfig: users section missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
-    );
+    throw new Error(`❌ Invalid kubeconfig: users section missing`);
   }
 
-  logger.info("Custom kubeconfig validated successfully.");
+  logger.info("✅ Custom kubeconfig validated successfully.");
 }
 
 
@@ -100,9 +83,9 @@ export function validateKubeconfig(path?: string) {
 export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
-  private k8sAttach: Attach;
-  private k8sLog: k8s.Log;
-  private namespace: string;
+  private k8sAttach?: Attach;
+  private k8sLog?: k8s.Log;
+  private namespace: string = "default";
   private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
@@ -112,42 +95,37 @@ export class McpServerRuntimeManager {
 
   constructor() {
     this.k8sConfig = new k8s.KubeConfig();
-  
-    const hasCustomKubeconfig =
-      Boolean(kubeconfig && kubeconfig.trim().length > 0);
-  
-    // If not loading from cluster AND user provided a custom kubeconfig → validate it
-    if (!loadKubeconfigFromCurrentCluster && hasCustomKubeconfig) {
-      validateKubeconfig(kubeconfig!);
-    }
-  
+
+    // Normalize kubeconfig input: treat empty string as undefined
+    const kubeconfigPath = kubeconfig && kubeconfig.trim().length > 0 ? kubeconfig.trim() : undefined;
+
     try {
+      // Validate and load kubeconfig based on configuration
       if (loadKubeconfigFromCurrentCluster) {
-        // Running inside Kubernetes pod
         this.k8sConfig.loadFromCluster();
-        logger.info("Loaded kubeconfig from in-cluster environment");
-      } else if (hasCustomKubeconfig) {
-        // Custom kubeconfig path provided by developer
-        logger.info(`Loading kubeconfig from env var: ${kubeconfig}`);
-        this.k8sConfig.loadFromFile(kubeconfig!);
+        logger.info("Loaded kubeconfig from current cluster");
+      } else if (kubeconfigPath) {
+        validateKubeconfig(kubeconfigPath);
+        this.k8sConfig.loadFromFile(kubeconfigPath);
+        logger.info(`Loaded kubeconfig from ${kubeconfigPath}`);
       } else {
-      
-        // No env var? → Use ~/.kube/config (default Kubernetes path)
-        logger.info("No kubeconfig env set — using default kubeconfig (~/.kube/config)");
         this.k8sConfig.loadFromDefault();
+        logger.info("No kubeconfig provided — using default kubeconfig");
       }
-  
-      // Initialize Kubernetes API client
+
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
+      this.k8sAttach = new Attach(this.k8sConfig);
+      this.k8sLog = new k8s.Log(this.k8sConfig);
+      this.namespace = namespace || this.namespace;
     } catch (error) {
-      logger.error({ err: error }, "Failed to load Kubernetes config:");
+      logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
-      throw error;
+      this.k8sApi = undefined;
+      this.k8sAttach = undefined;
+      this.k8sLog = undefined;
+      this.namespace = "";
+      return; // graceful fallback: constructor completes with runtime disabled
     }
-  
-    this.k8sAttach = new Attach(this.k8sConfig);
-    this.k8sLog = new k8s.Log(this.k8sConfig);
-    this.namespace = namespace;
   }
   
   /**
@@ -275,6 +253,10 @@ export class McpServerRuntimeManager {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
+      }
+
+      if (!this.k8sAttach || !this.k8sLog) {
+        throw new Error("Kubernetes clients not initialized");
       }
 
       const k8sPod = new K8sPod(

@@ -594,7 +594,7 @@ async function openLocalInstallationsDialog(
 
   // Wait for dialog to appear
   await expect(
-    page.getByTestId(E2eTestId.LocalInstallationsDialog),
+    page.getByTestId(E2eTestId.ManageCredentialsDialog),
   ).toBeVisible();
 }
 

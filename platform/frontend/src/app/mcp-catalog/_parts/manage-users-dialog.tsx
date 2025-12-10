@@ -1,10 +1,9 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import { format } from "date-fns";
 import { Info, Trash, User, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import { WithoutPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -188,15 +187,14 @@ export function ManageUsersDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px]">
+      <DialogContent
+        className="sm:max-w-[900px]"
+        data-testid={E2eTestId.ManageCredentialsDialog}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             Manage credentials
-            <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
-              {" "}
-              of your team
-            </WithoutPermissions>
             <span className="text-muted-foreground font-normal">
               {label || liveServer.name}
             </span>
@@ -214,7 +212,7 @@ export function ManageUsersDialog({
             </div>
           ) : (
             <div className="rounded-md border">
-              <Table>
+              <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Owner</TableHead>
@@ -244,11 +242,19 @@ export function ManageUsersDialog({
                     const availableTeams = allTeams || [];
 
                     return (
-                      <TableRow key={user.userId}>
+                      <TableRow
+                        key={user.userId}
+                        data-testid={E2eTestId.CredentialRow}
+                        data-user-email={user.email}
+                      >
                         <TableCell className="font-medium">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
-                              {user.email}
+                              <span
+                                data-testid={E2eTestId.CredentialOwnerEmail}
+                              >
+                                {user.email}
+                              </span>
                               {currentUserId === user.userId && (
                                 <Badge
                                   variant="secondary"
@@ -325,7 +331,10 @@ export function ManageUsersDialog({
                                 }
                                 disabled={grantTeamAccessMutation.isPending}
                               >
-                                <SelectTrigger className="h-6 w-[130px] text-xs">
+                                <SelectTrigger
+                                  className="h-6 w-[130px] text-xs"
+                                  data-testid={E2eTestId.CredentialTeamSelect}
+                                >
                                   <SelectValue placeholder="Select team..." />
                                 </SelectTrigger>
                                 <SelectContent>

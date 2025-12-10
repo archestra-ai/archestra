@@ -41,7 +41,6 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 import { BulkAssignProfileDialog } from "./bulk-assign-agent-dialog";
-import { ManageLocalInstallationsDialog } from "./manage-local-installations-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
 import { McpToolsDialog } from "./mcp-tools-dialog";
@@ -162,10 +161,6 @@ export function McpServerCard({
   // Dialog state
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
-  const [
-    isManageLocalInstallationsDialogOpen,
-    setIsManageLocalInstallationsDialogOpen,
-  ] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [selectedToolForAssignment, setSelectedToolForAssignment] =
     useState<ToolForAssignment | null>(null);
@@ -294,7 +289,7 @@ export function McpServerCard({
       </div>
       {mcpServersCount > 0 && (
         <Button
-          onClick={() => setIsManageLocalInstallationsDialogOpen(true)}
+          onClick={() => setIsManageUsersDialogOpen(true)}
           size="sm"
           variant="link"
           className="h-7 text-xs"
@@ -592,13 +587,6 @@ export function McpServerCard({
       <ManageUsersDialog
         isOpen={isManageUsersDialogOpen}
         onClose={() => setIsManageUsersDialogOpen(false)}
-        server={installedServer}
-        label={item.label || item.name}
-      />
-
-      <ManageLocalInstallationsDialog
-        isOpen={isManageLocalInstallationsDialogOpen}
-        onClose={() => setIsManageLocalInstallationsDialogOpen(false)}
         server={installedServer}
         label={item.label || item.name}
       />

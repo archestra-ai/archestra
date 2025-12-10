@@ -77,11 +77,15 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   // Determine initial credential type based on what's available
   const initialCredentialType = useMemo(() => {
+    // Force team selection when BYOS is enabled
+    if (byosEnabled && availableTeams.length > 0) {
+      return CredentialType.Team;
+    }
     if (hasPersonalInstallation && availableTeams.length > 0) {
       return CredentialType.Team;
     }
     return CredentialType.Personal;
-  }, [hasPersonalInstallation, availableTeams.length]);
+  }, [byosEnabled, hasPersonalInstallation, availableTeams.length]);
 
   const [credentialType, setCredentialType] = useState<
     (typeof CredentialType)[keyof typeof CredentialType]
@@ -90,7 +94,11 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // Update credential type when initial value changes (e.g., after data loads)
   // Also notifies parent of the current credential type
   useEffect(() => {
-    if (hasPersonalInstallation && credentialType === CredentialType.Personal) {
+    // Force team selection when BYOS is enabled or personal is already installed
+    if (
+      (hasPersonalInstallation || byosEnabled) &&
+      credentialType === CredentialType.Personal
+    ) {
       if (availableTeams.length > 0) {
         setCredentialType(CredentialType.Team);
         onCredentialTypeChange?.(CredentialType.Team);
@@ -101,6 +109,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     onCredentialTypeChange?.(credentialType);
   }, [
     hasPersonalInstallation,
+    byosEnabled,
     availableTeams.length,
     credentialType,
     onCredentialTypeChange,
@@ -128,7 +137,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     }
   }, [credentialType, availableTeams, onTeamChange]);
 
-  const isPersonalDisabled = hasPersonalInstallation;
+  const isPersonalDisabled = hasPersonalInstallation || byosEnabled;
   const isTeamDisabled = availableTeams.length === 0;
 
   return (
@@ -155,7 +164,9 @@ export function SelectMcpServerCredentialTypeAndTeams({
               Personal
               {isPersonalDisabled && (
                 <span className="text-xs text-muted-foreground">
-                  (already created for this MCP server)
+                  {byosEnabled
+                    ? "(not available when BYOS is enabled)"
+                    : "(already created for this MCP server)"}
                 </span>
               )}
             </Label>

@@ -5,9 +5,9 @@ import {
   type Permissions,
   type PredefinedRoleName,
   PredefinedRoleNameSchema,
-  predefinedPermissionsMap,
   type Resource,
 } from "@shared";
+import { predefinedPermissionsMap } from "@shared/access-control.ee";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";

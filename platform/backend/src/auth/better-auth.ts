@@ -1,18 +1,11 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
-import {
-  ac,
-  adminRole,
-  allAvailableActions,
-  editorRole,
-  MEMBER_ROLE_NAME,
-  memberRole,
-  SSO_TRUSTED_PROVIDER_IDS,
-} from "@shared";
+import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
@@ -51,6 +44,17 @@ const isHttps = () => {
   // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
   return frontendBaseUrl.startsWith("https://");
 };
+
+const { allAvailableActions, editorPermissions, memberPermissions } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
+const ac = createAccessControl(allAvailableActions);
+
+const adminRole = ac.newRole(allAvailableActions);
+const editorRole = ac.newRole(editorPermissions);
+const memberRole = ac.newRole(memberPermissions);
 
 // biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
 export const auth: any = betterAuth({

@@ -8,12 +8,20 @@ archestra:
   imagePullPolicy: IfNotPresent
 
   # Number of pod replicas for the Archestra Platform deployment
+  # Note: This value is ignored when horizontalPodAutoscaler.enabled is true,
+  # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
-  # When null, the default Kubernetes strategy is used
-  deploymentStrategy: null
+  # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.
+  # This ensures at least one pod is always available during updates, which is critical
+  # for GKE ingress health checks to always have healthy endpoints.
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
@@ -130,6 +138,73 @@ archestra:
 
     # Complete ingress specification
     spec: {}
+
+  # HorizontalPodAutoscaler configuration
+  # Automatically scales the number of pod replicas based on observed metrics
+  # See: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+  horizontalPodAutoscaler:
+    # Enable or disable HorizontalPodAutoscaler creation
+    enabled: false
+
+    # Minimum number of replicas the autoscaler can scale down to
+    minReplicas: 1
+
+    # Maximum number of replicas the autoscaler can scale up to
+    maxReplicas: 10
+
+    # Metrics used to determine scaling behavior
+    # Each metric can be of type: Resource, Pods, Object, External, or ContainerResource
+    # Example with CPU utilization:
+    #   metrics:
+    #     - type: Resource
+    #       resource:
+    #         name: cpu
+    #         target:
+    #           type: Utilization
+    #           averageUtilization: 80
+    metrics: []
+
+    # Scaling behavior configuration for scale up and scale down
+    # Allows fine-grained control over scaling speed and stabilization
+    # Example:
+    #   behavior:
+    #     scaleDown:
+    #       stabilizationWindowSeconds: 300
+    #       policies:
+    #         - type: Percent
+    #           value: 10
+    #           periodSeconds: 60
+    #     scaleUp:
+    #       stabilizationWindowSeconds: 0
+    #       policies:
+    #         - type: Percent
+    #           value: 100
+    #           periodSeconds: 15
+    behavior: {}
+
+  # PodDisruptionBudget configuration
+  # Limits the number of pods that can be down simultaneously during voluntary disruptions
+  # See: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+  podDisruptionBudget:
+    # Enable or disable PodDisruptionBudget creation
+    enabled: false
+
+    # Minimum number of pods that must remain available during a disruption
+    # Can be an integer (e.g., 1) or a percentage string (e.g., "50%")
+    # Only one of minAvailable or maxUnavailable can be set
+    minAvailable: null
+
+    # Maximum number of pods that can be unavailable during a disruption
+    # Can be an integer (e.g., 1) or a percentage string (e.g., "25%")
+    # Only one of minAvailable or maxUnavailable can be set
+    maxUnavailable: null
+
+    # Policy for evicting unhealthy pods
+    # Options: IfHealthyBudget, AlwaysAllow
+    # - IfHealthyBudget: Running pods that are not yet healthy can be evicted only if the guarded application is not disrupted
+    # - AlwaysAllow: Running pods that are not yet healthy can be evicted regardless of whether the criteria in a PodDisruptionBudget is met
+    # See: https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy
+    unhealthyPodEvictionPolicy: null
 
 # PostgreSQL configuration
 postgresql:

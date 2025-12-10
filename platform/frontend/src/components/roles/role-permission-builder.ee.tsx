@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type Action,
-  ActionSchema,
-  type Permissions,
-  type Resource,
-} from "@shared";
+import { type Action, actions, type Permissions, type Resource } from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -354,7 +349,7 @@ export function RolePermissionBuilder({
                           <Separator className="my-2" />
 
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {ActionSchema.options.map((action) => {
+                            {actions.map((action) => {
                               const isAvailable =
                                 availableActions.includes(action);
                               const isSelected =

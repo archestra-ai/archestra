@@ -1,11 +1,7 @@
-import {
-  ADMIN_ROLE_NAME,
-  EDITOR_ROLE_NAME,
-  MEMBER_ROLE_NAME,
-  predefinedPermissionsMap,
-} from "@shared";
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { predefinedPermissionsMap } from "@shared/access-control.ee";
 import { describe, expect, test } from "@/test";
-import OrganizationRoleModel from "./organization-role";
+import OrganizationRoleModel from "./organization-role.ee";
 
 describe("OrganizationRoleModel", () => {
   describe("isPredefinedRole", () => {

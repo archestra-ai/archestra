@@ -298,15 +298,6 @@ export function RemoteServerInstallDialog({
             </div>
           ) : null}
 
-          {!hasOAuth ? (
-            <div className="rounded-md bg-muted p-4">
-              <p className="text-sm text-muted-foreground">
-                This remote MCP server is ready to install. No additional
-                configuration is required.
-              </p>
-            </div>
-          ) : null}
-
           {catalogItem.serverUrl && (
             <div className="rounded-md bg-muted p-4">
               <h4 className="text-sm font-medium mb-2">Server Details:</h4>

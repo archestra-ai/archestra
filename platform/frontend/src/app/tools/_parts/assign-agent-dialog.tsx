@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { InstallationSelect } from "@/components/installation-select";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
   TokenSelect,
@@ -223,46 +222,28 @@ export function AssignProfileDialog({
 
         {selectedProfileIds.length > 0 && (
           <div className="pt-4 border-t">
-            {isLocalServer ? (
-              <>
-                <Label
-                  htmlFor="installation-select"
-                  className="text-md font-medium mb-1"
-                >
-                  Credential to use *
-                </Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Select whose MCP server installation will execute the tool
-                </p>
-                <InstallationSelect
-                  value={executionSourceMcpServerId}
-                  onValueChange={setExecutionSourceMcpServerId}
-                  className="w-full"
-                  catalogId={catalogId}
-                  shouldSetDefaultValue
-                />
-              </>
-            ) : (
-              <>
-                <Label
-                  htmlFor="token-select"
-                  className="text-md font-medium mb-1"
-                >
-                  Credential to use *
-                </Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Select which credential will be used when these profiles
-                  execute this tool
-                </p>
-                <TokenSelect
-                  value={credentialSourceMcpServerId}
-                  onValueChange={setCredentialSourceMcpServerId}
-                  className="w-full"
-                  catalogId={catalogId}
-                  shouldSetDefaultValue
-                />
-              </>
-            )}
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Credential to use *
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which credential will be used when these profiles execute
+              this tool
+            </p>
+            <TokenSelect
+              value={
+                isLocalServer
+                  ? executionSourceMcpServerId
+                  : credentialSourceMcpServerId
+              }
+              onValueChange={
+                isLocalServer
+                  ? setExecutionSourceMcpServerId
+                  : setCredentialSourceMcpServerId
+              }
+              className="w-full"
+              catalogId={catalogId}
+              shouldSetDefaultValue
+            />
           </div>
         )}
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,7 @@ interface TokenSelectProps {
   onValueChange: (value: string | null) => void;
   disabled?: boolean;
   className?: string;
-  /** Catalog ID to filter tokens - only shows tokens for the same catalog item */
+  /** Catalog ID to filter credentials - only shows credentials for the same catalog item */
   catalogId: string;
   shouldSetDefaultValue: boolean;
 }
@@ -32,7 +33,7 @@ interface TokenSelectProps {
  * Self-contained component for selecting credential source for MCP tool execution.
  * Shows all available credentials with their owner emails and team assignments.
  *
- * Fetches all tokens for the specified catalogId (no agent filtering).
+ * Fetches all credentials for the specified catalogId (no agent filtering).
  */
 export function TokenSelect({
   value,
@@ -42,18 +43,20 @@ export function TokenSelect({
   catalogId,
   shouldSetDefaultValue,
 }: TokenSelectProps) {
-  const groupedTokens = useMcpServersGroupedByCatalog({ catalogId });
+  const groupedCredentials = useMcpServersGroupedByCatalog({ catalogId });
 
-  // Get tokens for this catalogId from the grouped response
-  const mcpServers = groupedTokens?.[catalogId] ?? [];
+  // Get credentials for this catalogId from the grouped response
+  const mcpServers = groupedCredentials?.[catalogId] ?? [];
 
   // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
   const isLoading = false;
 
-  const staticCredentialOutsideOfGroupedTokens =
+  const staticCredentialOutsideOfGroupedCredentials =
     value &&
     value !== DYNAMIC_CREDENTIAL_VALUE &&
-    !groupedTokens?.[catalogId]?.some((token) => token.id === value);
+    !groupedCredentials?.[catalogId]?.some(
+      (credential) => credential.id === value,
+    );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
@@ -67,7 +70,7 @@ export function TokenSelect({
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
   }
 
-  if (staticCredentialOutsideOfGroupedTokens) {
+  if (staticCredentialOutsideOfGroupedCredentials) {
     return (
       <span className="text-xs text-muted-foreground">
         Owner outside your team
@@ -80,6 +83,7 @@ export function TokenSelect({
       value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
+      data-testid={E2eTestId.TokenSelect}
     >
       <SelectTrigger
         className={cn(
@@ -91,13 +95,6 @@ export function TokenSelect({
         <SelectValue placeholder="Select credentials..." />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
-          <div className="flex items-center gap-1">
-            <Zap className="h-3! w-3! text-amber-500" />
-            <span className="text-xs font-medium">Resolve at call time</span>
-          </div>
-        </SelectItem>
-        <Divider className="my-2" />
         <div className="text-xs text-muted-foreground ml-2">
           Static credentials
         </div>
@@ -108,21 +105,21 @@ export function TokenSelect({
             className="cursor-pointer"
           >
             <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs">
-                  {server.ownerEmail || "Unknown owner"}
-                </span>
+              <div className="flex gap-1 flex-wrap text-xs">
+                {server.teamDetails
+                  ? server.teamDetails.name
+                  : server.ownerEmail || "Unknown"}
               </div>
-              {server.teamDetails && (
-                <div className="flex gap-1 flex-wrap">
-                  <Badge variant="secondary" className="text-xs">
-                    {server.teamDetails.name}
-                  </Badge>
-                </div>
-              )}
             </div>
           </SelectItem>
         ))}
+        <Divider className="my-2" />
+        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span className="text-xs font-medium">Resolve at call time</span>
+          </div>
+        </SelectItem>
       </SelectContent>
     </Select>
   );

@@ -24,7 +24,7 @@ export const E2eTestId = {
   ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
-  InstallationSelect: "installation-select",
+  TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
   ProfileTeamBadge: "profile-team-badge",

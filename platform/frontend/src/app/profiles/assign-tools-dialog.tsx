@@ -11,7 +11,6 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { InstallationSelect } from "@/components/installation-select";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
   TokenSelect,
@@ -473,43 +472,26 @@ export function AssignToolsDialog({
 
                           return (
                             <div className="flex flex-col gap-1 mt-4">
-                              {isLocalServer ? (
-                                <>
-                                  <span className="text-xs text-muted-foreground">
-                                    Credential to use:
-                                  </span>
-                                  <InstallationSelect
-                                    catalogId={catalogId}
-                                    onValueChange={(executionSourceId) =>
-                                      handleExecutionSourceChange(
+                              <span className="text-xs text-muted-foreground">
+                                Credential to use:
+                              </span>
+                              <TokenSelect
+                                catalogId={catalogId}
+                                onValueChange={(credentialSourceId) =>
+                                  isLocalServer
+                                    ? handleExecutionSourceChange(
                                         tool.id,
-                                        executionSourceId ?? undefined,
+                                        credentialSourceId ?? undefined,
                                       )
-                                    }
-                                    value={displayValue ?? undefined}
-                                    className="mb-4"
-                                    shouldSetDefaultValue
-                                  />
-                                </>
-                              ) : (
-                                <>
-                                  <span className="text-xs text-muted-foreground">
-                                    Credential to use:
-                                  </span>
-                                  <TokenSelect
-                                    catalogId={catalogId}
-                                    onValueChange={(credentialsSourceId) =>
-                                      handleCredentialsSourceChange(
+                                    : handleCredentialsSourceChange(
                                         tool.id,
-                                        credentialsSourceId ?? undefined,
+                                        credentialSourceId ?? undefined,
                                       )
-                                    }
-                                    value={displayValue ?? undefined}
-                                    className="mb-4"
-                                    shouldSetDefaultValue
-                                  />
-                                </>
-                              )}
+                                }
+                                value={displayValue ?? undefined}
+                                className="mb-4"
+                                shouldSetDefaultValue
+                              />
                             </div>
                           );
                         })()}
@@ -539,23 +521,13 @@ export function AssignToolsDialog({
               Select a credential to apply to all {filteredTools.length} visible
               tool{filteredTools.length !== 1 ? "s" : ""}
             </p>
-            {isLocalServerForBulk ? (
-              <InstallationSelect
-                catalogId={originFilter}
-                onValueChange={handleBulkCredentialChange}
-                value={undefined}
-                className="w-full"
-                shouldSetDefaultValue={false}
-              />
-            ) : (
-              <TokenSelect
-                catalogId={originFilter}
-                onValueChange={handleBulkCredentialChange}
-                value={undefined}
-                className="w-full"
-                shouldSetDefaultValue={false}
-              />
-            )}
+            <TokenSelect
+              catalogId={originFilter}
+              onValueChange={handleBulkCredentialChange}
+              value={undefined}
+              className="w-full"
+              shouldSetDefaultValue={false}
+            />
           </div>
         )}
 

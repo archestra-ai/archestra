@@ -127,6 +127,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
+
+        // Validate no duplicate installations for this catalog item
+        const existingServers = await McpServerModel.findByCatalogId(
+          serverData.catalogId,
+        );
+
+        // Check for duplicate personal installation (same user, no team)
+        if (!serverData.teamId) {
+          const existingPersonal = existingServers.find(
+            (s) => s.ownerId === user.id && !s.teamId,
+          );
+          if (existingPersonal) {
+            throw new ApiError(
+              400,
+              "You already have a personal installation of this MCP server",
+            );
+          }
+        }
+
+        // Check for duplicate team installation (same team)
+        if (serverData.teamId) {
+          const existingTeam = existingServers.find(
+            (s) => s.teamId === serverData.teamId,
+          );
+          if (existingTeam) {
+            throw new ApiError(
+              400,
+              "This team already has an installation of this MCP server",
+            );
+          }
+        }
       }
 
       // For REMOTE servers: create secrets and validate connection

@@ -200,6 +200,7 @@ export function RemoteServerInstallDialog({
           <SelectMcpServerCredentialTypeAndTeams
             selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
+            catalogId={catalogItem?.id}
           />
 
           {hasOAuth && (

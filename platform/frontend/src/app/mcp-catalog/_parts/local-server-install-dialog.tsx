@@ -163,6 +163,7 @@ export function LocalServerInstallDialog({
         <SelectMcpServerCredentialTypeAndTeams
           selectedTeamId={selectedTeamId}
           onTeamChange={setSelectedTeamId}
+          catalogId={catalogItem?.id}
         />
 
         <div className="space-y-6 mt-4">

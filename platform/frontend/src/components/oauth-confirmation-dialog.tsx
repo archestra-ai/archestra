@@ -25,6 +25,8 @@ interface OAuthConfirmationDialogProps {
   serverName: string;
   onConfirm: (result: OAuthInstallResult) => void;
   onCancel: () => void;
+  /** Catalog ID to filter existing installations */
+  catalogId?: string;
 }
 
 export function OAuthConfirmationDialog({
@@ -33,6 +35,7 @@ export function OAuthConfirmationDialog({
   serverName,
   onConfirm,
   onCancel,
+  catalogId,
 }: OAuthConfirmationDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
@@ -78,6 +81,7 @@ export function OAuthConfirmationDialog({
           <SelectMcpServerCredentialTypeAndTeams
             selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
+            catalogId={catalogId}
           />
         </div>
 

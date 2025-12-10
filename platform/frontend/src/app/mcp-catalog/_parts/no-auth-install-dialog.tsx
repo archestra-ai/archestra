@@ -70,6 +70,7 @@ export function NoAuthInstallDialog({
           <SelectMcpServerCredentialTypeAndTeams
             selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
+            catalogId={catalogItem?.id}
           />
         </div>
 

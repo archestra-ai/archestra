@@ -456,7 +456,6 @@ export function InternalMCPCatalog({
       installedServer,
       isInstallInProgress,
       currentUserInstalledLocalServer,
-      currentUserLocalServerInstallation,
     };
   };
 
@@ -514,9 +513,6 @@ export function InternalMCPCatalog({
                   onCancelInstallation={handleCancelInstallation}
                   currentUserInstalledLocalServer={
                     serverInfo.currentUserInstalledLocalServer
-                  }
-                  currentUserLocalServerInstallation={
-                    serverInfo.currentUserLocalServerInstallation
                   }
                 />
               );
@@ -601,6 +597,7 @@ export function InternalMCPCatalog({
           closeDialog("oauth");
           setSelectedCatalogItem(null);
         }}
+        catalogId={selectedCatalogItem?.id}
       />
 
       <ReinstallConfirmationDialog

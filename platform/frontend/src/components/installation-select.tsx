@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
@@ -41,9 +41,7 @@ export function InstallationSelect({
   catalogId,
   shouldSetDefaultValue,
 }: InstallationSelectProps) {
-  const { data: groupedInstallations, isLoading } = useProfileAvailableTokens({
-    catalogId,
-  });
+  const groupedInstallations = useMcpServersGroupedByCatalog({ catalogId });
 
   const staticCredentialOutsideOfGroupedInstallations =
     value &&
@@ -54,6 +52,9 @@ export function InstallationSelect({
 
   // Get tokens for this catalogId from the grouped response
   const installations = groupedInstallations?.[catalogId] ?? [];
+
+  // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
+  const isLoading = false;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {

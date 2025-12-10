@@ -3752,97 +3752,6 @@ export type UpdateAgentToolResponses = {
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
 
-export type GetAgentAvailableTokensData = {
-    body?: never;
-    path?: never;
-    query?: {
-        catalogId?: string;
-    };
-    url: '/api/agents/available-tokens';
-};
-
-export type GetAgentAvailableTokensErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
-
-export type GetAgentAvailableTokensResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        [key: string]: Array<{
-            id: string;
-            name: string;
-            serverType: 'local' | 'remote';
-            catalogId: string | null;
-            ownerId: string | null;
-            ownerEmail: string | null;
-            teamDetails?: {
-                teamId: string;
-                name: string;
-                createdAt: string;
-            } | null;
-        }>;
-    };
-};
-
-export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
-
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
     headers: {
@@ -9947,7 +9856,9 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        catalogId?: string;
+    };
     url: '/api/mcp_server';
 };
 

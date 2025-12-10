@@ -58,37 +58,6 @@ class McpServerModel {
   }
 
   /**
-   * Get all MCP server IDs owned by the user's teammates (users who share a team).
-   * This allows users to see credentials from people in their teams.
-   */
-  private static async getTeammateMcpServerIds(
-    userId: string,
-  ): Promise<string[]> {
-    // Get all users who share at least one team with the current user
-    // Then get all MCP servers owned by those users
-    const teammateServers = await db
-      .select({ serverId: schema.mcpServersTable.id })
-      .from(schema.mcpServersTable)
-      .innerJoin(
-        schema.teamMembersTable,
-        eq(schema.mcpServersTable.ownerId, schema.teamMembersTable.userId),
-      )
-      .where(
-        inArray(
-          schema.teamMembersTable.teamId,
-          db
-            .select({ teamId: schema.teamMembersTable.teamId })
-            .from(schema.teamMembersTable)
-            .where(eq(schema.teamMembersTable.userId, userId)),
-        ),
-      );
-
-    // Dedupe
-    const serverIds = new Set(teammateServers.map((s) => s.serverId));
-    return Array.from(serverIds);
-  }
-
-  /**
    * Check if a user has access to a specific MCP server through team membership.
    */
   private static async userHasMcpServerAccessByTeam(
@@ -145,24 +114,15 @@ class McpServerModel {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
-      // 3. Teammate ownership (servers owned by users in the same teams)
-      const [
-        teamAccessibleMcpServerIds,
-        personalMcpServerIds,
-        teammateMcpServerIds,
-      ] = await Promise.all([
-        McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
-        McpServerUserModel.getUserPersonalMcpServerIds(userId),
-        McpServerModel.getTeammateMcpServerIds(userId),
-      ]);
+      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
+        await Promise.all([
+          McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+          McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        ]);
 
       // Combine all lists
       const accessibleMcpServerIds = [
-        ...new Set([
-          ...teamAccessibleMcpServerIds,
-          ...personalMcpServerIds,
-          ...teammateMcpServerIds,
-        ]),
+        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
       ];
 
       if (accessibleMcpServerIds.length === 0) {

@@ -94,7 +94,6 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
-  currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
 };
 
 export type McpServerCardVariant = "remote" | "local";
@@ -116,7 +115,6 @@ export function McpServerCard({
   onEdit,
   onDelete,
   onCancelInstallation,
-  currentUserInstalledLocalServer = false,
 }: McpServerCardBaseProps) {
   const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
     installedServer?.id ?? null,
@@ -177,6 +175,9 @@ export function McpServerCard({
     id: string;
     name: string;
   } | null>(null);
+  const mcpServerOfCurrentCatalogItem = allMcpServers?.filter(
+    (s) => s.catalogId === item.id,
+  );
 
   // Aggregate all installations for this catalog item (for logs dropdown)
   let localInstalls: typeof allMcpServers = [];
@@ -202,7 +203,7 @@ export function McpServerCard({
   const needsReinstall = installedServer?.reinstallRequired;
   const hasError = installedServer?.localInstallationStatus === "error";
   const errorMessage = installedServer?.localInstallationError;
-  const userCount = installedServer?.users?.length ?? 0;
+  const mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
   const isInstalling = Boolean(
     installingItemId === item.id ||
@@ -283,22 +284,15 @@ export function McpServerCard({
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
           Credentials
-          <WithoutPermissions permissions={{ profile: ["admin"] }}>
+          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
             {" "}
             in your team
           </WithoutPermissions>
-          : <span className="font-medium text-foreground">{userCount}</span>
-          {currentUserInstalledLocalServer && (
-            <Badge
-              variant="secondary"
-              className="ml-1 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-            >
-              You
-            </Badge>
-          )}
+          :{" "}
+          <span className="font-medium text-foreground">{mcpServersCount}</span>
         </span>
       </div>
-      {userCount > 0 && (
+      {mcpServersCount > 0 && (
         <Button
           onClick={() => setIsManageLocalInstallationsDialogOpen(true)}
           size="sm"
@@ -317,22 +311,15 @@ export function McpServerCard({
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
           Credentials
-          <WithoutPermissions permissions={{ profile: ["admin"] }}>
+          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
             {" "}
             in your team
           </WithoutPermissions>
-          : <span className="font-medium text-foreground">{userCount}</span>
-          {isCurrentUserAuthenticated && (
-            <Badge
-              variant="secondary"
-              className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-            >
-              You
-            </Badge>
-          )}
+          :{" "}
+          <span className="font-medium text-foreground">{mcpServersCount}</span>
         </span>
       </div>
-      {userCount > 0 && (
+      {mcpServersCount > 0 && (
         <Button
           onClick={() => setIsManageUsersDialogOpen(true)}
           size="sm"
@@ -429,7 +416,7 @@ export function McpServerCard({
               <TooltipContent>
                 <p>
                   {!canCreateNewInstallation
-                    ? "All installation options exhausted (personal and all teams)"
+                    ? "All connect options exhausted (personal and all teams)"
                     : requiresAuth
                       ? "Provide your credentials to connect this server"
                       : "Install this server to your organization"}
@@ -502,7 +489,7 @@ export function McpServerCard({
                 {!isLocalMcpEnabled
                   ? LOCAL_MCP_DISABLED_MESSAGE
                   : !canCreateNewInstallation
-                    ? "All installation options exhausted (personal and all teams)"
+                    ? "All connect options exhausted (personal and all teams)"
                     : "Provide your credentials to connect this server"}
               </p>
             </TooltipContent>

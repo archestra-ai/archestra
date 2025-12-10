@@ -511,9 +511,6 @@ export function InternalMCPCatalog({
                   }}
                   onDelete={() => setDeletingItem(item)}
                   onCancelInstallation={handleCancelInstallation}
-                  currentUserInstalledLocalServer={
-                    serverInfo.currentUserInstalledLocalServer
-                  }
                 />
               );
             })}

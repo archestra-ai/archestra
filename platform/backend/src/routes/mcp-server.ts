@@ -30,18 +30,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMcpServers,
         description: "Get all installed MCP servers",
         tags: ["MCP Server"],
+        querystring: z.object({
+          catalogId: z.string().optional(),
+        }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
-    async ({ user, headers }, reply) => {
+    async ({ user, headers, query }, reply) => {
+      const { catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServer: ["admin"] },
         headers,
       );
-      const allServers = await McpServerModel.findAll(
-        user.id,
-        isMcpServerAdmin,
-      );
+      let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
+
+      // Filter by catalogId if provided
+      if (catalogId) {
+        allServers = allServers.filter((s) => s.catalogId === catalogId);
+      }
 
       return reply.send(allServers);
     },

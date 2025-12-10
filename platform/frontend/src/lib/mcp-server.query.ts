@@ -5,7 +5,9 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { toast } from "sonner";
+import { authClient } from "./clients/auth/auth-client";
 
 const {
   deleteMcpServer,
@@ -13,20 +15,67 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  getAgentAvailableTokens,
   getMcpServerLogs,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
   hasInstallingServers?: boolean;
+  catalogId?: string;
 }) {
   return useSuspenseQuery({
-    queryKey: ["mcp-servers"],
-    queryFn: async () => (await getMcpServers()).data ?? [],
+    // Include catalogId in queryKey only when provided to maintain cache separation
+    queryKey: params?.catalogId
+      ? ["mcp-servers", { catalogId: params.catalogId }]
+      : ["mcp-servers"],
+    queryFn: async () => {
+      const response = await getMcpServers({
+        query: params?.catalogId ? { catalogId: params.catalogId } : undefined,
+      });
+      return response.data ?? [];
+    },
     initialData: params?.initialData,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
+}
+
+/**
+ * Get MCP servers grouped by catalogId with current user's credentials first.
+ * Used for credential/installation selection in tool configuration.
+ *
+ * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
+ */
+export function useMcpServersGroupedByCatalog(params?: { catalogId?: string }) {
+  const { data: servers } = useMcpServers({ catalogId: params?.catalogId });
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
+
+  return useMemo(() => {
+    if (!servers) return {};
+
+    // Filter out servers without catalogId
+    const withCatalog = servers.filter(
+      (s): s is typeof s & { catalogId: string } => !!s.catalogId,
+    );
+
+    // Sort: current user's credentials first
+    const sorted = [...withCatalog].sort((a, b) => {
+      const aIsOwner = a.ownerId === currentUserId ? 1 : 0;
+      const bIsOwner = b.ownerId === currentUserId ? 1 : 0;
+      return bIsOwner - aIsOwner;
+    });
+
+    // Group by catalogId
+    return sorted.reduce(
+      (acc, server) => {
+        const key = server.catalogId;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(server);
+        return acc;
+      },
+      {} as Record<string, typeof servers>,
+    );
+  }, [servers, currentUserId]);
 }
 
 export function useInstallMcpServer() {
@@ -279,28 +328,6 @@ export function useMcpServerInstallationStatus(
       );
     },
     enabled: !!installingMcpServerId,
-  });
-}
-
-/**
- * Get MCP servers (tokens) available for use with agents' tools.
- * Returns data grouped by catalogId.
- *
- * @param catalogId - Optional catalog ID to filter tokens. If not provided, returns tokens for all catalog items.
- */
-export function useProfileAvailableTokens(params: { catalogId?: string }) {
-  const { catalogId } = params;
-
-  return useQuery({
-    queryKey: ["agent-available-tokens", { catalogId }],
-    queryFn: async () => {
-      const response = await getAgentAvailableTokens({
-        query: {
-          ...(catalogId ? { catalogId } : {}),
-        },
-      });
-      return response.data ?? {};
-    },
   });
 }
 

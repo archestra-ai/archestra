@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
@@ -42,12 +42,13 @@ export function TokenSelect({
   catalogId,
   shouldSetDefaultValue,
 }: TokenSelectProps) {
-  const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
-    catalogId,
-  });
+  const groupedTokens = useMcpServersGroupedByCatalog({ catalogId });
 
   // Get tokens for this catalogId from the grouped response
   const mcpServers = groupedTokens?.[catalogId] ?? [];
+
+  // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
+  const isLoading = false;
 
   const staticCredentialOutsideOfGroupedTokens =
     value &&

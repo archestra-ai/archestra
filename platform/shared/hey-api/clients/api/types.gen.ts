@@ -3148,6 +3148,7 @@ export type GetAllAgentToolsResponses = {
             responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
+            policiesAutoConfiguredAt: string | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -3458,6 +3459,7 @@ export type BulkUpdateAgentToolsData = {
         ids: Array<string>;
         field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
         value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        clearAutoConfigured?: boolean;
     };
     path?: never;
     query?: never;
@@ -3642,6 +3644,7 @@ export type UpdateAgentToolData = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        policiesAutoConfiguredAt?: unknown;
     };
     path: {
         id: string;
@@ -3722,6 +3725,7 @@ export type UpdateAgentToolResponses = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        policiesAutoConfiguredAt?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };

@@ -571,6 +571,7 @@ export function McpServerCard({
                 responseModifierTemplate: null,
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
+                policiesAutoConfiguredAt: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,

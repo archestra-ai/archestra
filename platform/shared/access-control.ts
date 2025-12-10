@@ -833,6 +833,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/chat": {
     chatSettings: ["read"],
   },
+  "/settings/auto-policy": {
+    chatSettings: ["read"],
+  },
   "/settings/sso-providers": {
     ssoProvider: ["read"],
   },

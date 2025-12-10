@@ -39,6 +39,9 @@ const agentToolsTable = pgTable(
     executionSourceMcpServerId: uuid(
       "execution_source_mcp_server_id",
     ).references(() => mcpServerTable.id, { onDelete: "set null" }),
+    policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
+      mode: "date",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

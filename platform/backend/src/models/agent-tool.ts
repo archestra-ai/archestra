@@ -326,6 +326,7 @@ class AgentToolModel {
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
+        | "policiesAutoConfiguredAt"
       >
     >,
   ) {
@@ -344,6 +345,7 @@ class AgentToolModel {
     ids: string[],
     field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
     value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+    clearAutoConfigured?: boolean,
   ): Promise<number> {
     if (ids.length === 0) {
       return 0;
@@ -354,6 +356,7 @@ class AgentToolModel {
       .set({
         [field]: value,
         updatedAt: new Date(),
+        ...(clearAutoConfigured && { policiesAutoConfiguredAt: null }),
       })
       .where(inArray(schema.agentToolsTable.id, ids));
 

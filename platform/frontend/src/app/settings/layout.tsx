@@ -21,6 +21,7 @@ export default function SettingsLayout({
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "Chat", href: "/settings/chat" },
+    { label: "Auto-Policy", href: "/settings/auto-policy" },
     { label: "Your Account", href: "/settings/account" },
     ...(userCanReadOrganization
       ? [

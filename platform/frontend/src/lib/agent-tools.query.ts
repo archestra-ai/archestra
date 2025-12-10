@@ -271,9 +271,11 @@ export function useAutoConfigurePolicies() {
       });
 
       if (!result.data) {
-        throw new Error(
-          result.error?.message || "Failed to auto-configure policies",
-        );
+        const errorMessage =
+          result.error && "message" in result.error
+            ? String(result.error.message)
+            : "Failed to auto-configure policies";
+        throw new Error(errorMessage);
       }
 
       return result.data;

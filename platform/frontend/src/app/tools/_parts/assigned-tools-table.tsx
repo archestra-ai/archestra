@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Loader2,
   Search,
+  Sparkles,
   Unplug,
   Wand2,
 } from "lucide-react";
@@ -305,6 +306,8 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           ids: toolIds,
           field,
           value,
+          // Clear auto-configured timestamp when manually bulk updating policies
+          clearAutoConfigured: true,
         });
       } catch (error) {
         console.error("Bulk update failed:", error);
@@ -369,7 +372,16 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     async (id: string, field: string, updates: Partial<ProfileToolData>) => {
       setUpdatingRows((prev) => new Set(prev).add({ id, field }));
       try {
-        await agentToolPatchMutation.mutateAsync({ id, ...updates });
+        // Clear auto-configured timestamp when manually updating policies
+        const shouldClearAutoConfig =
+          field === "allowUsageWhenUntrustedDataIsPresent" ||
+          field === "toolResultTreatment";
+
+        await agentToolPatchMutation.mutateAsync({
+          id,
+          ...updates,
+          ...(shouldClearAutoConfig && { policiesAutoConfiguredAt: null }),
+        });
       } catch (error) {
         console.error("Update failed:", error);
       } finally {
@@ -639,6 +651,8 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             "allowUsageWhenUntrustedDataIsPresent",
           );
 
+          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
+
           return (
             <div className="flex items-center gap-2">
               <Switch
@@ -661,6 +675,18 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   ? "Allowed"
                   : "Blocked"}
               </span>
+              {isAutoConfigured && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Sparkles className="h-3 w-3 text-purple-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Auto-configured by AI</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isUpdating && (
                 <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
               )}
@@ -692,6 +718,8 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             row.original.id,
             "toolResultTreatment",
           );
+
+          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
 
           return (
             <div className="flex items-center gap-2">
@@ -725,6 +753,18 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   ))}
                 </SelectContent>
               </Select>
+              {isAutoConfigured && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Sparkles className="h-3 w-3 text-purple-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Auto-configured by AI</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isUpdating && (
                 <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
               )}

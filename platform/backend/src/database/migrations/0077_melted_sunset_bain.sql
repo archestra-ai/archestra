@@ -1,0 +1,1 @@
+ALTER TABLE "agent_tools" ADD COLUMN "policies_auto_configured_at" timestamp;

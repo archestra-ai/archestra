@@ -269,6 +269,7 @@ Analyze the tool and provide your security assessment.`;
         allowUsageWhenUntrustedDataIsPresent:
           policyConfig.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: policyConfig.toolResultTreatment,
+        policiesAutoConfiguredAt: new Date(),
       });
 
       logger.info(

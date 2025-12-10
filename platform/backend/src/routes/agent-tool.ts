@@ -279,12 +279,13 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { ids, field, value } = request.body;
+      const { ids, field, value, clearAutoConfigured } = request.body;
 
       const updatedCount = await AgentToolModel.bulkUpdateSameValue(
         ids,
         field,
         value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+        clearAutoConfigured,
       );
 
       return reply.send({ updatedCount });
@@ -362,6 +363,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
+          policiesAutoConfiguredAt: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },

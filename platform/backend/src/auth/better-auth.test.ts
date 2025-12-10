@@ -1292,5 +1292,119 @@ describe("handleAfterHook", () => {
       // Verify the record wasn't unnecessarily updated
       expect(member?.id).toBe(initialMember.id);
     });
+
+    test("should deny login for existing user when strictMode is enabled and no rules match", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "strict-mode@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with strictMode enabled
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-strict-mode",
+        roleMapping: {
+          defaultRole: "member",
+          strictMode: true, // Enable strict mode
+          rules: [
+            {
+              // Rule that won't match
+              expression:
+                '{{#includes groups "super-admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account WITHOUT the required group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["users"], // Not in super-admins
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-strict-mode",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-strict-mode",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should throw FORBIDDEN due to strict mode
+      await expect(handleAfterHook(ctx)).rejects.toMatchObject({
+        message: expect.stringContaining("Access denied"),
+      });
+    });
+
+    test("should allow login for existing user when strictMode is enabled and a rule matches", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "strict-mode-match@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with strictMode enabled
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-strict-mode-match",
+        roleMapping: {
+          defaultRole: "member",
+          strictMode: true, // Enable strict mode
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account WITH the required group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["admins"], // Matches the rule
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-strict-mode-match",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-strict-mode-match",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should NOT throw
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Verify user role was updated to admin
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+    });
   });
 });

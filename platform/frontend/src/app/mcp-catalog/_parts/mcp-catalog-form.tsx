@@ -86,15 +86,8 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
-  const environmentVars = form.watch("localConfig.environment") || [];
 
-  // Get NON-prompted secret-type env var keys for BYOS hint (these are stored with the catalog)
-  const nonPromptedSecretEnvVarKeys = environmentVars
-    .filter((env) => env.type === "secret" && !env.promptOnInstallation)
-    .map((env) => env.key)
-    .filter((key) => key); // Filter out empty keys
-
-  // BYOS (Bring Your Own Secrets) state
+  // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
   const [oauthVaultSecretPath, setOauthVaultSecretPath] = useState<
     string | null
@@ -102,15 +95,6 @@ export function McpCatalogForm({
   const [oauthVaultSecretKey, setOauthVaultSecretKey] = useState<string | null>(
     null,
   );
-  const [localConfigVaultTeamId, setLocalConfigVaultTeamId] = useState<
-    string | null
-  >(null);
-  const [localConfigVaultSecretPath, setLocalConfigVaultSecretPath] = useState<
-    string | null
-  >(null);
-  const [localConfigVaultSecretKey, setLocalConfigVaultSecretKey] = useState<
-    string | null
-  >(null);
 
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeatureFlag("byosEnabled");
@@ -133,23 +117,12 @@ export function McpCatalogForm({
     );
   }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
 
-  useEffect(() => {
-    form.setValue(
-      "localConfigVaultPath",
-      localConfigVaultSecretPath || undefined,
-    );
-    form.setValue(
-      "localConfigVaultKey",
-      localConfigVaultSecretKey || undefined,
-    );
-  }, [localConfigVaultSecretPath, localConfigVaultSecretKey, form]);
-
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
     if (initialValues) {
       const transformedValues = transformCatalogItemToFormValues(initialValues);
       form.reset(transformedValues);
-      // Initialize BYOS state from transformed values (parsed vault references)
+      // Initialize OAuth BYOS state from transformed values (parsed vault references)
       // Note: teamId cannot be derived from path, so we leave it null (user can reselect if needed)
       setOauthVaultTeamId(null);
       setOauthVaultSecretPath(
@@ -157,13 +130,6 @@ export function McpCatalogForm({
       );
       setOauthVaultSecretKey(
         transformedValues.oauthClientSecretVaultKey || null,
-      );
-      setLocalConfigVaultTeamId(null);
-      setLocalConfigVaultSecretPath(
-        transformedValues.localConfigVaultPath || null,
-      );
-      setLocalConfigVaultSecretKey(
-        transformedValues.localConfigVaultKey || null,
       );
     }
   }, [initialValues, form]);
@@ -315,18 +281,6 @@ export function McpCatalogForm({
                 form={form}
                 useExternalSecretsManager={showByosOption}
               />
-
-              {/* BYOS: Vault Secret Selector for Local Config Secrets - only shown when there are NON-prompted secret-type env vars */}
-              {showByosOption && nonPromptedSecretEnvVarKeys.length > 0 && (
-                <ExternalSecretSelector
-                  selectedTeamId={localConfigVaultTeamId}
-                  selectedSecretPath={localConfigVaultSecretPath}
-                  selectedSecretKey={localConfigVaultSecretKey}
-                  onTeamChange={setLocalConfigVaultTeamId}
-                  onSecretChange={setLocalConfigVaultSecretPath}
-                  onSecretKeyChange={setLocalConfigVaultSecretKey}
-                />
-              )}
 
               <FormField
                 control={form.control}

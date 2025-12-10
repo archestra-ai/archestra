@@ -3,7 +3,6 @@
 import { E2eTestId } from "@shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,

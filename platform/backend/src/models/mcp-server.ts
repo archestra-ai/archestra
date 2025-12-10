@@ -1,4 +1,4 @@
-import { eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -7,18 +7,24 @@ import { secretManager } from "@/secretsmanager";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
-import McpServerTeamModel from "./mcp-server-team";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
-    const { teams, userId, ...serverData } = server;
+    const { userId, ...serverData } = server;
 
     // For local servers, add a unique identifier to the name to avoid conflicts
+    // Use teamId for team installations, userId for personal installations
     let mcpServerName = serverData.name;
-    if (serverData.serverType === "local" && userId) {
-      mcpServerName = `${serverData.name}-${userId}`;
+    if (serverData.serverType === "local") {
+      if (serverData.teamId) {
+        // Team installation: use teamId for unique pod name
+        mcpServerName = `${serverData.name}-${serverData.teamId}`;
+      } else if (userId) {
+        // Personal installation: use userId for unique pod name
+        mcpServerName = `${serverData.name}-${userId}`;
+      }
     }
 
     // ownerId is part of serverData and will be inserted
@@ -27,11 +33,6 @@ class McpServerModel {
       .values({ ...serverData, name: mcpServerName })
       .returning();
 
-    // Assign teams to the MCP server if provided
-    if (teams && teams.length > 0) {
-      await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
-    }
-
     // Assign user to the MCP server if provided (personal auth)
     if (userId) {
       await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
@@ -39,9 +40,54 @@ class McpServerModel {
 
     return {
       ...createdServer,
-      teams: teams || [],
       users: userId ? [userId] : [],
     };
+  }
+
+  /**
+   * Get all MCP server IDs that a user has access to through team membership.
+   * Simplified query now that teamId is directly on mcp_server table.
+   */
+  private static async getUserAccessibleMcpServerIdsByTeam(
+    userId: string,
+  ): Promise<string[]> {
+    // Get all MCP servers where the server's teamId matches a team the user is a member of
+    const mcpServers = await db
+      .select({ mcpServerId: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(eq(schema.teamMembersTable.userId, userId));
+
+    return mcpServers.map((s) => s.mcpServerId);
+  }
+
+  /**
+   * Check if a user has access to a specific MCP server through team membership.
+   */
+  private static async userHasMcpServerAccessByTeam(
+    userId: string,
+    mcpServerId: string,
+  ): Promise<boolean> {
+    // Check if the MCP server's teamId matches any team the user is a member of
+    const result = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, mcpServerId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    return result.length > 0;
   }
 
   static async findAll(
@@ -53,6 +99,7 @@ class McpServerModel {
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
         catalogName: schema.internalMcpCatalogTable.name,
+        teamName: schema.teamsTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -63,6 +110,10 @@ class McpServerModel {
         schema.internalMcpCatalogTable,
         eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
       )
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
       .$dynamic();
 
     // Apply access control filtering for non-MCP server admins
@@ -70,24 +121,15 @@ class McpServerModel {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
-      // 3. Teammate ownership (servers owned by users in the same teams)
-      const [
-        teamAccessibleMcpServerIds,
-        personalMcpServerIds,
-        teammateMcpServerIds,
-      ] = await Promise.all([
-        McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false),
-        McpServerUserModel.getUserPersonalMcpServerIds(userId),
-        McpServerTeamModel.getTeammateMcpServerIds(userId),
-      ]);
+      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
+        await Promise.all([
+          McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+          McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        ]);
 
       // Combine all lists
       const accessibleMcpServerIds = [
-        ...new Set([
-          ...teamAccessibleMcpServerIds,
-          ...personalMcpServerIds,
-          ...teammateMcpServerIds,
-        ]),
+        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
       ];
 
       if (accessibleMcpServerIds.length === 0) {
@@ -103,22 +145,27 @@ class McpServerModel {
 
     const serverIds = results.map((result) => result.server.id);
 
-    // Populate teams and user details for all MCP servers with bulk queries to avoid N+1
-    const [userDetailsMap, teamDetailsMap] = await Promise.all([
-      McpServerUserModel.getUserDetailsForMcpServers(serverIds),
-      McpServerTeamModel.getTeamDetailsForMcpServers(serverIds),
-    ]);
+    // Populate user details for all MCP servers with bulk query to avoid N+1
+    const userDetailsMap =
+      await McpServerUserModel.getUserDetailsForMcpServers(serverIds);
 
     // Build the servers with relations
     const serversWithRelations: McpServer[] = results.map((result) => {
       const userDetails = userDetailsMap.get(result.server.id) || [];
-      const teamDetails = teamDetailsMap.get(result.server.id) || [];
+
+      // Build teamDetails from the joined team data
+      const teamDetails = result.server.teamId
+        ? {
+            teamId: result.server.teamId,
+            name: result.teamName || "",
+            createdAt: result.server.createdAt, // Use server createdAt as team assignment time
+          }
+        : null;
 
       return {
         ...result.server,
         ownerEmail: result.ownerEmail,
         catalogName: result.catalogName,
-        teams: teamDetails.map((t) => t.teamId),
         users: userDetails.map((u) => u.userId),
         userDetails,
         teamDetails,
@@ -136,7 +183,7 @@ class McpServerModel {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
       const [hasTeamAccess, hasPersonalAccess] = await Promise.all([
-        McpServerTeamModel.userHasMcpServerAccess(userId, id, false),
+        McpServerModel.userHasMcpServerAccessByTeam(userId, id),
         McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
       ]);
 
@@ -149,11 +196,16 @@ class McpServerModel {
       .select({
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
+        teamName: schema.teamsTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
         schema.usersTable,
         eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
       .where(eq(schema.mcpServersTable.id, id));
 
@@ -161,15 +213,20 @@ class McpServerModel {
       return null;
     }
 
-    const [teamDetails, userDetails] = await Promise.all([
-      McpServerTeamModel.getTeamDetailsForMcpServer(id),
-      McpServerUserModel.getUserDetailsForMcpServer(id),
-    ]);
+    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
+
+    // Build teamDetails from the joined team data
+    const teamDetails = result.server.teamId
+      ? {
+          teamId: result.server.teamId,
+          name: result.teamName || "",
+          createdAt: result.server.createdAt,
+        }
+      : null;
 
     return {
       ...result.server,
       ownerEmail: result.ownerEmail,
-      teams: teamDetails.map((t) => t.teamId),
       users: userDetails.map((u) => u.userId),
       userDetails,
       teamDetails,
@@ -195,7 +252,7 @@ class McpServerModel {
     id: string,
     server: Partial<UpdateMcpServer>,
   ): Promise<McpServer | null> {
-    const { teams, ...serverData } = server;
+    const serverData = server;
 
     let updatedServer: McpServer | undefined;
 
@@ -211,7 +268,7 @@ class McpServerModel {
         return null;
       }
     } else {
-      // If only updating teams, fetch the existing server
+      // No fields to update, fetch the existing server
       const [existingServer] = await db
         .select()
         .from(schema.mcpServersTable)
@@ -224,18 +281,23 @@ class McpServerModel {
       updatedServer = existingServer;
     }
 
-    // Sync team assignments if teams is provided
-    if (teams !== undefined) {
-      await McpServerTeamModel.syncMcpServerTeams(id, teams);
-    }
+    return updatedServer;
+  }
 
-    // Fetch current teams
-    const currentTeams = await McpServerTeamModel.getTeamsForMcpServer(id);
+  /**
+   * Set the team for an MCP server. Pass null to remove team assignment.
+   */
+  static async setTeam(
+    id: string,
+    teamId: string | null,
+  ): Promise<McpServer | null> {
+    const [updatedServer] = await db
+      .update(schema.mcpServersTable)
+      .set({ teamId })
+      .where(eq(schema.mcpServersTable.id, id))
+      .returning();
 
-    return {
-      ...updatedServer,
-      teams: currentTeams,
-    };
+    return updatedServer || null;
   }
 
   static async delete(id: string): Promise<boolean> {
@@ -377,7 +439,7 @@ class McpServerModel {
   }
 
   /**
-   * Find an MCP server by catalogId that has at least one matching team with the provided team IDs.
+   * Find an MCP server by catalogId that has a matching team from the provided team IDs.
    * Returns the first matching server with a secretId for credential resolution.
    * Used for dynamic team-based credential resolution.
    */
@@ -389,44 +451,42 @@ class McpServerModel {
       return null;
     }
 
-    // Find MCP servers with the matching catalog
-    const serversFromMatchingCatalogItem = await db
+    // Find MCP server with matching catalog AND matching team AND has a secretId
+    const [result] = await db
       .select({
         server: schema.mcpServersTable,
+        teamName: schema.teamsTable.name,
       })
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.catalogId, catalogId));
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          inArray(schema.mcpServersTable.teamId, teamIds),
+          isNotNull(schema.mcpServersTable.secretId),
+        ),
+      )
+      .limit(1);
 
-    if (serversFromMatchingCatalogItem.length === 0) {
+    if (!result) {
       return null;
     }
 
-    // Get unique server IDs
-    const serverIds = serversFromMatchingCatalogItem.map((r) => r.server.id);
+    const teamDetails = result.server.teamId
+      ? {
+          teamId: result.server.teamId,
+          name: result.teamName || "",
+          createdAt: result.server.createdAt,
+        }
+      : null;
 
-    // Get team details for all matching servers
-    const teamDetailsMap =
-      await McpServerTeamModel.getTeamDetailsForMcpServers(serverIds);
-
-    const teamIdsSet = new Set(teamIds);
-
-    // Find a server that has at least one matching team AND has a secretId
-    for (const serverRow of serversFromMatchingCatalogItem) {
-      const server = serverRow.server;
-      const serverTeams = teamDetailsMap.get(server.id) || [];
-      const hasMatchingTeam = serverTeams.some((t) => teamIdsSet.has(t.teamId));
-
-      if (hasMatchingTeam && server.secretId) {
-        // Found a matching server with credentials
-        return {
-          ...server,
-          teams: serverTeams.map((t) => t.teamId),
-          teamDetails: serverTeams,
-        };
-      }
-    }
-
-    return null;
+    return {
+      ...result.server,
+      teamDetails,
+    };
   }
 
   /**

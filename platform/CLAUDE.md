@@ -253,6 +253,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Flat file structure, avoid barrel files
 - Only export what's needed externally
 - **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
+- **Prefer TanStack Query over prop drilling**: When a component needs data that's available via a TanStack Query hook, use the hook directly in that component rather than fetching in a parent and passing via props. TanStack Query's built-in caching ensures no duplicate requests. Only pass minimal identifiers (like `catalogId`) needed for the component to fetch/filter its own data.
 
 **Backend**:
 

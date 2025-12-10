@@ -40,10 +40,6 @@ export const RouteId = {
   GetMcpServerLogs: "getMcpServerLogs",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
-  RevokeUserMcpServerAccess: "revokeUserMcpServerAccess",
-  GrantTeamMcpServerAccess: "grantTeamMcpServerAccess",
-  RevokeTeamMcpServerAccess: "revokeTeamMcpServerAccess",
-  RevokeAllTeamsMcpServerAccess: "revokeAllTeamsMcpServerAccess",
   RestartMcpServer: "restartMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   McpProxy: "mcpProxy",
@@ -71,10 +67,19 @@ export const RouteId = {
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
   RemoveTeamMember: "removeTeamMember",
+
   // Team External Group Routes (SSO Team Sync)
   GetTeamExternalGroups: "getTeamExternalGroups",
   AddTeamExternalGroup: "addTeamExternalGroup",
   RemoveTeamExternalGroup: "removeTeamExternalGroup",
+
+  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
+  GetTeamVaultFolder: "getTeamVaultFolder",
+  SetTeamVaultFolder: "setTeamVaultFolder",
+  DeleteTeamVaultFolder: "deleteTeamVaultFolder",
+  CheckTeamVaultFolderConnectivity: "checkTeamVaultFolderConnectivity",
+  ListTeamVaultFolderSecrets: "listTeamVaultFolderSecrets",
+  GetTeamVaultSecretKeys: "getTeamVaultSecretKeys",
 
   // Role Routes
   GetRoles: "getRoles",

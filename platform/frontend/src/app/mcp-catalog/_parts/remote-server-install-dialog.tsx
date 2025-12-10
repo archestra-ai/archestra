@@ -1,8 +1,9 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
+import { Info, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
+import { InlineVaultSecretSelector } from "@/components/inline-vault-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,14 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useTeams } from "@/lib/team.query";
+import { useFeatureFlag } from "@/lib/features.hook";
+import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -42,17 +37,23 @@ type UserConfigType = Record<
   }
 >;
 
+export interface RemoteServerInstallResult {
+  metadata: Record<string, unknown>;
+  /** Team ID to assign the MCP server to (null for personal) */
+  teamId?: string | null;
+  /** Whether metadata contains BYOS vault references in path#key format */
+  isByosVault?: boolean;
+}
+
 interface RemoteServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (
     catalogItem: CatalogItem,
-    metadata: Record<string, unknown>,
-    teams: string[],
+    result: RemoteServerInstallResult,
   ) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
-  isTeamMode?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -61,84 +62,100 @@ export function RemoteServerInstallDialog({
   onConfirm,
   catalogItem,
   isInstalling,
-  isTeamMode = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
-  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
-  const { data: teams } = useTeams();
+  // Team selection state
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [credentialType, setCredentialType] = useState<"personal" | "team">(
+    "personal",
+  );
 
-  const handleAddTeam = (teamId: string) => {
-    if (teamId && !assignedTeamIds.includes(teamId)) {
-      setAssignedTeamIds([...assignedTeamIds, teamId]);
-      setSelectedTeamId("");
-    }
+  // BYOS (Bring Your Own Secrets) state - per-field vault references
+  const [vaultSecrets, setVaultSecrets] = useState<
+    Record<string, { path: string | null; key: string | null }>
+  >({});
+
+  const byosEnabled = useFeatureFlag("byosEnabled");
+
+  // Helper to update vault secret for a specific field
+  const updateVaultSecret = (
+    fieldName: string,
+    prop: "path" | "key",
+    value: string | null,
+  ) => {
+    setVaultSecrets((prev) => ({
+      ...prev,
+      [fieldName]: {
+        ...prev[fieldName],
+        [prop]: value,
+        // Reset key when path changes
+        ...(prop === "path" ? { key: null } : {}),
+      },
+    }));
   };
 
-  const handleRemoveTeam = (teamId: string) => {
-    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-  };
-
-  const unassignedTeams = !teams
-    ? []
-    : teams.filter((team) => !assignedTeamIds.includes(team.id));
-
-  const getTeamById = (teamId: string) => {
-    return teams?.find((team) => team.id === teamId);
-  };
+  // Show vault selector only for team installations when BYOS is enabled
+  const useVaultSecrets = credentialType === "team" && byosEnabled;
 
   const handleConfirm = async () => {
     if (!catalogItem) {
       return;
     }
 
-    // Validate required fields
     const userConfig =
       (catalogItem.userConfig as UserConfigType | null | undefined) || {};
-    const requiredFields = Object.entries(userConfig).filter(
-      ([_, config]) => config.required,
-    );
-
-    for (const [fieldName, _] of requiredFields) {
-      if (!configValues[fieldName]?.trim()) {
-        return;
-      }
-    }
 
     try {
-      // Convert values to appropriate types based on config
       const metadata: Record<string, unknown> = {};
-      for (const [fieldName, value] of Object.entries(configValues)) {
-        const configField = userConfig[fieldName];
-        if (!configField) continue;
 
-        switch (configField.type) {
-          case "number":
-            metadata[fieldName] = Number(value);
-            break;
-          case "boolean":
-            metadata[fieldName] = value === "true";
-            break;
-          default:
-            metadata[fieldName] = value;
+      for (const [fieldName, fieldConfig] of Object.entries(userConfig)) {
+        // For BYOS mode, sensitive fields use vault references
+        if (useVaultSecrets && fieldConfig.sensitive) {
+          const vaultRef = vaultSecrets[fieldName];
+          if (vaultRef?.path && vaultRef?.key) {
+            // Store as path#key format for BYOS vault resolution
+            metadata[fieldName] = `${vaultRef.path}#${vaultRef.key}`;
+          }
+        } else {
+          // Non-sensitive fields or non-BYOS mode: use manual value
+          const value = configValues[fieldName];
+          if (value !== undefined && value !== "") {
+            switch (fieldConfig.type) {
+              case "number":
+                metadata[fieldName] = Number(value);
+                break;
+              case "boolean":
+                metadata[fieldName] = value === "true";
+                break;
+              default:
+                metadata[fieldName] = value;
+            }
+          }
         }
       }
 
-      await onConfirm(catalogItem, metadata, assignedTeamIds);
-      setConfigValues({});
-      setAssignedTeamIds([]);
-      setSelectedTeamId("");
+      await onConfirm(catalogItem, {
+        metadata,
+        teamId: selectedTeamId,
+        isByosVault: useVaultSecrets,
+      });
+      resetForm();
       onClose();
     } catch (_error) {
       // Error handling is done in the parent component
     }
   };
 
-  const handleClose = () => {
+  const resetForm = () => {
     setConfigValues({});
-    setAssignedTeamIds([]);
-    setSelectedTeamId("");
+    setSelectedTeamId(null);
+    setCredentialType(byosEnabled ? "team" : "personal");
+    setVaultSecrets({});
+  };
+
+  const handleClose = () => {
+    resetForm();
     onClose();
   };
 
@@ -151,12 +168,32 @@ export function RemoteServerInstallDialog({
   const hasConfig = Object.keys(userConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
 
-  // Check if all required fields are filled
-  const isValid =
-    Object.entries(userConfig)
-      .filter(([_, config]) => config.required)
-      .every(([fieldName, _]) => configValues[fieldName]?.trim()) &&
-    (!isTeamMode || assignedTeamIds.length > 0);
+  // Get sensitive and non-sensitive required fields
+  const sensitiveRequiredFields = Object.entries(userConfig).filter(
+    ([_, cfg]) => cfg.required && cfg.sensitive,
+  );
+  const nonSensitiveRequiredFields = Object.entries(userConfig).filter(
+    ([_, cfg]) => cfg.required && !cfg.sensitive,
+  );
+
+  // Check if non-sensitive required fields are valid (always need manual input)
+  const isNonSensitiveValid = nonSensitiveRequiredFields.every(([fieldName]) =>
+    configValues[fieldName]?.trim(),
+  );
+
+  // Check if sensitive required fields are valid:
+  // - BYOS mode: vault path AND key must be selected for each
+  // - Normal mode: manual values must be filled
+  const isSensitiveValid = useVaultSecrets
+    ? sensitiveRequiredFields.every(
+        ([fieldName]) =>
+          vaultSecrets[fieldName]?.path && vaultSecrets[fieldName]?.key,
+      )
+    : sensitiveRequiredFields.every(([fieldName]) =>
+        configValues[fieldName]?.trim(),
+      );
+
+  const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -164,13 +201,9 @@ export function RemoteServerInstallDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2">
             <div className="flex items-end gap-2">
-              {isTeamMode ? (
-                <Building2 className="h-5 w-5" />
-              ) : (
-                <User className="h-5 w-5" />
-              )}
+              <User className="h-5 w-5" />
               <span>
-                {isTeamMode ? "Team" : "Personal"} Authentication
+                Install Server
                 <span className="text-muted-foreground ml-2 font-normal">
                   {catalogItem.name}
                 </span>
@@ -186,72 +219,12 @@ export function RemoteServerInstallDialog({
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
-          {isTeamMode && (
-            <>
-              <Alert className="mb-2">
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Admin only: You are configuring shared credentials
-                </AlertDescription>
-              </Alert>
-
-              <div className="grid gap-2">
-                <Label htmlFor="assign-team">
-                  Select Teams <span className="text-destructive">*</span>
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Choose which teams will have access to this authentication.
-                </p>
-                <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                  <SelectTrigger id="assign-team">
-                    <SelectValue placeholder="Select a team to assign" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams?.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No teams available
-                      </div>
-                    ) : unassignedTeams.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        All teams are already assigned
-                      </div>
-                    ) : (
-                      unassignedTeams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {assignedTeamIds.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {assignedTeamIds.map((teamId) => {
-                      const team = getTeamById(teamId);
-                      return (
-                        <Badge
-                          key={teamId}
-                          variant="secondary"
-                          className="flex items-center gap-1 pr-1"
-                        >
-                          <span>{team?.name || teamId}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveTeam(teamId)}
-                            className="h-auto p-0.5 ml-1 hover:bg-destructive/20"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )}
+          <SelectMcpServerCredentialTypeAndTeams
+            selectedTeamId={selectedTeamId}
+            onTeamChange={setSelectedTeamId}
+            catalogId={catalogItem?.id}
+            onCredentialTypeChange={setCredentialType}
+          />
 
           {hasOAuth && (
             <Alert>
@@ -263,62 +236,81 @@ export function RemoteServerInstallDialog({
             </Alert>
           )}
 
-          {hasConfig ? (
-            Object.entries(userConfig).map(([fieldName, config]) => (
-              <div key={fieldName} className="grid gap-2">
-                <Label htmlFor={fieldName}>
-                  {config.title}
-                  {config.required && <span className="text-red-500"> *</span>}
-                </Label>
-                {config.type === "boolean" ? (
-                  <select
-                    id={fieldName}
-                    value={configValues[fieldName] || "false"}
-                    onChange={(e) =>
-                      setConfigValues((prev) => ({
-                        ...prev,
-                        [fieldName]: e.target.value,
-                      }))
-                    }
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
-                ) : (
-                  <Input
-                    id={fieldName}
-                    type={
-                      config.sensitive
-                        ? "password"
-                        : config.type === "number"
-                          ? "number"
-                          : "text"
-                    }
-                    placeholder={
-                      config.default?.toString() || config.description
-                    }
-                    value={configValues[fieldName] || ""}
-                    onChange={(e) =>
-                      setConfigValues((prev) => ({
-                        ...prev,
-                        [fieldName]: e.target.value,
-                      }))
-                    }
-                    min={config.min}
-                    max={config.max}
-                  />
-                )}
-              </div>
-            ))
-          ) : !hasOAuth ? (
-            <div className="rounded-md bg-muted p-4">
-              <p className="text-sm text-muted-foreground">
-                This remote MCP server is ready to install. No additional
-                configuration is required.
-              </p>
+          {/* Config fields - always show when config exists */}
+          {hasConfig && (
+            <div className="space-y-4">
+              {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
+                <div key={fieldName} className="grid gap-2">
+                  <Label htmlFor={fieldName}>
+                    {fieldConfig.title}
+                    {fieldConfig.required && (
+                      <span className="text-red-500"> *</span>
+                    )}
+                  </Label>
+                  {fieldConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {fieldConfig.description}
+                    </p>
+                  )}
+
+                  {/* BYOS mode: vault selector for sensitive fields */}
+                  {fieldConfig.sensitive && useVaultSecrets ? (
+                    <InlineVaultSecretSelector
+                      teamId={selectedTeamId}
+                      selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
+                      selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
+                      onSecretPathChange={(path) =>
+                        updateVaultSecret(fieldName, "path", path)
+                      }
+                      onSecretKeyChange={(key) =>
+                        updateVaultSecret(fieldName, "key", key)
+                      }
+                      disabled={isInstalling}
+                    />
+                  ) : fieldConfig.type === "boolean" ? (
+                    <select
+                      id={fieldName}
+                      value={configValues[fieldName] || "false"}
+                      onChange={(e) =>
+                        setConfigValues((prev) => ({
+                          ...prev,
+                          [fieldName]: e.target.value,
+                        }))
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+                    >
+                      <option value="false">No</option>
+                      <option value="true">Yes</option>
+                    </select>
+                  ) : (
+                    <Input
+                      id={fieldName}
+                      type={
+                        fieldConfig.sensitive
+                          ? "password"
+                          : fieldConfig.type === "number"
+                            ? "number"
+                            : "text"
+                      }
+                      placeholder={
+                        fieldConfig.default?.toString() ||
+                        fieldConfig.description
+                      }
+                      value={configValues[fieldName] || ""}
+                      onChange={(e) =>
+                        setConfigValues((prev) => ({
+                          ...prev,
+                          [fieldName]: e.target.value,
+                        }))
+                      }
+                      min={fieldConfig.min}
+                      max={fieldConfig.max}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
-          ) : null}
+          )}
 
           {catalogItem.serverUrl && (
             <div className="rounded-md bg-muted p-4">

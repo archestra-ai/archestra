@@ -212,7 +212,7 @@ export class McpServerRuntimeManager {
       this.mcpServerIdToPodMap.set(id, k8sPod);
       logger.info(`Registered MCP server pod ${id} in map`);
 
-      // If MCP server has a secretId, fetch secret from database and create K8s Secret
+      // If MCP server has a secretId, fetch secret and create K8s Secret
       if (mcpServer.secretId) {
         const secret = await secretManager.getSecret(mcpServer.secretId);
 
@@ -224,11 +224,11 @@ export class McpServerRuntimeManager {
             secretData[key] = String(value);
           }
 
-          // Create K8s Secret from database secret
+          // Create K8s Secret
           await k8sPod.createK8sSecret(secretData);
           logger.info(
             { mcpServerId: id, secretId: mcpServer.secretId },
-            "Created K8s Secret from database secret",
+            "Created K8s Secret from secret manager",
           );
         }
       }

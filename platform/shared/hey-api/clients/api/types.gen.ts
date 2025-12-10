@@ -3752,97 +3752,6 @@ export type UpdateAgentToolResponses = {
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
 
-export type GetAgentAvailableTokensData = {
-    body?: never;
-    path?: never;
-    query?: {
-        catalogId?: string;
-    };
-    url: '/api/agents/available-tokens';
-};
-
-export type GetAgentAvailableTokensErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
-
-export type GetAgentAvailableTokensResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        [key: string]: Array<{
-            id: string;
-            name: string;
-            serverType: 'local' | 'remote';
-            catalogId: string | null;
-            ownerId: string | null;
-            ownerEmail: string | null;
-            teamDetails?: Array<{
-                teamId: string;
-                name: string;
-                createdAt: string;
-            }>;
-        }>;
-    };
-};
-
-export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
-
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
     headers: {
@@ -6604,6 +6513,8 @@ export type GetFeaturesResponses = {
      */
     200: {
         'orchestrator-k8s-runtime': boolean;
+        byosEnabled: boolean;
+        byosVaultKvVersion: '1' | '2';
     };
 };
 
@@ -7526,6 +7437,10 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
+        localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path?: never;
     query?: never;
@@ -7976,6 +7891,10 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
+        localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path: {
         id: string;
@@ -9942,7 +9861,9 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        catalogId?: string;
+    };
     url: '/api/mcp_server';
 };
 
@@ -10016,6 +9937,7 @@ export type GetMcpServersResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10023,18 +9945,17 @@ export type GetMcpServersResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     }>;
 };
 
@@ -10046,10 +9967,10 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         ownerId?: string | null;
+        teamId?: string | null;
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
-        teams?: Array<string>;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -10059,6 +9980,7 @@ export type InstallMcpServerData = {
         };
         agentIds?: Array<string>;
         accessToken?: string;
+        isByosVault?: boolean;
     };
     path?: never;
     query?: never;
@@ -10135,6 +10057,7 @@ export type InstallMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10142,18 +10065,17 @@ export type InstallMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     };
 };
 
@@ -10317,6 +10239,7 @@ export type GetMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10324,18 +10247,17 @@ export type GetMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     };
 };
 
@@ -10675,327 +10597,6 @@ export type RestartMcpServerResponses = {
 };
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
-
-export type RevokeUserMcpServerAccessData = {
-    body?: never;
-    path: {
-        catalogId: string;
-        userId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
-};
-
-export type RevokeUserMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
-
-export type RevokeUserMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
-
-export type RevokeAllTeamsMcpServerAccessData = {
-    body?: never;
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/teams';
-};
-
-export type RevokeAllTeamsMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
-
-export type RevokeAllTeamsMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
-
-export type GrantTeamMcpServerAccessData = {
-    body: {
-        teamIds: Array<string>;
-        userId?: string;
-    };
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/teams';
-};
-
-export type GrantTeamMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
-
-export type GrantTeamMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
-
-export type RevokeTeamMcpServerAccessData = {
-    body?: never;
-    path: {
-        id: string;
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/{id}/team/{teamId}';
-};
-
-export type RevokeTeamMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
-
-export type RevokeTeamMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
 
 export type GetMcpToolCallsData = {
     body?: never;
@@ -12968,7 +12569,7 @@ export type GetSecretsTypeResponses = {
      * Default Response
      */
     200: {
-        type: 'DB' | 'Vault';
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
         meta: {
             [key: string]: string;
         };
@@ -15565,6 +15166,497 @@ export type RemoveTeamExternalGroupResponses = {
 };
 
 export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
+
+export type DeleteTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type DeleteTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
+
+export type DeleteTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
+
+export type GetTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type GetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
+
+export type GetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    } | null;
+};
+
+export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
+
+export type SetTeamVaultFolderData = {
+    body: {
+        vaultPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type SetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
+
+export type SetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
+
+export type CheckTeamVaultFolderConnectivityData = {
+    body?: {
+        vaultPath?: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
+};
+
+export type CheckTeamVaultFolderConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
+
+export type CheckTeamVaultFolderConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connected: boolean;
+        secretCount: number;
+        error?: string;
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
+
+export type ListTeamVaultFolderSecretsData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets';
+};
+
+export type ListTeamVaultFolderSecretsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
+
+export type ListTeamVaultFolderSecretsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        path: string;
+    }>;
+};
+
+export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
+
+export type GetTeamVaultSecretKeysData = {
+    body: {
+        secretPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
+};
+
+export type GetTeamVaultSecretKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
+
+export type GetTeamVaultSecretKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<string>;
+    };
+};
+
+export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
 
 export type GetTokenPricesData = {
     body?: never;

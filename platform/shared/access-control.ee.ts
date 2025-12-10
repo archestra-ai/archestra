@@ -290,18 +290,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
-  [RouteId.RevokeUserMcpServerAccess]: {
-    mcpServer: ["delete"],
-  },
-  [RouteId.GrantTeamMcpServerAccess]: {
-    mcpServer: ["create"],
-  },
-  [RouteId.RevokeTeamMcpServerAccess]: {
-    mcpServer: ["delete"],
-  },
-  [RouteId.RevokeAllTeamsMcpServerAccess]: {
-    mcpServer: ["delete"],
-  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },
@@ -368,6 +356,26 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.RemoveTeamExternalGroup]: {
     team: ["update"],
+  },
+  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
+  // Note: Additional team admin check is done in route handlers
+  [RouteId.GetTeamVaultFolder]: {
+    team: ["read"],
+  },
+  [RouteId.SetTeamVaultFolder]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeamVaultFolder]: {
+    team: ["update"],
+  },
+  [RouteId.CheckTeamVaultFolderConnectivity]: {
+    team: ["update"],
+  },
+  [RouteId.ListTeamVaultFolderSecrets]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeamVaultSecretKeys]: {
+    team: ["read"],
   },
   [RouteId.GetRoles]: {
     organization: ["read"],

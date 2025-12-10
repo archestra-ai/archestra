@@ -1,8 +1,9 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -38,31 +39,111 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateInternalMcpCatalogItem,
         description: "Create a new Internal MCP catalog item",
         tags: ["MCP Catalog"],
-        body: InsertInternalMcpCatalogSchema,
+        body: InsertInternalMcpCatalogSchema.extend({
+          // BYOS: External Vault path for OAuth client secret
+          oauthClientSecretVaultPath: z.string().optional(),
+          // BYOS: External Vault key for OAuth client secret
+          oauthClientSecretVaultKey: z.string().optional(),
+          // BYOS: External Vault path for local config secret env vars
+          localConfigVaultPath: z.string().optional(),
+          // BYOS: External Vault key for local config secret env vars
+          localConfigVaultKey: z.string().optional(),
+        }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
     async ({ body }, reply) => {
+      const {
+        oauthClientSecretVaultPath,
+        oauthClientSecretVaultKey,
+        localConfigVaultPath,
+        localConfigVaultKey,
+        ...restBody
+      } = body;
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
 
-      // If oauthConfig has client_secret, extract it and store in secrets table
-      if (body.oauthConfig && "client_secret" in body.oauthConfig) {
-        const clientSecret = body.oauthConfig.client_secret;
+      // Handle OAuth client secret - either via BYOS or direct value
+      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
+        // BYOS flow for OAuth client secret
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "BYOS (Bring Your Own Secrets) is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+          );
+        }
+
+        // Store as { client_secret: "path#key" } format
+        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { client_secret: vaultReference },
+          `${restBody.name}-oauth-client-secret-vault`,
+        );
+        clientSecretId = secret.id;
+        restBody.clientSecretId = clientSecretId;
+
+        // Remove client_secret from oauthConfig if present
+        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+          delete restBody.oauthConfig.client_secret;
+        }
+
+        logger.info(
+          "Created BYOS external vault secret reference for OAuth client secret",
+        );
+      } else if (
+        restBody.oauthConfig &&
+        "client_secret" in restBody.oauthConfig
+      ) {
+        // Direct client_secret value
+        const clientSecret = restBody.oauthConfig.client_secret;
         const secret = await secretManager.createSecret(
           { client_secret: clientSecret },
-          `${body.name}-oauth-client-secret`,
+          `${restBody.name}-oauth-client-secret`,
         );
         clientSecretId = secret.id;
 
-        body.clientSecretId = clientSecretId;
-        delete body.oauthConfig.client_secret;
+        restBody.clientSecretId = clientSecretId;
+        delete restBody.oauthConfig.client_secret;
       }
 
-      // Extract secret env vars from localConfig.environment
-      if (body.localConfig?.environment) {
+      // Handle local config secrets - either via BYOS or direct values
+      if (localConfigVaultPath && localConfigVaultKey) {
+        // BYOS flow for local config secrets
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "BYOS (Bring Your Own Secrets) is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+          );
+        }
+
+        // Store as { vaultKey: "path#vaultKey" } format
+        // The vault key becomes both the Archestra key and references itself in the vault
+        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { [localConfigVaultKey]: vaultReference },
+          `${restBody.name}-local-config-env-vault`,
+        );
+        localConfigSecretId = secret.id;
+        restBody.localConfigSecretId = localConfigSecretId;
+
+        // Remove values from secret env vars in catalog template
+        if (restBody.localConfig?.environment) {
+          for (const envVar of restBody.localConfig.environment) {
+            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+              delete envVar.value;
+            }
+          }
+        }
+
+        logger.info(
+          "Created BYOS external vault secret reference for local config secrets",
+        );
+      } else if (restBody.localConfig?.environment) {
+        // Extract secret env vars from localConfig.environment
         const secretEnvVars: Record<string, string> = {};
-        for (const envVar of body.localConfig.environment) {
+        for (const envVar of restBody.localConfig.environment) {
           if (
             envVar.type === "secret" &&
             envVar.value &&
@@ -77,14 +158,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (Object.keys(secretEnvVars).length > 0) {
           const secret = await secretManager.createSecret(
             secretEnvVars,
-            `${body.name}-local-config-env`,
+            `${restBody.name}-local-config-env`,
           );
           localConfigSecretId = secret.id;
-          body.localConfigSecretId = localConfigSecretId;
+          restBody.localConfigSecretId = localConfigSecretId;
         }
       }
 
-      const catalogItem = await InternalMcpCatalogModel.create(body);
+      const catalogItem = await InternalMcpCatalogModel.create(restBody);
       return reply.send(catalogItem);
     },
   );
@@ -123,11 +204,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateInternalMcpCatalogSchema.partial(),
+        body: UpdateInternalMcpCatalogSchema.partial().extend({
+          // BYOS: External Vault path for OAuth client secret
+          oauthClientSecretVaultPath: z.string().optional(),
+          // BYOS: External Vault key for OAuth client secret
+          oauthClientSecretVaultKey: z.string().optional(),
+          // BYOS: External Vault path for local config secret env vars
+          localConfigVaultPath: z.string().optional(),
+          // BYOS: External Vault key for local config secret env vars
+          localConfigVaultKey: z.string().optional(),
+        }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
+      const {
+        oauthClientSecretVaultPath,
+        oauthClientSecretVaultKey,
+        localConfigVaultPath,
+        localConfigVaultKey,
+        ...restBody
+      } = body;
+
       // Get the original catalog item to check if name or serverUrl changed
       const originalCatalogItem = await InternalMcpCatalogModel.findById(id);
 
@@ -138,9 +236,45 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let clientSecretId = originalCatalogItem.clientSecretId;
       let localConfigSecretId = originalCatalogItem.localConfigSecretId;
 
-      // If oauthConfig has client_secret, handle secret storage
-      if (body.oauthConfig && "client_secret" in body.oauthConfig) {
-        const clientSecret = body.oauthConfig.client_secret;
+      // Handle OAuth client secret - either via BYOS or direct value
+      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
+        // BYOS flow for OAuth client secret
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "BYOS (Bring Your Own Secrets) is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+          );
+        }
+
+        // Delete existing secret if any
+        if (clientSecretId) {
+          await secretManager.deleteSecret(clientSecretId);
+        }
+
+        // Store as { client_secret: "path#key" } format
+        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { client_secret: vaultReference },
+          `${originalCatalogItem.name}-oauth-client-secret-vault`,
+        );
+        clientSecretId = secret.id;
+        restBody.clientSecretId = clientSecretId;
+
+        // Remove client_secret from oauthConfig if present
+        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+          delete restBody.oauthConfig.client_secret;
+        }
+
+        logger.info(
+          "Created BYOS external vault secret reference for OAuth client secret",
+        );
+      } else if (
+        restBody.oauthConfig &&
+        "client_secret" in restBody.oauthConfig
+      ) {
+        // Direct client_secret value
+        const clientSecret = restBody.oauthConfig.client_secret;
         if (clientSecretId) {
           // Update existing secret
           await secretManager.updateSecret(clientSecretId, {
@@ -155,15 +289,52 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           clientSecretId = secret.id;
         }
 
-        body.clientSecretId = clientSecretId;
-        delete body.oauthConfig.client_secret;
+        restBody.clientSecretId = clientSecretId;
+        delete restBody.oauthConfig.client_secret;
       }
 
-      // Extract secret env vars from localConfig.environment
-      if (body.localConfig?.environment) {
+      // Handle local config secrets - either via BYOS or direct values
+      if (localConfigVaultPath && localConfigVaultKey) {
+        // BYOS flow for local config secrets
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "BYOS (Bring Your Own Secrets) is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+          );
+        }
+
+        // Delete existing secret if any
+        if (localConfigSecretId) {
+          await secretManager.deleteSecret(localConfigSecretId);
+        }
+
+        // Store as { vaultKey: "path#vaultKey" } format
+        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { [localConfigVaultKey]: vaultReference },
+          `${originalCatalogItem.name}-local-config-env-vault`,
+        );
+        localConfigSecretId = secret.id;
+        restBody.localConfigSecretId = localConfigSecretId;
+
+        // Remove values from secret env vars in catalog template
+        if (restBody.localConfig?.environment) {
+          for (const envVar of restBody.localConfig.environment) {
+            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+              delete envVar.value;
+            }
+          }
+        }
+
+        logger.info(
+          "Created BYOS external vault secret reference for local config secrets",
+        );
+      } else if (restBody.localConfig?.environment) {
+        // Extract secret env vars from localConfig.environment
         const secretEnvVars: Record<string, string> = {};
 
-        for (const envVar of body.localConfig.environment) {
+        for (const envVar of restBody.localConfig.environment) {
           if (
             envVar.type === "secret" &&
             envVar.value &&
@@ -190,12 +361,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             localConfigSecretId = secret.id;
           }
-          body.localConfigSecretId = localConfigSecretId;
+          restBody.localConfigSecretId = localConfigSecretId;
         }
       }
 
       // Update the catalog item
-      const catalogItem = await InternalMcpCatalogModel.update(id, body);
+      const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");

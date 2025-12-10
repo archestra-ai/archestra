@@ -98,77 +98,19 @@ jobs:
         working-directory: ./platform
         run: cp .env.example .env
 
-      - name: Install Kind
+      - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        uses: ./.github/actions/setup-archestra-platform
         with:
-          config: .github/kind.yaml
-          cluster_name: archestra-ci-cluster
-          install_only: false
-
-      - name: Debug Kind cluster
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "=== Kind version ==="
-          kind version
-          echo "=== Available clusters ==="
-          kind get clusters || echo "No clusters found"
-          echo "=== Docker containers ==="
-          docker ps -a | grep kind || echo "No kind containers found"
-          echo "=== Kubectl context ==="
-          kubectl config current-context || echo "No kubectl context"
-          echo "=== Kubectl cluster info ==="
-          kubectl cluster-info || echo "Cluster info failed"
-
-      - name: Build Docker image
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/build-platform-docker-image
-        with:
-          context: ./platform
-          load: "true"
-          tags: archestra/platform:ci-test
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          build-platform-image: "true"
+          platform-image-tag: archestra/platform:ci-test
+          platform-context: ./platform
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Load Docker image into kind
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
-
-      - name: Deploy Archestra Platform (and E2E test dependencies) with Helm
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          # Deploy e2e test dependencies (WireMock, Keycloak)
-          # Test users defined in helm/e2e-tests/values.yaml match Archestra defaults
-          helm install e2e-tests ./platform/helm/e2e-tests
-
-          helm install archestra-platform ./platform/helm/archestra \
-            --values .github/values-ci.yaml \
-            --set archestra.image=archestra/platform:ci-test \
-            --wait --timeout=5m
-
-      - name: Verify deployment
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
-
-          echo "=== Kubernetes Services ==="
-          kubectl get services
-
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
-
-      - name: Wait for services to be healthy
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "Waiting for platform pods to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
-          echo "Platform pods are ready"
-
-          echo "Verifying services are accessible..."
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
-          echo "All services are ready"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check

@@ -371,36 +371,27 @@ test.describe("SSO Role Mapping E2E", () => {
     await page.getByText("Role Mapping (Optional)").click();
 
     // Wait for accordion to expand - look for the Add Rule button
-    await expect(page.getByRole("button", { name: "Add Rule" })).toBeVisible();
+    const addRuleButton = page.getByTestId(E2eTestId.SsoRoleMappingAddRule);
+    await expect(addRuleButton).toBeVisible();
 
     // Add a rule to map archestra-admins group to admin role
-    await page.getByRole("button", { name: "Add Rule" }).click();
+    await addRuleButton.click();
 
-    // Fill in the Handlebars template
+    // Fill in the Handlebars template using data-testid
     // Keycloak sends groups as an array, so we check if 'archestra-admins' is in it
     await page
-      .getByLabel("Handlebars Template")
+      .getByTestId(E2eTestId.SsoRoleMappingRuleTemplate)
       .fill('{{#includes groups "archestra-admins"}}true{{/includes}}');
 
-    // Select admin role
-    await page
-      .locator('[data-testid="role-mapping-rules"]')
-      .isVisible()
-      .catch(() => {});
-    // The role selector is the second Select in the rule form
-    const roleSelect = page
-      .locator('button[role="combobox"]')
-      .filter({ hasText: /member|admin/i })
-      .last();
+    // Select admin role using data-testid
+    const roleSelect = page.getByTestId(E2eTestId.SsoRoleMappingRuleRole);
     await roleSelect.click();
     await page.getByRole("option", { name: "Admin" }).click();
 
-    // Set default role to member
-    // Find the default role select (has "Default Role" label before it)
-    const defaultRoleSelect = page
-      .getByLabel("Default Role")
-      .locator("..")
-      .locator('button[role="combobox"]');
+    // Set default role to member (so we can verify role mapping works)
+    const defaultRoleSelect = page.getByTestId(
+      E2eTestId.SsoRoleMappingDefaultRole,
+    );
     if (await defaultRoleSelect.isVisible()) {
       await defaultRoleSelect.click();
       await page.getByRole("option", { name: "Member" }).click();
@@ -449,6 +440,7 @@ test.describe("SSO Role Mapping E2E", () => {
       ).toBeVisible({ timeout: 10000 });
 
       // Success! The admin user was mapped to admin role via Handlebars template
+      // Note: The syncSsoRole function (for subsequent logins) is covered by unit tests
     } finally {
       await ssoContext.close();
     }

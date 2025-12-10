@@ -582,6 +582,13 @@
       "when": 1765222365967,
       "tag": "0082_wooden_lethal_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1765292666507,
+      "tag": "0083_sticky_chameleon",
+      "breakpoints": true
     }
   ]
 }

@@ -41,6 +41,11 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 
+const eeRoutes = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
+    await import("./routes/index.ee")
+  : ({} as Record<string, never>);
+
 const {
   api: {
     port,
@@ -381,6 +386,9 @@ const start = async () => {
     );
 
     for (const route of Object.values(routes)) {
+      fastify.register(route);
+    }
+    for (const route of Object.values(eeRoutes)) {
       fastify.register(route);
     }
 

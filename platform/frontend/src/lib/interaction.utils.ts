@@ -14,7 +14,8 @@ export class DynamicInteraction implements InteractionUtils {
   private interaction: Interaction;
 
   id: string;
-  agentId: string;
+  profileId: string;
+  externalAgentId: string | null;
   type: Interaction["type"];
   provider: archestraApiTypes.SupportedProviders;
   endpoint: string;
@@ -26,7 +27,8 @@ export class DynamicInteraction implements InteractionUtils {
 
     this.interaction = interaction;
     this.id = interaction.id;
-    this.agentId = interaction.agentId;
+    this.profileId = interaction.profileId;
+    this.externalAgentId = interaction.externalAgentId;
     this.type = interaction.type;
     this.provider = provider as archestraApiTypes.SupportedProviders;
     this.endpoint = endpoint;

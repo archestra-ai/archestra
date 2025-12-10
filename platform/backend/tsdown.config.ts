@@ -102,8 +102,8 @@ export default defineConfig((options: UserConfig) => {
     // Generate source maps for better stack traces
     sourcemap: true,
 
-    // Don't bundle dependencies - use them from node_modules, except for @shared
-    noExternal: ["@shared"],
+    // Don't bundle dependencies - use them from node_modules, except for @shared (including subpaths)
+    noExternal: [/^@shared/],
     tsconfig: "./tsconfig.json",
 
     ignoreWatch: [

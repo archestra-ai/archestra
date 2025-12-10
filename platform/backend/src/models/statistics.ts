@@ -322,7 +322,7 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .innerJoin(
         schema.agentTeamsTable,
@@ -498,7 +498,7 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .leftJoin(
         schema.agentTeamsTable,
@@ -638,7 +638,7 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .where(
         and(
@@ -843,7 +843,7 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .where(
         and(

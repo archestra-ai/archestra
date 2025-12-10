@@ -1,7 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
   DEFAULT_ADMIN_EMAIL,
-  type Permissions,
   type PredefinedRoleName,
 } from "@shared";
 import { eq, getTableColumns } from "drizzle-orm";
@@ -10,8 +9,6 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
-import MemberModel from "./member";
-import OrganizationRoleModel from "./organization-role";
 
 class UserModel {
   static async createOrGetExistingDefaultAdminUser({
@@ -105,39 +102,6 @@ class UserModel {
       .limit(1);
     logger.debug({ email, found: !!user }, "UserModel.findByEmail: completed");
     return user;
-  }
-
-  /**
-   * Get all permissions for a user
-   */
-  static async getUserPermissions(
-    userId: string,
-    organizationId: string,
-  ): Promise<Permissions> {
-    logger.debug(
-      { userId, organizationId },
-      "UserModel.getUserPermissions: fetching permissions",
-    );
-    // Get user's member record to find their role
-    const memberRecord = await MemberModel.getByUserId(userId, organizationId);
-
-    if (!memberRecord) {
-      logger.debug(
-        { userId, organizationId },
-        "UserModel.getUserPermissions: no member record found",
-      );
-      return {};
-    }
-
-    const permissions = await OrganizationRoleModel.getPermissions(
-      memberRecord.role,
-      organizationId,
-    );
-    logger.debug(
-      { userId, organizationId, role: memberRecord.role },
-      "UserModel.getUserPermissions: completed",
-    );
-    return permissions;
   }
 
   /**

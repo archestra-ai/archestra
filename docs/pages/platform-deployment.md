@@ -275,6 +275,79 @@ archestra:
       # Configure timeout via Traefik IngressRoute or Middleware
 ```
 
+#### Scaling & High Availability Configuration
+
+**HorizontalPodAutoscaler Settings**:
+
+- `archestra.horizontalPodAutoscaler.enabled` - Enable or disable HorizontalPodAutoscaler creation (default: false)
+- `archestra.horizontalPodAutoscaler.minReplicas` - Minimum number of replicas (default: 1)
+- `archestra.horizontalPodAutoscaler.maxReplicas` - Maximum number of replicas (default: 10)
+- `archestra.horizontalPodAutoscaler.metrics` - Metrics configuration for scaling decisions
+- `archestra.horizontalPodAutoscaler.behavior` - Scaling behavior configuration
+
+**Example with CPU-based autoscaling**:
+
+```yaml
+archestra:
+  horizontalPodAutoscaler:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 80
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
+```
+
+**PodDisruptionBudget Settings**:
+
+- `archestra.podDisruptionBudget.enabled` - Enable or disable PodDisruptionBudget creation (default: false)
+- `archestra.podDisruptionBudget.minAvailable` - Minimum number of pods that must remain available (integer or percentage)
+- `archestra.podDisruptionBudget.maxUnavailable` - Maximum number of pods that can be unavailable (integer or percentage)
+- `archestra.podDisruptionBudget.unhealthyPodEvictionPolicy` - Policy for evicting unhealthy pods (IfHealthyBudget or AlwaysAllow)
+
+**Note**: Only one of `minAvailable` or `maxUnavailable` can be set.
+
+**Example with minAvailable**:
+
+```yaml
+archestra:
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    unhealthyPodEvictionPolicy: IfHealthyBudget
+```
+
+**Example with maxUnavailable percentage**:
+
+```yaml
+archestra:
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: "25%"
+```
+
+See the Kubernetes documentation for more details:
+
+- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+
 #### Database Configuration
 
 **PostgreSQL Settings**:

@@ -6958,12 +6958,16 @@ export type GetInteractionsData = {
     path?: never;
     query?: {
         /**
-         * Filter by agent ID
+         * Filter by profile ID (internal Archestra profile)
          */
-        agentId?: string;
+        profileId?: string;
+        /**
+         * Filter by external agent ID (from X-Archestra-Agent-Id header)
+         */
+        externalAgentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -7035,7 +7039,8 @@ export type GetInteractionsResponses = {
     200: {
         data: Array<{
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -7051,7 +7056,8 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -7067,7 +7073,8 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -7094,6 +7101,81 @@ export type GetInteractionsResponses = {
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetUniqueExternalAgentIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/external-agent-ids';
+};
+
+export type GetUniqueExternalAgentIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+
+export type GetUniqueExternalAgentIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
 
 export type GetInteractionData = {
     body?: never;
@@ -7169,7 +7251,8 @@ export type GetInteractionResponses = {
      */
     200: {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -7185,7 +7268,8 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -7201,7 +7285,8 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -11926,452 +12011,6 @@ export type UpdateOptimizationRuleResponses = {
 
 export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[keyof UpdateOptimizationRuleResponses];
 
-export type GetRolesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/roles';
-};
-
-export type GetRolesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
-
-export type GetRolesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    }>;
-};
-
-export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
-
-export type CreateRoleData = {
-    body: {
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-    };
-    path?: never;
-    query?: never;
-    url: '/api/roles';
-};
-
-export type CreateRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
-
-export type CreateRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    };
-};
-
-export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
-
-export type DeleteRoleData = {
-    body?: never;
-    path: {
-        /**
-         * Custom role ID (base62)
-         */
-        roleId: string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type DeleteRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
-
-export type DeleteRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
-
-export type GetRoleData = {
-    body?: never;
-    path: {
-        /**
-         * Predefined role name or custom role ID
-         */
-        roleId: 'admin' | 'editor' | 'member' | string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type GetRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
-
-export type GetRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    };
-};
-
-export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
-
-export type UpdateRoleData = {
-    body?: {
-        name?: string;
-        permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-    };
-    path: {
-        /**
-         * Predefined role name or custom role ID
-         */
-        roleId: 'admin' | 'editor' | 'member' | string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type UpdateRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
-
-export type UpdateRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    };
-};
-
-export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
-
 export type GetOrganizationData = {
     body?: never;
     path?: never;
@@ -16710,6 +16349,452 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type GetRolesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type GetRolesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
+
+export type GetRolesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    }>;
+};
+
+export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
+
+export type CreateRoleData = {
+    body: {
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type CreateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
+
+export type CreateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
+
+export type DeleteRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Custom role ID (base62)
+         */
+        roleId: string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type DeleteRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
+
+export type DeleteRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
+
+export type GetRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type GetRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
+
+export type GetRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
+
+export type UpdateRoleData = {
+    body?: {
+        name?: string;
+        permission?: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+    };
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

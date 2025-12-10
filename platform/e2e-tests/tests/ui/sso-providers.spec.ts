@@ -319,7 +319,7 @@ test.describe(
 );
 
 test.describe("SSO Role Mapping E2E", () => {
-  test("should map admin group to admin role via OIDC", async ({
+  test("should map admin group to admin role via OIDC and sync on subsequent logins", async ({
     page,
     browser,
     goToPage,
@@ -412,10 +412,10 @@ test.describe("SSO Role Mapping E2E", () => {
 
     // STEP 3: Test SSO login with admin user (in archestra-admins group)
     // The admin user is configured in Keycloak with the archestra-admins group
-    const ssoContext = await browser.newContext({
+    let ssoContext = await browser.newContext({
       storageState: undefined,
     });
-    const ssoPage = await ssoContext.newPage();
+    let ssoPage = await ssoContext.newPage();
 
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
@@ -453,7 +453,75 @@ test.describe("SSO Role Mapping E2E", () => {
       await ssoContext.close();
     }
 
-    // STEP 4: Cleanup - delete the provider
+    // STEP 4: Manually demote the user to member role via API
+    // This simulates an admin manually changing the user's role
+    // We'll use the admin page context to do this via the Members settings page
+    await goToPage(page, "/settings/members");
+    await page.waitForLoadState("networkidle");
+
+    // Find the member row for our test user (ADMIN_EMAIL) and change their role
+    const memberRow = page
+      .locator("tr")
+      .filter({ hasText: new RegExp(ADMIN_EMAIL, "i") });
+    await expect(memberRow).toBeVisible({ timeout: 5000 });
+
+    // Click on the role dropdown in that row
+    const memberRoleSelect = memberRow.locator('button[role="combobox"]');
+    await memberRoleSelect.click();
+
+    // Select "Member" role to demote the user
+    await page.getByRole("option", { name: "Member", exact: true }).click();
+
+    // Wait for the role change to be saved (the UI should update)
+    await page.waitForLoadState("networkidle");
+
+    // Verify the role was changed to member
+    await expect(memberRoleSelect).toHaveText(/member/i, { timeout: 5000 });
+
+    // STEP 5: SSO login again to verify role sync on subsequent logins
+    // This tests the syncSsoRole function in handleAfterHook
+    ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Click SSO button and login via Keycloak again
+      await ssoPage
+        .getByRole("button", { name: new RegExp(providerName, "i") })
+        .click();
+
+      // Login via Keycloak (admin user is in archestra-admins group)
+      await loginViaKeycloak(ssoPage);
+
+      // Wait for redirect back to Archestra
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // CRITICAL: Verify the user's role was synced back to admin
+      // The syncSsoRole function should have updated the role based on the role mapping
+      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // If role sync worked, user should have admin role again and see the Roles page
+      // If not, they would be redirected or see an error (no permission)
+      await expect(
+        ssoPage.getByText("Roles", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Success! The role was synced back to admin on subsequent SSO login
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 6: Cleanup - delete the provider
     await goToPage(page, "/settings/sso-providers");
     await page.waitForLoadState("networkidle");
 

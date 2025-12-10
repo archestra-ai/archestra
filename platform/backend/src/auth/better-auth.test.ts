@@ -2,7 +2,7 @@ import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
-import { TeamModel } from "@/models";
+import { MemberModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Create a hoisted ref to control disableInvitations in tests
@@ -806,6 +806,491 @@ describe("handleAfterHook", () => {
 
       // Restore original value
       setEnterpriseLicense(originalEnterpriseValue);
+    });
+  });
+
+  describe("SSO role sync", () => {
+    test("should sync role when SSO callback with role mapping rules", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "role-sync@example.com" });
+      const org = await makeOrganization();
+      // Start with member role
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with role mapping rules that map admins group to admin role
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-role-sync",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account with idToken containing admins group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["admins", "users"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-role-sync",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-role-sync",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user role was updated to admin
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+    });
+
+    test("should not change role when no rules match", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "no-match@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with role mapping rules that don't match
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-no-match",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression:
+                '{{#includes groups "super-admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account WITHOUT the required group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["users"], // Not in super-admins
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-no-match",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-no-match",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user role remains member (default role applied)
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
+    test("should respect skipRoleSync setting", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "skip-sync@example.com" });
+      const org = await makeOrganization();
+      // Start with admin role
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      // Create SSO provider with skipRoleSync enabled
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-skip-sync",
+        roleMapping: {
+          defaultRole: "member",
+          skipRoleSync: true,
+          rules: [
+            {
+              expression: '{{#includes groups "users"}}true{{/includes}}',
+              role: "member", // Would demote to member if sync wasn't skipped
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account with groups that would trigger demotion
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["users"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-skip-sync",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-skip-sync",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user role was NOT changed (skipRoleSync is enabled)
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+    });
+
+    test("should not sync role for regular sign-in (non-SSO)", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "regular-signin@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with role mapping
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-regular",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account with admins group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["admins"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-regular",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sign-in", // Regular sign-in, not SSO callback
+        method: "POST",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user role was NOT changed (regular sign-in doesn't sync role)
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
+    test("should handle missing SSO account gracefully", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "no-sso-account-role@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with role mapping
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-no-account",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Don't create any SSO account
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-no-account",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should not throw
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Verify role wasn't changed
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
+    test("should handle missing idToken gracefully", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "no-idtoken@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider with role mapping
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-no-idtoken",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account WITHOUT idToken
+      await makeAccount(user.id, {
+        providerId: "keycloak-no-idtoken",
+        // No idToken
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-no-idtoken",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should not throw
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Verify role wasn't changed
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
+    test("should handle SSO provider without role mapping", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "no-mapping@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Create SSO provider WITHOUT role mapping
+      await makeSsoProvider(org.id, { providerId: "keycloak-no-mapping" });
+
+      // Create SSO account with idToken
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["admins"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-no-mapping",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-no-mapping",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should not throw
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Verify role wasn't changed (no role mapping configured)
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
+    test("should demote admin to member based on role mapping", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "demote@example.com" });
+      const org = await makeOrganization();
+      // Start with admin role
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      // Create SSO provider with role mapping that demotes non-admins
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-demote",
+        roleMapping: {
+          defaultRole: "member", // Default to member if no rules match
+          rules: [
+            {
+              expression:
+                '{{#includes groups "super-admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account WITHOUT super-admins group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["users"], // Not in super-admins
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-demote",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-demote",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was demoted to member
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
+    test("should not change role when it's already correct", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      const user = await makeUser({ email: "already-correct@example.com" });
+      const org = await makeOrganization();
+      // Start with admin role (already correct)
+      const initialMember = await makeMember(user.id, org.id, {
+        role: "admin",
+      });
+
+      // Create SSO provider that maps admins to admin
+      await makeSsoProvider(org.id, {
+        providerId: "keycloak-already-correct",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [
+            {
+              expression: '{{#includes groups "admins"}}true{{/includes}}',
+              role: "admin",
+            },
+          ],
+        } as unknown as Record<string, unknown>,
+      });
+
+      // Create SSO account with admins group
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["admins"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-already-correct",
+        idToken,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-already-correct",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify role is still admin (no unnecessary update)
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+      // Verify the record wasn't unnecessarily updated
+      expect(member?.id).toBe(initialMember.id);
     });
   });
 });

@@ -1623,6 +1623,13 @@ export function isByosEnabled(): boolean {
 }
 
 /**
- * Default secret manager instance
+ * Default secret manager instance (uses configured backend)
  */
 export const secretManager: SecretManager = createSecretManager();
+
+/**
+ * Database-only secret manager instance.
+ * Use this when you explicitly need to store secrets in the database,
+ * bypassing the configured secrets manager (e.g., for manual PAT input when BYOS is enabled).
+ */
+export const dbSecretManager: SecretManager = new DbSecretsManager();

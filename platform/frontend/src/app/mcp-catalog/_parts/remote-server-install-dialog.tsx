@@ -39,10 +39,10 @@ type UserConfigType = Record<
 
 export interface RemoteServerInstallResult {
   metadata: Record<string, unknown>;
-  /** External Vault secret path for BYOS */
-  externalVaultSecret?: string;
-  /** External Vault secret key for BYOS (the key within the secret to use) */
-  externalVaultSecretKey?: string;
+  /** External Vault path to access token secret for BYOS */
+  accessTokenExternalSecretPath?: string;
+  /** External Vault secret key for access token (the key within the secret to use) */
+  accessTokenExternalSecretKey?: string;
   /** Team ID to assign the MCP server to (null for personal) */
   teamId?: string | null;
 }
@@ -95,8 +95,8 @@ export function RemoteServerInstallDialog({
       try {
         await onConfirm(catalogItem, {
           metadata: {},
-          externalVaultSecret: vaultSecretPath,
-          externalVaultSecretKey: vaultSecretKey,
+          accessTokenExternalSecretPath: vaultSecretPath,
+          accessTokenExternalSecretKey: vaultSecretKey,
           teamId: selectedTeamId,
         });
         resetForm();

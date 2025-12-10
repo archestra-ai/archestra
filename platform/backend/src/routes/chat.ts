@@ -362,7 +362,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch MCP tools from gateway (same as used in chat)
       const mcpTools = await getChatMcpTools({
         agentName: agent.name,
-        agentId: agentId,
+        agentId,
         userId: user.id,
         userIsProfileAdmin: isAgentAdmin,
       });

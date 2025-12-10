@@ -137,6 +137,10 @@ export const auth: any = betterAuth({
       organizationProvisioning: {
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
+        // IMPORTANT: This callback is ONLY invoked when creating NEW organization memberships
+        // (i.e., first-time SSO logins for a user). For existing users who already have memberships,
+        // this callback is NOT called. To sync roles on every SSO login, we use the `syncSsoRole`
+        // function in `handleAfterHook` which runs on every `/sso/callback/*` request.
         getRole: async (data) => {
           logger.debug(
             {
@@ -578,16 +582,184 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
       }
 
-      // SSO Team Sync: Synchronize team memberships based on SSO groups
+      // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
         logger.debug(
           { userId, email: user.email },
-          "[auth:afterHook] Processing SSO team sync",
+          "[auth:afterHook] Processing SSO role and team sync",
         );
+
+        // Sync role first (based on role mapping rules)
+        await syncSsoRole(userId, user.email);
+
+        // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email);
       }
     }
+  }
+}
+
+/**
+ * Synchronize user's organization role based on SSO claims.
+ * This is called after successful SSO login in the after hook.
+ *
+ * Note: Better-auth's getRole callback is only invoked when creating NEW memberships.
+ * For existing users, we need to manually sync their role on every SSO login.
+ *
+ * @param userId - The user's ID
+ * @param userEmail - The user's email
+ */
+async function syncSsoRole(userId: string, userEmail: string): Promise<void> {
+  logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
+
+  // Get the user's accounts and find the most recently used SSO account
+  const allAccounts = await AccountModel.getAllByUserId(userId);
+
+  // Find an SSO account (providerId != "credential")
+  const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
+
+  if (!ssoAccount) {
+    logger.debug(
+      { userId, userEmail },
+      "No SSO account found for user, skipping role sync",
+    );
+    return;
+  }
+
+  const providerId = ssoAccount.providerId;
+
+  // Get the SSO provider to find the organization ID and role mapping config
+  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+
+  if (!ssoProvider?.organizationId) {
+    logger.debug(
+      { providerId, userEmail },
+      "SSO provider not found or has no organization, skipping role sync",
+    );
+    return;
+  }
+
+  // Check if role mapping is configured
+  const roleMapping = ssoProvider.roleMapping;
+  if (!roleMapping?.rules?.length) {
+    logger.debug(
+      { providerId, userEmail },
+      "No role mapping rules configured, skipping role sync",
+    );
+    return;
+  }
+
+  // Check if skipRoleSync is enabled
+  if (roleMapping.skipRoleSync) {
+    logger.debug(
+      { providerId, userEmail },
+      "skipRoleSync is enabled, skipping role sync for existing user",
+    );
+    return;
+  }
+
+  // Decode the idToken to get claims
+  if (!ssoAccount.idToken) {
+    logger.debug(
+      { providerId, userEmail },
+      "No idToken in SSO account, skipping role sync",
+    );
+    return;
+  }
+
+  let tokenClaims: Record<string, unknown> = {};
+  try {
+    tokenClaims = jwtDecode<Record<string, unknown>>(ssoAccount.idToken);
+    logger.debug(
+      {
+        providerId,
+        userEmail,
+        tokenClaimsKeys: Object.keys(tokenClaims),
+      },
+      "Decoded idToken claims for role sync",
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, providerId, userEmail },
+      "Failed to decode idToken for role sync",
+    );
+    return;
+  }
+
+  // Evaluate role mapping rules
+  const result = SsoProviderModel.evaluateRoleMapping(
+    roleMapping,
+    {
+      token: tokenClaims,
+      provider: {
+        id: ssoProvider.id,
+        providerId: ssoProvider.providerId,
+      },
+    },
+    "member",
+  );
+
+  logger.debug(
+    {
+      providerId,
+      userEmail,
+      result,
+    },
+    "Role mapping evaluation result for role sync",
+  );
+
+  if (!result.role) {
+    logger.debug(
+      { providerId, userEmail },
+      "No role determined from mapping rules, skipping role sync",
+    );
+    return;
+  }
+
+  // Get the user's current membership
+  const existingMember = await MemberModel.getByUserId(
+    userId,
+    ssoProvider.organizationId,
+  );
+
+  if (!existingMember) {
+    logger.debug(
+      { providerId, userEmail, organizationId: ssoProvider.organizationId },
+      "User has no membership in organization, skipping role sync (will be handled by organizationProvisioning)",
+    );
+    return;
+  }
+
+  // Update role if it changed
+  if (existingMember.role !== result.role) {
+    await MemberModel.updateRole(
+      userId,
+      ssoProvider.organizationId,
+      result.role,
+    );
+    logger.info(
+      {
+        userId,
+        userEmail,
+        providerId,
+        organizationId: ssoProvider.organizationId,
+        previousRole: existingMember.role,
+        newRole: result.role,
+        matched: result.matched,
+      },
+      "✅ SSO role sync completed - role updated",
+    );
+  } else {
+    logger.debug(
+      {
+        userId,
+        userEmail,
+        providerId,
+        currentRole: existingMember.role,
+      },
+      "SSO role sync - no change needed",
+    );
   }
 }
 

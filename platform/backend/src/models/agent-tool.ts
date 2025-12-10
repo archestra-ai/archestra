@@ -340,6 +340,7 @@ class AgentToolModel {
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
+        | "useDynamicTeamCredential"
       >
     >,
   ) {

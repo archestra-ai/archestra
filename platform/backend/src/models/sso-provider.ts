@@ -155,6 +155,17 @@ class SsoProviderModel {
   static async resolveSsoRole(data: SsoGetRoleData): Promise<string> {
     const { user, token, provider } = data;
 
+    logger.debug(
+      {
+        providerId: provider?.providerId,
+        userId: user?.id,
+        userEmail: user?.email,
+        hasToken: !!token,
+        tokenKeys: token ? Object.keys(token) : [],
+      },
+      "resolveSsoRole: Starting SSO role resolution",
+    );
+
     // Better-auth passes the raw OAuth token response, not decoded JWT claims.
     // We need to decode the idToken to get claims like 'groups' for role mapping.
     const idTokenJwt = token?.idToken;
@@ -162,25 +173,77 @@ class SsoProviderModel {
     if (idTokenJwt) {
       try {
         idTokenClaims = jwtDecode<Record<string, unknown>>(idTokenJwt);
-      } catch {
-        logger.warn("Failed to decode idToken JWT for role mapping");
+        logger.debug(
+          {
+            providerId: provider?.providerId,
+            idTokenClaimKeys: Object.keys(idTokenClaims),
+            idTokenClaims,
+          },
+          "resolveSsoRole: Decoded idToken JWT claims",
+        );
+      } catch (decodeError) {
+        logger.warn(
+          { err: decodeError, providerId: provider?.providerId },
+          "resolveSsoRole: Failed to decode idToken JWT for role mapping",
+        );
       }
+    } else {
+      logger.debug(
+        { providerId: provider?.providerId },
+        "resolveSsoRole: No idToken JWT present in token response",
+      );
     }
 
     try {
       // Fetch the SSO provider configuration to get role mapping rules
+      logger.debug(
+        { providerId: provider.providerId },
+        "resolveSsoRole: Fetching SSO provider configuration",
+      );
       const ssoProvider = await SsoProviderModel.findByProviderId(
         provider.providerId,
+      );
+
+      logger.debug(
+        {
+          providerId: provider.providerId,
+          ssoProviderFound: !!ssoProvider,
+          hasRoleMapping: !!ssoProvider?.roleMapping,
+          roleMappingConfig: ssoProvider?.roleMapping,
+          organizationId: ssoProvider?.organizationId,
+        },
+        "resolveSsoRole: SSO provider configuration retrieved",
       );
 
       if (ssoProvider?.roleMapping) {
         const roleMapping = ssoProvider.roleMapping;
 
         // Handle skipRoleSync: If enabled and user already has a membership in this organization, keep their current role
+        logger.debug(
+          {
+            providerId: provider.providerId,
+            skipRoleSync: roleMapping.skipRoleSync,
+            userId: user?.id,
+            organizationId: ssoProvider.organizationId,
+          },
+          "resolveSsoRole: Checking skipRoleSync configuration",
+        );
+
         if (roleMapping.skipRoleSync && user?.id) {
           const existingMember = ssoProvider.organizationId
             ? await MemberModel.getByUserId(user.id, ssoProvider.organizationId)
             : null;
+
+          logger.debug(
+            {
+              providerId: provider.providerId,
+              userId: user.id,
+              existingMemberFound: !!existingMember,
+              existingRole: existingMember?.role,
+            },
+            "resolveSsoRole: skipRoleSync - checked for existing membership",
+          );
+
           if (existingMember) {
             logger.info(
               {
@@ -225,6 +288,17 @@ class SsoProviderModel {
         // Evaluate role mapping rules using ID token claims
         const tokenClaims =
           idTokenClaims || (token as Record<string, unknown>) || {};
+
+        logger.debug(
+          {
+            providerId: provider.providerId,
+            tokenClaimsKeys: Object.keys(tokenClaims),
+            tokenClaims,
+            roleMapping,
+          },
+          "resolveSsoRole: Evaluating role mapping rules with token claims",
+        );
+
         const result = SsoProviderModel.evaluateRoleMapping(
           roleMapping,
           {
@@ -235,6 +309,14 @@ class SsoProviderModel {
             },
           },
           MEMBER_ROLE_NAME,
+        );
+
+        logger.debug(
+          {
+            providerId: provider.providerId,
+            result,
+          },
+          "resolveSsoRole: Role mapping evaluation completed",
         );
 
         // Handle strict mode: Deny login if no rules matched
@@ -307,15 +389,29 @@ class SsoProviderModel {
     } catch (error) {
       // Re-throw APIError (for strict mode)
       if (error instanceof APIError) {
+        logger.debug(
+          {
+            providerId: provider?.providerId,
+            errorMessage: error.message,
+          },
+          "resolveSsoRole: Re-throwing APIError (strict mode denial)",
+        );
         throw error;
       }
       logger.error(
         { err: error, providerId: provider?.providerId },
-        "Error evaluating SSO role mapping",
+        "resolveSsoRole: Error evaluating SSO role mapping",
       );
     }
 
     // Fallback to default role when no role mapping is configured
+    logger.debug(
+      {
+        providerId: provider?.providerId,
+        fallbackRole: MEMBER_ROLE_NAME,
+      },
+      "resolveSsoRole: Using fallback role (no role mapping configured or error occurred)",
+    );
     return MEMBER_ROLE_NAME;
   }
 

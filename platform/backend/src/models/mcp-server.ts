@@ -15,9 +15,16 @@ class McpServerModel {
     const { userId, ...serverData } = server;
 
     // For local servers, add a unique identifier to the name to avoid conflicts
+    // Use teamId for team installations, userId for personal installations
     let mcpServerName = serverData.name;
-    if (serverData.serverType === "local" && userId) {
-      mcpServerName = `${serverData.name}-${userId}`;
+    if (serverData.serverType === "local") {
+      if (serverData.teamId) {
+        // Team installation: use teamId for unique pod name
+        mcpServerName = `${serverData.name}-${serverData.teamId}`;
+      } else if (userId) {
+        // Personal installation: use userId for unique pod name
+        mcpServerName = `${serverData.name}-${userId}`;
+      }
     }
 
     // ownerId is part of serverData and will be inserted

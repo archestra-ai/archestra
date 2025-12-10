@@ -20,6 +20,14 @@ inputs:
     description: "Whether to deploy e2e test dependencies (WireMock, Keycloak)"
     required: false
     default: "false"
+  helm-chart-ref:
+    description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://europe-west1-docker.pkg.dev/.../archestra-platform)"
+    required: false
+    default: ""
+  helm-chart-version:
+    description: "Helm chart version to install (only used with OCI registry)"
+    required: false
+    default: ""
   build-platform-image:
     description: "Whether to build the platform Docker image from source. Set to false to use a pre-built image (e.g., archestra/platform:latest)"
     required: false
@@ -108,11 +116,26 @@ runs:
     - name: Deploy Archestra Platform with Helm
       shell: bash
       env:
+        HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
+        HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
         HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
       run: |
-        helm install archestra-platform "${PLATFORM_CONTEXT}/helm/archestra" \
+        # Determine chart reference: use helm-chart-ref if set, otherwise use local path
+        if [ -n "${HELM_CHART_REF}" ]; then
+          CHART_REF="${HELM_CHART_REF}"
+          VERSION_FLAG=""
+          if [ -n "${HELM_CHART_VERSION}" ]; then
+            VERSION_FLAG="--version ${HELM_CHART_VERSION}"
+          fi
+        else
+          CHART_REF="${PLATFORM_CONTEXT}/helm/archestra"
+          VERSION_FLAG=""
+        fi
+
+        helm install archestra-platform "${CHART_REF}" \
+          ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           --wait --timeout=5m

@@ -1,0 +1,194 @@
+name: Setup Archestra Platform
+description: |
+  Spins up a Kind cluster, optionally builds the Archestra platform Docker image, and deploys it with Helm.
+  This action is designed for CI environments to run integration/acceptance tests against a local Archestra instance.
+
+inputs:
+  kind-config-path:
+    description: "Path to the Kind cluster configuration file"
+    required: false
+    default: ".github/kind.yaml"
+  kind-cluster-name:
+    description: "Name of the Kind cluster"
+    required: false
+    default: "archestra-ci-cluster"
+  helm-values-path:
+    description: "Path to the Helm values file for Archestra deployment"
+    required: false
+    default: ".github/values-ci.yaml"
+  deploy-e2e-dependencies:
+    description: "Whether to deploy e2e test dependencies (WireMock, Keycloak)"
+    required: false
+    default: "false"
+  helm-chart-ref:
+    description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://europe-west1-docker.pkg.dev/.../archestra-platform)"
+    required: false
+    default: ""
+  helm-chart-version:
+    description: "Helm chart version to install (only used with OCI registry)"
+    required: false
+    default: ""
+  build-platform-image:
+    description: "Whether to build the platform Docker image from source. Set to false to use a pre-built image (e.g., archestra/platform:latest)"
+    required: false
+    default: "true"
+  platform-image-tag:
+    description: "Tag for the platform Docker image (used for both building and loading into Kind)"
+    required: false
+    default: "archestra/platform:ci-test"
+  platform-context:
+    description: "Path to the platform directory containing Dockerfile (only used when build-platform-image is true)"
+    required: false
+    default: "./platform"
+  turbo-team:
+    description: "Turborepo remote caching team (only required when build-platform-image is true)"
+    required: false
+    default: ""
+  turbo-token:
+    description: "Turborepo remote caching token (only required when build-platform-image is true)"
+    required: false
+    default: ""
+
+outputs:
+  backend-url:
+    description: "URL of the Archestra backend API"
+    value: ${{ steps.urls.outputs.backend-url }}
+  frontend-url:
+    description: "URL of the Archestra frontend"
+    value: ${{ steps.urls.outputs.frontend-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Kind
+      uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+      with:
+        config: ${{ inputs.kind-config-path }}
+        cluster_name: ${{ inputs.kind-cluster-name }}
+        install_only: false
+
+    - name: Debug Kind cluster
+      shell: bash
+      run: |
+        echo "=== Kind version ==="
+        kind version
+        echo "=== Available clusters ==="
+        kind get clusters || echo "No clusters found"
+        echo "=== Docker containers ==="
+        docker ps -a | grep kind || echo "No kind containers found"
+        echo "=== Kubectl context ==="
+        kubectl config current-context || echo "No kubectl context"
+        echo "=== Kubectl cluster info ==="
+        kubectl cluster-info || echo "Cluster info failed"
+
+    - name: Build Docker image
+      if: ${{ inputs.build-platform-image == 'true' }}
+      uses: ./.github/actions/build-platform-docker-image
+      with:
+        context: ${{ inputs.platform-context }}
+        load: "true"
+        tags: ${{ inputs.platform-image-tag }}
+        turbo-team: ${{ inputs.turbo-team }}
+        turbo-token: ${{ inputs.turbo-token }}
+
+    - name: Pull Docker image
+      if: ${{ inputs.build-platform-image != 'true' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+      run: docker pull "${PLATFORM_IMAGE_TAG}"
+
+    - name: Load Docker image into Kind
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+      run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
+
+    - name: Deploy e2e test dependencies (WireMock, Keycloak)
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      shell: bash
+      env:
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+      run: |
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests"
+
+    - name: Deploy Archestra Platform with Helm
+      shell: bash
+      env:
+        HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
+        HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+      run: |
+        # Determine chart reference: use helm-chart-ref if set, otherwise use local path
+        if [ -n "${HELM_CHART_REF}" ]; then
+          CHART_REF="${HELM_CHART_REF}"
+          VERSION_FLAG=""
+          if [ -n "${HELM_CHART_VERSION}" ]; then
+            VERSION_FLAG="--version ${HELM_CHART_VERSION}"
+          fi
+        else
+          CHART_REF="${PLATFORM_CONTEXT}/helm/archestra"
+          VERSION_FLAG=""
+        fi
+
+        helm install archestra-platform "${CHART_REF}" \
+          ${VERSION_FLAG} \
+          --values "${HELM_VALUES_PATH}" \
+          --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
+          --wait --timeout=5m
+
+    - name: Verify deployment
+      shell: bash
+      run: |
+        echo "=== Kubernetes Pods ==="
+        kubectl get pods -o wide
+
+        echo "=== Kubernetes Services ==="
+        kubectl get services
+
+        echo "=== Archestra Platform Logs ==="
+        kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
+
+    - name: Wait for services to be healthy
+      shell: bash
+      run: |
+        echo "Waiting for platform pods to be ready..."
+        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
+        echo "Platform pods are ready"
+
+        echo "Verifying services are accessible..."
+        curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
+        curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
+        echo "All services are ready"
+
+    - name: Set output URLs
+      id: urls
+      shell: bash
+      run: |
+        echo "backend-url=http://localhost:9000" >> $GITHUB_OUTPUT
+        echo "frontend-url=http://localhost:3000" >> $GITHUB_OUTPUT
+
+    - name: Show logs on failure
+      if: failure()
+      shell: bash
+      run: |
+        echo "=== Kubernetes Pods ==="
+        kubectl get pods -o wide
+
+        echo "=== Kubernetes Services ==="
+        kubectl get services
+
+        echo "=== Archestra Platform Logs ==="
+        kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
+
+        echo "=== PostgreSQL Logs ==="
+        kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || echo "No PostgreSQL logs"
+
+        echo "=== Describe Archestra Platform Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=archestra-platform
+
+        echo "=== Describe PostgreSQL Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=postgresql || echo "No PostgreSQL pod"

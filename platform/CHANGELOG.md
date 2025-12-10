@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.26](https://github.com/archestra-ai/archestra/compare/platform-v0.6.25...platform-v0.6.26) (2025-12-10)
+
+
+### Features
+
+* add (optional) `HorizontalPodAutoscaler` and `PodDisruptionBudget` resources to `helm` chart ([#1487](https://github.com/archestra-ai/archestra/issues/1487)) ([aef163b](https://github.com/archestra-ai/archestra/commit/aef163bec23cce175371a9320cfd723c95b0d053))
+* move RBAC to .ee files ([#1443](https://github.com/archestra-ai/archestra/issues/1443)) ([91ef9a2](https://github.com/archestra-ai/archestra/commit/91ef9a2725dce71fa2b7594ff4fbb0c3262c75b7))
+
+
+### Miscellaneous Chores
+
+* enforce `node` version for local dev be `>=18.0.0 <25.0.0` ([#1481](https://github.com/archestra-ai/archestra/issues/1481)) ([5a8a174](https://github.com/archestra-ai/archestra/commit/5a8a17451b918eb4642383b24b2f0998d8144bc3))
+* update default `deploymentStrategy` helm value + modify staging env ([#1488](https://github.com/archestra-ai/archestra/issues/1488)) ([db9a7a9](https://github.com/archestra-ai/archestra/commit/db9a7a98fd17f47e48ec9c7120a3f9d5d6aa70a1))
+
 ## [0.6.25](https://github.com/archestra-ai/archestra/compare/platform-v0.6.24...platform-v0.6.25) (2025-12-09)
 
 

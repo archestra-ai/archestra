@@ -132,7 +132,7 @@ export function LocalServerInstallDialog({
       }, {}),
     );
     setSelectedTeamId(null);
-    setCredentialType("personal");
+    setCredentialType(byosEnabled ? "team" : "personal");
     setSelectedSecretPath(null);
     setSelectedSecretKey(null);
   };

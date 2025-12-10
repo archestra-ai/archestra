@@ -151,7 +151,7 @@ export function RemoteServerInstallDialog({
   const resetForm = () => {
     setConfigValues({});
     setSelectedTeamId(null);
-    setCredentialType("personal");
+    setCredentialType(byosEnabled ? "team" : "personal");
     setVaultSecretPath(null);
     setVaultSecretKey(null);
   };

@@ -10,11 +10,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import {
-  dbSecretManager,
-  isByosEnabled,
-  secretManager,
-} from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -141,6 +137,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
+        // Reject personal installations when BYOS is enabled
+        if (isByosEnabled() && !serverData.teamId) {
+          throw new ApiError(
+            400,
+            "Personal MCP server installations are not allowed when BYOS is enabled. Please select a team.",
+          );
+        }
+
         // Validate no duplicate installations for this catalog item
         const existingServers = await McpServerModel.findByCatalogId(
           serverData.catalogId,
@@ -207,9 +211,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // If accessToken is provided (PAT flow), create a secret for it
-        // Use dbSecretManager to always store in DB (not BYOS vault reference)
+        // Not allowed when BYOS is enabled - use vault secrets instead
         if (accessToken && !secretId) {
-          const secret = await dbSecretManager.createSecret(
+          if (isByosEnabled()) {
+            throw new ApiError(
+              400,
+              "Manual PAT token input is not allowed when BYOS is enabled. Please use Vault secrets instead.",
+            );
+          }
+          const secret = await secretManager.createSecret(
             { access_token: accessToken },
             `${serverData.name}-token`,
           );
@@ -299,8 +309,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
 
-        // Collect and store secret-type env vars (if not using BYOS)
-        // Use dbSecretManager to always store in DB (not BYOS vault reference)
+        // Collect and store secret-type env vars (not allowed when BYOS is enabled)
         if (!secretId && catalogItem.localConfig?.environment) {
           const secretEnvVars: Record<string, string> = {};
 
@@ -325,7 +334,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await dbSecretManager.createSecret(
+            // Not allowed when BYOS is enabled - use vault secrets instead
+            if (isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Manual secret input is not allowed when BYOS is enabled. Please use Vault secrets instead.",
+              );
+            }
+            const secret = await secretManager.createSecret(
               secretEnvVars,
               `mcp-server-${serverData.name}-env`,
             );
@@ -535,13 +551,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await McpServerModel.delete(mcpServer.id);
 
         // Also clean up the secret if we created one
-        // Use the appropriate manager based on whether it was BYOS or manual input
         if (createdSecretId) {
-          if (accessTokenExternalSecretPath) {
-            await secretManager.deleteSecret(createdSecretId);
-          } else {
-            await dbSecretManager.deleteSecret(createdSecretId);
-          }
+          await secretManager.deleteSecret(createdSecretId);
         }
 
         throw new ApiError(

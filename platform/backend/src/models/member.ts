@@ -132,6 +132,35 @@ class MemberModel {
   }
 
   /**
+   * Update a member's role
+   */
+  static async updateRole(
+    userId: string,
+    organizationId: string,
+    newRole: AnyRoleName,
+  ) {
+    logger.debug(
+      { userId, organizationId, newRole },
+      "MemberModel.updateRole: updating member role",
+    );
+    const result = await db
+      .update(schema.membersTable)
+      .set({ role: newRole })
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .returning();
+    logger.debug(
+      { userId, organizationId, updated: !!result[0], newRole },
+      "MemberModel.updateRole: completed",
+    );
+    return result[0];
+  }
+
+  /**
    * Delete a member by member ID or user ID + organization ID
    */
   static async deleteByMemberOrUserId(

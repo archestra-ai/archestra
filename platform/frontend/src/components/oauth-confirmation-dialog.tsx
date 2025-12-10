@@ -1,9 +1,8 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
+import { ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp-catalog/_parts/select-mcp-server-credential-type-and-teams";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,28 +13,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useMcpServers } from "@/lib/mcp-server.query";
-import { useTeams } from "@/lib/team.query";
 
-type McpServer = archestraApiTypes.GetMcpServersResponses["200"][number];
+export interface OAuthInstallResult {
+  /** Team ID to assign the MCP server to (null for personal) */
+  teamId?: string | null;
+}
 
 interface OAuthConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serverName: string;
-  onConfirm: (teams: string[]) => void;
+  onConfirm: (result: OAuthInstallResult) => void;
   onCancel: () => void;
-  isTeamMode?: boolean;
+  /** Catalog ID to filter existing installations */
   catalogId?: string;
-  installedServers?: McpServer[];
 }
 
 export function OAuthConfirmationDialog({
@@ -44,69 +35,20 @@ export function OAuthConfirmationDialog({
   serverName,
   onConfirm,
   onCancel,
-  isTeamMode = false,
   catalogId,
-  installedServers,
 }: OAuthConfirmationDialogProps) {
-  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-
-  const { data: teams } = useTeams();
-  const { data: allServers } = useMcpServers();
-
-  // Get teams that already have access to this catalog
-  const serversToCheck = installedServers || allServers || [];
-  const serversForCatalog = catalogId
-    ? serversToCheck.filter((s) => s.catalogId === catalogId)
-    : [];
-
-  const teamsWithExistingAccess = new Set<string>();
-  for (const server of serversForCatalog) {
-    if (server.teams) {
-      for (const teamId of server.teams) {
-        teamsWithExistingAccess.add(teamId);
-      }
-    }
-  }
-
-  const handleAddTeam = (teamId: string) => {
-    if (teamId && !assignedTeamIds.includes(teamId)) {
-      setAssignedTeamIds([...assignedTeamIds, teamId]);
-      setSelectedTeamId("");
-    }
-  };
-
-  const handleRemoveTeam = (teamId: string) => {
-    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-  };
-
-  const unassignedTeams = !teams
-    ? []
-    : teams.filter(
-        (team) =>
-          !assignedTeamIds.includes(team.id) &&
-          !teamsWithExistingAccess.has(team.id),
-      );
-
-  const getTeamById = (teamId: string) => {
-    return teams?.find((team) => team.id === teamId);
-  };
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
   const handleConfirm = () => {
-    onConfirm(assignedTeamIds);
-    setAssignedTeamIds([]);
-    setSelectedTeamId("");
+    onConfirm({ teamId: selectedTeamId });
     onOpenChange(false);
   };
 
   const handleCancel = () => {
-    setAssignedTeamIds([]);
-    setSelectedTeamId("");
+    setSelectedTeamId(null);
     onCancel();
     onOpenChange(false);
   };
-
-  const isValid = !isTeamMode || assignedTeamIds.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,14 +56,8 @@ export function OAuthConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              {isTeamMode ? (
-                <Building2 className="h-5 w-5" />
-              ) : (
-                <User className="h-5 w-5" />
-              )}
-              <span>
-                {isTeamMode ? "Authorize teams" : "Authenticated users"}
-              </span>
+              <User className="h-5 w-5" />
+              <span>OAuth Authorization</span>
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1 ml-2"
@@ -141,73 +77,12 @@ export function OAuthConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          {isTeamMode && (
-            <>
-              <Alert className="mb-4">
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Admin only: You are configuring shared credentials
-                </AlertDescription>
-              </Alert>
-
-              <div className="grid gap-2">
-                <Label htmlFor="assign-team">
-                  Select Teams <span className="text-destructive">*</span>
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Choose which teams will have access to this authentication.
-                </p>
-                <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                  <SelectTrigger id="assign-team">
-                    <SelectValue placeholder="Select a team to assign" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams?.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No teams available
-                      </div>
-                    ) : unassignedTeams.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        All teams are already assigned
-                      </div>
-                    ) : (
-                      unassignedTeams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {assignedTeamIds.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {assignedTeamIds.map((teamId) => {
-                      const team = getTeamById(teamId);
-                      return (
-                        <Badge
-                          key={teamId}
-                          variant="secondary"
-                          className="flex items-center gap-1 pr-1"
-                        >
-                          <span>{team?.name || teamId}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveTeam(teamId)}
-                            className="h-auto p-0.5 ml-1 hover:bg-destructive/20"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )}
+        <div className="py-4">
+          <SelectMcpServerCredentialTypeAndTeams
+            selectedTeamId={selectedTeamId}
+            onTeamChange={setSelectedTeamId}
+            catalogId={catalogId}
+          />
         </div>
 
         <DialogFooter className="gap-3 sm:gap-3">
@@ -216,7 +91,6 @@ export function OAuthConfirmationDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!isValid}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             Continue to Authorization...

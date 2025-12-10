@@ -59,3 +59,25 @@ export type InsertTeamExternalGroup = z.infer<
 export type AddTeamExternalGroupBody = z.infer<
   typeof AddTeamExternalGroupBodySchema
 >;
+
+// Team Vault Folder schemas for BYOS (Bring Your Own Secrets) feature
+export const SelectTeamVaultFolderSchema = createSelectSchema(
+  schema.teamVaultFoldersTable,
+);
+export const InsertTeamVaultFolderSchema = createInsertSchema(
+  schema.teamVaultFoldersTable,
+);
+export const UpdateTeamVaultFolderSchema = createUpdateSchema(
+  schema.teamVaultFoldersTable,
+);
+
+export const SetTeamVaultFolderBodySchema = z.object({
+  vaultPath: z.string().min(1, "Vault path is required"),
+});
+
+export type TeamVaultFolder = z.infer<typeof SelectTeamVaultFolderSchema>;
+export type InsertTeamVaultFolder = z.infer<typeof InsertTeamVaultFolderSchema>;
+export type UpdateTeamVaultFolder = z.infer<typeof UpdateTeamVaultFolderSchema>;
+export type SetTeamVaultFolderBody = z.infer<
+  typeof SetTeamVaultFolderBodySchema
+>;

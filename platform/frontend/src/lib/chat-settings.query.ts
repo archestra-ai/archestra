@@ -31,6 +31,8 @@ export function useUpdateChatSettings() {
     mutationFn: async (data: {
       anthropicApiKey?: string;
       resetApiKey?: boolean;
+      /** External Vault path for BYOS */
+      externalVaultSecret?: string;
     }) => {
       const { data: responseData, error } = await updateChatSettings({
         body: data,

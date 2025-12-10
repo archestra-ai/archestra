@@ -1,13 +1,19 @@
 import { randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { secretManager } from "@/secretsmanager";
+import { DbSecretsManager } from "@/secretsmanager";
 import type {
   InsertTeamToken,
   SelectTeamToken,
   TeamTokenWithTeam,
   UpdateTeamToken,
 } from "@/types";
+
+/** Team tokens always use DB storage (not external Vault)
+ * This is because team tokens are seeded on archestra startup.
+ * So, it doesn't play nice with BYOS Vault. ( Which is read-only secrets from the customer's Vault)
+ **/
+const teamTokenSecretManager = new DbSecretsManager();
 
 /** Token prefix for identification */
 const TOKEN_PREFIX = "archestra_";
@@ -67,11 +73,10 @@ class TeamTokenModel {
     const tokenValue = generateToken();
     const tokenStart = getTokenStart(tokenValue);
 
-    // Store token value in secret table via secretsManager
     const secretName = input.teamId
       ? `team-token-${input.teamId}`
       : `org-token-${input.organizationId}`;
-    const secret = await secretManager.createSecret(
+    const secret = await teamTokenSecretManager.createSecret(
       { token: tokenValue },
       secretName,
     );
@@ -234,7 +239,7 @@ class TeamTokenModel {
       .where(eq(schema.teamTokensTable.id, id));
 
     // Also delete the secret explicitly
-    await secretManager.deleteSecret(token.secretId);
+    await teamTokenSecretManager.deleteSecret(token.secretId);
 
     return true;
   }
@@ -252,7 +257,9 @@ class TeamTokenModel {
     const newTokenStart = getTokenStart(newTokenValue);
 
     // Update secret with new value
-    await secretManager.updateSecret(token.secretId, { token: newTokenValue });
+    await teamTokenSecretManager.updateSecret(token.secretId, {
+      token: newTokenValue,
+    });
 
     // Update token start
     await db
@@ -275,7 +282,7 @@ class TeamTokenModel {
 
     // Check each token's secret
     for (const token of allTokens) {
-      const secret = await secretManager.getSecret(token.secretId);
+      const secret = await teamTokenSecretManager.getSecret(token.secretId);
       if (
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue
@@ -355,7 +362,7 @@ class TeamTokenModel {
     const token = await TeamTokenModel.findById(id);
     if (!token) return null;
 
-    const secret = await secretManager.getSecret(token.secretId);
+    const secret = await teamTokenSecretManager.getSecret(token.secretId);
     if (!secret?.secret) return null;
 
     return (secret.secret as { token?: string }).token ?? null;

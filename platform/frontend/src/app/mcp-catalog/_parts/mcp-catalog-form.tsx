@@ -19,6 +19,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -98,10 +99,16 @@ export function McpCatalogForm({
   const [oauthVaultSecretPath, setOauthVaultSecretPath] = useState<
     string | null
   >(null);
+  const [oauthVaultSecretKey, setOauthVaultSecretKey] = useState<string | null>(
+    null,
+  );
   const [localConfigVaultTeamId, setLocalConfigVaultTeamId] = useState<
     string | null
   >(null);
   const [localConfigVaultSecretPath, setLocalConfigVaultSecretPath] = useState<
+    string | null
+  >(null);
+  const [localConfigVaultSecretKey, setLocalConfigVaultSecretKey] = useState<
     string | null
   >(null);
 
@@ -114,30 +121,50 @@ export function McpCatalogForm({
     name: "localConfig.environment",
   });
 
-  // Update form values when BYOS paths change
+  // Update form values when BYOS paths/keys change
   useEffect(() => {
     form.setValue(
       "oauthClientSecretVaultPath",
       oauthVaultSecretPath || undefined,
     );
-  }, [oauthVaultSecretPath, form]);
+    form.setValue(
+      "oauthClientSecretVaultKey",
+      oauthVaultSecretKey || undefined,
+    );
+  }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
 
   useEffect(() => {
     form.setValue(
       "localConfigVaultPath",
       localConfigVaultSecretPath || undefined,
     );
-  }, [localConfigVaultSecretPath, form]);
+    form.setValue(
+      "localConfigVaultKey",
+      localConfigVaultSecretKey || undefined,
+    );
+  }, [localConfigVaultSecretPath, localConfigVaultSecretKey, form]);
 
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
     if (initialValues) {
-      form.reset(transformCatalogItemToFormValues(initialValues));
-      // Reset BYOS state on initial values change
+      const transformedValues = transformCatalogItemToFormValues(initialValues);
+      form.reset(transformedValues);
+      // Initialize BYOS state from transformed values (parsed vault references)
+      // Note: teamId cannot be derived from path, so we leave it null (user can reselect if needed)
       setOauthVaultTeamId(null);
-      setOauthVaultSecretPath(null);
+      setOauthVaultSecretPath(
+        transformedValues.oauthClientSecretVaultPath || null,
+      );
+      setOauthVaultSecretKey(
+        transformedValues.oauthClientSecretVaultKey || null,
+      );
       setLocalConfigVaultTeamId(null);
-      setLocalConfigVaultSecretPath(null);
+      setLocalConfigVaultSecretPath(
+        transformedValues.localConfigVaultPath || null,
+      );
+      setLocalConfigVaultSecretKey(
+        transformedValues.localConfigVaultKey || null,
+      );
     }
   }, [initialValues, form]);
 
@@ -289,18 +316,17 @@ export function McpCatalogForm({
                 useExternalSecretsManager={showByosOption}
               />
 
-              {/* BYOS: Vault Secret Selector for Local Config Secrets - only shown when there are NON-prompted secret-type env vars and not in edit mode */}
-              {mode === "create" &&
-                showByosOption &&
-                nonPromptedSecretEnvVarKeys.length > 0 && (
-                  <ExternalSecretSelector
-                    selectedTeamId={localConfigVaultTeamId}
-                    selectedSecretPath={localConfigVaultSecretPath}
-                    onTeamChange={setLocalConfigVaultTeamId}
-                    onSecretChange={setLocalConfigVaultSecretPath}
-                    expectedKeyHint={nonPromptedSecretEnvVarKeys.join(", ")}
-                  />
-                )}
+              {/* BYOS: Vault Secret Selector for Local Config Secrets - only shown when there are NON-prompted secret-type env vars */}
+              {showByosOption && nonPromptedSecretEnvVarKeys.length > 0 && (
+                <ExternalSecretSelector
+                  selectedTeamId={localConfigVaultTeamId}
+                  selectedSecretPath={localConfigVaultSecretPath}
+                  selectedSecretKey={localConfigVaultSecretKey}
+                  onTeamChange={setLocalConfigVaultTeamId}
+                  onSecretChange={setLocalConfigVaultSecretPath}
+                  onSecretKeyChange={setLocalConfigVaultSecretKey}
+                />
+              )}
 
               <FormField
                 control={form.control}
@@ -495,15 +521,19 @@ export function McpCatalogForm({
                   )}
                 />
 
-                {/* BYOS: External Secret Selector for OAuth Client Secret - only shown in create mode */}
-                {mode === "create" && showByosOption ? (
-                  <ExternalSecretSelector
-                    selectedTeamId={oauthVaultTeamId}
-                    selectedSecretPath={oauthVaultSecretPath}
-                    onTeamChange={setOauthVaultTeamId}
-                    onSecretChange={setOauthVaultSecretPath}
-                    expectedKeyHint="client_secret"
-                  />
+                {/* BYOS: External Secret Selector for OAuth Client Secret */}
+                {showByosOption ? (
+                  <div className="space-y-2">
+                    <Label>Client Secret</Label>
+                    <ExternalSecretSelector
+                      selectedTeamId={oauthVaultTeamId}
+                      selectedSecretPath={oauthVaultSecretPath}
+                      selectedSecretKey={oauthVaultSecretKey}
+                      onTeamChange={setOauthVaultTeamId}
+                      onSecretChange={setOauthVaultSecretPath}
+                      onSecretKeyChange={setOauthVaultSecretKey}
+                    />
+                  </div>
                 ) : (
                   <FormField
                     control={form.control}

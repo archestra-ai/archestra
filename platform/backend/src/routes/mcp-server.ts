@@ -92,6 +92,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken: z.string().optional(),
           // For BYOS (Bring Your Own Secrets) - path to the secret in the external Vault
           externalVaultSecret: z.string().optional(),
+          // For BYOS - the key within the Vault secret to use (mapped to access_token)
+          externalVaultSecretKey: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -102,6 +104,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId,
         accessToken,
         externalVaultSecret,
+        externalVaultSecretKey,
         userConfigValues,
         environmentValues,
         ...restDataFromRequestBody
@@ -178,15 +181,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
+          if (!externalVaultSecretKey) {
+            throw new ApiError(
+              400,
+              "externalVaultSecretKey is required when using externalVaultSecret",
+            );
+          }
+
+          // Create secret with path#key format for the access_token
+          const vaultReference = `${externalVaultSecret}#${externalVaultSecretKey}`;
           const secret = await secretManager.createSecret(
-            { __vaultPath: externalVaultSecret },
+            { access_token: vaultReference },
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { secretId: secret.id, vaultPath: externalVaultSecret },
-            "Created BYOS external vault secret reference for remote server",
+            { secretId: secret.id, vaultReference },
+            "Created BYOS vault secret reference for remote server",
           );
         }
 
@@ -260,14 +272,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
+          if (!externalVaultSecretKey) {
+            throw new ApiError(
+              400,
+              "externalVaultSecretKey is required when using externalVaultSecret",
+            );
+          }
+
+          // Create secret with path#key format
+          // The vault key becomes the Archestra secret key, pointing to the vault reference
+          const vaultReference = `${externalVaultSecret}#${externalVaultSecretKey}`;
           const secret = await secretManager.createSecret(
-            { __vaultPath: externalVaultSecret },
+            { [externalVaultSecretKey]: vaultReference },
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { secretId: secret.id, vaultPath: externalVaultSecret },
+            { secretId: secret.id, vaultReference },
             "Created BYOS external vault secret reference for local server",
           );
         }

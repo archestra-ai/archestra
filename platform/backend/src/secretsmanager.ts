@@ -8,6 +8,7 @@ import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import type { SecretValue, SelectSecret } from "@/types";
 import { ApiError } from "@/types/api";
+import { parseVaultSecretReference } from "@/types/secret";
 
 /**
  * Result of checking connectivity to the secrets storage
@@ -995,65 +996,42 @@ export class BYOSVaultSecretManager implements SecretManager {
   // ============================================================
 
   /**
-   * Create a secret that references an external Vault path, or falls back to DB storage.
+   * Create a BYOS secret.
+   * Since BYOS means the customer owns the secrets, we don't actually create anything in Vault.
+   * Instead, we create a DB record that stores vault references in "path#key" format.
    *
-   * Convetnion is that secrets that are stored in external Vault should contain a special `__vaultPath` key
-   * that specifies where to fetch the actual secret from external Vault.
-   * It's a hack because SecretsManager interface is designed to receive JSON object with k-v pairs.
-   * But external Vault secrets requres path to Vault secret, which contains kv pairs.
-   * Another reason is that we supporting BYOS feature not for every secret at the moment, so we need a way to fallback to DB storage.
-   *
-   * TLDR - if you want store secret reference to external Vault, you need to add `__vaultPath` key to the secret value.
-   * Otherwise, use usual { key: value } object, e.g. { client_secret: "1234567890" }
-   *
-   * @param secretValue - Optionally contains `__vaultPath` key with the Vault path
+   * @param secretValue - Key-value pairs where values are vault references (path#key format)
+   *                      e.g., { "access_token": "secret/data/api-keys#my_token" }
    * @param name - Human-readable name for the secret
    */
   async createSecret(
     secretValue: SecretValue,
     name: string,
   ): Promise<SelectSecret> {
-    const vaultPath = secretValue.__vaultPath as string | undefined;
-
-    // If no __vaultPath provided, fall back to DB storage
-    // This allows non-MCP secrets (like API keys) to work normally
-    if (!vaultPath) {
-      logger.info(
-        { name },
-        "BYOSVaultSecretManager.createSecret: no __vaultPath provided, falling back to DB storage",
-      );
-      return await SecretModel.create({
-        name,
-        secret: secretValue,
-        isVault: false,
-      });
-    }
-
-    // BYOS behavior: create reference to external vault secret
     logger.info(
-      { name, vaultPath },
-      "BYOSVaultSecretManager.createSecret: creating reference to external vault secret",
+      { name, keys: Object.keys(secretValue) },
+      "BYOSVaultSecretManager.createSecret: creating BYOS secret with vault references",
     );
 
-    // Create a DB record that references the external Vault path
-    // The actual secret value is stored in the customer's Vault, not in our DB
     const secret = await SecretModel.create({
       name,
-      secret: {}, // Empty - actual value is in external Vault
-      isVault: true,
-      vaultPath,
+      secret: secretValue, // Store path#key references
+      isByosVault: true,
     });
 
     logger.info(
-      { vaultPath },
-      "BYOSVaultSecretManager.createSecret: created external vault secret reference",
+      { secretId: secret.id, keys: Object.keys(secretValue) },
+      "BYOSVaultSecretManager.createSecret: created BYOS secret",
     );
 
     return secret;
   }
 
   /**
-   * Get the secret value from external Vault.
+   * Get the secret value, resolving vault references for BYOS secrets.
+   *
+   * If the secret has isByosVault=true, the secret field contains vault references
+   * in "path#key" format that need to be resolved by fetching from Vault.
    */
   async getSecret(secretId: string): Promise<SelectSecret | null> {
     const dbRecord = await SecretModel.findById(secretId);
@@ -1062,14 +1040,20 @@ export class BYOSVaultSecretManager implements SecretManager {
       return null;
     }
 
-    // If not a BYOS secret (no vaultPath), just return the DB record
-    if (!dbRecord.vaultPath) {
+    // If not a BYOS Vault secret, just return the DB record as-is
+    if (!dbRecord.isByosVault) {
+      return dbRecord;
+    }
+
+    // All values in secret field are vault references (path#key format)
+    const vaultReferences = dbRecord.secret as Record<string, string>;
+    if (Object.keys(vaultReferences).length === 0) {
       return dbRecord;
     }
 
     logger.debug(
-      { vaultPath: dbRecord.vaultPath },
-      "BYOSVaultSecretManager.getSecret: fetching from external vault",
+      { secretId, keys: Object.keys(vaultReferences) },
+      "BYOSVaultSecretManager.getSecret: resolving vault references",
     );
 
     try {
@@ -1079,21 +1063,22 @@ export class BYOSVaultSecretManager implements SecretManager {
     }
 
     try {
-      const secretValue = await this.getSecretFromPath(dbRecord.vaultPath);
+      const resolvedSecrets =
+        await this.resolveVaultReferences(vaultReferences);
 
       logger.info(
-        { vaultPath: dbRecord.vaultPath },
-        "BYOSVaultSecretManager.getSecret: successfully fetched from external vault",
+        { secretId, keys: Object.keys(resolvedSecrets) },
+        "BYOSVaultSecretManager.getSecret: successfully resolved vault references",
       );
 
       return {
         ...dbRecord,
-        secret: secretValue as SecretValue,
+        secret: resolvedSecrets,
       };
     } catch (error) {
       logger.error(
-        { error, vaultPath: dbRecord.vaultPath },
-        "BYOSVaultSecretManager.getSecret: failed to fetch from external vault",
+        { error, secretId },
+        "BYOSVaultSecretManager.getSecret: failed to resolve vault references",
       );
 
       if (error instanceof ApiError) {
@@ -1102,10 +1087,54 @@ export class BYOSVaultSecretManager implements SecretManager {
 
       throw new ApiError(
         500,
-        `Failed to fetch secret from external Vault path '${dbRecord.vaultPath}'. ` +
-          `Please verify the path exists and Archestra has read access.`,
+        "Failed to resolve vault secret references. Please verify the paths exist and Archestra has read access.",
       );
     }
+  }
+
+  /**
+   * Resolve vault references by fetching values from Vault.
+   * Groups by path to minimize Vault API calls.
+   */
+  private async resolveVaultReferences(
+    references: Record<string, string>,
+  ): Promise<SecretValue> {
+    const resolved: SecretValue = {};
+
+    // Group by path to minimize Vault calls
+    const pathToKeys = new Map<
+      string,
+      { archestraKey: string; vaultKey: string }[]
+    >();
+
+    for (const [archestraKey, ref] of Object.entries(references)) {
+      const { path, key: vaultKey } = parseVaultSecretReference(
+        ref as `${string}#${string}`,
+      );
+      const existing = pathToKeys.get(path);
+      if (existing) {
+        existing.push({ archestraKey, vaultKey });
+      } else {
+        pathToKeys.set(path, [{ archestraKey, vaultKey }]);
+      }
+    }
+
+    // Fetch from each path and extract specific keys
+    for (const [path, keys] of pathToKeys) {
+      const vaultData = await this.getSecretFromPath(path);
+      for (const { archestraKey, vaultKey } of keys) {
+        if (vaultData[vaultKey] !== undefined) {
+          resolved[archestraKey] = vaultData[vaultKey];
+        } else {
+          logger.warn(
+            { path, vaultKey, archestraKey },
+            "Vault key not found in secret",
+          );
+        }
+      }
+    }
+
+    return resolved;
   }
 
   /**
@@ -1140,7 +1169,7 @@ export class BYOSVaultSecretManager implements SecretManager {
       return null;
     }
 
-    if (dbRecord.vaultPath) {
+    if (dbRecord.isVault) {
       throw new ApiError(
         400,
         "Cannot update BYOS external vault secrets. Update the secret directly in your external Vault.",
@@ -1207,9 +1236,12 @@ export class BYOSVaultSecretManager implements SecretManager {
       // Filter out folder entries (they end with /)
       const secretKeys = keys.filter((key) => !key.endsWith("/"));
 
+      // Normalize folder path by removing trailing slashes to avoid double slashes in the path
+      const normalizedFolderPath = folderPath.replace(/\/+$/, "");
+
       const items: VaultSecretListItem[] = secretKeys.map((name) => ({
         name,
-        path: `${folderPath}/${name}`,
+        path: `${normalizedFolderPath}/${name}`,
       }));
 
       logger.info(

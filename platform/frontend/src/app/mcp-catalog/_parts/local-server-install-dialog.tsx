@@ -26,6 +26,8 @@ export interface LocalServerInstallResult {
   environmentValues: Record<string, string>;
   /** External Vault secret path for BYOS */
   externalVaultSecret?: string;
+  /** External Vault secret key for BYOS (the key within the secret to use) */
+  externalVaultSecretKey?: string;
   /** Team ID to assign the MCP server to (null for personal) */
   teamId?: string | null;
 }
@@ -70,7 +72,11 @@ export function LocalServerInstallDialog({
   );
 
   // BYOS (Bring Your Own Secrets) state
+  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
   const [selectedSecretPath, setSelectedSecretPath] = useState<string | null>(
+    null,
+  );
+  const [selectedSecretKey, setSelectedSecretKey] = useState<string | null>(
     null,
   );
 
@@ -85,7 +91,12 @@ export function LocalServerInstallDialog({
     if (!catalogItem) return;
 
     // BYOS mode: secrets from vault, non-secrets from form
-    if (showByosOption && secretEnvVars.length > 0) {
+    if (
+      showByosOption &&
+      secretEnvVars.length > 0 &&
+      selectedSecretPath &&
+      selectedSecretKey
+    ) {
       // Include only non-secret env var values (secret ones come from vault)
       const nonSecretValues: Record<string, string> = {};
       for (const env of nonSecretEnvVars) {
@@ -96,7 +107,8 @@ export function LocalServerInstallDialog({
 
       await onConfirm({
         environmentValues: nonSecretValues,
-        externalVaultSecret: selectedSecretPath || undefined,
+        externalVaultSecret: selectedSecretPath,
+        externalVaultSecretKey: selectedSecretKey,
         teamId: selectedTeamId,
       });
     } else {
@@ -116,7 +128,9 @@ export function LocalServerInstallDialog({
       }, {}),
     );
     setSelectedTeamId(null);
+    setVaultTeamId(null);
     setSelectedSecretPath(null);
+    setSelectedSecretKey(null);
   };
 
   const handleClose = () => {
@@ -135,12 +149,12 @@ export function LocalServerInstallDialog({
   });
 
   // Check if secrets are valid:
-  // - BYOS mode: vault must be selected
+  // - BYOS mode: vault path AND key must be selected
   // - Non-BYOS mode: manual secret values must be filled
   const isSecretsValid =
     secretEnvVars.length === 0 ||
     (showByosOption
-      ? !!selectedSecretPath
+      ? !!selectedSecretPath && !!selectedSecretKey
       : secretEnvVars.every((env) => {
           if (!env.required) return true;
           const value = environmentValues[env.key];
@@ -245,14 +259,13 @@ export function LocalServerInstallDialog({
                 {/* BYOS mode: Only vault selection allowed */}
                 {showByosOption ? (
                   <ExternalSecretSelector
-                    selectedTeamId={selectedTeamId}
+                    selectedTeamId={vaultTeamId}
                     selectedSecretPath={selectedSecretPath}
-                    onTeamChange={setSelectedTeamId}
+                    selectedSecretKey={selectedSecretKey}
+                    onTeamChange={setVaultTeamId}
                     onSecretChange={setSelectedSecretPath}
+                    onSecretKeyChange={setSelectedSecretKey}
                     disabled={isInstalling}
-                    expectedKeyHint={secretEnvVars
-                      .map((env) => env.key)
-                      .join(", ")}
                   />
                 ) : (
                   /* Non-BYOS mode: Manual secret entry */

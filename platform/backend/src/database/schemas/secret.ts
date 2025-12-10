@@ -12,16 +12,18 @@ const secretTable = pgTable("secret", {
   id: uuid("id").primaryKey().defaultRandom(),
   /** Human-readable name to identify the secret in external storage */
   name: varchar("name", { length: 256 }).notNull().default("secret"),
-  secret: jsonb("secret").$type<SecretValue>().notNull().default({}),
-  /** When true, the actual secret value is stored in Vault and should be fetched using the record ID as path */
-  isVault: boolean("is_vault").notNull().default(false),
   /**
-   * External Vault path for BYOS (Bring Your Own Secrets) feature.
-   * When set along with isVault=true, the secret value is fetched from this external path
-   * instead of the derived Archestra-managed path.
-   * Example: "secret/data/engineering/api-keys"
+   * Stores secret data. Format depends on storage type:
+   * - For DB-stored secrets (isVault=false, isByosVault=false): { "access_token": "actual_value", ... }
+   * - For Archestra-managed Vault (isVault=true): references resolved via Vault path
+   * - For BYOS Vault (isByosVault=true): { "access_token": "vault/path#key_name", ... }
+   *   where the value is a reference in "path#key" format
    */
-  vaultPath: varchar("vault_path", { length: 512 }),
+  secret: jsonb("secret").$type<SecretValue>().notNull().default({}),
+  /** When true, secret is stored in Archestra-managed Vault */
+  isVault: boolean("is_vault").notNull().default(false),
+  /** When true, secret field contains BYOS Vault path#key references that need resolution */
+  isByosVault: boolean("is_byos_vault").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

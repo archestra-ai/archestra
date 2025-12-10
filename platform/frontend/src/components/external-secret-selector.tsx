@@ -28,20 +28,21 @@ import {
 interface ExternalSecretSelectorProps {
   selectedTeamId: string | null;
   selectedSecretPath: string | null;
+  selectedSecretKey: string | null;
   onTeamChange: (teamId: string | null) => void;
   onSecretChange: (secretPath: string | null) => void;
+  onSecretKeyChange: (key: string | null) => void;
   disabled?: boolean;
-  /** Expected key names hint to show to users (e.g., "API_KEY, SECRET_TOKEN") */
-  expectedKeyHint?: string;
 }
 
 export function ExternalSecretSelector({
   selectedTeamId,
   selectedSecretPath,
+  selectedSecretKey,
   onTeamChange,
   onSecretChange,
+  onSecretKeyChange,
   disabled = false,
-  expectedKeyHint,
 }: ExternalSecretSelectorProps) {
   const byosEnabled = useFeatureFlag("byosEnabled");
   const { data: teamsWithVaultPaths, isLoading: isLoadingTeams } =
@@ -70,45 +71,67 @@ export function ExternalSecretSelector({
   }
 
   const teams = teamsWithVaultPaths || [];
-
-  // Parse expected keys and check which ones are present
-  const expectedKeys = expectedKeyHint
-    ? expectedKeyHint.split(",").map((k) => k.trim())
-    : [];
-  const actualKeys = secretKeysData?.keys || [];
-  const missingKeys = expectedKeys.filter((key) => !actualKeys.includes(key));
-  const allKeysPresent = expectedKeys.length > 0 && missingKeys.length === 0;
+  const availableKeys = secretKeysData?.keys || [];
 
   const handleTeamChange = (value: string) => {
     if (value === "none") {
       onTeamChange(null);
       onSecretChange(null);
+      onSecretKeyChange(null);
     } else {
       onTeamChange(value);
       onSecretChange(null);
+      onSecretKeyChange(null);
     }
   };
 
   const handleSecretChange = (value: string) => {
     if (value === "none") {
       onSecretChange(null);
+      onSecretKeyChange(null);
     } else {
       onSecretChange(value);
+      onSecretKeyChange(null);
     }
   };
+
+  const handleKeyChange = (value: string) => {
+    if (value === "none") {
+      onSecretKeyChange(null);
+    } else {
+      onSecretKeyChange(value);
+    }
+  };
+
+  // Check if we have a saved vault reference (from edit mode) but no team selected
+  const hasSavedVaultReference =
+    !selectedTeamId && selectedSecretPath && selectedSecretKey;
 
   return (
     <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
       <span className="font-medium">Select external secret from Vault</span>
 
-      {/* Show expected keys hint at the top */}
-      {expectedKeyHint && (
-        <p className="text-xs text-muted-foreground">
-          Archestra expects the following keys to exist in this secret:{" "}
-          <code className="font-mono bg-muted px-1 rounded">
-            {expectedKeyHint}
-          </code>
-        </p>
+      {/* Show saved vault reference when editing without team selected */}
+      {hasSavedVaultReference && (
+        <div className="space-y-2 p-3 rounded border bg-muted/50">
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <span className="font-medium">Current Vault Secret:</span>
+          </div>
+          <div className="space-y-1 text-sm font-mono">
+            <div>
+              <span className="text-muted-foreground">Path: </span>
+              {selectedSecretPath}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Key: </span>
+              {selectedSecretKey}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Select a team below to change the vault secret.
+          </p>
+        </div>
       )}
 
       {/* Team selector */}
@@ -221,39 +244,61 @@ export function ExternalSecretSelector({
               </AlertDescription>
             </Alert>
           ) : null}
+        </div>
+      )}
 
-          {/* Key validation feedback */}
-          {selectedSecretPath &&
-            expectedKeys.length > 0 &&
-            (isLoadingKeys ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Validating secret keys...
-              </div>
-            ) : keysError ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Failed to validate secret keys:{" "}
-                  {keysError.message || "Unknown error"}
-                </AlertDescription>
-              </Alert>
-            ) : allKeysPresent ? (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle2 className="h-4 w-4" />
-                All expected keys found in the secret
-              </div>
-            ) : missingKeys.length > 0 ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Secret has missing keys:{" "}
-                  <code className="font-mono bg-destructive/10 px-1 rounded">
-                    {missingKeys.join(", ")}
-                  </code>
-                </AlertDescription>
-              </Alert>
-            ) : null)}
+      {/* Key selector - always shown when secret is selected */}
+      {selectedSecretPath && (
+        <div className="space-y-2">
+          <Label htmlFor="vault-key">Secret Key</Label>
+          {keysError ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Failed to load secret keys:{" "}
+                {keysError.message || "Unknown error"}
+              </AlertDescription>
+            </Alert>
+          ) : isLoadingKeys ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading keys...
+            </div>
+          ) : availableKeys.length > 0 ? (
+            <>
+              <Select
+                value={selectedSecretKey || "none"}
+                onValueChange={handleKeyChange}
+                disabled={disabled}
+              >
+                <SelectTrigger id="vault-key" className="w-64">
+                  <SelectValue placeholder="Select a key..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- Select a key --</SelectItem>
+                  {availableKeys.map((key) => (
+                    <SelectItem key={key} value={key}>
+                      <div className="flex items-center gap-2">
+                        <Key className="h-3 w-3" />
+                        {key}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedSecretKey && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Key selected
+                </div>
+              )}
+            </>
+          ) : (
+            <Alert variant="default">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>No keys found in this secret.</AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
     </div>

@@ -115,9 +115,16 @@ export function useDeleteTeamVaultFolder() {
  */
 export function useCheckTeamVaultFolderConnectivity() {
   return useMutation({
-    mutationFn: async (teamId: string) => {
+    mutationFn: async ({
+      teamId,
+      vaultPath,
+    }: {
+      teamId: string;
+      vaultPath?: string;
+    }) => {
       const { data, error } = await checkTeamVaultFolderConnectivity({
         path: { teamId },
+        body: { vaultPath },
       });
       if (error) {
         throw new Error(

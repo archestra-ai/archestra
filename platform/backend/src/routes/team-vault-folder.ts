@@ -230,12 +230,17 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           teamId: z.string(),
         }),
+        body: z
+          .object({
+            vaultPath: z.string().optional(),
+          })
+          .optional(),
         response: constructResponseSchema(
           VaultFolderConnectivityResponseSchema,
         ),
       },
     },
-    async ({ params: { teamId }, organizationId, user }, reply) => {
+    async ({ params: { teamId }, body, organizationId, user }, reply) => {
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -262,16 +267,34 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Get the team's Vault folder
-      const folder = await TeamVaultFolderModel.findByTeamId(teamId);
-      if (!folder) {
+      // Use provided vaultPath or fall back to saved folder
+      let pathToTest = body?.vaultPath?.trim();
+
+      if (!pathToTest) {
+        // Get the team's Vault folder
+        const folder = await TeamVaultFolderModel.findByTeamId(teamId);
+        if (!folder) {
+          throw new ApiError(
+            400,
+            "No Vault folder configured for this team. Set a Vault path first.",
+          );
+        }
+        pathToTest = folder.vaultPath;
+      }
+
+      // Validate the path format
+      if (
+        pathToTest.includes("..") ||
+        pathToTest.startsWith("/") ||
+        pathToTest.endsWith("/")
+      ) {
         throw new ApiError(
           400,
-          "No Vault folder configured for this team. Set a Vault path first.",
+          "Invalid Vault path. Path cannot contain '..', start with '/', or end with '/'",
         );
       }
 
-      const result = await manager.checkFolderConnectivity(folder.vaultPath);
+      const result = await manager.checkFolderConnectivity(pathToTest);
 
       return reply.send(result);
     },

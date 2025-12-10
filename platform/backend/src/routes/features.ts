@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
-import { isByosEnabled } from "@/secretsmanager";
+import { getByosVaultKvVersion, isByosEnabled } from "@/secretsmanager";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -22,6 +22,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "orchestrator-k8s-runtime": z.boolean(),
             /** BYOS (Bring Your Own Secrets) - allows teams to use external Vault folders */
             byosEnabled: z.boolean(),
+            /** Vault KV version when BYOS is enabled (null if BYOS is disabled) */
+            byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
           }),
         },
       },
@@ -31,6 +33,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...config.features,
         "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
         byosEnabled: isByosEnabled(),
+        byosVaultKvVersion: getByosVaultKvVersion(),
       }),
   );
 };

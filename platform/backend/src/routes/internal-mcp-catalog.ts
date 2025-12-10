@@ -89,7 +89,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          { secretId: secret.id, vaultReference },
+          { vaultReference },
           "Created BYOS external vault secret reference for OAuth client secret",
         );
       } else if (
@@ -139,7 +139,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          { secretId: secret.id, vaultReference },
+          { vaultReference },
           "Created BYOS external vault secret reference for local config secrets",
         );
       } else if (restBody.localConfig?.environment) {
@@ -269,7 +269,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          { secretId: secret.id, vaultReference },
+          { vaultReference },
           "Created BYOS external vault secret reference for OAuth client secret",
         );
       } else if (
@@ -331,7 +331,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          { secretId: secret.id, vaultReference },
+          { vaultReference },
           "Created BYOS external vault secret reference for local config secrets",
         );
       } else if (restBody.localConfig?.environment) {

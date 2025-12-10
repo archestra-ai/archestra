@@ -83,23 +83,38 @@ runs:
         turbo-team: ${{ inputs.turbo-team }}
         turbo-token: ${{ inputs.turbo-token }}
 
-    - name: Load Docker image into Kind
-      if: ${{ inputs.build-platform-image == 'true' }}
+    - name: Pull Docker image
+      if: ${{ inputs.build-platform-image != 'true' }}
       shell: bash
-      run: kind load docker-image ${{ inputs.platform-image-tag }} --name ${{ inputs.kind-cluster-name }}
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+      run: docker pull "${PLATFORM_IMAGE_TAG}"
+
+    - name: Load Docker image into Kind
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+      run: kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}"
 
     - name: Deploy e2e test dependencies (WireMock, Keycloak)
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
+      env:
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
       run: |
-        helm install e2e-tests ${{ inputs.platform-context }}/helm/e2e-tests
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests"
 
     - name: Deploy Archestra Platform with Helm
       shell: bash
+      env:
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        HELM_VALUES_PATH: ${{ inputs.helm-values-path }}
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
       run: |
-        helm install archestra-platform ${{ inputs.platform-context }}/helm/archestra \
-          --values ${{ inputs.helm-values-path }} \
-          --set archestra.image=${{ inputs.platform-image-tag }} \
+        helm install archestra-platform "${PLATFORM_CONTEXT}/helm/archestra" \
+          --values "${HELM_VALUES_PATH}" \
+          --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           --wait --timeout=5m
 
     - name: Verify deployment

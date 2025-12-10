@@ -25,12 +25,15 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   onTeamChange: (teamId: string | null) => void;
   /** Catalog ID to filter existing installations - if provided, disables already-used options */
   catalogId?: string;
+  /** Callback when credential type changes (personal vs team) */
+  onCredentialTypeChange?: (type: "personal" | "team") => void;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
   selectedTeamId,
   onTeamChange,
   catalogId,
+  onCredentialTypeChange,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const { data: installedServers } = useMcpServers();
@@ -81,18 +84,29 @@ export function SelectMcpServerCredentialTypeAndTeams({
   >(initialCredentialType);
 
   // Update credential type when initial value changes (e.g., after data loads)
+  // Also notifies parent of the current credential type
   useEffect(() => {
     if (hasPersonalInstallation && credentialType === CredentialType.Personal) {
       if (availableTeams.length > 0) {
         setCredentialType(CredentialType.Team);
+        onCredentialTypeChange?.(CredentialType.Team);
+        return;
       }
     }
-  }, [hasPersonalInstallation, availableTeams.length, credentialType]);
+    // Always notify parent of current credential type when dependencies change
+    onCredentialTypeChange?.(credentialType);
+  }, [
+    hasPersonalInstallation,
+    availableTeams.length,
+    credentialType,
+    onCredentialTypeChange,
+  ]);
 
   const handleCredentialTypeChange = (
     value: (typeof CredentialType)[keyof typeof CredentialType],
   ) => {
     setCredentialType(value);
+    onCredentialTypeChange?.(value);
     // Reset team selection when switching to personal
     if (value === CredentialType.Personal) {
       onTeamChange(null);

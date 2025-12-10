@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { Info, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
-import { ExternalSecretSelector } from "@/components/external-secret-selector";
+import { InlineVaultSecretSelector } from "@/components/inline-vault-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,13 +69,18 @@ export function RemoteServerInstallDialog({
 
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [credentialType, setCredentialType] = useState<"personal" | "team">(
+    "personal",
+  );
 
-  // BYOS (Bring Your Own Secrets) state
-  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
+  // BYOS (Bring Your Own Secrets) state - vault uses the same teamId as MCP server
   const [vaultSecretPath, setVaultSecretPath] = useState<string | null>(null);
   const [vaultSecretKey, setVaultSecretKey] = useState<string | null>(null);
 
   const byosEnabled = useFeatureFlag("byosEnabled");
+
+  // Show vault selector only for team installations when BYOS is enabled
+  const useVaultSecrets = credentialType === "team" && byosEnabled;
 
   const handleConfirm = async () => {
     if (!catalogItem) {
@@ -146,7 +151,7 @@ export function RemoteServerInstallDialog({
   const resetForm = () => {
     setConfigValues({});
     setSelectedTeamId(null);
-    setVaultTeamId(null);
+    setCredentialType("personal");
     setVaultSecretPath(null);
     setVaultSecretKey(null);
   };
@@ -165,13 +170,13 @@ export function RemoteServerInstallDialog({
   const hasConfig = Object.keys(userConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
 
-  // Check if BYOS feature is available (enterprise license + Vault configured)
-  const showByosOption = byosEnabled && hasConfig && selectedTeamId;
+  // Check if we should show vault selector (team installation + BYOS enabled)
+  const showVaultSelector = useVaultSecrets && hasConfig;
 
   // Check if config is valid:
-  // - BYOS mode: vault path AND key must be selected
-  // - Non-BYOS mode: manual values must be filled
-  const isValid = showByosOption
+  // - Vault mode (team + BYOS): vault path AND key must be selected
+  // - Manual mode (personal or BYOS disabled): manual values must be filled
+  const isValid = showVaultSelector
     ? !!vaultSecretPath && !!vaultSecretKey
     : !hasConfig ||
       Object.entries(userConfig)
@@ -206,6 +211,7 @@ export function RemoteServerInstallDialog({
             selectedTeamId={selectedTeamId}
             onTeamChange={setSelectedTeamId}
             catalogId={catalogItem?.id}
+            onCredentialTypeChange={setCredentialType}
           />
 
           {hasOAuth && (
@@ -218,18 +224,20 @@ export function RemoteServerInstallDialog({
             </Alert>
           )}
 
-          {/* Config fields - either BYOS vault selector or manual entry */}
+          {/* Config fields - vault selector for team+BYOS, manual entry otherwise */}
           {hasConfig ? (
-            showByosOption ? (
-              <ExternalSecretSelector
-                selectedTeamId={vaultTeamId}
-                selectedSecretPath={vaultSecretPath}
-                selectedSecretKey={vaultSecretKey}
-                onTeamChange={setVaultTeamId}
-                onSecretChange={setVaultSecretPath}
-                onSecretKeyChange={setVaultSecretKey}
-                disabled={isInstalling}
-              />
+            showVaultSelector ? (
+              <div className="space-y-2">
+                <Label>Select External Secret</Label>
+                <InlineVaultSecretSelector
+                  teamId={selectedTeamId}
+                  selectedSecretPath={vaultSecretPath}
+                  selectedSecretKey={vaultSecretKey}
+                  onSecretPathChange={setVaultSecretPath}
+                  onSecretKeyChange={setVaultSecretKey}
+                  disabled={isInstalling}
+                />
+              </div>
             ) : (
               <div className="space-y-4">
                 {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (

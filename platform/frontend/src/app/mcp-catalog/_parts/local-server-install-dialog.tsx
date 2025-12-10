@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
-import { ExternalSecretSelector } from "@/components/external-secret-selector";
+import { InlineVaultSecretSelector } from "@/components/inline-vault-secret-selector";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -48,6 +48,9 @@ export function LocalServerInstallDialog({
   isInstalling,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [credentialType, setCredentialType] = useState<"personal" | "team">(
+    "personal",
+  );
 
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
@@ -71,8 +74,7 @@ export function LocalServerInstallDialog({
     }, {}),
   );
 
-  // BYOS (Bring Your Own Secrets) state
-  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
+  // BYOS (Bring Your Own Secrets) state - vault uses the same teamId as MCP server
   const [selectedSecretPath, setSelectedSecretPath] = useState<string | null>(
     null,
   );
@@ -80,8 +82,10 @@ export function LocalServerInstallDialog({
     null,
   );
 
-  // Check if BYOS feature is available (enterprise license + Vault configured)
-  const showByosOption = useFeatureFlag("byosEnabled") && selectedTeamId;
+  const byosEnabled = useFeatureFlag("byosEnabled");
+
+  // Show vault selector only for team installations when BYOS is enabled
+  const useVaultSecrets = credentialType === "team" && byosEnabled;
 
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
@@ -90,9 +94,9 @@ export function LocalServerInstallDialog({
   const handleInstall = async () => {
     if (!catalogItem) return;
 
-    // BYOS mode: secrets from vault, non-secrets from form
+    // Vault mode (team + BYOS): secrets from vault, non-secrets from form
     if (
-      showByosOption &&
+      useVaultSecrets &&
       secretEnvVars.length > 0 &&
       selectedSecretPath &&
       selectedSecretKey
@@ -128,7 +132,7 @@ export function LocalServerInstallDialog({
       }, {}),
     );
     setSelectedTeamId(null);
-    setVaultTeamId(null);
+    setCredentialType("personal");
     setSelectedSecretPath(null);
     setSelectedSecretKey(null);
   };
@@ -149,11 +153,11 @@ export function LocalServerInstallDialog({
   });
 
   // Check if secrets are valid:
-  // - BYOS mode: vault path AND key must be selected
-  // - Non-BYOS mode: manual secret values must be filled
+  // - Vault mode (team + BYOS): vault path AND key must be selected
+  // - Manual mode (personal or BYOS disabled): manual secret values must be filled
   const isSecretsValid =
     secretEnvVars.length === 0 ||
-    (showByosOption
+    (useVaultSecrets
       ? !!selectedSecretPath && !!selectedSecretKey
       : secretEnvVars.every((env) => {
           if (!env.required) return true;
@@ -178,6 +182,7 @@ export function LocalServerInstallDialog({
           selectedTeamId={selectedTeamId}
           onTeamChange={setSelectedTeamId}
           catalogId={catalogItem?.id}
+          onCredentialTypeChange={setCredentialType}
         />
 
         <div className="space-y-6 mt-4">
@@ -256,17 +261,19 @@ export function LocalServerInstallDialog({
               <div className="space-y-4">
                 <h3 className="text-sm font-medium">Secrets</h3>
 
-                {/* BYOS mode: Only vault selection allowed */}
-                {showByosOption ? (
-                  <ExternalSecretSelector
-                    selectedTeamId={vaultTeamId}
-                    selectedSecretPath={selectedSecretPath}
-                    selectedSecretKey={selectedSecretKey}
-                    onTeamChange={setVaultTeamId}
-                    onSecretChange={setSelectedSecretPath}
-                    onSecretKeyChange={setSelectedSecretKey}
-                    disabled={isInstalling}
-                  />
+                {/* Vault mode (team + BYOS): vault selection */}
+                {useVaultSecrets ? (
+                  <div className="space-y-2">
+                    <Label>Select External Secret</Label>
+                    <InlineVaultSecretSelector
+                      teamId={selectedTeamId}
+                      selectedSecretPath={selectedSecretPath}
+                      selectedSecretKey={selectedSecretKey}
+                      onSecretPathChange={setSelectedSecretPath}
+                      onSecretKeyChange={setSelectedSecretKey}
+                      disabled={isInstalling}
+                    />
+                  </div>
                 ) : (
                   /* Non-BYOS mode: Manual secret entry */
                   <>

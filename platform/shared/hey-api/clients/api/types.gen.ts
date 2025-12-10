@@ -7437,7 +7437,9 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_port?: number;
         } | null;
         oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path?: never;
     query?: never;
@@ -7889,7 +7891,9 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_port?: number;
         } | null;
         oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path: {
         id: string;
@@ -9976,6 +9980,7 @@ export type InstallMcpServerData = {
         agentIds?: Array<string>;
         accessToken?: string;
         externalVaultSecret?: string;
+        externalVaultSecretKey?: string;
     };
     path?: never;
     query?: never;

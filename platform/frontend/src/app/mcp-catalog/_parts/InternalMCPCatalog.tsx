@@ -241,6 +241,7 @@ export function InternalMCPCatalog({
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
       externalVaultSecret: result.externalVaultSecret,
+      externalVaultSecretKey: result.externalVaultSecretKey,
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);

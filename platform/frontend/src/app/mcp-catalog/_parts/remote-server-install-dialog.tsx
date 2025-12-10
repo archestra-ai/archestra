@@ -41,6 +41,8 @@ export interface RemoteServerInstallResult {
   metadata: Record<string, unknown>;
   /** External Vault secret path for BYOS */
   externalVaultSecret?: string;
+  /** External Vault secret key for BYOS (the key within the secret to use) */
+  externalVaultSecretKey?: string;
   /** Team ID to assign the MCP server to (null for personal) */
   teamId?: string | null;
 }
@@ -71,6 +73,7 @@ export function RemoteServerInstallDialog({
   // BYOS (Bring Your Own Secrets) state
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
   const [vaultSecretPath, setVaultSecretPath] = useState<string | null>(null);
+  const [vaultSecretKey, setVaultSecretKey] = useState<string | null>(null);
 
   const byosEnabled = useFeatureFlag("byosEnabled");
 
@@ -83,11 +86,12 @@ export function RemoteServerInstallDialog({
       (catalogItem.userConfig as UserConfigType | null | undefined) || {};
 
     // If vault secret is selected, use that instead of manual values
-    if (vaultSecretPath) {
+    if (vaultSecretPath && vaultSecretKey) {
       try {
         await onConfirm(catalogItem, {
           metadata: {},
           externalVaultSecret: vaultSecretPath,
+          externalVaultSecretKey: vaultSecretKey,
           teamId: selectedTeamId,
         });
         resetForm();
@@ -144,6 +148,7 @@ export function RemoteServerInstallDialog({
     setSelectedTeamId(null);
     setVaultTeamId(null);
     setVaultSecretPath(null);
+    setVaultSecretKey(null);
   };
 
   const handleClose = () => {
@@ -164,10 +169,10 @@ export function RemoteServerInstallDialog({
   const showByosOption = byosEnabled && hasConfig;
 
   // Check if config is valid:
-  // - BYOS mode: vault must be selected
+  // - BYOS mode: vault path AND key must be selected
   // - Non-BYOS mode: manual values must be filled
   const isValid = showByosOption
-    ? !!vaultSecretPath
+    ? !!vaultSecretPath && !!vaultSecretKey
     : !hasConfig ||
       Object.entries(userConfig)
         .filter(([_, cfg]) => cfg.required)
@@ -219,10 +224,11 @@ export function RemoteServerInstallDialog({
               <ExternalSecretSelector
                 selectedTeamId={vaultTeamId}
                 selectedSecretPath={vaultSecretPath}
+                selectedSecretKey={vaultSecretKey}
                 onTeamChange={setVaultTeamId}
                 onSecretChange={setVaultSecretPath}
+                onSecretKeyChange={setVaultSecretKey}
                 disabled={isInstalling}
-                expectedKeyHint="access_token"
               />
             ) : (
               <div className="space-y-4">

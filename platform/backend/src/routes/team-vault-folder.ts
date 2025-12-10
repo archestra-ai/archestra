@@ -148,10 +148,14 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Validate the Vault path format (basic validation)
-      if (vaultPath.includes("..") || vaultPath.startsWith("/")) {
+      if (
+        vaultPath.includes("..") ||
+        vaultPath.startsWith("/") ||
+        vaultPath.endsWith("/")
+      ) {
         throw new ApiError(
           400,
-          "Invalid Vault path. Path cannot contain '..' or start with '/'",
+          "Invalid Vault path. Path cannot contain '..', start with '/', or end with '/'",
         );
       }
 

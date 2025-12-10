@@ -10,7 +10,11 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
+import {
+  dbSecretManager,
+  isByosEnabled,
+  secretManager,
+} from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -90,10 +94,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
-          // For BYOS (Bring Your Own Secrets) - path to the secret in the external Vault
-          externalVaultSecret: z.string().optional(),
-          // For BYOS - the key within the Vault secret to use (mapped to access_token)
-          externalVaultSecretKey: z.string().optional(),
+          // For BYOS (Bring Your Own Secrets) - path to the access token secret in the external Vault
+          accessTokenExternalSecretPath: z.string().optional(),
+          // For BYOS - the key within the Vault secret to use for access_token
+          accessTokenExternalSecretKey: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -103,8 +107,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentIds,
         secretId,
         accessToken,
-        externalVaultSecret,
-        externalVaultSecretKey,
+        accessTokenExternalSecretPath,
+        accessTokenExternalSecretKey,
         userConfigValues,
         environmentValues,
         ...restDataFromRequestBody
@@ -171,8 +175,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For REMOTE servers: create secrets and validate connection
       if (catalogItem?.serverType === "remote") {
-        // If externalVaultSecret is provided (BYOS flow), create a secret reference
-        if (externalVaultSecret && !secretId) {
+        // If accessTokenExternalSecretPath is provided (BYOS flow), create a secret reference
+        if (accessTokenExternalSecretPath && !secretId) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -181,15 +185,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
-          if (!externalVaultSecretKey) {
+          if (!accessTokenExternalSecretKey) {
             throw new ApiError(
               400,
-              "externalVaultSecretKey is required when using externalVaultSecret",
+              "accessTokenExternalSecretKey is required when using accessTokenExternalSecretPath",
             );
           }
 
           // Create secret with path#key format for the access_token
-          const vaultReference = `${externalVaultSecret}#${externalVaultSecretKey}`;
+          const vaultReference = `${accessTokenExternalSecretPath}#${accessTokenExternalSecretKey}`;
           const secret = await secretManager.createSecret(
             { access_token: vaultReference },
             `${serverData.name}-vault-secret`,
@@ -203,8 +207,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // If accessToken is provided (PAT flow), create a secret for it
+        // Use dbSecretManager to always store in DB (not BYOS vault reference)
         if (accessToken && !secretId) {
-          const secret = await secretManager.createSecret(
+          const secret = await dbSecretManager.createSecret(
             { access_token: accessToken },
             `${serverData.name}-token`,
           );
@@ -223,7 +228,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!isValid) {
             // Clean up the secret we just created if validation fails
             if (createdSecretId) {
-              await secretManager.deleteSecret(createdSecretId);
+              secretManager.deleteSecret(createdSecretId);
             }
 
             throw new ApiError(
@@ -263,7 +268,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Handle BYOS external vault secret for local servers
-        if (externalVaultSecret && !secretId) {
+        if (accessTokenExternalSecretPath && !secretId) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -272,18 +277,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
-          if (!externalVaultSecretKey) {
+          if (!accessTokenExternalSecretKey) {
             throw new ApiError(
               400,
-              "externalVaultSecretKey is required when using externalVaultSecret",
+              "accessTokenExternalSecretKey is required when using accessTokenExternalSecretPath",
             );
           }
 
           // Create secret with path#key format
           // The vault key becomes the Archestra secret key, pointing to the vault reference
-          const vaultReference = `${externalVaultSecret}#${externalVaultSecretKey}`;
+          const vaultReference = `${accessTokenExternalSecretPath}#${accessTokenExternalSecretKey}`;
           const secret = await secretManager.createSecret(
-            { [externalVaultSecretKey]: vaultReference },
+            { [accessTokenExternalSecretKey]: vaultReference },
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
@@ -295,6 +300,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Collect and store secret-type env vars (if not using BYOS)
+        // Use dbSecretManager to always store in DB (not BYOS vault reference)
         if (!secretId && catalogItem.localConfig?.environment) {
           const secretEnvVars: Record<string, string> = {};
 
@@ -319,7 +325,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager.createSecret(
+            const secret = await dbSecretManager.createSecret(
               secretEnvVars,
               `mcp-server-${serverData.name}-env`,
             );
@@ -529,8 +535,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await McpServerModel.delete(mcpServer.id);
 
         // Also clean up the secret if we created one
+        // Use the appropriate manager based on whether it was BYOS or manual input
         if (createdSecretId) {
-          await secretManager.deleteSecret(createdSecretId);
+          if (accessTokenExternalSecretPath) {
+            await secretManager.deleteSecret(createdSecretId);
+          } else {
+            await dbSecretManager.deleteSecret(createdSecretId);
+          }
         }
 
         throw new ApiError(

@@ -207,7 +207,9 @@ export function InternalMCPCatalog({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       environmentValues: installResult.environmentValues,
-      externalVaultSecret: installResult.externalVaultSecret,
+      accessTokenExternalSecretPath:
+        installResult.accessTokenExternalSecretPath,
+      accessTokenExternalSecretKey: installResult.accessTokenExternalSecretKey,
       teamId: installResult.teamId ?? undefined,
       dontShowToast: true,
     });
@@ -240,8 +242,8 @@ export function InternalMCPCatalog({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
-      externalVaultSecret: result.externalVaultSecret,
-      externalVaultSecretKey: result.externalVaultSecretKey,
+      accessTokenExternalSecretPath: result.accessTokenExternalSecretPath,
+      accessTokenExternalSecretKey: result.accessTokenExternalSecretKey,
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);

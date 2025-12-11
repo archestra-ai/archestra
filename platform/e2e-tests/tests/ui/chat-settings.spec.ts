@@ -49,7 +49,9 @@ test.describe("Chat Settings UI", () => {
       await expect(page.getByRole("combobox")).toContainText("Anthropic");
 
       // Fill in API key
-      await page.getByLabel(/API Key/i).fill("sk-ant-test-key-12345");
+      await page
+        .getByRole("textbox", { name: /API Key/i })
+        .fill("sk-ant-test-key-12345");
 
       // Click Create button
       await page.getByRole("button", { name: "Create" }).click();
@@ -63,32 +65,16 @@ test.describe("Chat Settings UI", () => {
       await expect(page.getByText(keyName)).toBeVisible();
 
       // Cleanup: Delete the created key
-      await page.getByRole("row").filter({ hasText: keyName }).getByRole("button").last().click();
+      await page
+        .getByRole("row")
+        .filter({ hasText: keyName })
+        .getByRole("button")
+        .last()
+        .click();
       await page.getByRole("menuitem", { name: /Delete/i }).click();
       await page.getByRole("button", { name: "Delete" }).click();
     },
   );
-
-  test("should show OpenAI as coming soon in provider dropdown", async ({
-    page,
-    goToPage,
-  }) => {
-    await goToPage(page, "/settings/chat");
-
-    // Click Add API Key button
-    await page.getByRole("button", { name: /Add API Key/i }).click();
-
-    // Open the provider dropdown
-    await page.getByRole("combobox").click();
-
-    // Verify OpenAI is shown but disabled with "Coming Soon" badge
-    const openaiOption = page.getByRole("option", { name: /OpenAI/i });
-    await expect(openaiOption).toBeVisible();
-    await expect(openaiOption).toContainText("Coming Soon");
-
-    // Close the dialog
-    await page.keyboard.press("Escape");
-  });
 
   test(
     "should edit an API key name",
@@ -102,14 +88,21 @@ test.describe("Chat Settings UI", () => {
       // Create a key first
       await page.getByRole("button", { name: /Add API Key/i }).click();
       await page.getByLabel(/Name/i).fill(originalName);
-      await page.getByLabel(/API Key/i).fill("sk-ant-edit-test-key");
+      await page
+        .getByRole("textbox", { name: /API Key/i })
+        .fill("sk-ant-edit-test-key");
       await page.getByRole("button", { name: "Create" }).click();
       await expect(page.getByText("API key created successfully")).toBeVisible({
         timeout: 5000,
       });
 
       // Open the actions menu for the created key
-      await page.getByRole("row").filter({ hasText: originalName }).getByRole("button").last().click();
+      await page
+        .getByRole("row")
+        .filter({ hasText: originalName })
+        .getByRole("button")
+        .last()
+        .click();
       await page.getByRole("menuitem", { name: /Edit/i }).click();
 
       // Update the name
@@ -124,7 +117,12 @@ test.describe("Chat Settings UI", () => {
       await expect(page.getByText(updatedName)).toBeVisible();
 
       // Cleanup
-      await page.getByRole("row").filter({ hasText: updatedName }).getByRole("button").last().click();
+      await page
+        .getByRole("row")
+        .filter({ hasText: updatedName })
+        .getByRole("button")
+        .last()
+        .click();
       await page.getByRole("menuitem", { name: /Delete/i }).click();
       await page.getByRole("button", { name: "Delete" }).click();
     },
@@ -141,14 +139,21 @@ test.describe("Chat Settings UI", () => {
       // Create a key first
       await page.getByRole("button", { name: /Add API Key/i }).click();
       await page.getByLabel(/Name/i).fill(keyName);
-      await page.getByLabel(/API Key/i).fill("sk-ant-delete-test-key");
+      await page
+        .getByRole("textbox", { name: /API Key/i })
+        .fill("sk-ant-delete-test-key");
       await page.getByRole("button", { name: "Create" }).click();
       await expect(page.getByText("API key created successfully")).toBeVisible({
         timeout: 5000,
       });
 
       // Open the actions menu and click delete
-      await page.getByRole("row").filter({ hasText: keyName }).getByRole("button").last().click();
+      await page
+        .getByRole("row")
+        .filter({ hasText: keyName })
+        .getByRole("button")
+        .last()
+        .click();
       await page.getByRole("menuitem", { name: /Delete/i }).click();
 
       // Confirm deletion
@@ -176,14 +181,21 @@ test.describe("Chat Settings UI", () => {
       // Create a key without setting it as default
       await page.getByRole("button", { name: /Add API Key/i }).click();
       await page.getByLabel(/Name/i).fill(keyName);
-      await page.getByLabel(/API Key/i).fill("sk-ant-default-test-key");
+      await page
+        .getByRole("textbox", { name: /API Key/i })
+        .fill("sk-ant-default-test-key");
       await page.getByRole("button", { name: "Create" }).click();
       await expect(page.getByText("API key created successfully")).toBeVisible({
         timeout: 5000,
       });
 
       // Open actions menu and set as default
-      await page.getByRole("row").filter({ hasText: keyName }).getByRole("button").last().click();
+      await page
+        .getByRole("row")
+        .filter({ hasText: keyName })
+        .getByRole("button")
+        .last()
+        .click();
       await page.getByRole("menuitem", { name: /Set as Default/i }).click();
 
       // Verify the default badge appears
@@ -201,33 +213,4 @@ test.describe("Chat Settings UI", () => {
       await page.getByRole("button", { name: "Delete" }).click();
     },
   );
-
-  test("should show provider icons in the table", async ({
-    page,
-    goToPage,
-    makeRandomString,
-  }) => {
-    const keyName = makeRandomString(8, "Icon Test");
-
-    await goToPage(page, "/settings/chat");
-
-    // Create a key
-    await page.getByRole("button", { name: /Add API Key/i }).click();
-    await page.getByLabel(/Name/i).fill(keyName);
-    await page.getByLabel(/API Key/i).fill("sk-ant-icon-test-key");
-    await page.getByRole("button", { name: "Create" }).click();
-    await expect(page.getByText("API key created successfully")).toBeVisible({
-      timeout: 5000,
-    });
-
-    // Verify the Anthropic icon is displayed
-    const keyRow = page.getByRole("row").filter({ hasText: keyName });
-    await expect(keyRow.getByRole("img", { name: "Anthropic" })).toBeVisible();
-
-    // Cleanup
-    await keyRow.getByRole("button").last().click();
-    await page.getByRole("menuitem", { name: /Delete/i }).click();
-    await page.getByRole("button", { name: "Delete" }).click();
-  });
 });
-

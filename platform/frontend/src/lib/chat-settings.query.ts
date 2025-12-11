@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk } from "@shared";
 import {
   useMutation,
   useQuery,
@@ -7,8 +7,6 @@ import {
 } from "@tanstack/react-query";
 
 const {
-  getChatSettings,
-  updateChatSettings,
   getChatApiKeys,
   createChatApiKey,
   updateChatApiKey,
@@ -17,53 +15,6 @@ const {
   unsetChatApiKeyDefault,
   updateChatApiKeyProfiles,
 } = archestraApiSdk;
-
-// Legacy chat settings hooks (for backward compatibility)
-export function useChatSettings(params?: {
-  initialData?: archestraApiTypes.GetChatSettingsResponses["200"];
-}) {
-  return useSuspenseQuery({
-    queryKey: ["chat-settings"],
-    queryFn: async () => (await getChatSettings()).data ?? null,
-    initialData: params?.initialData,
-  });
-}
-
-export function useChatSettingsOptional() {
-  return useQuery({
-    queryKey: ["chat-settings"],
-    queryFn: async () => (await getChatSettings()).data ?? null,
-  });
-}
-
-export function useUpdateChatSettings() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: {
-      anthropicApiKey?: string;
-      resetApiKey?: boolean;
-      /** External Vault path for BYOS */
-      externalVaultSecret?: string;
-    }) => {
-      const { data: responseData, error } = await updateChatSettings({
-        body: data,
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Unknown error";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-settings"] });
-    },
-  });
-}
-
-// New chat API keys hooks
 export function useChatApiKeys() {
   return useSuspenseQuery({
     queryKey: ["chat-api-keys"],

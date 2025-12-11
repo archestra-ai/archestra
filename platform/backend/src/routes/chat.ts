@@ -15,7 +15,6 @@ import logger from "@/logging";
 import {
   AgentModel,
   ChatApiKeyModel,
-  ChatSettingsModel,
   ConversationModel,
   MessageModel,
   PromptModel,
@@ -73,8 +72,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch MCP tools, agent prompts, and chat settings in parallel
-      const [mcpTools, prompt, chatSettings] = await Promise.all([
+      // Fetch MCP tools and agent prompts in parallel
+      const [mcpTools, prompt] = await Promise.all([
         getChatMcpTools({
           agentName: conversation.agent.name,
           agentId: conversation.agentId,
@@ -82,7 +81,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userIsProfileAdmin,
         }),
         PromptModel.findById(conversation.promptId),
-        ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -139,17 +137,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKeySource = profileApiKey.isOrganizationDefault
             ? "organization default"
             : "profile-specific";
-        }
-      }
-
-      // Fall back to legacy chat settings (for backward compatibility during migration)
-      if (!anthropicApiKey && chatSettings?.anthropicApiKeySecretId) {
-        const secret = await secretManager.getSecret(
-          chatSettings.anthropicApiKeySecretId,
-        );
-        if (secret?.secret?.anthropicApiKey) {
-          anthropicApiKey = secret.secret.anthropicApiKey as string;
-          apiKeySource = "legacy chat settings";
         }
       }
 
@@ -604,20 +591,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager.getSecret(profileApiKey.secretId);
           if (secret?.secret?.apiKey) {
             anthropicApiKey = secret.secret.apiKey as string;
-          }
-        }
-      }
-
-      // Fall back to legacy chat settings (for backward compatibility during migration)
-      if (!anthropicApiKey) {
-        const chatSettings =
-          await ChatSettingsModel.findByOrganizationId(organizationId);
-        if (chatSettings?.anthropicApiKeySecretId) {
-          const secret = await secretManager.getSecret(
-            chatSettings.anthropicApiKeySecretId,
-          );
-          if (secret?.secret?.anthropicApiKey) {
-            anthropicApiKey = secret.secret.anthropicApiKey as string;
           }
         }
       }

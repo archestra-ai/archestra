@@ -340,24 +340,6 @@ test.describe("Chat API Keys CRUD", () => {
   });
 });
 
-test.describe("Legacy Chat Settings API", () => {
-  test("should get chat settings for the organization", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    const response = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/chat-settings",
-    });
-
-    expect(response.ok()).toBe(true);
-    const settings = await response.json();
-    expect(settings).toHaveProperty("id");
-    expect(settings).toHaveProperty("organizationId");
-  });
-});
-
 test.describe("Chat API Keys Access Control", () => {
   test("member should be able to read chat API keys", async ({
     memberRequest,
@@ -391,4 +373,3 @@ test.describe("Chat API Keys Access Control", () => {
     expect(response.status()).toBe(403);
   });
 });
-

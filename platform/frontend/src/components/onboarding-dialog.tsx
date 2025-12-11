@@ -22,7 +22,6 @@ import { useDefaultProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useChatApiKeysOptional,
-  useChatSettingsOptional,
   useCreateChatApiKey,
 } from "@/lib/chat-settings.query";
 import {
@@ -50,8 +49,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
       "Failed to complete onboarding",
     );
 
-  // Chat settings state - use both old and new APIs for backward compatibility
-  const { data: chatSettings } = useChatSettingsOptional();
+  // Chat settings state
   const { data: chatApiKeys = [] } = useChatApiKeysOptional();
   const createChatApiKey = useCreateChatApiKey();
   const { data: canUpdateChatSettings } = useHasPermissions({
@@ -60,14 +58,10 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const [apiKey, setApiKey] = useState("");
   const [hasApiKeyChanged, setHasApiKeyChanged] = useState(false);
 
-  // Check if any Anthropic API key is configured (new system or legacy)
+  // Check if any Anthropic API key is configured
   const hasAnthropicApiKey = useMemo(() => {
-    const hasNewKey = chatApiKeys.some(
-      (k) => k.provider === "anthropic" && k.secretId,
-    );
-    const hasLegacyKey = !!chatSettings?.anthropicApiKeySecretId;
-    return hasNewKey || hasLegacyKey;
-  }, [chatApiKeys, chatSettings?.anthropicApiKeySecretId]);
+    return chatApiKeys.some((k) => k.provider === "anthropic" && k.secretId);
+  }, [chatApiKeys]);
 
   // Set placeholder dots when API key is configured
   useEffect(() => {

@@ -49,10 +49,7 @@ import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
-import {
-  useChatApiKeysOptional,
-  useChatSettingsOptional,
-} from "@/lib/chat-settings.query";
+import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
@@ -100,12 +97,11 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  // Check if API key is configured - check both new and legacy systems
-  const { data: chatSettings } = useChatSettingsOptional();
+  // Check if API key is configured
   const { data: chatApiKeys = [] } = useChatApiKeysOptional();
-  const hasAnyApiKey =
-    chatApiKeys.some((k) => k.provider === "anthropic" && k.secretId) ||
-    !!chatSettings?.anthropicApiKeySecretId;
+  const hasAnyApiKey = chatApiKeys.some(
+    (k) => k.provider === "anthropic" && k.secretId,
+  );
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -367,7 +363,7 @@ export default function ChatPage() {
   );
 
   // If API key is not configured, show setup message
-  if (chatSettings && !hasAnyApiKey) {
+  if (!hasAnyApiKey) {
     return (
       <div className="flex h-screen items-center justify-center p-8">
         <Card className="max-w-md">

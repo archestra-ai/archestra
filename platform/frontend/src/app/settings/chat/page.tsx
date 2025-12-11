@@ -419,7 +419,7 @@ function ChatSettingsContent() {
 
       {/* Create Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add API Key</DialogTitle>
             <DialogDescription>

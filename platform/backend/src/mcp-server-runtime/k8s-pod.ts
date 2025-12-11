@@ -360,6 +360,10 @@ export default class K8sPod {
   private rewriteLocalhostUrl(value: string): string {
     try {
       const url = new URL(value);
+      const isHttp = url.protocol === "http:" || url.protocol === "https:";
+      if (!isHttp) {
+        return value;
+      }
       if (
         url.hostname === "localhost" ||
         url.hostname === "127.0.0.1" ||

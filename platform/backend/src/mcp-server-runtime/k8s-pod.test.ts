@@ -8,9 +8,6 @@ import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 
-// Don't mock config - just import and modify as needed
-// This allows other parts of config to work normally
-
 // Helper function to create a K8sPod instance with mocked dependencies
 function createK8sPodInstance(
   environmentValues?: Record<string, string | number | boolean>,
@@ -251,7 +248,7 @@ describe("K8sPod.createPodEnvFromConfig", () => {
         { name: "API_KEY", value: "sk-1234567890abcdef" },
         {
           name: "DATABASE_URL",
-          value: "postgresql://user:pass@host.docker.internal:5432/db",
+          value: "postgresql://user:pass@localhost:5432/db",
         },
         { name: "NODE_ENV", value: "production" },
         { name: "PORT", value: "8080" },
@@ -1183,13 +1180,9 @@ describe("K8sPod.generatePodSpec", () => {
     const container = podSpec.spec?.containers[0];
 
     // Verify environment variables (quotes should be stripped by createPodEnvFromConfig)
-    // Note: localhost URLs are automatically rewritten to host.docker.internal
     expect(container?.env).toEqual([
       { name: "API_KEY", value: "sk-1234567890" },
-      {
-        name: "DATABASE_URL",
-        value: "postgresql://host.docker.internal:5432/db",
-      },
+      { name: "DATABASE_URL", value: "postgresql://localhost:5432/db" },
       { name: "WORKERS", value: "4" },
       { name: "DEBUG", value: "false" },
     ]);
@@ -1207,7 +1200,14 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("automatically rewrites localhost URLs to host.docker.internal", () => {
+  test("rewrite localhost URLs when backend is external to MCP pods", () => {
+    // Save original value
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+
+    // Mock config to simulate backend running in-cluster (production deployment)
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
+
     const mockCatalogItem = {
       id: "test-catalog-id",
       name: "test-catalog",
@@ -1262,6 +1262,9 @@ describe("K8sPod.generatePodSpec", () => {
 
     expect(grafanaUrl?.value).toBe("http://host.docker.internal:3002/");
     expect(apiEndpoint?.value).toBe("http://host.docker.internal:8080/api");
+
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
   });
 
   test("does not rewrite non-localhost URLs", () => {
@@ -1309,7 +1312,75 @@ describe("K8sPod.generatePodSpec", () => {
     expect(grafanaUrl?.value).toBe("https://grafana.example.com:3000/");
   });
 
-  test("does not rewrite localhost URLs when backend runs inside K8s cluster", () => {
+  test("does not rewrite non-HTTP/HTTPS protocols (MongoDB, PostgreSQL, etc.)", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "DATABASE_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Database URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "MONGODB_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "MongoDB URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "REDIS_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "Redis URL",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        DATABASE_URL: "postgresql://localhost:5432/mydb",
+        MONGODB_URL: "mongodb://127.0.0.1:27017/mydb",
+        REDIS_URL: "redis://localhost:6379",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-ignore - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    const databaseUrl = envVars.find((env) => env.name === "DATABASE_URL");
+    const mongodbUrl = envVars.find((env) => env.name === "MONGODB_URL");
+    const redisUrl = envVars.find((env) => env.name === "REDIS_URL");
+
+    // Should NOT be rewritten - only HTTP/HTTPS protocols are rewritten
+    expect(databaseUrl?.value).toBe("postgresql://localhost:5432/mydb");
+    expect(mongodbUrl?.value).toBe("mongodb://127.0.0.1:27017/mydb");
+    expect(redisUrl?.value).toBe("redis://localhost:6379");
+  });
+
+  test("does not rewrite localhost URLs when backend shares environment with K8s cluster", () => {
     // Save original value
     const originalValue =
       config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;

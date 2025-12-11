@@ -70,7 +70,10 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { params: { teamId }, organizationId } = request;
+      const {
+        params: { teamId },
+        organizationId,
+      } = request;
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -115,7 +118,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { params: { teamId }, body: { vaultPath }, organizationId } = request;
+      const {
+        params: { teamId },
+        body: { vaultPath },
+        organizationId,
+      } = request;
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -171,7 +178,10 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { params: { teamId }, organizationId } = request;
+      const {
+        params: { teamId },
+        organizationId,
+      } = request;
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -227,7 +237,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { params: { teamId }, body, organizationId } = request;
+      const {
+        params: { teamId },
+        body,
+        organizationId,
+      } = request;
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -299,7 +313,10 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { params: { teamId }, organizationId } = request;
+      const {
+        params: { teamId },
+        organizationId,
+      } = request;
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -358,7 +375,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { params: { teamId }, body: { secretPath }, organizationId } = request;
+      const {
+        params: { teamId },
+        body: { secretPath },
+        organizationId,
+      } = request;
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization

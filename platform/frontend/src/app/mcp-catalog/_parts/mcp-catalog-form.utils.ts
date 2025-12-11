@@ -109,7 +109,7 @@ export function transformFormToApiData(
  * Check if a value is a BYOS vault reference (path#key format)
  * Type guard to narrow string | undefined to string
  */
-function isVaultReference(value: string | undefined): value is string {
+export function isVaultReference(value: string | undefined): value is string {
   if (!value) return false;
   // Vault references look like "secret/data/path/to/secret#keyname"
   // They contain a # and the part before # looks like a path
@@ -123,7 +123,10 @@ function isVaultReference(value: string | undefined): value is string {
 /**
  * Parse a vault reference into path and key
  */
-function parseVaultReference(value: string): { path: string; key: string } {
+export function parseVaultReference(value: string): {
+  path: string;
+  key: string;
+} {
   const hashIndex = value.indexOf("#");
   return {
     path: value.substring(0, hashIndex),

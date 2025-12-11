@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   Control,
   FieldArrayWithId,
@@ -13,6 +13,7 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
+import { parseVaultReference } from "@/app/mcp-catalog/_parts/mcp-catalog-form.utils";
 import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -83,14 +84,8 @@ export function EnvironmentVariablesFormField<
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
     number | null
   >(null);
-  const [externalSecrets, setExternalSecrets] = useState<
-    Record<number, ExternalSecretValue>
-  >({});
 
   const handleSecretConfirm = (index: number, value: ExternalSecretValue) => {
-    // Save the external secret selection
-    setExternalSecrets((prev) => ({ ...prev, [index]: value }));
-
     // Store the value in the form field as path#key format
     if (value.secretPath && value.secretKey) {
       form.setValue(
@@ -101,7 +96,6 @@ export function EnvironmentVariablesFormField<
         >,
       );
     }
-
     setDialogOpenForEnvIndex(null);
   };
 
@@ -280,13 +274,13 @@ export function EnvironmentVariablesFormField<
 
                   // If using external secrets manager and this is a secret type, show Set secret button
                   if (useExternalSecretsManager && envType === "secret") {
-                    const savedSecret = externalSecrets[index];
-                    const hasSecret =
-                      savedSecret?.secretPath && savedSecret?.secretKey;
+                    const formValue = form.watch(
+                      `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
+                    ) as string | undefined;
 
                     return (
                       <div className="flex items-center h-10">
-                        {hasSecret ? (
+                        {formValue ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -296,7 +290,7 @@ export function EnvironmentVariablesFormField<
                           >
                             <CheckCircle2 className="h-3 w-3 mr-1" />
                             <span className="truncate max-w-[120px]">
-                              {savedSecret.secretKey}
+                              {parseVaultReference(formValue).key}
                             </span>
                           </Button>
                         ) : (
@@ -429,7 +423,20 @@ export function EnvironmentVariablesFormField<
         envKey={dialogEnvKey as string}
         initialValue={
           dialogOpenForEnvIndex !== null
-            ? externalSecrets[dialogOpenForEnvIndex]
+            ? (() => {
+                const formValue = form.watch(
+                  `${fieldNamePrefix}.${dialogOpenForEnvIndex}.value` as FieldPath<TFieldValues>,
+                ) as string | undefined;
+                if (formValue) {
+                  const parsed = parseVaultReference(formValue as string);
+                  return {
+                    teamId: null,
+                    secretPath: parsed.path,
+                    secretKey: parsed.key,
+                  };
+                }
+                return undefined;
+              })()
             : undefined
         }
         onConfirm={(value) =>
@@ -467,13 +474,18 @@ function ExternalSecretDialog({
     initialValue?.secretKey ?? null,
   );
 
-  // Reset state when dialog opens with new initial value
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
+  // Reset state when dialog opens or initialValue changes
+  useEffect(() => {
+    if (isOpen) {
       setTeamId(initialValue?.teamId ?? null);
       setSecretPath(initialValue?.secretPath ?? null);
       setSecretKey(initialValue?.secretKey ?? null);
-    } else {
+    }
+  }, [isOpen, initialValue]);
+
+  // Handle dialog open/close
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
       onClose();
     }
   };

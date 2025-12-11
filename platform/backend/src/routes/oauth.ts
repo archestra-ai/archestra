@@ -273,8 +273,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body: { catalogId } }, reply) => {
-      // Get catalog item to retrieve OAuth configuration
-      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+      // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
+      const catalogItem =
+        await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -508,10 +509,11 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Invalid or expired OAuth state");
       }
 
-      // Get catalog item to retrieve OAuth configuration
-      const catalogItem = await InternalMcpCatalogModel.findById(
-        oauthState.catalogId,
-      );
+      // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
+      const catalogItem =
+        await InternalMcpCatalogModel.findByIdWithResolvedSecrets(
+          oauthState.catalogId,
+        );
 
       if (!catalogItem || !catalogItem.oauthConfig) {
         throw new ApiError(400, "Invalid catalog item or OAuth configuration");

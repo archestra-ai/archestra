@@ -24,6 +24,7 @@ import {
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
 } from "@/lib/team-vault-folder.query";
+import Divider from "./divider";
 
 interface ExternalSecretSelectorProps {
   selectedTeamId: string | null;
@@ -109,8 +110,6 @@ export function ExternalSecretSelector({
 
   return (
     <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
-      <span className="font-medium">Select external secret from Vault</span>
-
       {/* Show saved vault reference when editing without team selected */}
       {hasSavedVaultReference && (
         <div className="space-y-2 p-3 rounded border bg-muted/50">
@@ -128,12 +127,11 @@ export function ExternalSecretSelector({
               {selectedSecretKey}
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Select a team below to change the vault secret.
-          </p>
         </div>
       )}
 
+      <Divider />
+      <p className="font-medium">Select external secret from Vault</p>
       {/* Team selector */}
       <div className="space-y-2">
         <Label htmlFor="vault-team">Team</Label>

@@ -28,7 +28,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(await InternalMcpCatalogModel.findAll());
+      // Don't expand secrets for list view
+      return reply.send(
+        await InternalMcpCatalogModel.findAll({ expandSecrets: false }),
+      );
     },
   );
 
@@ -69,8 +72,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!isByosEnabled()) {
           throw new ApiError(
             400,
-            "BYOS (Bring Your Own Secrets) is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
           );
         }
 
@@ -89,7 +92,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          "Created BYOS external vault secret reference for OAuth client secret",
+          "Created Readonly Vault external vault secret reference for OAuth client secret",
         );
       } else if (
         restBody.oauthConfig &&
@@ -107,14 +110,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
-      // Handle local config secrets - either via BYOS or direct values
+      // Handle local config secrets - either via Readonly Vault or direct values
       if (localConfigVaultPath && localConfigVaultKey) {
-        // BYOS flow for local config secrets
+        // Readonly Vault flow for local config secrets
         if (!isByosEnabled()) {
           throw new ApiError(
             400,
-            "BYOS (Bring Your Own Secrets) is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
           );
         }
 
@@ -138,7 +141,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          "Created BYOS external vault secret reference for local config secrets",
+          "Created Readonly Vault external vault secret reference for local config secrets",
         );
       } else if (restBody.localConfig?.environment) {
         // Extract secret env vars from localConfig.environment
@@ -236,14 +239,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let clientSecretId = originalCatalogItem.clientSecretId;
       let localConfigSecretId = originalCatalogItem.localConfigSecretId;
 
-      // Handle OAuth client secret - either via BYOS or direct value
+      // Handle OAuth client secret - either via Readonly Vault or direct value
       if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
-        // BYOS flow for OAuth client secret
+        // Readonly Vault flow for OAuth client secret
         if (!isByosEnabled()) {
           throw new ApiError(
             400,
-            "BYOS (Bring Your Own Secrets) is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
           );
         }
 
@@ -267,7 +270,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          "Created BYOS external vault secret reference for OAuth client secret",
+          "Created Readonly Vault external vault secret reference for OAuth client secret",
         );
       } else if (
         restBody.oauthConfig &&
@@ -293,14 +296,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
-      // Handle local config secrets - either via BYOS or direct values
+      // Handle local config secrets - either via Readonly Vault or direct values
       if (localConfigVaultPath && localConfigVaultKey) {
-        // BYOS flow for local config secrets
+        // Readonly Vault flow for local config secrets
         if (!isByosEnabled()) {
           throw new ApiError(
             400,
-            "BYOS (Bring Your Own Secrets) is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
           );
         }
 
@@ -328,7 +331,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          "Created BYOS external vault secret reference for local config secrets",
+          "Created Readonly Vault external vault secret reference for local config secrets",
         );
       } else if (restBody.localConfig?.environment) {
         // Extract secret env vars from localConfig.environment
@@ -404,8 +407,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
-      // Get the catalog item to check if it has secrets
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+      // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        expandSecrets: false,
+      });
 
       if (catalogItem?.clientSecretId) {
         // Delete the associated OAuth secret

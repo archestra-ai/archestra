@@ -146,50 +146,44 @@ openssl rand -base64 32
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
 
+**GKE BackendConfig Settings** (Google Cloud only):
+
+- `archestra.gkeBackendConfig.enabled` - Enable or disable GKE BackendConfig resources (default: false)
+- `archestra.gkeBackendConfig.backend.timeoutSec` - Request timeout for backend API (recommended: 600 for streaming)
+- `archestra.gkeBackendConfig.backend.connectionDraining.drainingTimeoutSec` - Connection draining timeout for backend
+- `archestra.gkeBackendConfig.backend.healthCheck` - Health check configuration for backend (port 9000)
+- `archestra.gkeBackendConfig.frontend.timeoutSec` - Request timeout for frontend
+- `archestra.gkeBackendConfig.frontend.connectionDraining.drainingTimeoutSec` - Connection draining timeout for frontend
+- `archestra.gkeBackendConfig.frontend.healthCheck` - Health check configuration for frontend (port 3000)
+
 #### Cloud Provider Configuration (Streaming Timeout Settings)
 
 **⚠️ IMPORTANT:** Archestra Platform requires proper timeout settings on the upstream load balancer. **Without longer timeouts, streaming responses may end prematurely**, resulting in a “network error”
 
 ##### Google Cloud Platform (GKE)
 
-For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts using a BackendConfig resource. **BackendConfig is cloud-provider-specific and should be managed through your infrastructure-as-code** (Terraform, Pulumi, etc.) rather than the Helm chart.
+For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts and health checks using BackendConfig resources. The Helm chart can create and manage these resources for you.
 
-**Create BackendConfig Resource**:
-
-The BackendConfig should be created in the same namespace as your Archestra Platform deployment:
-
-```yaml
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata:
-  name: archestra-platform-backend-config
-  namespace: archestra # Same namespace as Helm release
-spec:
-  timeoutSec: 600 # 10 minutes for streaming responses and long-running MCP operations
-  connectionDraining:
-    drainingTimeoutSec: 60
-  healthCheck:
-    checkIntervalSec: 10
-    timeoutSec: 5
-    healthyThreshold: 1
-    unhealthyThreshold: 3
-    type: HTTP
-    requestPath: /health
-    port: 9000
-```
-
-**Reference BackendConfig in Service**:
-
-After creating the BackendConfig resource, configure the Helm chart to reference it via service annotations:
+Enable the `gkeBackendConfig` section in your values:
 
 ```yaml
 archestra:
+  gkeBackendConfig:
+    enabled: true
+    backend:
+      timeoutSec: 600 # 10 minutes for streaming responses
+      connectionDraining:
+        drainingTimeoutSec: 60
+    frontend:
+      timeoutSec: 600
+      connectionDraining:
+        drainingTimeoutSec: 60
   service:
     annotations:
-      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+      cloud.google.com/backend-config: '{"ports": {"9000":"RELEASE_NAME-archestra-platform-backend-config", "3000":"RELEASE_NAME-archestra-platform-frontend-config"}}'
 ```
 
-Apply via Helm:
+Apply via Helm (replace `RELEASE_NAME` with your actual release name, e.g., `archestra-platform`):
 
 ```bash
 helm upgrade archestra-platform \
@@ -197,9 +191,17 @@ helm upgrade archestra-platform \
   --install \
   --namespace archestra \
   --create-namespace \
-  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-backend-config"}}' \
+  --set archestra.gkeBackendConfig.enabled=true \
+  --set archestra.gkeBackendConfig.backend.timeoutSec=600 \
+  --set archestra.gkeBackendConfig.frontend.timeoutSec=600 \
+  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-archestra-platform-backend-config", "3000":"archestra-platform-archestra-platform-frontend-config"}}' \
   --wait
 ```
+
+The Helm chart creates two BackendConfig resources with health checks tuned for deployments:
+
+- `<release>-archestra-platform-backend-config` - For the API backend (port 9000)
+- `<release>-archestra-platform-frontend-config` - For the frontend (port 3000)
 
 ##### Amazon Web Services (AWS EKS)
 

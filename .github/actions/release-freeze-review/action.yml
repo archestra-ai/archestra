@@ -48,8 +48,33 @@ runs:
           fi
         fi
 
+    - name: Check existing review state
+      id: check-review
+      if: steps.find-pr.outputs.pr_number != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        PR_NUMBER: ${{ steps.find-pr.outputs.pr_number }}
+      run: |
+        # Look for reviews containing our marker text to identify our bot's reviews
+        # This avoids needing to call /user which requires different permissions
+        FREEZE_MARKER="release freeze system"
+
+        # Get all reviews and find the latest one with our marker
+        LATEST_REVIEW=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+          --jq "[.[] | select(.body | contains(\"$FREEZE_MARKER\"))] | last")
+
+        if [ "$LATEST_REVIEW" = "null" ] || [ -z "$LATEST_REVIEW" ]; then
+          echo "No existing release freeze review found"
+          echo "review_state=NONE" >> "$GITHUB_OUTPUT"
+        else
+          REVIEW_STATE=$(echo "$LATEST_REVIEW" | jq -r '.state')
+          echo "Found existing release freeze review with state: $REVIEW_STATE"
+          echo "review_state=$REVIEW_STATE" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Request changes (freeze)
-      if: inputs.action == 'freeze' && steps.find-pr.outputs.pr_number != ''
+      if: inputs.action == 'freeze' && steps.find-pr.outputs.pr_number != '' && steps.check-review.outputs.review_state != 'CHANGES_REQUESTED'
       shell: bash
       env:
         GH_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -72,8 +97,14 @@ runs:
         *This review was posted automatically by the release freeze system.*"
         echo "✅ Requested changes on PR #$PR_NUMBER"
 
+    - name: Skip freeze (already requested)
+      if: inputs.action == 'freeze' && steps.find-pr.outputs.pr_number != '' && steps.check-review.outputs.review_state == 'CHANGES_REQUESTED'
+      shell: bash
+      run: |
+        echo "⏭️ Skipping - already have CHANGES_REQUESTED review on this PR"
+
     - name: Approve (unfreeze)
-      if: inputs.action == 'unfreeze' && steps.find-pr.outputs.pr_number != ''
+      if: inputs.action == 'unfreeze' && steps.find-pr.outputs.pr_number != '' && steps.check-review.outputs.review_state != 'APPROVED'
       shell: bash
       env:
         GH_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -85,5 +116,11 @@ runs:
         The release freeze has been lifted. This PR can now be merged.
 
         ---
-        *This approval was posted automatically when the release freeze was disabled.*"
+        *This approval was posted automatically by the release freeze system.*"
         echo "✅ Approved PR #$PR_NUMBER"
+
+    - name: Skip unfreeze (already approved or no blocking review)
+      if: inputs.action == 'unfreeze' && steps.find-pr.outputs.pr_number != '' && steps.check-review.outputs.review_state == 'APPROVED'
+      shell: bash
+      run: |
+        echo "⏭️ Skipping - already have APPROVED review on this PR"

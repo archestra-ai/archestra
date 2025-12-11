@@ -1,7 +1,8 @@
-import { ADMIN_ROLE_NAME, RouteId } from "@shared";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { MemberModel, TeamModel } from "@/models";
+import { hasPermission } from "@/auth";
+import { TeamModel } from "@/models";
 import TeamVaultFolderModel from "@/models/team-vault-folder";
 import {
   type BYOSVaultSecretManager,
@@ -25,7 +26,7 @@ function assertByosEnabled(): BYOSVaultSecretManager {
   if (!isByosEnabled()) {
     throw new ApiError(
       403,
-      "BYOS (Bring Your Own Secrets) is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+      "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
     );
   }
 
@@ -68,7 +69,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { teamId }, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { teamId },
+        organizationId,
+      } = request;
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -77,21 +82,16 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is org admin
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
-
-      // Check if user has access (org admin or team admin)
-      const hasAccess = await TeamVaultFolderModel.userHasAccess(
-        user.id,
-        teamId,
-        isOrgAdmin,
+      // Check if user has team:update permission
+      const { success: hasAccess } = await hasPermission(
+        { team: ["update"] },
+        request.headers,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only organization admins or team admins can view Vault folder configuration",
+          "Only users with team:update permission can view Vault folder configuration",
         );
       }
 
@@ -117,10 +117,12 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamVaultFolderSchema),
       },
     },
-    async (
-      { params: { teamId }, body: { vaultPath }, organizationId, user },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const {
+        params: { teamId },
+        body: { vaultPath },
+        organizationId,
+      } = request;
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -129,21 +131,16 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is org admin
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
-
-      // Check if user has access (org admin or team admin)
-      const hasAccess = await TeamVaultFolderModel.userHasAccess(
-        user.id,
-        teamId,
-        isOrgAdmin,
+      // Check if user has team:update permission
+      const { success: hasAccess } = await hasPermission(
+        { team: ["update"] },
+        request.headers,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only organization admins or team admins can configure Vault folder settings",
+          "Only users with team:update permission can configure Vault folder settings",
         );
       }
 
@@ -180,7 +177,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { teamId }, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { teamId },
+        organizationId,
+      } = request;
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -189,21 +190,16 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is org admin
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
-
-      // Check if user has access (org admin or team admin)
-      const hasAccess = await TeamVaultFolderModel.userHasAccess(
-        user.id,
-        teamId,
-        isOrgAdmin,
+      // Check if user has team:update permission
+      const { success: hasAccess } = await hasPermission(
+        { team: ["update"] },
+        request.headers,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only organization admins or team admins can delete Vault folder configuration",
+          "Only users with team:update permission can delete Vault folder configuration",
         );
       }
 
@@ -240,7 +236,12 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { teamId }, body, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { teamId },
+        body,
+        organizationId,
+      } = request;
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -249,21 +250,16 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is org admin
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
-
-      // Check if user has access (org admin or team admin)
-      const hasAccess = await TeamVaultFolderModel.userHasAccess(
-        user.id,
-        teamId,
-        isOrgAdmin,
+      // Check if user has team:update permission
+      const { success: hasAccess } = await hasPermission(
+        { team: ["update"] },
+        request.headers,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only organization admins or team admins can check Vault folder connectivity",
+          "Only users with team:update permission can check Vault folder connectivity",
         );
       }
 
@@ -316,7 +312,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(VaultSecretListItemSchema)),
       },
     },
-    async ({ params: { teamId }, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { teamId },
+        organizationId,
+      } = request;
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -325,21 +325,16 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is org admin
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
-
-      // Check if user has access (org admin or team admin)
-      const hasAccess = await TeamVaultFolderModel.userHasAccess(
-        user.id,
-        teamId,
-        isOrgAdmin,
+      // Check if user has team:update permission
+      const { success: hasAccess } = await hasPermission(
+        { team: ["update"] },
+        request.headers,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only organization admins or team admins can list Vault folder secrets",
+          "Only users with team:update permission can list Vault folder secrets",
         );
       }
 
@@ -379,10 +374,12 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(VaultSecretKeysResponseSchema),
       },
     },
-    async (
-      { params: { teamId }, body: { secretPath }, organizationId, user },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const {
+        params: { teamId },
+        body: { secretPath },
+        organizationId,
+      } = request;
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
@@ -391,21 +388,16 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is org admin
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-      const isOrgAdmin = member?.role === ADMIN_ROLE_NAME;
-
-      // Check if user has access (org admin or team admin)
-      const hasAccess = await TeamVaultFolderModel.userHasAccess(
-        user.id,
-        teamId,
-        isOrgAdmin,
+      // Check if user has team:update permission
+      const { success: hasAccess } = await hasPermission(
+        { team: ["update"] },
+        request.headers,
       );
 
       if (!hasAccess) {
         throw new ApiError(
           403,
-          "Only organization admins or team admins can access Vault secrets",
+          "Only users with team:update permission can access Vault secrets",
         );
       }
 

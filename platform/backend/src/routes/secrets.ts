@@ -2,7 +2,11 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import SecretModel from "@/models/secret";
-import { SecretsManagerType, secretManager } from "@/secretsmanager";
+import {
+  isByosEnabled,
+  SecretsManagerType,
+  secretManager,
+} from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -48,15 +52,26 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
-      // For BYOS secrets, we want to return the raw secret column (vault references)
-      // without resolving them. Use SecretModel directly instead of secretManager
-      // to avoid resolving vault references.
+      // Security: Only allow access to secrets when BYOS is enabled or the secret is a BYOS secret.
+      // This prevents exposing actual secret values (API keys, tokens, etc.) when BYOS is not enabled.
+      // When BYOS is enabled, secrets contain vault references (safe to expose) rather than actual values.
       const secret = await SecretModel.findById(id);
 
       if (!secret) {
         throw new ApiError(404, "Secret not found");
       }
 
+      // Only allow access if BYOS is enabled globally OR the secret is a BYOS secret
+      if (!isByosEnabled() && !secret.isByosVault) {
+        throw new ApiError(
+          403,
+          "Access to secrets is only allowed for BYOS (Bring Your Own Secrets) secrets when BYOS is enabled",
+        );
+      }
+
+      // For BYOS secrets, we want to return the raw secret column (vault references)
+      // without resolving them. Use SecretModel directly instead of secretManager
+      // to avoid resolving vault references.
       return reply.send(secret);
     },
   );

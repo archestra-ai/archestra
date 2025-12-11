@@ -161,7 +161,7 @@ const VideoMetadataSchema = z
   })
   .describe(`https://ai.google.dev/api/caching#VideoMetadata`);
 
-const PartDataSchema = z
+const _PartDataSchema = z
   .union([
     TextPartSchema,
     InlineDataPartSchema,

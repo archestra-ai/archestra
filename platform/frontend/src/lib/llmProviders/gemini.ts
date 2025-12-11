@@ -2,6 +2,106 @@ import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
+// Define more precise types for Gemini parts since the generated types use union discrimination
+type GeminiFunctionCallPart = {
+  thought?: boolean;
+  thoughtSignature?: string;
+  functionCall: {
+    id?: string;
+    name: string;
+    args?: Record<string, unknown>;
+  };
+};
+
+type GeminiFunctionResponsePart = {
+  thought?: boolean;
+  thoughtSignature?: string;
+  functionResponse: {
+    id?: string;
+    name: string;
+    response: Record<string, unknown>;
+  };
+};
+
+type GeminiTextPart = {
+  thought?: boolean;
+  thoughtSignature?: string;
+  text: string;
+};
+
+type GeminiInlineDataPart = {
+  thought?: boolean;
+  thoughtSignature?: string;
+  inlineData: {
+    mimeType: string;
+    data: string;
+  };
+};
+
+type GeminiFileDataPart = {
+  thought?: boolean;
+  thoughtSignature?: string;
+  fileData: {
+    mimeType?: string;
+    fileUri: string;
+  };
+};
+
+type GeminiPart =
+  | GeminiTextPart
+  | GeminiFunctionCallPart
+  | GeminiFunctionResponsePart
+  | GeminiInlineDataPart
+  | GeminiFileDataPart;
+
+// Type guards for discriminating union types
+function hasFunctionResponse(
+  part: unknown,
+): part is GeminiFunctionResponsePart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "functionResponse" in part &&
+    part.functionResponse !== undefined
+  );
+}
+
+function hasFunctionCall(part: unknown): part is GeminiFunctionCallPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "functionCall" in part &&
+    part.functionCall !== undefined
+  );
+}
+
+function hasText(part: unknown): part is GeminiTextPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "text" in part &&
+    typeof (part as GeminiTextPart).text === "string"
+  );
+}
+
+function hasInlineData(part: unknown): part is GeminiInlineDataPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "inlineData" in part &&
+    part.inlineData !== undefined
+  );
+}
+
+function hasFileData(part: unknown): part is GeminiFileDataPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "fileData" in part &&
+    part.fileData !== undefined
+  );
+}
+
 class GeminiGenerateContentInteraction implements InteractionUtils {
   private request: archestraApiTypes.GeminiGenerateContentRequest;
   private response: archestraApiTypes.GeminiGenerateContentResponse;
@@ -26,7 +126,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
 
     // Check if last user message contains functionResponse parts
     if (lastMessage.role === "user" && Array.isArray(lastMessage.parts)) {
-      return lastMessage.parts.some((part) => "functionResponse" in part);
+      return lastMessage.parts.some((part) => hasFunctionResponse(part));
     }
 
     return false;
@@ -43,7 +143,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       const message = messages[i];
       if (message.role === "user" && Array.isArray(message.parts)) {
         for (const part of message.parts) {
-          if ("functionResponse" in part && part.functionResponse?.id) {
+          if (hasFunctionResponse(part) && part.functionResponse.id) {
             return part.functionResponse.id;
           }
         }
@@ -60,7 +160,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     for (const message of this.request.contents) {
       if (message.role === "model" && Array.isArray(message.parts)) {
         for (const part of message.parts) {
-          if ("functionCall" in part && part.functionCall?.name) {
+          if (hasFunctionCall(part) && part.functionCall.name) {
             toolsUsed.add(part.functionCall.name);
           }
         }
@@ -77,7 +177,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     for (const message of this.request.contents) {
       if (message.role === "model" && Array.isArray(message.parts)) {
         for (const part of message.parts) {
-          if ("text" in part && part.text) {
+          if (hasText(part) && part.text) {
             const toolName = part.text.match(
               /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
             )?.[1];
@@ -94,7 +194,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       for (const candidate of this.response.candidates) {
         if (candidate.content?.parts) {
           for (const part of candidate.content.parts) {
-            if ("text" in part && part.text) {
+            if (hasText(part) && part.text) {
               const toolName = part.text.match(
                 /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
               )?.[1];
@@ -118,7 +218,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       for (const candidate of this.response.candidates) {
         if (candidate.content?.parts) {
           for (const part of candidate.content.parts) {
-            if ("functionCall" in part && part.functionCall?.name) {
+            if (hasFunctionCall(part) && part.functionCall.name) {
               toolsRequested.add(part.functionCall.name);
             }
           }
@@ -136,7 +236,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     for (const message of this.request.contents) {
       if (message.role === "model" && Array.isArray(message.parts)) {
         for (const part of message.parts) {
-          if ("text" in part && part.text) {
+          if (hasText(part) && part.text) {
             if (part.text.includes("<archestra-tool-name>")) {
               count++;
             }
@@ -150,7 +250,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       for (const candidate of this.response.candidates) {
         if (candidate.content?.parts) {
           for (const part of candidate.content.parts) {
-            if ("text" in part && part.text) {
+            if (hasText(part) && part.text) {
               if (part.text.includes("<archestra-tool-name>")) {
                 count++;
               }
@@ -173,7 +273,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       if (Array.isArray(message.parts)) {
         // Find the first text part that's not a functionResponse
         for (const part of message.parts) {
-          if ("text" in part && part.text) {
+          if (hasText(part) && part.text) {
             return part.text;
           }
         }
@@ -190,7 +290,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
 
     // Find the first text part in the response
     for (const part of candidate.content.parts) {
-      if ("text" in part && part.text) {
+      if (hasText(part) && part.text) {
         return part.text;
       }
     }
@@ -222,9 +322,9 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
 
     // Process content parts
     for (const part of contentParts) {
-      if ("text" in part && part.text) {
+      if (hasText(part) && part.text) {
         parts.push({ type: "text", text: part.text });
-      } else if ("functionCall" in part && part.functionCall) {
+      } else if (hasFunctionCall(part) && part.functionCall) {
         // Tool invocation by model
         parts.push({
           type: "dynamic-tool",
@@ -233,7 +333,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
           state: "input-available",
           input: part.functionCall.args || {},
         });
-      } else if ("inlineData" in part && part.inlineData) {
+      } else if (hasInlineData(part) && part.inlineData) {
         // Inline image/file data - convert base64 to data URL
         const dataUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
         parts.push({
@@ -241,7 +341,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
           mediaType: part.inlineData.mimeType,
           url: dataUrl,
         });
-      } else if ("fileData" in part && part.fileData) {
+      } else if (hasFileData(part) && part.fileData) {
         // File reference
         parts.push({
           type: "file",
@@ -271,8 +371,8 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       if (msg.role === "user" && Array.isArray(msg.parts)) {
-        const hasOnlyFunctionResponses = msg.parts.every(
-          (part) => "functionResponse" in part,
+        const hasOnlyFunctionResponses = msg.parts.every((part) =>
+          hasFunctionResponse(part),
         );
         if (hasOnlyFunctionResponses && msg.parts.length > 0) {
           userMessagesWithFunctionResponses.add(i);
@@ -293,16 +393,16 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
 
       // If this is a model message with functionCall parts, look ahead for function responses
       if (msg.role === "model" && Array.isArray(msg.parts)) {
-        const hasFunctionCall = msg.parts.some(
-          (part) => "functionCall" in part,
+        const hasFunctionCallPart = msg.parts.some((part) =>
+          hasFunctionCall(part),
         );
 
-        if (hasFunctionCall) {
+        if (hasFunctionCallPart) {
           const toolCallParts: PartialUIMessage["parts"] = [...uiMessage.parts];
 
           // For each functionCall part, find its corresponding functionResponse
           for (const part of msg.parts) {
-            if ("functionCall" in part && part.functionCall) {
+            if (hasFunctionCall(part) && part.functionCall) {
               const functionCallId = part.functionCall.id;
               const functionCallName = part.functionCall.name;
 
@@ -315,8 +415,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
                     Array.isArray(m.parts) &&
                     m.parts.some(
                       (p) =>
-                        "functionResponse" in p &&
-                        p.functionResponse &&
+                        hasFunctionResponse(p) &&
                         (p.functionResponse.id === functionCallId ||
                           p.functionResponse.name === functionCallName),
                     ),
@@ -329,15 +428,14 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
                 // Find the specific functionResponse part
                 const functionResponsePart = functionResponseMsg.parts.find(
                   (p) =>
-                    "functionResponse" in p &&
-                    p.functionResponse &&
+                    hasFunctionResponse(p) &&
                     (p.functionResponse.id === functionCallId ||
                       p.functionResponse.name === functionCallName),
                 );
 
                 if (
                   functionResponsePart &&
-                  "functionResponse" in functionResponsePart
+                  hasFunctionResponse(functionResponsePart)
                 ) {
                   // Parse the function response
                   const output =

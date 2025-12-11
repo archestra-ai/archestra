@@ -34,7 +34,7 @@ export function toCommonFormat(contents: GeminiContents): CommonMessage[] {
 
     // Process parts looking for function responses
     if (content.parts) {
-      const toolCalls = [];
+      const toolCalls: CommonToolResult[] = [];
 
       for (const part of content.parts) {
         // Check if this part has the functionResponse property
@@ -54,7 +54,8 @@ export function toCommonFormat(contents: GeminiContents): CommonMessage[] {
           toolCalls.push({
             id,
             name: functionResponse.name as string,
-            result: functionResponse.response,
+            content: functionResponse.response,
+            isError: false,
           });
         }
       }

@@ -1,10 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import {
-  type Content,
-  type FunctionResponse,
-  type GenerateContentParameters,
-  GoogleGenAI,
-} from "@google/genai";
+import { type GenerateContentParameters, GoogleGenAI } from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -23,64 +18,6 @@ import {
 } from "@/types";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import * as utils from "./utils";
-
-/**
- * Inject assigned MCP tools into Gemini tools object
- * Assigned tools take priority and override tools with the same name from the request
- */
-const injectTools = async (
-  requestTools: Gemini.Types.Tool[] | undefined,
-  agentId: string,
-): Promise<Gemini.Types.Tool[] | undefined> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to Gemini format (function declarations)
-  const assignedGeminiFunctions: z.infer<
-    typeof Gemini.Tools.FunctionDeclarationSchema
-  >[] = assignedTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || "",
-    parameters: tool.parameters,
-  }));
-
-  if (assignedGeminiFunctions.length === 0 && !requestTools) {
-    return undefined;
-  }
-
-  // Handle case where requestTools is undefined or empty
-  const requestFunctions: z.infer<
-    typeof Gemini.Tools.FunctionDeclarationSchema
-  >[] = [];
-  if (requestTools && Array.isArray(requestTools) && requestTools.length > 0) {
-    for (const tool of requestTools) {
-      if (tool.functionDeclarations) {
-        requestFunctions.push(...tool.functionDeclarations);
-      }
-    }
-  }
-
-  // Create a map of request functions by name
-  const functionMap = new Map<
-    string,
-    z.infer<typeof Gemini.Tools.FunctionDeclarationSchema>
-  >();
-  for (const func of requestFunctions) {
-    functionMap.set(func.name, func);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  for (const assignedFunc of assignedGeminiFunctions) {
-    functionMap.set(assignedFunc.name, assignedFunc);
-  }
-
-  // Return as Gemini.Types.Tool array format
-  const mergedFunctions = Array.from(functionMap.values());
-  if (mergedFunctions.length === 0) {
-    return undefined;
-  }
-
-  return [{ functionDeclarations: mergedFunctions }];
-};
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -240,22 +177,23 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[GeminiProxy] Limit check passed");
 
-      // Persist tools if present
+      // Persist tools if present (for tracking - clients handle tool execution via MCP Gateway)
       await utils.tools.persistTools(
         (tools || [])
           .filter((tool) => tool.functionDeclarations !== undefined)
-          .map((tool) => {
-            return {
-              toolName: tool.functionDeclarations?.[0].name ?? "unnamed_tool",
-              toolParameters: tool.functionDeclarations?.[0].parameters || {},
-              toolDescription: tool.functionDeclarations?.[0].description || "",
-            };
-          }),
+          .flatMap((tool) =>
+            (tool.functionDeclarations || []).map((fd) => ({
+              toolName: fd.name ?? "unnamed_tool",
+              toolParameters: fd.parameters || {},
+              toolDescription: fd.description || "",
+            })),
+          ),
         resolvedAgentId,
       );
 
-      // Inject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await injectTools(body.tools, resolvedAgentId);
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
 
       // Convert to common format and evaluate trusted data policies
       logger.debug(
@@ -297,7 +235,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         utils.adapters.gemini.restToSdkGenerateContentParams(
           { ...body, contents: filteredContents },
           modelName,
-          mergedTools,
+          mergedTools.length > 0 ? mergedTools : undefined,
         );
 
       logger.debug(
@@ -407,108 +345,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           return reply.send(refusalResponse);
-        } else if (toolCalls.length > 0) {
-          // Tool calls are allowed - execute MCP tools
-          const commonToolCalls = toolCalls
-            .filter(
-              (tc): tc is { name: string; args?: Record<string, unknown> } =>
-                Boolean(tc?.name),
-            )
-            .map((tc) => ({
-              id: utils.adapters.gemini.generateToolCallId(tc.name),
-              name: tc.name,
-              arguments: tc.args || {},
-            }));
-
-          const mcpResults = await utils.tools.executeMcpToolCalls(
-            commonToolCalls,
-            resolvedAgentId,
-          );
-
-          fastify.log.info(
-            {
-              resolvedAgentId,
-              results: mcpResults.map((r) => ({
-                id: r.id,
-                isError: r.isError,
-                contentLength:
-                  typeof r.content === "string"
-                    ? r.content.length
-                    : JSON.stringify(r.content).length,
-              })),
-            },
-            "MCP tool calls completed (non-streaming)",
-          );
-
-          if (mcpResults.length > 0) {
-            // Convert MCP results to Gemini format
-            const toolResultParts: FunctionResponse[] =
-              utils.adapters.gemini.toolResultsToMessages(
-                mcpResults,
-                commonToolCalls,
-              );
-
-            // Make another call with the tool results
-            const updatedContents: Content[] = [
-              ...(filteredContents as Content[]),
-              {
-                role: "model" as const,
-                parts: response.candidates?.[0]?.content?.parts || [],
-              },
-              {
-                role: "user" as const,
-                parts: toolResultParts.map((fr) => ({
-                  functionResponse: {
-                    name: fr.name,
-                    response: fr.response,
-                  },
-                })),
-              },
-            ];
-
-            // Make final call with tool results
-            const finalParams = {
-              ...processedBody,
-              contents: updatedContents as Content[],
-            } as GenerateContentParameters;
-
-            const finalResponse =
-              await genAI.models.generateContent(finalParams);
-
-            // Convert SDK response to REST format
-            const restResponse =
-              utils.adapters.gemini.sdkResponseToRestResponse(
-                finalResponse,
-                modelName,
-              );
-
-            const tokenUsage = finalResponse.usageMetadata
-              ? utils.adapters.gemini.getUsageTokens(finalResponse.usageMetadata)
-              : { input: null, output: null };
-
-            // Store the interaction with final response
-            await InteractionModel.create({
-              profileId: resolvedAgentId,
-              externalAgentId,
-              type: "gemini:generateContent",
-              request: body,
-              model: model,
-              response: {
-                ...restResponse,
-                candidates: [
-                  ...(finalParams.contents as Content[]).map((c, idx) => ({
-                    content: utils.adapters.gemini.sdkContentToRestContent(c),
-                    index: idx,
-                  })),
-                  ...restResponse.candidates,
-                ],
-              },
-              inputTokens: tokenUsage.input,
-              outputTokens: tokenUsage.output,
-            });
-
-            return reply.send(restResponse);
-          }
         }
 
         // Convert SDK response to REST format and store

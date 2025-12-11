@@ -363,15 +363,15 @@ export type GeminiGenerateContentRequestInput = {
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
     contents: Array<{
-        /**
-         * The role of the author of this content.
-         */
-        role: string;
-        /**
-         * https://ai.google.dev/api/caching#Part
-         */
+        role: 'user' | 'model' | 'function';
         parts: Array<{
+            /**
+             * Indicates if the part is thought from the model
+             */
             thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
             thoughtSignature?: string;
             /**
              * https://ai.google.dev/api/caching#Part
@@ -477,225 +477,7 @@ export type GeminiGenerateContentRequestInput = {
             /**
              * https://ai.google.dev/api/caching#VideoMetadata
              */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            text: string;
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            inlineData: {
-                mimeType?: string;
-                data: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            functionCall: {
-                id?: string;
-                name: string;
-                args?: {
-                    [key: string]: unknown;
-                };
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            functionResponse: {
-                id?: string;
-                name: string;
-                response: {
-                    [key: string]: unknown;
-                };
-                willContinue?: boolean;
-                scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            fileData: {
-                mimeType?: string;
-                fileUri: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-            executableCode: {
-                code: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            codeExecutionResult: {
-                /**
-                 * Outcome of the code execution.
-                 */
-                outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                output?: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
+            metadata: {
                 /**
                  * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                  */
@@ -760,53 +542,7 @@ export type GeminiGenerateContentRequestInput = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
-    }> | {
-        functionDeclarations?: Array<{
-            /**
-             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-             */
-            name: string;
-            /**
-             * A brief description of the function.
-             */
-            description: string;
-            /**
-             * https://ai.google.dev/api/caching#Behavior
-             */
-            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
-            /**
-             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            parametersJsonSchema?: unknown;
-            response?: unknown;
-            responseJsonSchema?: unknown;
-        }>;
-        /**
-         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
-         */
-        googleSearchRetrieval?: {
-            /**
-             *
-             * Specifies the dynamic retrieval configuration for the given source.
-             *
-             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
-             *
-             */
-            dynamicRetrievalConfig: {
-                /**
-                 * https://ai.google.dev/api/caching#Mode
-                 */
-                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-                dynamicThreshold: number;
-            };
-        };
-        codeExecution?: unknown;
-        googleSearch?: unknown;
-        urlContext?: unknown;
-    };
+    }>;
     /**
      * Tool configuration for any Tool specified in the request.
      */
@@ -878,110 +614,6 @@ export type GeminiGenerateContentRequestInput = {
      * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
      */
     cachedContent?: string;
-    config?: {
-        tools?: Array<{
-            functionDeclarations?: Array<{
-                /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                 */
-                name: string;
-                /**
-                 * A brief description of the function.
-                 */
-                description: string;
-                /**
-                 * https://ai.google.dev/api/caching#Behavior
-                 */
-                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
-                /**
-                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                parametersJsonSchema?: unknown;
-                response?: unknown;
-                responseJsonSchema?: unknown;
-            }>;
-            /**
-             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
-             */
-            googleSearchRetrieval?: {
-                /**
-                 *
-                 * Specifies the dynamic retrieval configuration for the given source.
-                 *
-                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
-                 *
-                 */
-                dynamicRetrievalConfig: {
-                    /**
-                     * https://ai.google.dev/api/caching#Mode
-                     */
-                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-                    dynamicThreshold: number;
-                };
-            };
-            codeExecution?: unknown;
-            googleSearch?: unknown;
-            urlContext?: unknown;
-        }> | {
-            functionDeclarations?: Array<{
-                /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                 */
-                name: string;
-                /**
-                 * A brief description of the function.
-                 */
-                description: string;
-                /**
-                 * https://ai.google.dev/api/caching#Behavior
-                 */
-                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
-                /**
-                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                parametersJsonSchema?: unknown;
-                response?: unknown;
-                responseJsonSchema?: unknown;
-            }>;
-            /**
-             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
-             */
-            googleSearchRetrieval?: {
-                /**
-                 *
-                 * Specifies the dynamic retrieval configuration for the given source.
-                 *
-                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
-                 *
-                 */
-                dynamicRetrievalConfig: {
-                    /**
-                     * https://ai.google.dev/api/caching#Mode
-                     */
-                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-                    dynamicThreshold: number;
-                };
-            };
-            codeExecution?: unknown;
-            googleSearch?: unknown;
-            urlContext?: unknown;
-        };
-        /**
-         * Tool configuration for any Tool specified in the request.
-         */
-        toolConfig?: {
-            functionCallingConfig: {
-                mode: 'AUTO' | 'ANY' | 'NONE';
-                allowedFunctionNames?: Array<string>;
-            };
-        };
-    };
 };
 
 export type GeminiGenerateContentResponseInput = {
@@ -999,15 +631,15 @@ export type GeminiGenerateContentResponseInput = {
          *
          */
         content: {
-            /**
-             * The role of the author of this content.
-             */
-            role: string;
-            /**
-             * https://ai.google.dev/api/caching#Part
-             */
+            role: 'user' | 'model' | 'function';
             parts: Array<{
+                /**
+                 * Indicates if the part is thought from the model
+                 */
                 thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
                 thoughtSignature?: string;
                 /**
                  * https://ai.google.dev/api/caching#Part
@@ -1113,225 +745,7 @@ export type GeminiGenerateContentResponseInput = {
                 /**
                  * https://ai.google.dev/api/caching#VideoMetadata
                  */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                text: string;
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                inlineData: {
-                    mimeType?: string;
-                    data: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                functionCall: {
-                    id?: string;
-                    name: string;
-                    args?: {
-                        [key: string]: unknown;
-                    };
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                functionResponse: {
-                    id?: string;
-                    name: string;
-                    response: {
-                        [key: string]: unknown;
-                    };
-                    willContinue?: boolean;
-                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                fileData: {
-                    mimeType?: string;
-                    fileUri: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-                executableCode: {
-                    code: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                codeExecutionResult: {
-                    /**
-                     * Outcome of the code execution.
-                     */
-                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                    output?: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
+                metadata: {
                     /**
                      * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                      */
@@ -1357,7 +771,7 @@ export type GeminiGenerateContentResponseInput = {
          *
          */
         finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
-        safetyRatings?: Array<{
+        safetyRatings: Array<{
             /**
              *
              * The category for this setting
@@ -1373,12 +787,12 @@ export type GeminiGenerateContentResponseInput = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked?: boolean;
+            blocked: boolean;
         }>;
         /**
          * https://ai.google.dev/api/generate-content#citationmetadata
          */
-        citationMetadata?: {
+        citationMetadata: {
             citationSources: Array<{
                 startIndex?: number;
                 endIndex?: number;
@@ -1386,12 +800,12 @@ export type GeminiGenerateContentResponseInput = {
                 license?: string;
             }>;
         };
-        tokenCount?: number;
-        groundingAttributions?: Array<unknown>;
-        groundingMetadata?: unknown;
-        avgLogprobs?: number;
-        logprobsResult?: unknown;
-        urlContextMetadata?: unknown;
+        tokenCount: number;
+        groundingAttributions: Array<unknown>;
+        groundingMetadata: unknown;
+        avgLogprobs: number;
+        logprobsResult: unknown;
+        urlContextMetadata: unknown;
         /**
          * Index of the candidate in the list of response candidates.
          */
@@ -1404,7 +818,7 @@ export type GeminiGenerateContentResponseInput = {
     /**
      * Returns the prompt's feedback related to the content filters
      */
-    promptFeedback?: {
+    promptFeedback: {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
@@ -1425,20 +839,20 @@ export type GeminiGenerateContentResponseInput = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked?: boolean;
+            blocked: boolean;
         }>;
     };
     /**
      * Metadata on the generation requests' token usage
      */
-    usageMetadata?: {
+    usageMetadata: {
         promptTokenCount?: number;
-        cachedContentTokenCount?: number;
+        cachedContentTokenCount: number;
         candidatesTokenCount?: number;
-        toolUsePromptTokenCount?: number;
-        thoughtsTokenCount?: number;
-        totalTokenCount?: number;
-        promptTokensDetails?: Array<{
+        toolUsePromptTokenCount: number;
+        thoughtsTokenCount: number;
+        totalTokenCount: number;
+        promptTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1448,7 +862,7 @@ export type GeminiGenerateContentResponseInput = {
              */
             tokenCount: number;
         }>;
-        cacheTokensDetails?: Array<{
+        cacheTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1458,7 +872,7 @@ export type GeminiGenerateContentResponseInput = {
              */
             tokenCount: number;
         }>;
-        candidatesTokensDetails?: Array<{
+        candidatesTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1468,7 +882,7 @@ export type GeminiGenerateContentResponseInput = {
              */
             tokenCount: number;
         }>;
-        toolUsePromptTokensDetails?: Array<{
+        toolUsePromptTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1482,11 +896,7 @@ export type GeminiGenerateContentResponseInput = {
     /**
      * The model version used to generate the response.
      */
-    modelVersion?: string;
-    /**
-     * The unique response ID.
-     */
-    responseId?: string;
+    modelVersion: string;
 };
 
 export type AnthropicMessagesRequestInput = {
@@ -1981,15 +1391,15 @@ export type GeminiGenerateContentRequest = {
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
     contents: Array<{
-        /**
-         * The role of the author of this content.
-         */
-        role: string;
-        /**
-         * https://ai.google.dev/api/caching#Part
-         */
+        role: 'user' | 'model' | 'function';
         parts: Array<{
+            /**
+             * Indicates if the part is thought from the model
+             */
             thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
             thoughtSignature?: string;
             /**
              * https://ai.google.dev/api/caching#Part
@@ -2095,225 +1505,7 @@ export type GeminiGenerateContentRequest = {
             /**
              * https://ai.google.dev/api/caching#VideoMetadata
              */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            text: string;
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            inlineData: {
-                mimeType?: string;
-                data: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            functionCall: {
-                id?: string;
-                name: string;
-                args?: {
-                    [key: string]: unknown;
-                };
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            functionResponse: {
-                id?: string;
-                name: string;
-                response: {
-                    [key: string]: unknown;
-                };
-                willContinue?: boolean;
-                scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            fileData: {
-                mimeType?: string;
-                fileUri: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-            executableCode: {
-                code: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
-                /**
-                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                startOffset?: string;
-                /**
-                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                 */
-                endOffset?: string;
-                /**
-                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                 */
-                fps?: number;
-            };
-        } | {
-            /**
-             * Indicates if the part is thought from the model
-             */
-            thought?: boolean;
-            /**
-             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-             */
-            thoughtSignature?: string;
-            codeExecutionResult: {
-                /**
-                 * Outcome of the code execution.
-                 */
-                outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                output?: string;
-            };
-            /**
-             * https://ai.google.dev/api/caching#VideoMetadata
-             */
-            metadata?: {
+            metadata: {
                 /**
                  * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                  */
@@ -2378,53 +1570,7 @@ export type GeminiGenerateContentRequest = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
-    }> | {
-        functionDeclarations?: Array<{
-            /**
-             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-             */
-            name: string;
-            /**
-             * A brief description of the function.
-             */
-            description: string;
-            /**
-             * https://ai.google.dev/api/caching#Behavior
-             */
-            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
-            /**
-             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            parametersJsonSchema?: unknown;
-            response?: unknown;
-            responseJsonSchema?: unknown;
-        }>;
-        /**
-         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
-         */
-        googleSearchRetrieval?: {
-            /**
-             *
-             * Specifies the dynamic retrieval configuration for the given source.
-             *
-             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
-             *
-             */
-            dynamicRetrievalConfig: {
-                /**
-                 * https://ai.google.dev/api/caching#Mode
-                 */
-                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-                dynamicThreshold: number;
-            };
-        };
-        codeExecution?: unknown;
-        googleSearch?: unknown;
-        urlContext?: unknown;
-    };
+    }>;
     /**
      * Tool configuration for any Tool specified in the request.
      */
@@ -2496,110 +1642,6 @@ export type GeminiGenerateContentRequest = {
      * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
      */
     cachedContent?: string;
-    config?: {
-        tools?: Array<{
-            functionDeclarations?: Array<{
-                /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                 */
-                name: string;
-                /**
-                 * A brief description of the function.
-                 */
-                description: string;
-                /**
-                 * https://ai.google.dev/api/caching#Behavior
-                 */
-                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
-                /**
-                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                parametersJsonSchema?: unknown;
-                response?: unknown;
-                responseJsonSchema?: unknown;
-            }>;
-            /**
-             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
-             */
-            googleSearchRetrieval?: {
-                /**
-                 *
-                 * Specifies the dynamic retrieval configuration for the given source.
-                 *
-                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
-                 *
-                 */
-                dynamicRetrievalConfig: {
-                    /**
-                     * https://ai.google.dev/api/caching#Mode
-                     */
-                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-                    dynamicThreshold: number;
-                };
-            };
-            codeExecution?: unknown;
-            googleSearch?: unknown;
-            urlContext?: unknown;
-        }> | {
-            functionDeclarations?: Array<{
-                /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                 */
-                name: string;
-                /**
-                 * A brief description of the function.
-                 */
-                description: string;
-                /**
-                 * https://ai.google.dev/api/caching#Behavior
-                 */
-                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
-                /**
-                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                parametersJsonSchema?: unknown;
-                response?: unknown;
-                responseJsonSchema?: unknown;
-            }>;
-            /**
-             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
-             */
-            googleSearchRetrieval?: {
-                /**
-                 *
-                 * Specifies the dynamic retrieval configuration for the given source.
-                 *
-                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
-                 *
-                 */
-                dynamicRetrievalConfig: {
-                    /**
-                     * https://ai.google.dev/api/caching#Mode
-                     */
-                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-                    dynamicThreshold: number;
-                };
-            };
-            codeExecution?: unknown;
-            googleSearch?: unknown;
-            urlContext?: unknown;
-        };
-        /**
-         * Tool configuration for any Tool specified in the request.
-         */
-        toolConfig?: {
-            functionCallingConfig: {
-                mode: 'AUTO' | 'ANY' | 'NONE';
-                allowedFunctionNames?: Array<string>;
-            };
-        };
-    };
 };
 
 export type GeminiGenerateContentResponse = {
@@ -2617,15 +1659,15 @@ export type GeminiGenerateContentResponse = {
          *
          */
         content: {
-            /**
-             * The role of the author of this content.
-             */
-            role: string;
-            /**
-             * https://ai.google.dev/api/caching#Part
-             */
+            role: 'user' | 'model' | 'function';
             parts: Array<{
+                /**
+                 * Indicates if the part is thought from the model
+                 */
                 thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
                 thoughtSignature?: string;
                 /**
                  * https://ai.google.dev/api/caching#Part
@@ -2731,225 +1773,7 @@ export type GeminiGenerateContentResponse = {
                 /**
                  * https://ai.google.dev/api/caching#VideoMetadata
                  */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                text: string;
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                inlineData: {
-                    mimeType?: string;
-                    data: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                functionCall: {
-                    id?: string;
-                    name: string;
-                    args?: {
-                        [key: string]: unknown;
-                    };
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                functionResponse: {
-                    id?: string;
-                    name: string;
-                    response: {
-                        [key: string]: unknown;
-                    };
-                    willContinue?: boolean;
-                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                fileData: {
-                    mimeType?: string;
-                    fileUri: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-                executableCode: {
-                    code: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
-                    /**
-                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    startOffset?: string;
-                    /**
-                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
-                     */
-                    endOffset?: string;
-                    /**
-                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
-                     */
-                    fps?: number;
-                };
-            } | {
-                /**
-                 * Indicates if the part is thought from the model
-                 */
-                thought?: boolean;
-                /**
-                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
-                 */
-                thoughtSignature?: string;
-                codeExecutionResult: {
-                    /**
-                     * Outcome of the code execution.
-                     */
-                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                    output?: string;
-                };
-                /**
-                 * https://ai.google.dev/api/caching#VideoMetadata
-                 */
-                metadata?: {
+                metadata: {
                     /**
                      * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                      */
@@ -2975,7 +1799,7 @@ export type GeminiGenerateContentResponse = {
          *
          */
         finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
-        safetyRatings?: Array<{
+        safetyRatings: Array<{
             /**
              *
              * The category for this setting
@@ -2991,12 +1815,12 @@ export type GeminiGenerateContentResponse = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked?: boolean;
+            blocked: boolean;
         }>;
         /**
          * https://ai.google.dev/api/generate-content#citationmetadata
          */
-        citationMetadata?: {
+        citationMetadata: {
             citationSources: Array<{
                 startIndex?: number;
                 endIndex?: number;
@@ -3004,12 +1828,12 @@ export type GeminiGenerateContentResponse = {
                 license?: string;
             }>;
         };
-        tokenCount?: number;
-        groundingAttributions?: Array<unknown>;
-        groundingMetadata?: unknown;
-        avgLogprobs?: number;
-        logprobsResult?: unknown;
-        urlContextMetadata?: unknown;
+        tokenCount: number;
+        groundingAttributions: Array<unknown>;
+        groundingMetadata: unknown;
+        avgLogprobs: number;
+        logprobsResult: unknown;
+        urlContextMetadata: unknown;
         /**
          * Index of the candidate in the list of response candidates.
          */
@@ -3022,7 +1846,7 @@ export type GeminiGenerateContentResponse = {
     /**
      * Returns the prompt's feedback related to the content filters
      */
-    promptFeedback?: {
+    promptFeedback: {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
@@ -3043,20 +1867,20 @@ export type GeminiGenerateContentResponse = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked?: boolean;
+            blocked: boolean;
         }>;
     };
     /**
      * Metadata on the generation requests' token usage
      */
-    usageMetadata?: {
+    usageMetadata: {
         promptTokenCount?: number;
-        cachedContentTokenCount?: number;
+        cachedContentTokenCount: number;
         candidatesTokenCount?: number;
-        toolUsePromptTokenCount?: number;
-        thoughtsTokenCount?: number;
-        totalTokenCount?: number;
-        promptTokensDetails?: Array<{
+        toolUsePromptTokenCount: number;
+        thoughtsTokenCount: number;
+        totalTokenCount: number;
+        promptTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -3066,7 +1890,7 @@ export type GeminiGenerateContentResponse = {
              */
             tokenCount: number;
         }>;
-        cacheTokensDetails?: Array<{
+        cacheTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -3076,7 +1900,7 @@ export type GeminiGenerateContentResponse = {
              */
             tokenCount: number;
         }>;
-        candidatesTokensDetails?: Array<{
+        candidatesTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -3086,7 +1910,7 @@ export type GeminiGenerateContentResponse = {
              */
             tokenCount: number;
         }>;
-        toolUsePromptTokensDetails?: Array<{
+        toolUsePromptTokensDetails: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -3100,11 +1924,7 @@ export type GeminiGenerateContentResponse = {
     /**
      * The model version used to generate the response.
      */
-    modelVersion?: string;
-    /**
-     * The unique response ID.
-     */
-    responseId?: string;
+    modelVersion: string;
 };
 
 export type AnthropicMessagesRequest = {
@@ -8234,7 +7054,7 @@ export type GetFeaturesResponses = {
 
 export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
 
-export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
+export type PostV1GeminiModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -8253,10 +7073,10 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/v1beta/models/{model}:generateContent';
+    url: '/v1/gemini/models/{model}:generateContent';
 };
 
-export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
+export type PostV1GeminiModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -8313,18 +7133,18 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiV1BetaModelsByModelGenerateContentError = PostV1GeminiV1BetaModelsByModelGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelGenerateContentErrors];
+export type PostV1GeminiModelsByModelGenerateContentError = PostV1GeminiModelsByModelGenerateContentErrors[keyof PostV1GeminiModelsByModelGenerateContentErrors];
 
-export type PostV1GeminiV1BetaModelsByModelGenerateContentResponses = {
+export type PostV1GeminiModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
     200: GeminiGenerateContentResponse;
 };
 
-export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1GeminiV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiV1BetaModelsByModelGenerateContentResponses];
+export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
 
-export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
+export type PostV1GeminiModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -8343,10 +7163,10 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/v1beta/models/{model}:streamGenerateContent';
+    url: '/v1/gemini/models/{model}:streamGenerateContent';
 };
 
-export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
+export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -8403,9 +7223,9 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors];
+export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -8425,10 +7245,10 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/{agentId}/v1beta/models/{model}:generateContent';
+    url: '/v1/gemini/{agentId}/models/{model}:generateContent';
 };
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -8485,18 +7305,18 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors];
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentError = PostV1GeminiByAgentIdModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentErrors];
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses = {
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
     200: GeminiGenerateContentResponse;
 };
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses];
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -8516,10 +7336,10 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = 
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent';
+    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent';
 };
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors = {
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -8576,7 +7396,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
     };
 };
 
-export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
 
 export type GetInteractionsData = {
     body?: never;

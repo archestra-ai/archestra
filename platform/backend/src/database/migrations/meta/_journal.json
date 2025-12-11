@@ -617,6 +617,13 @@
       "when": 1765391728106,
       "tag": "0087_perfect_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1765480000000,
+      "tag": "0088_add_team_admin_to_custom_roles",
+      "breakpoints": true
     }
   ]
 }

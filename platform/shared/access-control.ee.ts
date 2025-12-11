@@ -43,7 +43,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete", "admin"],
-  team: ["create", "read", "update", "delete"],
+  team: ["create", "read", "update", "delete", "admin"],
   mcpToolCall: ["read"],
   conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
@@ -342,23 +342,23 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["read"],
   },
   [RouteId.AddTeamMember]: {
-    team: ["update"],
+    team: ["admin"],
   },
   [RouteId.RemoveTeamMember]: {
-    team: ["update"],
+    team: ["admin"],
   },
-  // Team External Group Routes (SSO Team Sync) - requires team update permission
+  // Team External Group Routes (SSO Team Sync) - requires team admin permission
   [RouteId.GetTeamExternalGroups]: {
     team: ["read"],
   },
   [RouteId.AddTeamExternalGroup]: {
-    team: ["update"],
+    team: ["admin"],
   },
   [RouteId.RemoveTeamExternalGroup]: {
-    team: ["update"],
+    team: ["admin"],
   },
   // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
-  // Note: Additional team admin check is done in route handlers
+  // Note: Route handlers check team membership for non-admin users
   [RouteId.GetTeamVaultFolder]: {
     team: ["read"],
   },

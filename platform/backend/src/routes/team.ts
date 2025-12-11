@@ -29,13 +29,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: canUpdateTeams } = await hasPermission(
-        { team: ["update"] },
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
         request.headers,
       );
 
-      // Users that can't update teams only see teams they're members of
-      if (!canUpdateTeams) {
+      // Non-team admins only see teams they're members of
+      if (!isTeamAdmin) {
         return reply.send(await TeamModel.getUserTeams(request.user.id));
       }
 

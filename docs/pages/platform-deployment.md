@@ -391,6 +391,44 @@ Then visit:
 
 For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
 
+**Provider Configuration**:
+
+```terraform
+terraform {
+  required_providers {
+    archestra = {
+      source = "archestra-ai/archestra"
+    }
+  }
+}
+
+provider "archestra" {
+  base_url = "http://localhost:9000" # Your Archestra API URL
+  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+}
+```
+
+**Obtaining an API Key**:
+
+1. Log in to the Archestra Admin UI (default: <http://localhost:3000>)
+2. Navigate to **Settings** → **Account**
+3. In the **API Keys** section, click **Create API Key**
+4. Copy the generated key — it will only be shown once
+
+**Configuring `base_url`**:
+
+The `base_url` should match your `ARCHESTRA_API_BASE_URL` environment variable — this is where your Archestra Platform API is accessible:
+
+- **Local development**: `http://localhost:9000` (default)
+- **Production**: Your externally-accessible API URL (e.g., `https://api.archestra.example.com`)
+
+You can also set these values via environment variables instead of hardcoding them:
+
+```bash
+export ARCHESTRA_API_KEY="your-api-key-here"
+export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+```
+
 For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
 
 ## Environment Variables

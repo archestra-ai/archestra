@@ -106,7 +106,7 @@ export function TeamVaultFolderDialog({
     }
   };
 
-  // BYOS feature requires both enterprise license and ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT
+  // Readonly Vault feature requires both enterprise license and ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT
   if (!byosEnabled) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,11 +120,12 @@ export function TeamVaultFolderDialog({
           <div className="py-4">
             <Alert>
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>BYOS Not Enabled</AlertTitle>
+              <AlertTitle>Readonly Vault Not Enabled</AlertTitle>
               <AlertDescription>
-                Team Vault Folders require BYOS (Bring Your Own Secrets) to be
-                enabled. Contact your administrator to configure
-                ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT with an enterprise license.
+                Team Vault Folders require Readonly Vault to be enabled. Contact
+                your administrator to configure
+                ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT with an enterprise
+                license.
               </AlertDescription>
             </Alert>
           </div>

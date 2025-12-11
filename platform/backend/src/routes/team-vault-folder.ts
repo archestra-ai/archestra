@@ -116,7 +116,6 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Check access: team:admin can access all, others need team membership
       await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
 
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);
@@ -163,7 +162,6 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Check access: team:admin can access all, others need team membership
       await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
 
       // Validate the Vault path format (basic validation)
@@ -220,7 +218,6 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Check access: team:admin can access all, others need team membership
       await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
 
       const success = await TeamVaultFolderModel.delete(teamId);
@@ -278,7 +275,6 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Check access: team:admin can access all, others need team membership
       await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
 
       // Use provided vaultPath or fall back to saved folder
@@ -351,7 +347,6 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Check access: team:admin can access all, others need team membership
       await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
 
       // Get the team's Vault folder
@@ -412,7 +407,6 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Check access: team:admin can access all, others need team membership
       await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
 
       // Get the team's Vault folder

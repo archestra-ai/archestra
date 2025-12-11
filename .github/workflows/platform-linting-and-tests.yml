@@ -148,10 +148,13 @@ jobs:
               echo "📦 Release-please PR with codegen changes detected. Auto-committing..."
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add .
+              # Add all changes from repo root (docs/openapi.json is outside platform/)
+              git -C "$GITHUB_WORKSPACE" add -A
               git commit -m "chore: update generated files for release"
               git push
               echo "✅ Changes committed. Workflow will be re-triggered."
+              # Exit early - the push triggers a new workflow run with the updated code
+              exit 0
             else
               echo "::error::Generated code is not up to date. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the changes."
               exit 1

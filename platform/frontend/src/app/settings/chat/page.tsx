@@ -1,11 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   CheckCircle2,
   Loader2,
-  MoreHorizontal,
   Pencil,
   Plus,
   Star,
@@ -18,6 +17,7 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -28,15 +28,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -245,10 +239,17 @@ function ChatSettingsContent() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2"
+            data-testid={`${E2eTestId.ChatApiKeyRow}-${row.original.name}`}
+          >
             <span className="font-medium">{row.original.name}</span>
             {row.original.isOrganizationDefault && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge
+                variant="secondary"
+                className="text-xs"
+                data-testid={`${E2eTestId.ChatApiKeyDefaultBadge}-${row.original.name}`}
+              >
                 <Star className="h-3 w-3 mr-1" />
                 Default
               </Badge>
@@ -307,18 +308,9 @@ function ChatSettingsContent() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openProfilesDialog(row.original);
-                    }}
-                    className="h-8 px-2"
-                  >
-                    <Users className="h-4 w-4 mr-1" />
+                  <span className="text-sm text-muted-foreground">
                     {profileCount}
-                  </Button>
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>
                   {profileCount > 0 ? (
@@ -344,50 +336,82 @@ function ChatSettingsContent() {
       },
       {
         id: "actions",
+        header: "Actions",
         cell: ({ row }) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => openEditDialog(row.original)}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => openProfilesDialog(row.original)}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Manage Profiles
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+          <ButtonGroup>
+            <PermissionButton
+              permissions={{ chatSettings: ["update"] }}
+              tooltip="Edit"
+              aria-label="Edit"
+              variant="outline"
+              size="icon-sm"
+              data-testid={`${E2eTestId.EditChatApiKeyButton}-${row.original.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                openEditDialog(row.original);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ chatSettings: ["update"] }}
+              tooltip="Manage Profiles"
+              aria-label="Manage Profiles"
+              variant="outline"
+              size="icon-sm"
+              data-testid={`${E2eTestId.ManageProfilesChatApiKeyButton}-${row.original.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                openProfilesDialog(row.original);
+              }}
+            >
+              <Users className="h-4 w-4" />
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ chatSettings: ["update"] }}
+              tooltip={
+                row.original.isOrganizationDefault
+                  ? "Remove as Default"
+                  : "Set as Default"
+              }
+              aria-label={
+                row.original.isOrganizationDefault
+                  ? "Remove as Default"
+                  : "Set as Default"
+              }
+              variant="outline"
+              size="icon-sm"
+              data-testid={`${E2eTestId.SetDefaultChatApiKeyButton}-${row.original.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (row.original.isOrganizationDefault) {
+                  handleUnsetDefault(row.original);
+                } else {
+                  handleSetDefault(row.original);
+                }
+              }}
+            >
               {row.original.isOrganizationDefault ? (
-                <DropdownMenuItem
-                  onClick={() => handleUnsetDefault(row.original)}
-                >
-                  <StarOff className="h-4 w-4 mr-2" />
-                  Remove as Default
-                </DropdownMenuItem>
+                <StarOff className="h-4 w-4" />
               ) : (
-                <DropdownMenuItem
-                  onClick={() => handleSetDefault(row.original)}
-                >
-                  <Star className="h-4 w-4 mr-2" />
-                  Set as Default
-                </DropdownMenuItem>
+                <Star className="h-4 w-4" />
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => openDeleteDialog(row.original)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ chatSettings: ["delete"] }}
+              tooltip="Delete"
+              aria-label="Delete"
+              variant="outline"
+              size="icon-sm"
+              data-testid={`${E2eTestId.DeleteChatApiKeyButton}-${row.original.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                openDeleteDialog(row.original);
+              }}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </PermissionButton>
+          </ButtonGroup>
         ),
       },
     ],
@@ -409,13 +433,18 @@ function ChatSettingsContent() {
             Manage API keys for LLM providers used in Chat
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
+        <Button
+          onClick={() => setIsCreateDialogOpen(true)}
+          data-testid={E2eTestId.AddChatApiKeyButton}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add API Key
         </Button>
       </div>
 
-      <DataTable columns={columns} data={apiKeys} />
+      <div data-testid={E2eTestId.ChatApiKeysTable}>
+        <DataTable columns={columns} data={apiKeys} hideSelectedCount />
+      </div>
 
       {/* Create Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>

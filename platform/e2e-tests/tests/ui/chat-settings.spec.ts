@@ -21,9 +21,7 @@ test.describe("Chat Settings UI", () => {
     ).toBeVisible();
 
     // Verify the Add API Key button is visible
-    await expect(
-      page.getByRole("button", { name: /Add API Key/i }),
-    ).toBeVisible();
+    await expect(page.getByTestId(E2eTestId.AddChatApiKeyButton)).toBeVisible();
   });
 
   test(
@@ -35,7 +33,7 @@ test.describe("Chat Settings UI", () => {
       await goToPage(page, "/settings/chat");
 
       // Click Add API Key button
-      await page.getByRole("button", { name: /Add API Key/i }).click();
+      await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
 
       // Verify dialog is open
       await expect(
@@ -62,16 +60,14 @@ test.describe("Chat Settings UI", () => {
       });
 
       // Verify the new key appears in the table
-      await expect(page.getByText(keyName)).toBeVisible();
+      await expect(
+        page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
+      ).toBeVisible();
 
       // Cleanup: Delete the created key
       await page
-        .getByRole("row")
-        .filter({ hasText: keyName })
-        .getByRole("button")
-        .last()
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
         .click();
-      await page.getByRole("menuitem", { name: /Delete/i }).click();
       await page.getByRole("button", { name: "Delete" }).click();
     },
   );
@@ -86,7 +82,7 @@ test.describe("Chat Settings UI", () => {
       await goToPage(page, "/settings/chat");
 
       // Create a key first
-      await page.getByRole("button", { name: /Add API Key/i }).click();
+      await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await page.getByLabel(/Name/i).fill(originalName);
       await page
         .getByRole("textbox", { name: /API Key/i })
@@ -96,14 +92,10 @@ test.describe("Chat Settings UI", () => {
         timeout: 5000,
       });
 
-      // Open the actions menu for the created key
+      // Click the edit button for the created key
       await page
-        .getByRole("row")
-        .filter({ hasText: originalName })
-        .getByRole("button")
-        .last()
+        .getByTestId(`${E2eTestId.EditChatApiKeyButton}-${originalName}`)
         .click();
-      await page.getByRole("menuitem", { name: /Edit/i }).click();
 
       // Update the name
       await page.getByLabel(/Name/i).clear();
@@ -114,16 +106,14 @@ test.describe("Chat Settings UI", () => {
       await expect(page.getByText("API key updated successfully")).toBeVisible({
         timeout: 5000,
       });
-      await expect(page.getByText(updatedName)).toBeVisible();
+      await expect(
+        page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${updatedName}`),
+      ).toBeVisible();
 
       // Cleanup
       await page
-        .getByRole("row")
-        .filter({ hasText: updatedName })
-        .getByRole("button")
-        .last()
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${updatedName}`)
         .click();
-      await page.getByRole("menuitem", { name: /Delete/i }).click();
       await page.getByRole("button", { name: "Delete" }).click();
     },
   );
@@ -137,7 +127,7 @@ test.describe("Chat Settings UI", () => {
       await goToPage(page, "/settings/chat");
 
       // Create a key first
-      await page.getByRole("button", { name: /Add API Key/i }).click();
+      await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await page.getByLabel(/Name/i).fill(keyName);
       await page
         .getByRole("textbox", { name: /API Key/i })
@@ -147,14 +137,10 @@ test.describe("Chat Settings UI", () => {
         timeout: 5000,
       });
 
-      // Open the actions menu and click delete
+      // Click the delete button for the created key
       await page
-        .getByRole("row")
-        .filter({ hasText: keyName })
-        .getByRole("button")
-        .last()
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
         .click();
-      await page.getByRole("menuitem", { name: /Delete/i }).click();
 
       // Confirm deletion
       await expect(
@@ -166,7 +152,9 @@ test.describe("Chat Settings UI", () => {
       await expect(page.getByText("API key deleted successfully")).toBeVisible({
         timeout: 5000,
       });
-      await expect(page.getByText(keyName)).not.toBeVisible();
+      await expect(
+        page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
+      ).not.toBeVisible();
     },
   );
 
@@ -179,7 +167,7 @@ test.describe("Chat Settings UI", () => {
       await goToPage(page, "/settings/chat");
 
       // Create a key without setting it as default
-      await page.getByRole("button", { name: /Add API Key/i }).click();
+      await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await page.getByLabel(/Name/i).fill(keyName);
       await page
         .getByRole("textbox", { name: /API Key/i })
@@ -189,14 +177,10 @@ test.describe("Chat Settings UI", () => {
         timeout: 5000,
       });
 
-      // Open actions menu and set as default
+      // Click the set as default button
       await page
-        .getByRole("row")
-        .filter({ hasText: keyName })
-        .getByRole("button")
-        .last()
+        .getByTestId(`${E2eTestId.SetDefaultChatApiKeyButton}-${keyName}`)
         .click();
-      await page.getByRole("menuitem", { name: /Set as Default/i }).click();
 
       // Verify the default badge appears
       await expect(page.getByText("Set as organization default")).toBeVisible({
@@ -204,12 +188,14 @@ test.describe("Chat Settings UI", () => {
       });
 
       // The row should now show the Default badge
-      const keyRow = page.getByRole("row").filter({ hasText: keyName });
-      await expect(keyRow.getByText("Default", { exact: true })).toBeVisible();
+      await expect(
+        page.getByTestId(`${E2eTestId.ChatApiKeyDefaultBadge}-${keyName}`),
+      ).toBeVisible();
 
       // Cleanup
-      await keyRow.getByRole("button").last().click();
-      await page.getByRole("menuitem", { name: /Delete/i }).click();
+      await page
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
+        .click();
       await page.getByRole("button", { name: "Delete" }).click();
     },
   );

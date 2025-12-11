@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { SupportedChatProvider } from "@/types";
 import secretsTable from "./secret";
 
 const chatApiKeysTable = pgTable(
@@ -14,7 +15,7 @@ const chatApiKeysTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
-    provider: text("provider").notNull(), // 'anthropic' | 'openai'
+    provider: text("provider").$type<SupportedChatProvider>().notNull(),
     secretId: uuid("secret_id").references(() => secretsTable.id, {
       onDelete: "set null",
     }),

@@ -20,7 +20,7 @@ class ChatApiKeyModel {
       .values(data)
       .returning();
 
-    return apiKey as ChatApiKey;
+    return apiKey;
   }
 
   /**
@@ -32,7 +32,7 @@ class ChatApiKeyModel {
       .from(schema.chatApiKeysTable)
       .where(eq(schema.chatApiKeysTable.id, id));
 
-    return apiKey ? (apiKey as ChatApiKey) : null;
+    return apiKey;
   }
 
   /**
@@ -47,7 +47,7 @@ class ChatApiKeyModel {
       .where(eq(schema.chatApiKeysTable.organizationId, organizationId))
       .orderBy(schema.chatApiKeysTable.createdAt);
 
-    return apiKeys as ChatApiKey[];
+    return apiKeys;
   }
 
   /**
@@ -132,7 +132,7 @@ class ChatApiKeyModel {
       .where(eq(schema.chatApiKeysTable.id, id))
       .returning();
 
-    return updated ? (updated as ChatApiKey) : null;
+    return updated;
   }
 
   /**
@@ -178,7 +178,7 @@ class ChatApiKeyModel {
       .where(eq(schema.chatApiKeysTable.id, id))
       .returning();
 
-    return updated ? (updated as ChatApiKey) : null;
+    return updated;
   }
 
   /**
@@ -193,7 +193,7 @@ class ChatApiKeyModel {
       .where(eq(schema.chatApiKeysTable.id, id))
       .returning();
 
-    return updated ? (updated as ChatApiKey) : null;
+    return updated;
   }
 
   /**
@@ -219,10 +219,10 @@ class ChatApiKeyModel {
             eq(schema.profileChatApiKeysTable.chatApiKeyId, data.chatApiKeyId),
           ),
         );
-      return existing as ProfileChatApiKey;
+      return existing;
     }
 
-    return assignment as ProfileChatApiKey;
+    return assignment;
   }
 
   /**
@@ -296,7 +296,7 @@ class ChatApiKeyModel {
       );
 
     if (profileKey) {
-      return profileKey.apiKey as ChatApiKey;
+      return profileKey.apiKey;
     }
 
     // Fall back to organization default
@@ -321,7 +321,7 @@ class ChatApiKeyModel {
       )
       .where(eq(schema.profileChatApiKeysTable.agentId, agentId));
 
-    return assignments.map((a) => a.apiKey as ChatApiKey);
+    return assignments.map((a) => a.apiKey);
   }
 
   /**

@@ -34,6 +34,15 @@ export const E2eTestId = {
   ProfileTeamBadge: "profile-team-badge",
   EditAgentButton: "edit-agent-button",
   RemoveTeamBadge: "remove-team-badge",
+  // Chat Settings
+  ChatApiKeysTable: "chat-api-keys-table",
+  AddChatApiKeyButton: "add-chat-api-key-button",
+  ChatApiKeyRow: "chat-api-key-row",
+  EditChatApiKeyButton: "edit-chat-api-key-button",
+  DeleteChatApiKeyButton: "delete-chat-api-key-button",
+  SetDefaultChatApiKeyButton: "set-default-chat-api-key-button",
+  ManageProfilesChatApiKeyButton: "manage-profiles-chat-api-key-button",
+  ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

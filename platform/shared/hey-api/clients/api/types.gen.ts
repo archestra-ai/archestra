@@ -12584,6 +12584,93 @@ export type GetSecretsTypeResponses = {
 
 export type GetSecretsTypeResponse = GetSecretsTypeResponses[keyof GetSecretsTypeResponses];
 
+export type GetSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/{id}';
+};
+
+export type GetSecretErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSecretError = GetSecretErrors[keyof GetSecretErrors];
+
+export type GetSecretResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        secret: {
+            [key: string]: unknown;
+        };
+        isVault: boolean;
+        isByosVault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetSecretResponse = GetSecretResponses[keyof GetSecretResponses];
+
 export type CheckSecretsConnectivityData = {
     body?: never;
     path?: never;

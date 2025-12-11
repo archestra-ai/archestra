@@ -1,8 +1,14 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import SecretModel from "@/models/secret";
 import { SecretsManagerType, secretManager } from "@/secretsmanager";
-import { constructResponseSchema } from "@/types";
+import {
+  ApiError,
+  constructResponseSchema,
+  SelectSecretSchema,
+  UuidIdSchema,
+} from "@/types";
 
 const SecretsManagerTypeSchema = z.nativeEnum(SecretsManagerType);
 
@@ -25,6 +31,33 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (_request, reply) => {
       return reply.send(secretManager.getUserVisibleDebugInfo());
+    },
+  );
+
+  fastify.get(
+    "/api/secrets/:id",
+    {
+      schema: {
+        operationId: RouteId.GetSecret,
+        description: "Get a secret by ID",
+        tags: ["Secrets"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectSecretSchema),
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      // For BYOS secrets, we want to return the raw secret column (vault references)
+      // without resolving them. Use SecretModel directly instead of secretManager
+      // to avoid resolving vault references.
+      const secret = await SecretModel.findById(id);
+
+      if (!secret) {
+        throw new ApiError(404, "Secret not found");
+      }
+
+      return reply.send(secret);
     },
   );
 

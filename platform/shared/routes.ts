@@ -214,6 +214,7 @@ export const RouteId = {
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",
+  GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
 } as const;
 

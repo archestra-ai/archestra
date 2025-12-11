@@ -132,11 +132,15 @@ export async function executeArchestraTool(
       let catalogItems: InternalMcpCatalog[];
 
       if (query && query.trim() !== "") {
-        // Search by name or description
-        catalogItems = await InternalMcpCatalogModel.searchByQuery(query);
+        // Search by name or description - don't expand secrets, we do not need them to execute the tool
+        catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
+          expandSecrets: false,
+        });
       } else {
-        // Return all catalog items
-        catalogItems = await InternalMcpCatalogModel.findAll();
+        // Return all catalog items - don't expand secrets, we do not need actual secrets for this
+        catalogItems = await InternalMcpCatalogModel.findAll({
+          expandSecrets: false,
+        });
       }
 
       if (catalogItems.length === 0) {

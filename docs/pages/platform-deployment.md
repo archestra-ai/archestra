@@ -70,6 +70,8 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
+  --set archestra.image="archestra/platform:0.6.27" \
+  --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
 ```
@@ -144,50 +146,44 @@ openssl rand -base64 32
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
 
+**GKE BackendConfig Settings** (Google Cloud only):
+
+- `archestra.gkeBackendConfig.enabled` - Enable or disable GKE BackendConfig resources (default: false)
+- `archestra.gkeBackendConfig.backend.timeoutSec` - Request timeout for backend API (recommended: 600 for streaming)
+- `archestra.gkeBackendConfig.backend.connectionDraining.drainingTimeoutSec` - Connection draining timeout for backend
+- `archestra.gkeBackendConfig.backend.healthCheck` - Health check configuration for backend (port 9000)
+- `archestra.gkeBackendConfig.frontend.timeoutSec` - Request timeout for frontend
+- `archestra.gkeBackendConfig.frontend.connectionDraining.drainingTimeoutSec` - Connection draining timeout for frontend
+- `archestra.gkeBackendConfig.frontend.healthCheck` - Health check configuration for frontend (port 3000)
+
 #### Cloud Provider Configuration (Streaming Timeout Settings)
 
 **⚠️ IMPORTANT:** Archestra Platform requires proper timeout settings on the upstream load balancer. **Without longer timeouts, streaming responses may end prematurely**, resulting in a “network error”
 
 ##### Google Cloud Platform (GKE)
 
-For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts using a BackendConfig resource. **BackendConfig is cloud-provider-specific and should be managed through your infrastructure-as-code** (Terraform, Pulumi, etc.) rather than the Helm chart.
+For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts and health checks using BackendConfig resources. The Helm chart can create and manage these resources for you.
 
-**Create BackendConfig Resource**:
-
-The BackendConfig should be created in the same namespace as your Archestra Platform deployment:
-
-```yaml
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata:
-  name: archestra-platform-backend-config
-  namespace: archestra # Same namespace as Helm release
-spec:
-  timeoutSec: 600 # 10 minutes for streaming responses and long-running MCP operations
-  connectionDraining:
-    drainingTimeoutSec: 60
-  healthCheck:
-    checkIntervalSec: 10
-    timeoutSec: 5
-    healthyThreshold: 1
-    unhealthyThreshold: 3
-    type: HTTP
-    requestPath: /health
-    port: 9000
-```
-
-**Reference BackendConfig in Service**:
-
-After creating the BackendConfig resource, configure the Helm chart to reference it via service annotations:
+Enable the `gkeBackendConfig` section in your values:
 
 ```yaml
 archestra:
+  gkeBackendConfig:
+    enabled: true
+    backend:
+      timeoutSec: 600 # 10 minutes for streaming responses
+      connectionDraining:
+        drainingTimeoutSec: 60
+    frontend:
+      timeoutSec: 600
+      connectionDraining:
+        drainingTimeoutSec: 60
   service:
     annotations:
-      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+      cloud.google.com/backend-config: '{"ports": {"9000":"RELEASE_NAME-archestra-platform-backend-config", "3000":"RELEASE_NAME-archestra-platform-frontend-config"}}'
 ```
 
-Apply via Helm:
+Apply via Helm (replace `RELEASE_NAME` with your actual release name, e.g., `archestra-platform`):
 
 ```bash
 helm upgrade archestra-platform \
@@ -195,9 +191,17 @@ helm upgrade archestra-platform \
   --install \
   --namespace archestra \
   --create-namespace \
-  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-backend-config"}}' \
+  --set archestra.gkeBackendConfig.enabled=true \
+  --set archestra.gkeBackendConfig.backend.timeoutSec=600 \
+  --set archestra.gkeBackendConfig.frontend.timeoutSec=600 \
+  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-archestra-platform-backend-config", "3000":"archestra-platform-archestra-platform-frontend-config"}}' \
   --wait
 ```
+
+The Helm chart creates two BackendConfig resources with health checks tuned for deployments:
+
+- `<release>-archestra-platform-backend-config` - For the API backend (port 9000)
+- `<release>-archestra-platform-frontend-config` - For the frontend (port 3000)
 
 ##### Amazon Web Services (AWS EKS)
 
@@ -275,6 +279,79 @@ archestra:
       # Configure timeout via Traefik IngressRoute or Middleware
 ```
 
+#### Scaling & High Availability Configuration
+
+**HorizontalPodAutoscaler Settings**:
+
+- `archestra.horizontalPodAutoscaler.enabled` - Enable or disable HorizontalPodAutoscaler creation (default: false)
+- `archestra.horizontalPodAutoscaler.minReplicas` - Minimum number of replicas (default: 1)
+- `archestra.horizontalPodAutoscaler.maxReplicas` - Maximum number of replicas (default: 10)
+- `archestra.horizontalPodAutoscaler.metrics` - Metrics configuration for scaling decisions
+- `archestra.horizontalPodAutoscaler.behavior` - Scaling behavior configuration
+
+**Example with CPU-based autoscaling**:
+
+```yaml
+archestra:
+  horizontalPodAutoscaler:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 80
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
+```
+
+**PodDisruptionBudget Settings**:
+
+- `archestra.podDisruptionBudget.enabled` - Enable or disable PodDisruptionBudget creation (default: false)
+- `archestra.podDisruptionBudget.minAvailable` - Minimum number of pods that must remain available (integer or percentage)
+- `archestra.podDisruptionBudget.maxUnavailable` - Maximum number of pods that can be unavailable (integer or percentage)
+- `archestra.podDisruptionBudget.unhealthyPodEvictionPolicy` - Policy for evicting unhealthy pods (IfHealthyBudget or AlwaysAllow)
+
+**Note**: Only one of `minAvailable` or `maxUnavailable` can be set.
+
+**Example with minAvailable**:
+
+```yaml
+archestra:
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    unhealthyPodEvictionPolicy: IfHealthyBudget
+```
+
+**Example with maxUnavailable percentage**:
+
+```yaml
+archestra:
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: "25%"
+```
+
+See the Kubernetes documentation for more details:
+
+- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+
 #### Database Configuration
 
 **PostgreSQL Settings**:
@@ -315,6 +392,39 @@ Then visit:
 ### Terraform
 
 For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
+
+**Provider Configuration**:
+
+```terraform
+terraform {
+  required_providers {
+    archestra = {
+      source = "archestra-ai/archestra"
+    }
+  }
+}
+
+provider "archestra" {
+  base_url = "http://localhost:9000" # Your Archestra API URL
+  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+}
+```
+
+**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
+
+**Configuring `base_url`**:
+
+The `base_url` should match your `ARCHESTRA_API_BASE_URL` environment variable — this is where your Archestra Platform API is accessible:
+
+- **Local development**: `http://localhost:9000` (default)
+- **Production**: Your externally-accessible API URL (e.g., `https://api.archestra.example.com`)
+
+You can also set these values via environment variables instead of hardcoding them:
+
+```bash
+export ARCHESTRA_API_KEY="your-api-key-here"
+export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+```
 
 For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
 
@@ -432,13 +542,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Options: `DB` or `Vault`
   - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
 
-- **`HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
+- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
-- **`HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing

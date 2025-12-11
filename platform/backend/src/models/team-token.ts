@@ -9,6 +9,13 @@ import type {
   UpdateTeamToken,
 } from "@/types";
 
+/**
+ * Team tokens always use DB storage (forceDB: true) because:
+ * 1. They are seeded on archestra startup
+ * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
+ */
+const FORCE_DB = true;
+
 /** Token prefix for identification */
 const TOKEN_PREFIX = "archestra_";
 
@@ -67,13 +74,13 @@ class TeamTokenModel {
     const tokenValue = generateToken();
     const tokenStart = getTokenStart(tokenValue);
 
-    // Store token value in secret table via secretsManager
     const secretName = input.teamId
       ? `team-token-${input.teamId}`
       : `org-token-${input.organizationId}`;
     const secret = await secretManager.createSecret(
       { token: tokenValue },
       secretName,
+      FORCE_DB,
     );
 
     // Create token record
@@ -252,7 +259,9 @@ class TeamTokenModel {
     const newTokenStart = getTokenStart(newTokenValue);
 
     // Update secret with new value
-    await secretManager.updateSecret(token.secretId, { token: newTokenValue });
+    await secretManager.updateSecret(token.secretId, {
+      token: newTokenValue,
+    });
 
     // Update token start
     await db

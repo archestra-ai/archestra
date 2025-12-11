@@ -380,13 +380,13 @@ class AgentTeamModel {
       .select({ teamId: schema.agentTeamsTable.teamId })
       .from(schema.agentTeamsTable)
       .innerJoin(
-        schema.mcpServerTeamsTable,
-        eq(schema.agentTeamsTable.teamId, schema.mcpServerTeamsTable.teamId),
+        schema.mcpServersTable,
+        eq(schema.agentTeamsTable.teamId, schema.mcpServersTable.teamId),
       )
       .where(
         and(
           eq(schema.agentTeamsTable.agentId, agentId),
-          eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId),
+          eq(schema.mcpServersTable.id, mcpServerId),
         ),
       )
       .limit(1);

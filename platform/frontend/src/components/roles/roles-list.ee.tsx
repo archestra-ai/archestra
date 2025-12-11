@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  allAvailableActions,
-  type archestraApiTypes,
-  type Permissions,
-} from "@shared";
+import type { archestraApiTypes, Permissions } from "@shared";
+import { allAvailableActions } from "@shared/access-control.ee";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -33,7 +30,7 @@ import {
   useRoles,
   useUpdateRole,
 } from "@/lib/role.query";
-import { RolePermissionBuilder } from "./role-permission-builder";
+import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 

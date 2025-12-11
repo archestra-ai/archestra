@@ -121,63 +121,65 @@ function ChatSettingsContent() {
             Configure the Anthropic API key for chat functionality
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key</Label>
-            <div className="relative">
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="sk-ant-..."
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                className={
-                  chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged
-                    ? "border-green-500 pr-10"
-                    : ""
-                }
-              />
-              {chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged && (
-                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
-              )}
+        <CardContent className="space-y-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="apiKey">API Key</Label>
+              <div className="relative">
+                <Input
+                  id="apiKey"
+                  type="password"
+                  placeholder="sk-ant-..."
+                  value={apiKey}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
+                  className={
+                    chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged
+                      ? "border-green-500 pr-10"
+                      : ""
+                  }
+                />
+                {chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged && (
+                  <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                )}
+              </div>
             </div>
+            {hasApiKeyChanged ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelApiKey}
+                  disabled={updateChatSettings.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveApiKey}
+                  disabled={updateChatSettings.isPending || !apiKey}
+                >
+                  {updateChatSettings.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {chatSettings?.anthropicApiKeySecretId
+                    ? "Update API Key"
+                    : "Save API Key"}
+                </Button>
+              </div>
+            ) : (
+              chatSettings?.anthropicApiKeySecretId && (
+                <Button
+                  variant="destructive"
+                  onClick={handleResetApiKey}
+                  disabled={updateChatSettings.isPending}
+                >
+                  {updateChatSettings.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset API Key
+                </Button>
+              )
+            )}
           </div>
-          {hasApiKeyChanged ? (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleCancelApiKey}
-                disabled={updateChatSettings.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveApiKey}
-                disabled={updateChatSettings.isPending || !apiKey}
-              >
-                {updateChatSettings.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {chatSettings?.anthropicApiKeySecretId
-                  ? "Update API Key"
-                  : "Save API Key"}
-              </Button>
-            </div>
-          ) : (
-            chatSettings?.anthropicApiKeySecretId && (
-              <Button
-                variant="destructive"
-                onClick={handleResetApiKey}
-                disabled={updateChatSettings.isPending}
-              >
-                {updateChatSettings.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Reset API Key
-              </Button>
-            )
-          )}
         </CardContent>
       </Card>
     </div>

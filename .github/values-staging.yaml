@@ -4,7 +4,9 @@ archestra:
   service:
     annotations:
       # GKE BackendConfig for custom health checks
-      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+      # Maps backend port (9000) and frontend port (3000) to their respective BackendConfigs
+      # These BackendConfigs are defined in archestra-ai/infra repo (gke/ingress.tf)
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config", "3000":"archestra-platform-frontend-config"}}'
 
   ingress:
     enabled: true

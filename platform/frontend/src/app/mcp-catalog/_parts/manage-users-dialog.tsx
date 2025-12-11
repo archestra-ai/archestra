@@ -101,6 +101,11 @@ export function ManageUsersDialog({
                             ? mcpServer.teamDetails?.name || "Team"
                             : mcpServer.ownerEmail || "Unknown"}
                         </span>
+                        {mcpServer.teamId && (
+                          <span className="text-muted-foreground text-xs block">
+                            Created by: {mcpServer.ownerEmail}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {format(new Date(mcpServer.createdAt), "PPp")}

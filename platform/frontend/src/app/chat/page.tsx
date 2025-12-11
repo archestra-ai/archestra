@@ -49,7 +49,10 @@ import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
-import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import {
+  useChatApiKeysOptional,
+  useChatSettingsOptional,
+} from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
@@ -97,8 +100,12 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  // Check if API key is configured
+  // Check if API key is configured - check both new and legacy systems
   const { data: chatSettings } = useChatSettingsOptional();
+  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
+  const hasAnyApiKey =
+    chatApiKeys.some((k) => k.provider === "anthropic" && k.secretId) ||
+    !!chatSettings?.anthropicApiKeySecretId;
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -360,19 +367,19 @@ export default function ChatPage() {
   );
 
   // If API key is not configured, show setup message
-  if (chatSettings && !chatSettings.anthropicApiKeySecretId) {
+  if (chatSettings && !hasAnyApiKey) {
     return (
       <div className="flex h-screen items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Anthropic API Key Required</CardTitle>
+            <CardTitle>LLM Provider API Key Required</CardTitle>
             <CardDescription>
-              The chat feature requires an Anthropic API key to function.
+              The chat feature requires an LLM provider API key to function.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure your Anthropic API key in Chat Settings to start
+              Please configure an LLM provider API key in Chat Settings to start
               using the chat feature.
             </p>
             <Button asChild>

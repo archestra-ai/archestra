@@ -4947,6 +4947,705 @@ export type UpdateTrustedDataPolicyResponses = {
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
 
+export type GetChatApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys';
+};
+
+export type GetChatApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatApiKeysError = GetChatApiKeysErrors[keyof GetChatApiKeysErrors];
+
+export type GetChatApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    }>;
+};
+
+export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKeysResponses];
+
+export type CreateChatApiKeyData = {
+    body: {
+        name: string;
+        provider: 'anthropic' | 'openai';
+        apiKey: string;
+        isOrganizationDefault?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys';
+};
+
+export type CreateChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateChatApiKeyError = CreateChatApiKeyErrors[keyof CreateChatApiKeyErrors];
+
+export type CreateChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateChatApiKeyResponse = CreateChatApiKeyResponses[keyof CreateChatApiKeyResponses];
+
+export type DeleteChatApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type DeleteChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteChatApiKeyError = DeleteChatApiKeyErrors[keyof DeleteChatApiKeyErrors];
+
+export type DeleteChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatApiKeyResponse = DeleteChatApiKeyResponses[keyof DeleteChatApiKeyResponses];
+
+export type GetChatApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type GetChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatApiKeyError = GetChatApiKeyErrors[keyof GetChatApiKeyErrors];
+
+export type GetChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type GetChatApiKeyResponse = GetChatApiKeyResponses[keyof GetChatApiKeyResponses];
+
+export type UpdateChatApiKeyData = {
+    body?: {
+        name?: string;
+        apiKey?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type UpdateChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatApiKeyError = UpdateChatApiKeyErrors[keyof UpdateChatApiKeyErrors];
+
+export type UpdateChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatApiKeyResponse = UpdateChatApiKeyResponses[keyof UpdateChatApiKeyResponses];
+
+export type SetChatApiKeyDefaultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/set-default';
+};
+
+export type SetChatApiKeyDefaultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetChatApiKeyDefaultError = SetChatApiKeyDefaultErrors[keyof SetChatApiKeyDefaultErrors];
+
+export type SetChatApiKeyDefaultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetChatApiKeyDefaultResponse = SetChatApiKeyDefaultResponses[keyof SetChatApiKeyDefaultResponses];
+
+export type UnsetChatApiKeyDefaultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/unset-default';
+};
+
+export type UnsetChatApiKeyDefaultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnsetChatApiKeyDefaultError = UnsetChatApiKeyDefaultErrors[keyof UnsetChatApiKeyDefaultErrors];
+
+export type UnsetChatApiKeyDefaultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UnsetChatApiKeyDefaultResponse = UnsetChatApiKeyDefaultResponses[keyof UnsetChatApiKeyDefaultResponses];
+
+export type UpdateChatApiKeyProfilesData = {
+    body: {
+        profileIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/profiles';
+};
+
+export type UpdateChatApiKeyProfilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatApiKeyProfilesError = UpdateChatApiKeyProfilesErrors[keyof UpdateChatApiKeyProfilesErrors];
+
+export type UpdateChatApiKeyProfilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type UpdateChatApiKeyProfilesResponse = UpdateChatApiKeyProfilesResponses[keyof UpdateChatApiKeyProfilesResponses];
+
 export type StreamChatData = {
     body: {
         id: string;

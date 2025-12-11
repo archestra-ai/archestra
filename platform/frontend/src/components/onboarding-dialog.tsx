@@ -3,7 +3,7 @@
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
@@ -21,7 +21,9 @@ import { Label } from "@/components/ui/label";
 import { useDefaultProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
+  useChatApiKeysOptional,
   useChatSettingsOptional,
+  useCreateChatApiKey,
   useUpdateChatSettings,
 } from "@/lib/chat-settings.query";
 import {
@@ -49,57 +51,66 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
       "Failed to complete onboarding",
     );
 
-  // Chat settings state
+  // Chat settings state - use both old and new APIs for backward compatibility
   const { data: chatSettings } = useChatSettingsOptional();
+  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
   const updateChatSettings = useUpdateChatSettings();
+  const createChatApiKey = useCreateChatApiKey();
   const { data: canUpdateChatSettings } = useHasPermissions({
     chatSettings: ["update"],
   });
   const [apiKey, setApiKey] = useState("");
   const [hasApiKeyChanged, setHasApiKeyChanged] = useState(false);
 
+  // Check if any Anthropic API key is configured (new system or legacy)
+  const hasAnthropicApiKey = useMemo(() => {
+    const hasNewKey = chatApiKeys.some(
+      (k) => k.provider === "anthropic" && k.secretId,
+    );
+    const hasLegacyKey = !!chatSettings?.anthropicApiKeySecretId;
+    return hasNewKey || hasLegacyKey;
+  }, [chatApiKeys, chatSettings?.anthropicApiKeySecretId]);
+
   // Set placeholder dots when API key is configured
   useEffect(() => {
-    if (chatSettings?.anthropicApiKeySecretId) {
+    if (hasAnthropicApiKey) {
       setApiKey(PLACEHOLDER_KEY);
       setHasApiKeyChanged(false);
     }
-  }, [chatSettings?.anthropicApiKeySecretId]);
+  }, [hasAnthropicApiKey]);
 
   const handleApiKeyChange = useCallback(
     (value: string) => {
       setApiKey(value);
-      if (chatSettings?.anthropicApiKeySecretId) {
+      if (hasAnthropicApiKey) {
         setHasApiKeyChanged(value !== PLACEHOLDER_KEY);
       } else {
         setHasApiKeyChanged(value !== "");
       }
     },
-    [chatSettings?.anthropicApiKeySecretId],
+    [hasAnthropicApiKey],
   );
 
   const handleSaveApiKey = useCallback(async () => {
     try {
       const keyToSend = hasApiKeyChanged ? apiKey : undefined;
-      await updateChatSettings.mutateAsync({
-        anthropicApiKey: keyToSend,
+      if (!keyToSend) return;
+
+      // Use new API to create a chat API key
+      await createChatApiKey.mutateAsync({
+        name: "Default Anthropic Key",
+        provider: "anthropic",
+        apiKey: keyToSend,
+        isOrganizationDefault: true,
       });
+
       toast.success("API key saved successfully");
-      if (chatSettings?.anthropicApiKeySecretId || keyToSend) {
-        setApiKey(PLACEHOLDER_KEY);
-        setHasApiKeyChanged(false);
-      } else {
-        setApiKey("");
-      }
+      setApiKey(PLACEHOLDER_KEY);
+      setHasApiKeyChanged(false);
     } catch (_error) {
       toast.error("Failed to save API key");
     }
-  }, [
-    chatSettings?.anthropicApiKeySecretId,
-    hasApiKeyChanged,
-    apiKey,
-    updateChatSettings,
-  ]);
+  }, [hasApiKeyChanged, apiKey, createChatApiKey]);
 
   const handleFinishOnboarding = useCallback(() => {
     completeOnboarding({
@@ -197,14 +208,12 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                           value={apiKey}
                           onChange={(e) => handleApiKeyChange(e.target.value)}
                           className={
-                            chatSettings?.anthropicApiKeySecretId &&
-                            !hasApiKeyChanged
+                            hasAnthropicApiKey && !hasApiKeyChanged
                               ? "border-green-500 pr-10"
                               : ""
                           }
                         />
-                        {chatSettings?.anthropicApiKeySecretId &&
-                          !hasApiKeyChanged && (
+                        {hasAnthropicApiKey && !hasApiKeyChanged && (
                             <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
                           )}
                       </div>
@@ -223,28 +232,26 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 
                     <Button
                       onClick={handleSaveApiKey}
-                      disabled={updateChatSettings.isPending || !apiKey}
+                      disabled={createChatApiKey.isPending || !apiKey}
                       size="sm"
                     >
-                      {updateChatSettings.isPending && (
+                      {createChatApiKey.isPending && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {chatSettings?.anthropicApiKeySecretId
-                        ? "Update API Key"
-                        : "Save API Key"}
+                      {hasAnthropicApiKey ? "Update API Key" : "Save API Key"}
                     </Button>
                   </div>
                 ) : (
                   <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
-                      {chatSettings?.anthropicApiKeySecretId ? (
+                      {hasAnthropicApiKey ? (
                         <span className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                           API key is configured. Chat is ready to use.
                         </span>
                       ) : (
-                        "An administrator needs to configure the Anthropic API key to enable Chat. You can configure it later in Settings → Chat."
+                        "An administrator needs to configure an LLM provider API key to enable Chat. You can configure it later in Settings → Chat."
                       )}
                     </AlertDescription>
                   </Alert>

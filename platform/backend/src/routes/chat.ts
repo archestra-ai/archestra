@@ -14,6 +14,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
+  ChatApiKeyModel,
   ChatSettingsModel,
   ConversationModel,
   MessageModel,
@@ -120,24 +121,50 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      let anthropicApiKey = config.chat.anthropic.apiKey; // Fallback to env var
+      // Resolve API key: profile-specific -> org default -> env var
+      let anthropicApiKey: string | undefined;
+      let apiKeySource = "environment";
 
-      if (chatSettings?.anthropicApiKeySecretId) {
+      // Try profile-specific API key first
+      const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+        conversation.agentId,
+        "anthropic",
+        organizationId,
+      );
+
+      if (profileApiKey?.secretId) {
+        const secret = await secretManager.getSecret(profileApiKey.secretId);
+        if (secret?.secret?.apiKey) {
+          anthropicApiKey = secret.secret.apiKey as string;
+          apiKeySource = profileApiKey.isOrganizationDefault
+            ? "organization default"
+            : "profile-specific";
+        }
+      }
+
+      // Fall back to legacy chat settings (for backward compatibility during migration)
+      if (!anthropicApiKey && chatSettings?.anthropicApiKeySecretId) {
         const secret = await secretManager.getSecret(
           chatSettings.anthropicApiKeySecretId,
         );
         if (secret?.secret?.anthropicApiKey) {
           anthropicApiKey = secret.secret.anthropicApiKey as string;
-          logger.info("Using Anthropic API key from database");
+          apiKeySource = "legacy chat settings";
         }
-      } else {
-        logger.info("Using Anthropic API key from environment variable");
       }
+
+      // Fall back to environment variable
+      if (!anthropicApiKey) {
+        anthropicApiKey = config.chat.anthropic.apiKey;
+        apiKeySource = "environment";
+      }
+
+      logger.info({ apiKeySource }, "Using Anthropic API key");
 
       if (!anthropicApiKey) {
         throw new ApiError(
           400,
-          "Anthropic API key not configured. Please configure it in Chat Settings.",
+          "LLM Provider API key not configured. Please configure it in Chat Settings.",
         );
       }
 
@@ -562,23 +589,48 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Get Anthropic API key
-      const chatSettings =
-        await ChatSettingsModel.findByOrganizationId(organizationId);
-      let anthropicApiKey = config.chat.anthropic.apiKey;
-      if (chatSettings?.anthropicApiKeySecretId) {
-        const secret = await secretManager.getSecret(
-          chatSettings.anthropicApiKeySecretId,
+      // Resolve API key: profile-specific -> org default -> env var
+      let anthropicApiKey: string | undefined;
+
+      // Try profile-specific API key first (if conversation has an agent)
+      if (conversation.agentId) {
+        const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+          conversation.agentId,
+          "anthropic",
+          organizationId,
         );
-        if (secret?.secret?.anthropicApiKey) {
-          anthropicApiKey = secret.secret.anthropicApiKey as string;
+
+        if (profileApiKey?.secretId) {
+          const secret = await secretManager.getSecret(profileApiKey.secretId);
+          if (secret?.secret?.apiKey) {
+            anthropicApiKey = secret.secret.apiKey as string;
+          }
         }
+      }
+
+      // Fall back to legacy chat settings (for backward compatibility during migration)
+      if (!anthropicApiKey) {
+        const chatSettings =
+          await ChatSettingsModel.findByOrganizationId(organizationId);
+        if (chatSettings?.anthropicApiKeySecretId) {
+          const secret = await secretManager.getSecret(
+            chatSettings.anthropicApiKeySecretId,
+          );
+          if (secret?.secret?.anthropicApiKey) {
+            anthropicApiKey = secret.secret.anthropicApiKey as string;
+          }
+        }
+      }
+
+      // Fall back to environment variable
+      if (!anthropicApiKey) {
+        anthropicApiKey = config.chat.anthropic.apiKey;
       }
 
       if (!anthropicApiKey) {
         throw new ApiError(
           400,
-          "Anthropic API key not configured. Please configure it in Chat Settings.",
+          "LLM Provider API key not configured. Please configure it in Chat Settings.",
         );
       }
 

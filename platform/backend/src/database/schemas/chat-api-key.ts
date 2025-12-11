@@ -1,9 +1,9 @@
 import {
   boolean,
+  index,
   pgTable,
   text,
   timestamp,
-  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import secretsTable from "./secret";
@@ -28,10 +28,13 @@ const chatApiKeysTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Only one default per organization per provider
-    unique("chat_api_keys_org_provider_default_unique")
-      .on(table.organizationId, table.provider)
-      .nullsNotDistinct(),
+    // Index for efficient lookups by organization
+    index("chat_api_keys_organization_id_idx").on(table.organizationId),
+    // Index for finding defaults by org + provider
+    index("chat_api_keys_org_provider_idx").on(
+      table.organizationId,
+      table.provider,
+    ),
   ],
 );
 

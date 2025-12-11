@@ -59,9 +59,9 @@ export function TokenSelect({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && !value) {
-      // Default to dynamic credential
-      onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+    if (shouldSetDefaultValue && !value && mcpServers.length > 0) {
+      // Default to the first credential
+      onValueChange(mcpServers[0].id);
     }
   }, []);
 

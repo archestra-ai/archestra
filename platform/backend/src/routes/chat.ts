@@ -123,7 +123,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let anthropicApiKey: string | undefined;
       let apiKeySource = "environment";
 
-      // Try profile-specific API key first
+      // Try profile-specific API key first (getProfileApiKey already falls back to org default)
       const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
         conversation.agentId,
         "anthropic",
@@ -132,11 +132,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (profileApiKey?.secretId) {
         const secret = await secretManager.getSecret(profileApiKey.secretId);
-        if (secret?.secret?.apiKey) {
-          anthropicApiKey = secret.secret.apiKey as string;
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+        if (secretValue) {
+          anthropicApiKey = secretValue as string;
           apiKeySource = profileApiKey.isOrganizationDefault
             ? "organization default"
             : "profile-specific";
+        }
+      }
+
+      // If profileApiKey exists but has no secretId, or getProfileApiKey returned null,
+      // explicitly try organization default as a fallback
+      if (!anthropicApiKey) {
+        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+          organizationId,
+          "anthropic",
+        );
+        if (orgDefault?.secretId) {
+          const secret = await secretManager.getSecret(orgDefault.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+            apiKeySource = "organization default";
+          }
         }
       }
 
@@ -589,8 +611,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (profileApiKey?.secretId) {
           const secret = await secretManager.getSecret(profileApiKey.secretId);
-          if (secret?.secret?.apiKey) {
-            anthropicApiKey = secret.secret.apiKey as string;
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+          }
+        }
+      }
+
+      // If profileApiKey doesn't work, explicitly try organization default as a fallback
+      if (!anthropicApiKey) {
+        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+          organizationId,
+          "anthropic",
+        );
+        if (orgDefault?.secretId) {
+          const secret = await secretManager.getSecret(orgDefault.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
           }
         }
       }

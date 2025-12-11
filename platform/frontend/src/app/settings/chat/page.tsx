@@ -554,7 +554,7 @@ function ChatSettingsContent() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit API Key</DialogTitle>
             <DialogDescription>

@@ -42,6 +42,7 @@ export function useProfilesPaginated(params?: {
   sortBy?: "name" | "createdAt" | "toolsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
+  initialData?: archestraApiTypes.GetAgentsResponses["200"];
 }) {
   const { limit, offset, sortBy, sortDirection, name } = params || {};
 
@@ -59,6 +60,7 @@ export function useProfilesPaginated(params?: {
           },
         })
       ).data ?? null,
+    initialData: params?.initialData,
   });
 }
 
@@ -141,10 +143,13 @@ export function useDeleteProfile() {
   });
 }
 
-export function useLabelKeys() {
+export function useLabelKeys(params?: {
+  initialData?: archestraApiTypes.GetLabelKeysResponses["200"];
+}) {
   return useQuery({
     queryKey: ["agents", "labels", "keys"],
     queryFn: async () => (await getLabelKeys()).data ?? [],
+    initialData: params?.initialData,
   });
 }
 

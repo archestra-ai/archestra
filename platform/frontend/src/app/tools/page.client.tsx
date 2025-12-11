@@ -2,8 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Suspense, useEffect, useState } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { useEffect, useState } from "react";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -16,7 +15,15 @@ import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 type ProfileToolData =
   archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 
-export function ToolsClient() {
+export function ToolsClient({
+  initialAgentTools,
+  initialAgents,
+  initialInternalMcpCatalog,
+}: {
+  initialAgentTools?: archestraApiTypes.GetAllAgentToolsResponses["200"];
+  initialAgents?: archestraApiTypes.GetAllAgentsResponses["200"];
+  initialInternalMcpCatalog?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+}) {
   const queryClient = useQueryClient();
 
   // Prefetch policy data on mount
@@ -29,15 +36,25 @@ export function ToolsClient() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
-          <ToolsList />
-        </Suspense>
+        <ToolsList
+          initialAgentTools={initialAgentTools}
+          initialAgents={initialAgents}
+          initialInternalMcpCatalog={initialInternalMcpCatalog}
+        />
       </ErrorBoundary>
     </div>
   );
 }
 
-function ToolsList() {
+function ToolsList({
+  initialAgentTools,
+  initialAgents,
+  initialInternalMcpCatalog,
+}: {
+  initialAgentTools?: archestraApiTypes.GetAllAgentToolsResponses["200"];
+  initialAgents?: archestraApiTypes.GetAllAgentsResponses["200"];
+  initialInternalMcpCatalog?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+}) {
   const queryClient = useQueryClient();
   const [selectedToolForDialog, setSelectedToolForDialog] =
     useState<ProfileToolData | null>(null);
@@ -70,7 +87,12 @@ function ToolsList() {
 
   return (
     <div>
-      <AssignedToolsTable onToolClick={setSelectedToolForDialog} />
+      <AssignedToolsTable
+        onToolClick={setSelectedToolForDialog}
+        initialAgentTools={initialAgentTools}
+        initialAgents={initialAgents}
+        initialInternalMcpCatalog={initialInternalMcpCatalog}
+      />
 
       <ToolDetailsDialog
         agentTool={selectedToolForDialog}

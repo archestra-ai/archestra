@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
@@ -13,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
@@ -22,7 +23,6 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { DebouncedInput } from "@/components/debounced-input";
-import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -66,13 +66,23 @@ import { ProfileActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
-export default function ProfilesPage() {
+export default function ProfilesPage({
+  initialData,
+  initialTeams,
+  initialLabelKeys,
+}: {
+  initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  initialTeams?: archestraApiTypes.GetTeamsResponses["200"];
+  initialLabelKeys?: archestraApiTypes.GetLabelKeysResponses["200"];
+}) {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Profiles />
-        </Suspense>
+        <Profiles
+          initialAgents={initialData}
+          initialTeams={initialTeams}
+          initialLabelKeys={initialLabelKeys}
+        />
       </ErrorBoundary>
     </div>
   );
@@ -144,7 +154,15 @@ function ProfileTeamsBadges({
   );
 }
 
-function Profiles() {
+function Profiles({
+  initialAgents,
+  initialTeams,
+  initialLabelKeys,
+}: {
+  initialAgents?: archestraApiTypes.GetAgentsResponses["200"] | null;
+  initialTeams?: archestraApiTypes.GetTeamsResponses["200"];
+  initialLabelKeys?: archestraApiTypes.GetLabelKeysResponses["200"];
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -178,6 +196,7 @@ function Profiles() {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
+    initialData: initialAgents ?? undefined,
   });
 
   const agents = agentsResponse?.data || [];
@@ -498,6 +517,8 @@ function Profiles() {
           <CreateProfileDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
+            initialTeams={initialTeams}
+            initialLabelKeys={initialLabelKeys}
           />
 
           {connectingProfile && (
@@ -523,6 +544,8 @@ function Profiles() {
               agent={editingProfile}
               open={!!editingProfile}
               onOpenChange={(open) => !open && setEditingProfile(null)}
+              initialTeams={initialTeams}
+              initialLabelKeys={initialLabelKeys}
             />
           )}
 
@@ -542,9 +565,13 @@ function Profiles() {
 function CreateProfileDialog({
   open,
   onOpenChange,
+  initialTeams,
+  initialLabelKeys,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTeams?: archestraApiTypes.GetTeamsResponses["200"];
+  initialLabelKeys?: archestraApiTypes.GetLabelKeysResponses["200"];
 }) {
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
@@ -557,8 +584,11 @@ function CreateProfileDialog({
       const response = await archestraApiSdk.getTeams();
       return response.data || [];
     },
+    initialData: initialTeams,
   });
-  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableKeys = [] } = useLabelKeys({
+    initialData: initialLabelKeys,
+  });
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdProfile, setCreatedProfile] = useState<{
     id: string;
@@ -796,6 +826,8 @@ function EditProfileDialog({
   agent,
   open,
   onOpenChange,
+  initialTeams,
+  initialLabelKeys,
 }: {
   agent: {
     id: string;
@@ -806,6 +838,8 @@ function EditProfileDialog({
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTeams?: archestraApiTypes.GetTeamsResponses["200"];
+  initialLabelKeys?: archestraApiTypes.GetLabelKeysResponses["200"];
 }) {
   const [name, setName] = useState(agent.name);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
@@ -821,8 +855,11 @@ function EditProfileDialog({
       const response = await archestraApiSdk.getTeams();
       return response.data || [];
     },
+    initialData: initialTeams,
   });
-  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableKeys = [] } = useLabelKeys({
+    initialData: initialLabelKeys,
+  });
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateProfile = useUpdateProfile();
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
@@ -964,7 +1001,9 @@ function EditProfileDialog({
                         <button
                           type="button"
                           onClick={() => handleRemoveTeam(teamId)}
-                          data-testid={`${E2eTestId.RemoveTeamBadge}-${team?.name || teamId}`}
+                          data-testid={`${E2eTestId.RemoveTeamBadge}-${
+                            team?.name || teamId
+                          }`}
                           className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                         >
                           <X className="h-3 w-3" />

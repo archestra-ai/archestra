@@ -69,6 +69,9 @@ type ToolResultTreatment = ProfileToolData["toolResultTreatment"];
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ProfileToolData) => void;
+  initialAgentTools?: archestraApiTypes.GetAllAgentToolsResponses["200"];
+  initialAgents?: archestraApiTypes.GetAllAgentsResponses["200"];
+  initialInternalMcpCatalog?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
@@ -85,14 +88,21 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
+export function AssignedToolsTable({
+  onToolClick,
+  initialAgentTools,
+  initialAgents,
+  initialInternalMcpCatalog,
+}: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
-  const { data: agents } = useProfiles();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+    initialData: initialInternalMcpCatalog,
+  });
+  const { data: agents } = useProfiles({ initialData: initialAgents });
   const { data: mcpServers } = useMcpServers();
 
   const searchParams = useSearchParams();
@@ -136,6 +146,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
   const { data: agentToolsData, isLoading } = useAllProfileTools({
+    initialData: initialAgentTools,
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,

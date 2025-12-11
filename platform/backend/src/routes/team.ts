@@ -154,11 +154,24 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user has team:admin permission or is a member of the team
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+
+      if (!isTeamAdmin) {
+        const isMember = await TeamModel.isUserInTeam(id, user.id);
+        if (!isMember) {
+          throw new ApiError(403, "You must be a member of this team to delete it");
+        }
       }
 
       const success = await TeamModel.delete(id);

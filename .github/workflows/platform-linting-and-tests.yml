@@ -91,7 +91,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # Persist credentials for release-please PRs to allow auto-committing codegen changes
-          persist-credentials: true
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked] -- persist-credentials is conditionally true only for release-please PRs
           # For release-please PRs, checkout the actual PR branch (not the merge commit)
           # to avoid detached HEAD state which would cause git push to fail
           ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}

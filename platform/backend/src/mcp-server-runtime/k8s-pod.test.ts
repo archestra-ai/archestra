@@ -3,9 +3,13 @@ import type { Attach, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import { vi } from "vitest";
 import type { z } from "zod";
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
+
+// Don't mock config - just import and modify as needed
+// This allows other parts of config to work normally
 
 // Helper function to create a K8sPod instance with mocked dependencies
 function createK8sPodInstance(
@@ -247,7 +251,7 @@ describe("K8sPod.createPodEnvFromConfig", () => {
         { name: "API_KEY", value: "sk-1234567890abcdef" },
         {
           name: "DATABASE_URL",
-          value: "postgresql://user:pass@localhost:5432/db",
+          value: "postgresql://user:pass@host.docker.internal:5432/db",
         },
         { name: "NODE_ENV", value: "production" },
         { name: "PORT", value: "8080" },
@@ -1179,9 +1183,13 @@ describe("K8sPod.generatePodSpec", () => {
     const container = podSpec.spec?.containers[0];
 
     // Verify environment variables (quotes should be stripped by createPodEnvFromConfig)
+    // Note: localhost URLs are automatically rewritten to host.docker.internal
     expect(container?.env).toEqual([
       { name: "API_KEY", value: "sk-1234567890" },
-      { name: "DATABASE_URL", value: "postgresql://localhost:5432/db" },
+      {
+        name: "DATABASE_URL",
+        value: "postgresql://host.docker.internal:5432/db",
+      },
       { name: "WORKERS", value: "4" },
       { name: "DEBUG", value: "false" },
     ]);
@@ -1197,6 +1205,177 @@ describe("K8sPod.generatePodSpec", () => {
         protocol: "TCP",
       },
     ]);
+  });
+
+  test("automatically rewrites localhost URLs to host.docker.internal", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "API_ENDPOINT",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "API endpoint",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "http://localhost:3002/",
+        API_ENDPOINT: "http://127.0.0.1:8080/api",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-ignore - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    // Find the rewritten URLs
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+    const apiEndpoint = envVars.find((env) => env.name === "API_ENDPOINT");
+
+    expect(grafanaUrl?.value).toBe("http://host.docker.internal:3002/");
+    expect(apiEndpoint?.value).toBe("http://host.docker.internal:8080/api");
+  });
+
+  test("does not rewrite non-localhost URLs", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "https://grafana.example.com:3000/",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-ignore - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+
+    // Should NOT be rewritten
+    expect(grafanaUrl?.value).toBe("https://grafana.example.com:3000/");
+  });
+
+  test("does not rewrite localhost URLs when backend runs inside K8s cluster", () => {
+    // Save original value
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+
+    // Mock config to simulate backend running in-cluster (production deployment)
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "API_ENDPOINT",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "API endpoint",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "http://localhost:3002/",
+        API_ENDPOINT: "http://127.0.0.1:8080/api",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-ignore - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    // Find the URLs
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+    const apiEndpoint = envVars.find((env) => env.name === "API_ENDPOINT");
+
+    // Should NOT be rewritten when backend runs in cluster
+    expect(grafanaUrl?.value).toBe("http://localhost:3002/");
+    expect(apiEndpoint?.value).toBe("http://127.0.0.1:8080/api");
+
+    // Restore original value
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
   });
 });
 

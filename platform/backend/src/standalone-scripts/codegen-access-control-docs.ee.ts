@@ -1,13 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  type Action,
-  ADMIN_ROLE_NAME,
-  MEMBER_ROLE_NAME,
-  type PredefinedRoleName,
-  type Resource,
-} from "@shared";
+import type { Action, PredefinedRoleName, Resource } from "@shared";
 import {
   allAvailableActions,
   predefinedPermissionsMap,
@@ -44,21 +38,22 @@ function getResourceDescription(resource: Resource): string {
   return descriptions[resource] || "";
 }
 
-function getRoleDescription(roleName: string): string {
-  const descriptions: Record<string, string> = {
-    [ADMIN_ROLE_NAME]:
-      "Full administrative access to all organization resources",
-    [MEMBER_ROLE_NAME]:
-      "Standard user with limited access to organization resources",
-  };
-  return descriptions[roleName] || "";
+// Using Record<PredefinedRoleName, string> ensures TypeScript will error
+// if a new predefined role is added but description is missing
+const roleDescriptions: Record<PredefinedRoleName, string> = {
+  admin: "Full administrative access to all organization resources",
+  editor:
+    "Power user with full CRUD access to most resources but no admin privileges",
+  member: "Standard user with limited access to organization resources",
+};
+
+function getRoleDescription(roleName: PredefinedRoleName): string {
+  return roleDescriptions[roleName];
 }
 
 function generatePredefinedRolesTable(): string {
-  const roles: readonly PredefinedRoleName[] = [
-    ADMIN_ROLE_NAME,
-    MEMBER_ROLE_NAME,
-  ];
+  // Dynamically get all predefined roles from the permissions map
+  const roles = Object.keys(predefinedPermissionsMap) as PredefinedRoleName[];
 
   let table = "| Role | Description | Granted Permissions |\n";
   table += "|------|-------------|--------------------|\n";

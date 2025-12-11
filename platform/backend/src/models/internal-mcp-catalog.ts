@@ -95,6 +95,59 @@ class InternalMcpCatalogModel {
     }
   }
 
+  /**
+   * Always resolves all secrets to their actual values.
+   * Use this for runtime flows (OAuth, MCP server startup) that need real secret values.
+   */
+  private static async expandSecretsAndAlwaysResolveValues(
+    catalogItems: InternalMcpCatalog[],
+  ): Promise<void> {
+    const secretIds = new Set<string>();
+    for (const item of catalogItems) {
+      if (item.clientSecretId) secretIds.add(item.clientSecretId);
+      if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
+    }
+
+    if (secretIds.size === 0) return;
+
+    // Always resolve using secretManager (resolves BYOS vault references to actual values)
+    const secretPromises = Array.from(secretIds).map((id) =>
+      secretManager.getSecret(id).then((secret) => [id, secret] as const),
+    );
+    const secretEntries = await Promise.all(secretPromises);
+    const secretMap = new Map(
+      secretEntries.filter(
+        (entry): entry is [string, NonNullable<(typeof entry)[1]>] =>
+          entry[1] !== null,
+      ),
+    );
+
+    for (const catalogItem of catalogItems) {
+      if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+        const secret = secretMap.get(catalogItem.clientSecretId);
+        const value = secret?.secret.client_secret;
+        if (value) {
+          catalogItem.oauthConfig.client_secret = String(value);
+        }
+      }
+
+      if (
+        catalogItem.localConfigSecretId &&
+        catalogItem.localConfig?.environment
+      ) {
+        const secret = secretMap.get(catalogItem.localConfigSecretId);
+        if (secret) {
+          for (const envVar of catalogItem.localConfig.environment) {
+            const value = secret.secret[envVar.key];
+            if (envVar.type === "secret" && value) {
+              envVar.value = String(value);
+            }
+          }
+        }
+      }
+    }
+  }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -164,6 +217,29 @@ class InternalMcpCatalogModel {
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
     }
+
+    return catalogItem;
+  }
+
+  /**
+   * Find catalog item by ID with all secrets resolved to actual values.
+   * Use this for runtime flows (OAuth, MCP server startup).
+   */
+  static async findByIdWithResolvedSecrets(
+    id: string,
+  ): Promise<InternalMcpCatalog | null> {
+    const [catalogItem] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+
+    if (!catalogItem) {
+      return null;
+    }
+
+    await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
+      catalogItem,
+    ]);
 
     return catalogItem;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   Control,
   FieldArrayWithId,
@@ -467,13 +467,18 @@ function ExternalSecretDialog({
     initialValue?.secretKey ?? null,
   );
 
-  // Reset state when dialog opens with new initial value
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
+  // Reset state when dialog opens or initialValue changes
+  useEffect(() => {
+    if (isOpen) {
       setTeamId(initialValue?.teamId ?? null);
       setSecretPath(initialValue?.secretPath ?? null);
       setSecretKey(initialValue?.secretKey ?? null);
-    } else {
+    }
+  }, [isOpen, initialValue]);
+
+  // Handle dialog open/close
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
       onClose();
     }
   };

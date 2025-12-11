@@ -20,8 +20,10 @@ spec:
   timeoutSec: {{ . }}
   {{- end }}
   {{- with .Values.archestra.gkeBackendConfig.backend.connectionDraining }}
+  {{- if .drainingTimeoutSec }}
   connectionDraining:
     drainingTimeoutSec: {{ .drainingTimeoutSec }}
+  {{- end }}
   {{- end }}
   healthCheck:
     checkIntervalSec: {{ .Values.archestra.gkeBackendConfig.backend.healthCheck.checkIntervalSec }}
@@ -43,8 +45,10 @@ spec:
   timeoutSec: {{ . }}
   {{- end }}
   {{- with .Values.archestra.gkeBackendConfig.frontend.connectionDraining }}
+  {{- if .drainingTimeoutSec }}
   connectionDraining:
     drainingTimeoutSec: {{ .drainingTimeoutSec }}
+  {{- end }}
   {{- end }}
   healthCheck:
     checkIntervalSec: {{ .Values.archestra.gkeBackendConfig.frontend.healthCheck.checkIntervalSec }}

@@ -237,6 +237,24 @@ tests:
       - notExists:
           path: spec.connectionDraining
 
+  - it: should not include connectionDraining when provided without drainingTimeoutSec (backend)
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.backend.connectionDraining: {}
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.connectionDraining
+
+  - it: should not include connectionDraining when provided without drainingTimeoutSec (frontend)
+    set:
+      archestra.gkeBackendConfig.enabled: true
+      archestra.gkeBackendConfig.frontend.connectionDraining: {}
+    documentIndex: 1
+    asserts:
+      - notExists:
+          path: spec.connectionDraining
+
   - it: should include chart labels
     set:
       archestra.gkeBackendConfig.enabled: true

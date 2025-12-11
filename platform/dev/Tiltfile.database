@@ -1,23 +1,6 @@
 # Database resources
 load('ext://helm_remote', 'helm_remote')
 
-# MCP Server RBAC resources for local development
-# Render from Helm chart and filter to only RBAC resources (avoid duplication)
-k8s_yaml(local(
-  'helm template archestra ./helm/archestra --namespace default --show-only templates/mcp-server-rbac.yaml',
-  quiet=True
-))
-
-k8s_resource(
-  new_name='mcp-rbac',
-  labels=['database'],
-  objects=[
-    'archestra-mcp-k8s-operator:serviceaccount:default',
-    'archestra-mcp-server-operator:clusterrole',
-    'archestra-mcp-server-operator:clusterrolebinding'
-  ]
-)
-
 # PostgreSQL database for local development
 # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
 helm_remote(

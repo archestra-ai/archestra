@@ -1,5 +1,22 @@
 # Development + pre-requisite resources
 
+# MCP Server RBAC resources for local development
+# Render from Helm chart and filter to only RBAC resources (avoid duplication)
+k8s_yaml(local(
+  'helm template archestra ../helm/archestra --namespace default --show-only templates/mcp-server-rbac.yaml',
+  quiet=True
+))
+
+k8s_resource(
+  new_name='mcp-rbac',
+  labels=['dev'],
+  objects=[
+    'archestra-archestra-platform-mcp-k8s-operator:serviceaccount:default',
+    'archestra-archestra-platform-mcp-server-operator:clusterrole',
+    'archestra-archestra-platform-mcp-server-operator:clusterrolebinding'
+  ]
+)
+
 # Define is_prod locally (same logic as main Tiltfile)
 is_prod = os.getenv('PROD') == 'true'
 dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'

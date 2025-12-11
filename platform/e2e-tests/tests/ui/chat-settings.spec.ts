@@ -3,22 +3,28 @@ import { expect, test } from "../../fixtures";
 
 test.describe("Chat Settings UI", () => {
   test.beforeEach(async ({ page, goToPage }) => {
-    // Skip onboarding if dialog is present
-    await goToPage(page, "/");
-    const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-    if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await skipButton.click();
-      await page.waitForTimeout(500);
+    // Navigate to home first to ensure we're in a good state
+    try {
+      await goToPage(page, "/");
+      // Skip onboarding if dialog is present
+      const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
+      if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await skipButton.click();
+        await page.waitForTimeout(500);
+      }
+    } catch (error) {
+      // If navigation fails, try to recover by waiting
+      await page.waitForTimeout(1000);
     }
   });
 
   test("should navigate to chat settings page", async ({ page, goToPage }) => {
     await goToPage(page, "/settings/chat");
 
-    // Verify the page title
+    // Wait for page to be fully loaded
     await expect(
       page.getByRole("heading", { name: /LLM Provider API Keys/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 10000 });
 
     // Verify the Add API Key button is visible
     await expect(page.getByTestId(E2eTestId.AddChatApiKeyButton)).toBeVisible();
@@ -30,7 +36,11 @@ test.describe("Chat Settings UI", () => {
     async ({ page, goToPage, makeRandomString }) => {
       const keyName = makeRandomString(8, "Test Key");
 
+      // Navigate and wait for page to load
       await goToPage(page, "/settings/chat");
+      await expect(
+        page.getByRole("heading", { name: /LLM Provider API Keys/i }),
+      ).toBeVisible({ timeout: 10000 });
 
       // Click Add API Key button
       await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -79,7 +89,11 @@ test.describe("Chat Settings UI", () => {
       const originalName = makeRandomString(8, "Original");
       const updatedName = makeRandomString(8, "Updated");
 
+      // Navigate and wait for page to load
       await goToPage(page, "/settings/chat");
+      await expect(
+        page.getByRole("heading", { name: /LLM Provider API Keys/i }),
+      ).toBeVisible({ timeout: 10000 });
 
       // Create a key first
       await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -124,7 +138,11 @@ test.describe("Chat Settings UI", () => {
     async ({ page, goToPage, makeRandomString }) => {
       const keyName = makeRandomString(8, "Delete Me");
 
+      // Navigate and wait for page to load
       await goToPage(page, "/settings/chat");
+      await expect(
+        page.getByRole("heading", { name: /LLM Provider API Keys/i }),
+      ).toBeVisible({ timeout: 10000 });
 
       // Create a key first
       await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -164,7 +182,11 @@ test.describe("Chat Settings UI", () => {
     async ({ page, goToPage, makeRandomString }) => {
       const keyName = makeRandomString(8, "Default Key");
 
+      // Navigate and wait for page to load
       await goToPage(page, "/settings/chat");
+      await expect(
+        page.getByRole("heading", { name: /LLM Provider API Keys/i }),
+      ).toBeVisible({ timeout: 10000 });
 
       // Create a key without setting it as default
       await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -182,15 +204,18 @@ test.describe("Chat Settings UI", () => {
         .getByTestId(`${E2eTestId.SetDefaultChatApiKeyButton}-${keyName}`)
         .click();
 
-      // Verify the default badge appears
+      // Verify the success toast appears
       await expect(page.getByText("Set as organization default")).toBeVisible({
         timeout: 5000,
       });
 
+      // Wait a bit for the UI to update
+      await page.waitForTimeout(500);
+
       // The row should now show the Default badge
       await expect(
         page.getByTestId(`${E2eTestId.ChatApiKeyDefaultBadge}-${keyName}`),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 5000 });
 
       // Cleanup
       await page

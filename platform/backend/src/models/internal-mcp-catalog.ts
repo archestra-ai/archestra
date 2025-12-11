@@ -7,11 +7,13 @@ import type {
   UpdateInternalMcpCatalog,
 } from "@/types";
 import McpServerModel from "./mcp-server";
+import SecretModel from "./secret";
 
 class InternalMcpCatalogModel {
   /**
    * Expands secrets and adds them to the catalog items, mutating the items.
-   * Uses secretManager.getSecret() to properly resolve BYOS vault references.
+   * For BYOS secrets (isByosVault=true), returns vault references / paths as-is.
+   * For non-BYOS secrets, resolves actual values via secretManager.
    */
   private static async expandSecrets(
     catalogItems: InternalMcpCatalog[],
@@ -25,22 +27,44 @@ class InternalMcpCatalogModel {
 
     if (secretIds.size === 0) return;
 
-    // Fetch all secrets using secretManager to properly resolve BYOS vault references
-    const secretPromises = Array.from(secretIds).map((id) =>
+    // Fetch raw secret records e.g. vault paths, not resolved to actual value)
+    const unresolvedSecretPromises = Array.from(secretIds).map((id) =>
+      SecretModel.findById(id).then((secret) => [id, secret] as const),
+    );
+    const unresolvedSecretEntries = await Promise.all(unresolvedSecretPromises);
+    const unresolvedSecretMap = new Map(
+      unresolvedSecretEntries.filter(
+        (entry): entry is [string, NonNullable<(typeof entry)[1]>] =>
+          entry[1] !== null,
+      ),
+    );
+
+    // For non-BYOS secrets, resolve them using secretManager
+    const nonByosSecretIds = Array.from(secretIds).filter(
+      (id) => !unresolvedSecretMap.get(id)?.isByosVault,
+    );
+    const resolvedSecretPromises = nonByosSecretIds.map((id) =>
       secretManager.getSecret(id).then((secret) => [id, secret] as const),
     );
-    const secretEntries = await Promise.all(secretPromises);
-
-    // Create a map for O(1) lookups
-    const secretMap = new Map(
-      secretEntries.filter(([, secret]) => secret !== null),
+    const resolvedSecretEntries = await Promise.all(resolvedSecretPromises);
+    const resolvedSecretMap = new Map(
+      resolvedSecretEntries.filter(
+        (entry): entry is [string, NonNullable<(typeof entry)[1]>] =>
+          entry[1] !== null,
+      ),
     );
 
     // Enrich each catalog item
     for (const catalogItem of catalogItems) {
       // Enrich OAuth client_secret
       if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
-        const secret = secretMap.get(catalogItem.clientSecretId);
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.clientSecretId,
+        );
+        // For BYOS: use raw vault reference, for non-BYOS: use resolved value
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.clientSecretId);
         const value = secret?.secret.client_secret;
         if (value) {
           catalogItem.oauthConfig.client_secret = String(value);
@@ -52,7 +76,13 @@ class InternalMcpCatalogModel {
         catalogItem.localConfigSecretId &&
         catalogItem.localConfig?.environment
       ) {
-        const secret = secretMap.get(catalogItem.localConfigSecretId);
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.localConfigSecretId,
+        );
+        // For BYOS: use raw vault reference, for non-BYOS: use resolved value
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.localConfigSecretId);
         if (secret) {
           for (const envVar of catalogItem.localConfig.environment) {
             const value = secret.secret[envVar.key];

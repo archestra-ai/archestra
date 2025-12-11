@@ -1,13 +1,13 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import logger from '@/logging';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import logger from "@/logging";
 import {
   createFastifyInstance,
   registerApiRoutes,
   registerHealthEndpoint,
   registerSwaggerPlugin,
-} from '@/server';
+} from "@/server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 async function generateOpenApiSpec() {
   const fastify = createFastifyInstance();
 
-  logger.info('📄 Generating OpenAPI specification...');
+  logger.info("📄 Generating OpenAPI specification...");
 
   // Note: registerOpenApiSchemas() is called at module load time in server.ts,
   // so we don't need to call it again here
@@ -36,7 +36,7 @@ async function generateOpenApiSpec() {
   const spec = fastify.swagger();
 
   // Output path - write to docs/openapi.json
-  const outputPath = path.join(__dirname, '../../../../docs/openapi.json');
+  const outputPath = path.join(__dirname, "../../../../docs/openapi.json");
 
   // Ensure directory exists
   const docsDir = path.dirname(outputPath);
@@ -65,7 +65,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     .catch((error) => {
       logger.error(
         { error, stack: error.stack },
-        '❌ Error generating OpenAPI specification'
+        "❌ Error generating OpenAPI specification",
       );
       process.exit(1);
     });

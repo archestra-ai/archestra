@@ -28,7 +28,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      // Don't expand secrets for list view 
+      // Don't expand secrets for list view
       return reply.send(
         await InternalMcpCatalogModel.findAll({ expandSecrets: false }),
       );

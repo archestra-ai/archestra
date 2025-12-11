@@ -137,7 +137,7 @@ export async function executeArchestraTool(
           expandSecrets: false,
         });
       } else {
-        // Return all catalog items - don't expand secrets, we do not need actual secrets for this  
+        // Return all catalog items - don't expand secrets, we do not need actual secrets for this
         catalogItems = await InternalMcpCatalogModel.findAll({
           expandSecrets: false,
         });

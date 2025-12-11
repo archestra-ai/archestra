@@ -1,9 +1,11 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SupportedChatProvider } from "@/types";
@@ -36,6 +38,10 @@ const chatApiKeysTable = pgTable(
       table.organizationId,
       table.provider,
     ),
+    // Partial unique index: only one default per provider per organization
+    uniqueIndex("chat_api_keys_org_provider_default_unique")
+      .on(table.organizationId, table.provider)
+      .where(sql`${table.isOrganizationDefault} = true`),
   ],
 );
 

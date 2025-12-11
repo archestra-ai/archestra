@@ -197,11 +197,50 @@ class ChatApiKeyModel {
   }
 
   /**
-   * Assign an API key to a profile
+   * Assign an API key to a profile.
+   * Only one API key per provider is allowed per profile.
+   * If a key for the same provider already exists, it will be replaced.
    */
   static async assignToProfile(
     data: InsertProfileChatApiKey,
   ): Promise<ProfileChatApiKey> {
+    // Get the API key to determine its provider
+    const apiKey = await ChatApiKeyModel.findById(data.chatApiKeyId);
+    if (!apiKey) {
+      throw new Error("API key not found");
+    }
+
+    // Remove any existing assignment for the same provider from this profile
+    // This ensures only one API key per provider per profile
+    const existingKeys = await db
+      .select({
+        assignmentId: schema.profileChatApiKeysTable.id,
+        apiKeyId: schema.chatApiKeysTable.id,
+      })
+      .from(schema.profileChatApiKeysTable)
+      .innerJoin(
+        schema.chatApiKeysTable,
+        eq(
+          schema.profileChatApiKeysTable.chatApiKeyId,
+          schema.chatApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.profileChatApiKeysTable.agentId, data.agentId),
+          eq(schema.chatApiKeysTable.provider, apiKey.provider),
+        ),
+      );
+
+    // Delete existing same-provider assignments (except if it's the same key)
+    for (const existing of existingKeys) {
+      if (existing.apiKeyId !== data.chatApiKeyId) {
+        await db
+          .delete(schema.profileChatApiKeysTable)
+          .where(eq(schema.profileChatApiKeysTable.id, existing.assignmentId));
+      }
+    }
+
     const [assignment] = await db
       .insert(schema.profileChatApiKeysTable)
       .values(data)
@@ -325,7 +364,9 @@ class ChatApiKeyModel {
   }
 
   /**
-   * Bulk assign profiles to an API key
+   * Bulk assign profiles to an API key.
+   * Respects the one-key-per-provider-per-profile constraint by removing
+   * existing same-provider assignments.
    */
   static async bulkAssignProfiles(
     chatApiKeyId: string,
@@ -335,29 +376,29 @@ class ChatApiKeyModel {
       return;
     }
 
-    await db
-      .insert(schema.profileChatApiKeysTable)
-      .values(agentIds.map((agentId) => ({ agentId, chatApiKeyId })))
-      .onConflictDoNothing();
+    // Use individual assignments to respect provider constraint
+    for (const agentId of agentIds) {
+      await ChatApiKeyModel.assignToProfile({ agentId, chatApiKeyId });
+    }
   }
 
   /**
-   * Replace all profile assignments for an API key
+   * Replace all profile assignments for an API key.
+   * Respects the one-key-per-provider-per-profile constraint by removing
+   * existing same-provider assignments from newly assigned profiles.
    */
   static async replaceProfileAssignments(
     chatApiKeyId: string,
     agentIds: string[],
   ): Promise<void> {
-    // Delete all existing assignments
+    // Delete all existing assignments for this specific API key
     await db
       .delete(schema.profileChatApiKeysTable)
       .where(eq(schema.profileChatApiKeysTable.chatApiKeyId, chatApiKeyId));
 
-    // Add new assignments
+    // Add new assignments (using bulk which respects provider constraint)
     if (agentIds.length > 0) {
-      await db
-        .insert(schema.profileChatApiKeysTable)
-        .values(agentIds.map((agentId) => ({ agentId, chatApiKeyId })));
+      await ChatApiKeyModel.bulkAssignProfiles(chatApiKeyId, agentIds);
     }
   }
 

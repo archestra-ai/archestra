@@ -75,11 +75,11 @@ describe("ChatApiKeyModel", () => {
       expect(found?.name).toBe("Test Key");
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns undefined for non-existent ID", async () => {
       const found = await ChatApiKeyModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
-      expect(found).toBeNull();
+      expect(found).toBeUndefined();
     });
   });
 
@@ -237,13 +237,13 @@ describe("ChatApiKeyModel", () => {
       expect(updated?.provider).toBe("anthropic");
     });
 
-    test("returns null when updating non-existent key", async () => {
+    test("returns undefined when updating non-existent key", async () => {
       const result = await ChatApiKeyModel.update(
         "00000000-0000-0000-0000-000000000000",
         { name: "New Name" },
       );
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
     });
   });
 
@@ -260,7 +260,7 @@ describe("ChatApiKeyModel", () => {
       const found = await ChatApiKeyModel.findById(apiKey.id);
 
       expect(deleted).toBe(true);
-      expect(found).toBeNull();
+      expect(found).toBeUndefined();
     });
 
     test("returns false when deleting non-existent key", async () => {
@@ -347,6 +347,68 @@ describe("ChatApiKeyModel", () => {
 
       expect(result).toBeNull();
     });
+
+    test("database constraint prevents multiple defaults per provider via direct insert", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // Create first default key
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Default Key 1",
+        provider: "anthropic",
+        isOrganizationDefault: true,
+      });
+
+      // Trying to create second default for same provider should fail with unique constraint violation
+      await expect(
+        ChatApiKeyModel.create({
+          organizationId: org.id,
+          name: "Default Key 2",
+          provider: "anthropic",
+          isOrganizationDefault: true,
+        }),
+      ).rejects.toThrow();
+    });
+
+    test("database constraint allows defaults for different providers", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // Create default for anthropic
+      const anthropicDefault = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Default",
+        provider: "anthropic",
+        isOrganizationDefault: true,
+      });
+
+      // Create default for openai - should succeed (different provider)
+      const openaiDefault = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "OpenAI Default",
+        provider: "openai",
+        isOrganizationDefault: true,
+      });
+
+      expect(anthropicDefault.isOrganizationDefault).toBe(true);
+      expect(openaiDefault.isOrganizationDefault).toBe(true);
+
+      // Verify both are returned as defaults for their respective providers
+      const foundAnthropic = await ChatApiKeyModel.findOrganizationDefault(
+        org.id,
+        "anthropic",
+      );
+      const foundOpenai = await ChatApiKeyModel.findOrganizationDefault(
+        org.id,
+        "openai",
+      );
+
+      expect(foundAnthropic?.id).toBe(anthropicDefault.id);
+      expect(foundOpenai?.id).toBe(openaiDefault.id);
+    });
   });
 
   describe("profile assignments", () => {
@@ -370,6 +432,81 @@ describe("ChatApiKeyModel", () => {
       expect(assignment).toBeDefined();
       expect(assignment.chatApiKeyId).toBe(apiKey.id);
       expect(assignment.agentId).toBe(agent.id);
+    });
+
+    test("replaces existing same-provider key when assigning new one to profile", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent();
+
+      // Create two anthropic keys
+      const anthropicKey1 = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Key 1",
+        provider: "anthropic",
+      });
+      const anthropicKey2 = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Key 2",
+        provider: "anthropic",
+      });
+
+      // Assign first anthropic key
+      await ChatApiKeyModel.assignToProfile({
+        chatApiKeyId: anthropicKey1.id,
+        agentId: agent.id,
+      });
+
+      // Assign second anthropic key - should replace first
+      await ChatApiKeyModel.assignToProfile({
+        chatApiKeyId: anthropicKey2.id,
+        agentId: agent.id,
+      });
+
+      // Profile should only have one anthropic key (the second one)
+      const profileKeys = await ChatApiKeyModel.getProfileApiKeys(agent.id);
+      const anthropicKeys = profileKeys.filter(
+        (k) => k.provider === "anthropic",
+      );
+
+      expect(anthropicKeys).toHaveLength(1);
+      expect(anthropicKeys[0].id).toBe(anthropicKey2.id);
+    });
+
+    test("allows different provider keys on same profile", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent();
+
+      const anthropicKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Key",
+        provider: "anthropic",
+      });
+      const openaiKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "OpenAI Key",
+        provider: "openai",
+      });
+
+      await ChatApiKeyModel.assignToProfile({
+        chatApiKeyId: anthropicKey.id,
+        agentId: agent.id,
+      });
+      await ChatApiKeyModel.assignToProfile({
+        chatApiKeyId: openaiKey.id,
+        agentId: agent.id,
+      });
+
+      // Profile should have both keys (different providers)
+      const profileKeys = await ChatApiKeyModel.getProfileApiKeys(agent.id);
+      expect(profileKeys).toHaveLength(2);
+      expect(profileKeys.map((k) => k.provider)).toContain("anthropic");
+      expect(profileKeys.map((k) => k.provider)).toContain("openai");
     });
 
     test("can unassign an API key from a profile", async ({

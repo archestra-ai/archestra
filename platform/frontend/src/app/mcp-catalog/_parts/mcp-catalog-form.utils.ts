@@ -137,6 +137,9 @@ export function parseVaultReference(value: string): {
 // Transform catalog item to form values
 export function transformCatalogItemToFormValues(
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+  localConfigSecret?: {
+    secret: Record<string, unknown>;
+  } | null,
 ): McpCatalogFormValues {
   // Determine auth method
   let authMethod: "none" | "pat" | "oauth" = "none";
@@ -211,18 +214,35 @@ export function transformCatalogItemToFormValues(
 
     const config = item.localConfig;
 
-    localConfig = {
-      command: item.localConfig.command || "",
-      arguments: argumentsString,
-      environment:
-        item.localConfig.environment?.map((env) => ({
+    // Map environment variables and populate values from secret if available
+    const environment =
+      item.localConfig.environment?.map((env) => {
+        const envVar = {
           ...env,
           // Add promptOnInstallation with default value if missing
           promptOnInstallation: env.promptOnInstallation ?? false,
           // Preserve required and description fields
           required: env.required ?? false,
           description: env.description ?? "",
-        })) || [],
+        };
+
+        // If we have a secret and the secret contains a value for this env var key, use it
+        if (localConfigSecret?.secret && env.key in localConfigSecret.secret) {
+          const secretValue = localConfigSecret.secret[env.key];
+          // Convert the value to string if it's not already
+          envVar.value =
+            secretValue !== null && secretValue !== undefined
+              ? String(secretValue)
+              : undefined;
+        }
+
+        return envVar;
+      }) || [];
+
+    localConfig = {
+      command: item.localConfig.command || "",
+      arguments: argumentsString,
+      environment,
       dockerImage: item.localConfig.dockerImage || "",
       transportType: config.transportType || undefined,
       httpPort: config.httpPort?.toString() || undefined,

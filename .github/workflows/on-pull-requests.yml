@@ -138,6 +138,11 @@ jobs:
       id-token: write # Required for Workload Identity Federation
       pull-requests: write # Required for Docker Scout to write a comment to a PR
     uses: ./.github/workflows/platform-linting-and-tests.yml
+    with:
+      # Enable auto-commit of codegen changes for release-please PRs
+      # This handles the case where release-please bumps the version in package.json,
+      # causing generated files (like docs/openapi.json) to be out of date
+      is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

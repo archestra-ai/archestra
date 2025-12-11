@@ -22,33 +22,56 @@ concurrency:
 jobs:
   release-freeze-check:
     name: Release Freeze Check
-    # Only run on release-please PRs (branch name starts with "release-please--")
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+    # Always run so it can be a required status check - passes immediately for non-release-please PRs and merge_group
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
     steps:
+      - name: Check if this requires freeze validation
+        id: check-context
+        run: |
+          # For merge_group events, always pass
+          if [ "$EVENT_NAME" = "merge_group" ]; then
+            echo "should_check=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Merge queue - passing automatically"
+            exit 0
+          fi
+
+          # For PRs, only check release-please branches
+          if [[ "$HEAD_REF" == release-please--* ]]; then
+            echo "should_check=true" >> "$GITHUB_OUTPUT"
+            echo "🔖 This is a release-please PR - checking freeze status"
+          else
+            echo "should_check=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Not a release-please PR - passing automatically"
+          fi
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+
       - name: Check if release is frozen
         id: check-freeze
+        if: steps.check-context.outputs.should_check == 'true'
         env:
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: |
           if [ "$RELEASE_FREEZE" = "true" ]; then
             echo "frozen=true" >> "$GITHUB_OUTPUT"
+            echo "❄️ Release freeze is active"
           else
             echo "frozen=false" >> "$GITHUB_OUTPUT"
             echo "✅ No release freeze active. Release-please PR can proceed."
           fi
 
       - name: Checkout repository
-        if: steps.check-freeze.outputs.frozen == 'true'
+        if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
       - name: Request changes on PR
-        if: steps.check-freeze.outputs.frozen == 'true'
+        if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
         uses: ./.github/actions/release-freeze-review
         with:
           action: freeze
@@ -57,7 +80,7 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
 
       - name: Fail if frozen
-        if: steps.check-freeze.outputs.frozen == 'true'
+        if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
         run: |
           echo "::error::❄️ Release freeze is active. Merging release-please PRs is blocked."
           exit 1

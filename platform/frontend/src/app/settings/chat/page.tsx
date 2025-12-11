@@ -430,7 +430,7 @@ function ChatSettingsContent() {
         <div>
           <h2 className="text-lg font-semibold">LLM Provider API Keys</h2>
           <p className="text-sm text-muted-foreground">
-            Manage API keys for LLM providers used in Chat
+            Manage API keys for LLM providers used in the Archestra Chat
           </p>
         </div>
         <Button

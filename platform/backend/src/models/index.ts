@@ -4,7 +4,6 @@ export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as ChatApiKeyModel } from "./chat-api-key";
-export { default as ChatSettingsModel } from "./chat-settings";
 export { default as ConversationModel } from "./conversation";
 export { default as DualLlmConfigModel } from "./dual-llm-config";
 export { default as DualLlmResultModel } from "./dual-llm-result";

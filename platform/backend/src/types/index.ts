@@ -4,7 +4,6 @@ export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";
 export * from "./chat-api-key";
-export * from "./chat-settings";
 export * from "./conversation";
 export * from "./dual-llm-config";
 export * from "./dual-llm-result";

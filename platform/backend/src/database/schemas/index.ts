@@ -5,7 +5,6 @@ export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as chatApiKeysTable } from "./chat-api-key";
-export { default as chatSettingsTable } from "./chat-settings";
 export { default as conversationsTable } from "./conversation";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";

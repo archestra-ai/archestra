@@ -92,6 +92,9 @@ jobs:
         with:
           # Persist credentials for release-please PRs to allow auto-committing codegen changes
           persist-credentials: true
+          # For release-please PRs, checkout the actual PR branch (not the merge commit)
+          # to avoid detached HEAD state which would cause git push to fail
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

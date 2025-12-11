@@ -42,10 +42,7 @@
     "test:e2e:ui": {
       "cache": false
     },
-    "codegen:api-client": {
-      "cache": false
-    },
-    "codegen:theme-css": {
+    "codegen": {
       "cache": false
     },
     "db:generate": {

@@ -408,12 +408,7 @@ provider "archestra" {
 }
 ```
 
-**Obtaining an API Key**:
-
-1. Log in to the Archestra Admin UI (default: <http://localhost:3000>)
-2. Navigate to **Settings** → **Account**
-3. In the **API Keys** section, click **Create API Key**
-4. Copy the generated key — it will only be shown once
+**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
 
 **Configuring `base_url`**:
 

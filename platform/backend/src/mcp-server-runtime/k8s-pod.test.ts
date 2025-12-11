@@ -1244,7 +1244,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Use reflection to set the catalog item
-    // @ts-ignore - accessing private property for testing
+    // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
     const podSpec = pod.generatePodSpec(
@@ -1295,7 +1295,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Use reflection to set the catalog item
-    // @ts-ignore - accessing private property for testing
+    // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
     const podSpec = pod.generatePodSpec(
@@ -1358,7 +1358,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Use reflection to set the catalog item
-    // @ts-ignore - accessing private property for testing
+    // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
     const podSpec = pod.generatePodSpec(
@@ -1424,7 +1424,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Use reflection to set the catalog item
-    // @ts-ignore - accessing private property for testing
+    // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
     const podSpec = pod.generatePodSpec(

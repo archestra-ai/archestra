@@ -163,46 +163,6 @@ class TeamVaultFolderModel {
   }
 
   /**
-   * Check if a user has access to a specific team's Vault folder.
-   * Returns true if user is org admin or team admin.
-   */
-  static async userHasAccess(
-    userId: string,
-    teamId: string,
-    isOrgAdmin: boolean,
-  ): Promise<boolean> {
-    logger.debug(
-      { userId, teamId, isOrgAdmin },
-      "TeamVaultFolderModel.userHasAccess: checking access",
-    );
-
-    if (isOrgAdmin) {
-      return true;
-    }
-
-    // Check if user is admin of this team
-    const [membership] = await db
-      .select()
-      .from(schema.teamMembersTable)
-      .where(
-        and(
-          eq(schema.teamMembersTable.teamId, teamId),
-          eq(schema.teamMembersTable.userId, userId),
-          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
-        ),
-      )
-      .limit(1);
-
-    const hasAccess = !!membership;
-
-    logger.debug(
-      { userId, teamId, hasAccess },
-      "TeamVaultFolderModel.userHasAccess: completed",
-    );
-    return hasAccess;
-  }
-
-  /**
    * Check if a Vault path is accessible to a user based on their team folder mappings.
    * A path is accessible if it starts with one of the user's team folder paths.
    */

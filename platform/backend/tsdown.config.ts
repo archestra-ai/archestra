@@ -65,12 +65,14 @@ const onSuccessHandler: UserConfig["onSuccess"] = async () => {
 
   args.push("dist/server.mjs");
 
-  // Use process.execPath instead of "node" string for cross-platform compatibility
-  // On Windows, spawn("node", ...) can fail silently without shell: true
+  // Use process.execPath (absolute path to Node.js binary) instead of "node" string
+  // for cross-platform compatibility. On Windows, spawn("node", ...) can fail if
+  // Node.js isn't in PATH or PATH resolution behaves differently. Using the absolute
+  // path bypasses PATH resolution entirely.
+  // Note: We intentionally avoid shell: true to prevent orphaned processes on Windows
+  // (shell creates cmd.exe as parent, making kill() ineffective on the actual server).
   currentServerProcess = spawn(process.execPath, args, {
     stdio: "inherit",
-    // shell: true is needed on Windows for proper process management
-    shell: process.platform === "win32",
   });
 
   currentServerProcess.on("error", (err) => {

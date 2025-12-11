@@ -76,19 +76,29 @@ class InternalMcpCatalogModel {
     return createdItem;
   }
 
-  static async findAll(): Promise<InternalMcpCatalog[]> {
+  static async findAll(options?: {
+    expandSecrets?: boolean;
+  }): Promise<InternalMcpCatalog[]> {
+    const { expandSecrets = true } = options ?? {};
+
     const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
 
-    // Batch enrich all catalog items to avoid N+1 queries
-    await InternalMcpCatalogModel.expandSecrets(catalogItems);
+    if (expandSecrets) {
+      await InternalMcpCatalogModel.expandSecrets(catalogItems);
+    }
 
     return catalogItems;
   }
 
-  static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {
+  static async searchByQuery(
+    query: string,
+    options?: { expandSecrets?: boolean },
+  ): Promise<InternalMcpCatalog[]> {
+    const { expandSecrets = true } = options ?? {};
+
     const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
@@ -99,13 +109,19 @@ class InternalMcpCatalogModel {
         ),
       );
 
-    // Batch enrich all catalog items to avoid N+1 queries
-    await InternalMcpCatalogModel.expandSecrets(catalogItems);
+    if (expandSecrets) {
+      await InternalMcpCatalogModel.expandSecrets(catalogItems);
+    }
 
     return catalogItems;
   }
 
-  static async findById(id: string): Promise<InternalMcpCatalog | null> {
+  static async findById(
+    id: string,
+    options?: { expandSecrets?: boolean },
+  ): Promise<InternalMcpCatalog | null> {
+    const { expandSecrets = true } = options ?? {};
+
     const [catalogItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
@@ -115,8 +131,9 @@ class InternalMcpCatalogModel {
       return null;
     }
 
-    // Enrich with secret values for edit forms (OAuth client_secret and env vars)
-    await InternalMcpCatalogModel.expandSecrets([catalogItem]);
+    if (expandSecrets) {
+      await InternalMcpCatalogModel.expandSecrets([catalogItem]);
+    }
 
     return catalogItem;
   }

@@ -28,7 +28,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(await InternalMcpCatalogModel.findAll());
+      // Don't expand secrets for list view
+      return reply.send(
+        await InternalMcpCatalogModel.findAll({ expandSecrets: false }),
+      );
     },
   );
 
@@ -404,8 +407,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
-      // Get the catalog item to check if it has secrets
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+      // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        expandSecrets: false,
+      });
 
       if (catalogItem?.clientSecretId) {
         // Delete the associated OAuth secret

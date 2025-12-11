@@ -1,8 +1,9 @@
 "use client";
 
-import { ShieldCheck, User } from "lucide-react";
+import { AlertCircle, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
 import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp-catalog/_parts/select-mcp-server-credential-type-and-teams";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useFeatureFlag } from "@/lib/features.hook";
 
 export interface OAuthInstallResult {
   /** Team ID to assign the MCP server to (null for personal) */
@@ -38,6 +40,7 @@ export function OAuthConfirmationDialog({
   catalogId,
 }: OAuthConfirmationDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const byosEnabled = useFeatureFlag("byosEnabled");
 
   const handleConfirm = () => {
     onConfirm({ teamId: selectedTeamId });
@@ -76,6 +79,19 @@ export function OAuthConfirmationDialog({
             server will be installed with your credentials.
           </DialogDescription>
         </DialogHeader>
+
+        {byosEnabled && (
+          <Alert
+            variant="default"
+            className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20"
+          >
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+            <AlertDescription className="text-amber-700 dark:text-amber-400">
+              Read-only Vault Secret Manager doesn't support OAuth credentials.
+              They will be stored in the database.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="py-4">
           <SelectMcpServerCredentialTypeAndTeams

@@ -25,7 +25,7 @@ function assertByosEnabled(): BYOSVaultSecretManager {
   if (!isByosEnabled()) {
     throw new ApiError(
       403,
-      "BYOS (Bring Your Own Secrets) is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and an enterprise license.",
+      "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
     );
   }
 

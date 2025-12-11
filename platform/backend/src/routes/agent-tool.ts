@@ -431,8 +431,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentToolForValidation &&
         agentToolForValidation.tool.catalogId
       ) {
+        // Only need serverType for validation, no secrets needed
         const catalogItem = await InternalMcpCatalogModel.findById(
           agentToolForValidation.tool.catalogId,
+          { expandSecrets: false },
         );
         // Check if tool is from local server and executionSourceMcpServerId is being set to null
         // (allowed if useDynamicTeamCredential is being set to true)
@@ -545,7 +547,10 @@ export async function assignToolToAgent(
     if (preFetchedData?.catalogItemsMap) {
       catalogItem = preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
     } else {
-      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+      // Only need serverType for validation, no secrets needed
+      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId, {
+        expandSecrets: false,
+      });
     }
 
     if (catalogItem?.serverType === "local") {

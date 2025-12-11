@@ -54,33 +54,36 @@ local_resource(
 
 # HashiCorp Vault in K8s (manual trigger)
 # Start with: tilt trigger vault
+# NOTE: Vault K8s integration is skipped on Windows due to helm_remote compatibility issues.
+# Use vault-docker instead on Windows: tilt trigger vault-docker
 load('ext://helm_remote', 'helm_remote')
 
-helm_remote(
-  'vault',
-  repo_url='https://helm.releases.hashicorp.com',
-  namespace='archestra-dev',
-  create_namespace=False,  # Namespace already created by Tiltfile.database
-  set=[
-    # Run in dev mode (unsealed, in-memory storage)
-    'server.dev.enabled=true',
-    'server.dev.devRootToken=dev-root-token',
-    # Disable injector and CSI (not needed for dev)
-    'injector.enabled=false',
-    'csi.enabled=false',
-    # Resource limits for dev
-    'server.resources.requests.memory=256Mi',
-    'server.resources.requests.cpu=250m',
-  ]
-)
+if os.name != 'nt':
+  helm_remote(
+    'vault',
+    repo_url='https://helm.releases.hashicorp.com',
+    namespace='archestra-dev',
+    create_namespace=False,  # Namespace already created by Tiltfile.database
+    set=[
+      # Run in dev mode (unsealed, in-memory storage)
+      'server.dev.enabled=true',
+      'server.dev.devRootToken=dev-root-token',
+      # Disable injector and CSI (not needed for dev)
+      'injector.enabled=false',
+      'csi.enabled=false',
+      # Resource limits for dev
+      'server.resources.requests.memory=256Mi',
+      'server.resources.requests.cpu=250m',
+    ]
+  )
 
-k8s_resource(
-  'vault',
-  port_forwards=['8200:8200'],
-  labels=['integrations'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
-)
+  k8s_resource(
+    'vault',
+    port_forwards=['8200:8200'],
+    labels=['integrations'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False
+  )
 
 # Configure Vault K8s auth with KV v1 (run after vault is started)
 # Use this for: ARCHESTRA_HASHICORP_VAULT_KV_VERSION=1, ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=kv/archestra
@@ -211,36 +214,39 @@ EOF'
 
 # Archestra running in K8s (for testing Vault K8s auth, etc.)
 # Start with: tilt trigger archestra-k8s
-docker_build(
-  'archestra/platform-dev',
-  context='..',
-  dockerfile='../Dockerfile',
-  only=[
-    'package.json',
-    'pnpm-lock.yaml',
-    'pnpm-workspace.yaml',
-    'turbo.json',
-    'backend',
-    'frontend',
-    'shared',
-    'docker-banner.sh',
-  ],
-  ignore=[
-    '**/node_modules',
-    '**/.next',
-    '**/dist',
-    '**/*.test.ts',
-    '**/*.spec.ts',
-  ]
-)
+# NOTE: This resource is skipped on Windows due to k8s_yaml() using heredoc syntax
+# which is not compatible with Windows CMD
+if os.name != 'nt':
+  docker_build(
+    'archestra/platform-dev',
+    context='..',
+    dockerfile='../Dockerfile',
+    only=[
+      'package.json',
+      'pnpm-lock.yaml',
+      'pnpm-workspace.yaml',
+      'turbo.json',
+      'backend',
+      'frontend',
+      'shared',
+      'docker-banner.sh',
+    ],
+    ignore=[
+      '**/node_modules',
+      '**/.next',
+      '**/dist',
+      '**/*.test.ts',
+      '**/*.spec.ts',
+    ]
+  )
 
-k8s_yaml(read_file('./archestra-k8s.yaml'))
+  k8s_yaml(read_file('./archestra-k8s.yaml'))
 
-k8s_resource(
-  'archestra-platform',
-  port_forwards=['3000:3000', '9000:9000'],
-  labels=['integrations'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-  resource_deps=['postgresql', 'vault']
-)
+  k8s_resource(
+    'archestra-platform',
+    port_forwards=['3000:3000', '9000:9000'],
+    labels=['integrations'],
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+    resource_deps=['postgresql', 'vault']
+  )

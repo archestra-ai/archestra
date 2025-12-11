@@ -88,8 +88,8 @@ local_resource(
 )
 
 local_resource(
-  'codegen:api-client',
-  cmd='pnpm codegen:api-client',
+  'codegen',
+  cmd='pnpm codegen',
   labels=['dev'],
   resource_deps=['pnpm-install', dev_resource_name],
   trigger_mode=TRIGGER_MODE_MANUAL,

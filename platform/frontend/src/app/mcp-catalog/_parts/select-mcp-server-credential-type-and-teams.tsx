@@ -163,7 +163,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
               {isPersonalDisabled && (
                 <span className="text-xs text-muted-foreground">
                   {byosEnabled
-                    ? "(not available when BYOS is enabled)"
+                    ? "(not available when Readonly Vault is enabled)"
                     : "(already created for this MCP server)"}
                 </span>
               )}

@@ -12,7 +12,7 @@ test.describe("Chat Settings UI", () => {
         await skipButton.click();
         await page.waitForTimeout(500);
       }
-    } catch (error) {
+    } catch (_error) {
       // If navigation fails, try to recover by waiting
       await page.waitForTimeout(1000);
     }

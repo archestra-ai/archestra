@@ -1809,7 +1809,8 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
         kubernetes: { mcpK8sServiceAccountName: string };
       };
     };
-    const originalValue = mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "";
 
     const mockMcpServer = {
@@ -1908,7 +1909,8 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
         kubernetes: { mcpK8sServiceAccountName: string };
       };
     };
-    const originalValue = mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "archestra";
 
     const mockMcpServer = {

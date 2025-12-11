@@ -43,9 +43,10 @@ export const LocalConfigSchema = z
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
     httpPath: z.string().optional(),
-    // Kubernetes service account for MCP server pods that need K8s API access
+    // Kubernetes service account role for MCP server pods that need K8s API access
     // If not specified, uses the default service account (no K8s permissions)
-    // Set to the dedicated k8s-reader service account for MCP servers that query K8s resources
+    // Specify just the role (e.g., "reader") - the platform automatically constructs the full name:
+    // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-reader")
     serviceAccount: z.string().optional(),
   })
   .refine(

@@ -1798,10 +1798,9 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     expect(podSpec.spec?.serviceAccountName).toBeUndefined();
   });
 
-  test("does not set serviceAccountName when placeholder present but config is empty", () => {
-    // This test verifies that when a serviceAccount contains a placeholder
-    // but the replacement config value is empty, the field is not set at all
-    // (preventing invalid service account names like "-mcp-k8s-reader")
+  test("uses serviceAccount role as-is when release name prefix is empty", () => {
+    // This test verifies that when a serviceAccount role is specified but the release name is empty,
+    // we use the role name as-is without the prefix and middle part
 
     // Mock config with empty release name
     const mockConfig = config as {
@@ -1842,7 +1841,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "docker",
       arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
-      serviceAccount: "{{HELM_RELEASE_NAME}}-mcp-k8s-reader",
+      serviceAccount: "reader",
     };
 
     const podSpec = k8sPod.generatePodSpec(
@@ -1852,14 +1851,24 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       8080,
     );
 
-    // When config value is empty, the serviceAccountName should not be set to avoid invalid values
-    expect(podSpec.spec?.serviceAccountName).toBeUndefined();
+    // When release name is empty, use role as-is
+    expect(podSpec.spec?.serviceAccountName).toBe("reader");
 
     // Restore original config value
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 
-  test("sets serviceAccountName without replacement when no placeholder present", () => {
+  test("uses custom serviceAccount as-is when prefix is not configured", () => {
+    // Mock config with empty release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "";
+
     const mockMcpServer = {
       id: "custom-server",
       name: "Custom Server",
@@ -1900,9 +1909,12 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     );
 
     expect(podSpec.spec?.serviceAccountName).toBe("custom-service-account");
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 
-  test("replaces HELM_RELEASE_NAME placeholder with config value", () => {
+  test("automatically constructs full service account name from role", () => {
     // Mock config with release name
     const mockConfig = config as {
       orchestrator: {
@@ -1911,7 +1923,8 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     };
     const originalValue =
       mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "archestra";
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
+      "archestra-platform";
 
     const mockMcpServer = {
       id: "k8s-server",
@@ -1942,7 +1955,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "docker",
       arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
-      serviceAccount: "{{HELM_RELEASE_NAME}}-mcp-k8s-reader",
+      serviceAccount: "reader",
     };
 
     const podSpec = k8sPod.generatePodSpec(
@@ -1952,8 +1965,10 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       8080,
     );
 
-    // Should replace placeholder with config value and append suffix
-    expect(podSpec.spec?.serviceAccountName).toBe("archestra-mcp-k8s-reader");
+    // Should construct full name: {releaseName}-mcp-k8s-{role}
+    expect(podSpec.spec?.serviceAccountName).toBe(
+      "archestra-platform-mcp-k8s-reader",
+    );
 
     // Restore original config value
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;

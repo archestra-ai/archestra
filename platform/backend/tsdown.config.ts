@@ -65,8 +65,12 @@ const onSuccessHandler: UserConfig["onSuccess"] = async () => {
 
   args.push("dist/server.mjs");
 
-  currentServerProcess = spawn("node", args, {
+  // Use process.execPath instead of "node" string for cross-platform compatibility
+  // On Windows, spawn("node", ...) can fail silently without shell: true
+  currentServerProcess = spawn(process.execPath, args, {
     stdio: "inherit",
+    // shell: true is needed on Windows for proper process management
+    shell: process.platform === "win32",
   });
 
   currentServerProcess.on("error", (err) => {

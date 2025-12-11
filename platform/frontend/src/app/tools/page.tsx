@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+import { ToolsClient } from "./page.client";
 
-export default function ToolsPage() {
-  redirect("/tools/agents-assigned");
+export const dynamic = "force-dynamic";
+
+export default async function ToolsPage() {
+  return <ToolsClient />;
 }

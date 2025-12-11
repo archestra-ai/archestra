@@ -1,5 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*"],
+  "globalDependencies": [".env"],
   "tasks": {
     "build": {
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
@@ -13,33 +15,34 @@
       "cache": false
     },
     "lint": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "lint:fix": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "lint:fix:unsafe": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "check:ci": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts", "**/knip.config.ts", "**/package.json"]
+    },
+    "knip": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "**/knip.config.ts", "**/package.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "type-check": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "test": {
       "cache": false
     },
     "test:e2e": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]
     },
     "test:e2e:ui": {
       "cache": false
     },
-    "codegen:api-client": {
-      "cache": false
-    },
-    "codegen:theme-css": {
+    "codegen": {
       "cache": false
     },
     "db:generate": {

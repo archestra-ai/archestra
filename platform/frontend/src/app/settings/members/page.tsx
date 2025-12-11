@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import config from "@/lib/config";
 import {
   organizationKeys,
   useActiveMemberRole,
@@ -33,40 +34,50 @@ function MembersSettingsContent() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const hasPermissionTodo = "TODO:";
+  const invitationsEnabled = !config.disableInvitations;
+
   const members = activeOrg ? (
     <div className="space-y-6">
-      {activeMemberRole &&
-        (activeMemberRole === "admin" || activeMemberRole === "owner") && (
-          <Dialog
-            open={inviteDialogOpen}
-            onOpenChange={(open) => {
-              setInviteDialogOpen(open);
-              if (!open) {
-                queryClient.invalidateQueries({
-                  queryKey: organizationKeys.invitations(),
-                });
-              }
-            }}
-          >
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Invite Member</DialogTitle>
-              </DialogHeader>
-              <InviteByLinkCard
-                organizationId={activeOrg.id}
-                onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
-              />
-            </DialogContent>
-          </Dialog>
-        )}
+      {invitationsEnabled && activeMemberRole && hasPermissionTodo && (
+        <Dialog
+          open={inviteDialogOpen}
+          onOpenChange={(open) => {
+            setInviteDialogOpen(open);
+            if (!open) {
+              queryClient.invalidateQueries({
+                queryKey: organizationKeys.invitations(),
+              });
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Invite Member</DialogTitle>
+            </DialogHeader>
+            <InviteByLinkCard
+              organizationId={activeOrg.id}
+              onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
       <OrganizationMembersCard
-        action={() => {
-          if (activeMemberRole === "admin" || activeMemberRole === "owner") {
-            setInviteDialogOpen(true);
-          }
-        }}
+        {...(!invitationsEnabled && {
+          actionLabel: null,
+          instructions: null,
+        })}
+        action={
+          invitationsEnabled
+            ? () => {
+                setInviteDialogOpen(true);
+              }
+            : undefined
+        }
       />
-      <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
+      {invitationsEnabled && (
+        <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
+      )}
     </div>
   ) : (
     <Card>
@@ -85,9 +96,7 @@ function MembersSettingsContent() {
     </Card>
   );
 
-  return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">{members}</div>
-  );
+  return members;
 }
 
 export default function MembersSettingsPage() {

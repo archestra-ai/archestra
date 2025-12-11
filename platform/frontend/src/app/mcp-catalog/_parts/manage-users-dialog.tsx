@@ -1,10 +1,8 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { E2eTestId } from "@shared";
 import { format } from "date-fns";
 import { Trash, User } from "lucide-react";
-import { useCallback, useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,150 +20,100 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  useMcpServers,
-  useRevokeUserMcpServerAccess,
-} from "@/lib/mcp-server.query";
+import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  server:
-    | archestraApiTypes.GetMcpServersResponses["200"][number]
-    | null
-    | undefined;
   label?: string;
+  catalogId: string;
 }
 
 export function ManageUsersDialog({
   isOpen,
   onClose,
-  server,
   label,
+  catalogId,
 }: ManageUsersDialogProps) {
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
-
   // Subscribe to live mcp-servers query to get fresh data
-  const { data: allServers } = useMcpServers();
+  const { data: allServers } = useMcpServers({ catalogId });
 
-  // Find all servers with the same catalogId and aggregate their user details
-  const userDetails = useMemo(() => {
-    if (!server?.catalogId || !allServers) return server?.userDetails || [];
+  // Use the first server for display purposes
+  const firstServer = allServers?.[0];
 
-    // Find all servers with the same catalogId
-    const serversForCatalog = allServers.filter(
-      (s) => s.catalogId === server.catalogId,
-    );
+  const deleteMcpServerMutation = useDeleteMcpServer();
 
-    // Aggregate user details from all servers
-    const aggregatedUserDetails: Array<{
-      userId: string;
-      email: string;
-      createdAt: string;
-      serverId: string;
-    }> = [];
+  const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
+    await deleteMcpServerMutation.mutateAsync({
+      id: mcpServer.id,
+      name: mcpServer.name,
+    });
+  };
 
-    for (const srv of serversForCatalog) {
-      if (srv.userDetails) {
-        for (const userDetail of srv.userDetails) {
-          // Only add if not already present
-          if (
-            !aggregatedUserDetails.some((ud) => ud.userId === userDetail.userId)
-          ) {
-            aggregatedUserDetails.push({
-              ...userDetail,
-              serverId: srv.id,
-            });
-          }
-        }
-      }
-    }
-
-    return aggregatedUserDetails;
-  }, [allServers, server?.catalogId, server?.userDetails]);
-
-  // Use the first server for operations that need a server ID
-  const liveServer = useMemo(() => {
-    if (!server?.catalogId || !allServers) return server;
-    return allServers.find((s) => s.catalogId === server.catalogId) || server;
-  }, [allServers, server]);
-
-  const revokeAccessMutation = useRevokeUserMcpServerAccess();
-
-  const handleRevoke = useCallback(
-    async (userId: string) => {
-      if (!liveServer?.catalogId) return;
-
-      // Use catalogId to find and delete the user's personal-auth server
-      await revokeAccessMutation.mutateAsync({
-        catalogId: liveServer.catalogId,
-        userId,
-      });
-    },
-    [liveServer, revokeAccessMutation],
-  );
-
-  if (!liveServer) {
+  if (!firstServer) {
     return null;
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px]">
+      <DialogContent
+        className="sm:max-w-[700px]"
+        data-testid={E2eTestId.ManageCredentialsDialog}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Users authenticated
+            Manage credentials
             <span className="text-muted-foreground font-normal">
-              {label || liveServer.name}
+              {label || firstServer.name}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Manage personal authentication for users who have authenticated to
-            this MCP server.
+            Manage credentials for this MCP Registry item.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
-          {userDetails.length === 0 ? (
+          {allServers?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No users have authenticated to this server yet.
+              No credentials available for this server.
             </div>
           ) : (
             <div className="rounded-md border">
-              <Table>
+              <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead>Owner</TableHead>
+                    <TableHead>Created At</TableHead>
                     <TableHead className="w-[120px]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {userDetails.map((user) => (
-                    <TableRow key={user.userId}>
+                  {allServers?.map((mcpServer) => (
+                    <TableRow
+                      key={mcpServer.id}
+                      data-testid={E2eTestId.CredentialRow}
+                      data-server-id={mcpServer.id}
+                    >
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {user.email}
-                          {currentUserId === user.userId && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-                            >
-                              You
-                            </Badge>
-                          )}
-                        </div>
+                        <span data-testid={E2eTestId.CredentialOwnerEmail}>
+                          {mcpServer.teamId
+                            ? mcpServer.teamDetails?.name || "Team"
+                            : mcpServer.ownerEmail || "Unknown"}
+                        </span>
+                        {mcpServer.teamId && (
+                          <span className="text-muted-foreground text-xs block">
+                            Created by: {mcpServer.ownerEmail}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {format(new Date(user.createdAt), "PPp")}
+                        {format(new Date(mcpServer.createdAt), "PPp")}
                       </TableCell>
                       <TableCell>
                         <Button
-                          onClick={() => handleRevoke(user.userId)}
-                          disabled={revokeAccessMutation.isPending}
+                          onClick={() => handleRevoke(mcpServer)}
+                          disabled={deleteMcpServerMutation.isPending}
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"

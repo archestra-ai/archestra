@@ -9,6 +9,8 @@ import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   organizationKeys,
   useCancelInvitation,
@@ -77,23 +79,24 @@ function InvitationsListContent({
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button
+                  <TooltipButton
+                    tooltip="Copy invitation link"
                     size="icon"
                     variant="ghost"
                     onClick={() => handleCopy(inv.id, inv.email)}
-                    title="Copy invitation link"
                   >
                     <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
+                  </TooltipButton>
+                  <PermissionButton
+                    permissions={{ invitation: ["cancel"] }}
+                    tooltip="Delete invitation"
                     size="icon"
                     variant="ghost"
                     onClick={() => handleDelete(inv.id)}
                     disabled={cancelMutation.isPending}
-                    title="Delete invitation"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </PermissionButton>
                 </div>
               </div>
             ))}

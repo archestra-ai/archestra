@@ -89,6 +89,9 @@ export function useApproveMcpServerInstallationRequest() {
       queryClient.invalidateQueries({
         queryKey: ["mcp-server-installation-request"],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-catalog"],
+      });
       toast.success("Installation request approved successfully");
     },
     onError: (error: Error) => {

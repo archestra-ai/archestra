@@ -27,9 +27,11 @@ export const OAuthConfigSchema = z.object({
 // Environment variable schema for UI forms
 export const EnvironmentVariableSchema = z.object({
   key: z.string().min(1, "Key is required"),
-  type: z.enum(["plain_text", "secret"]),
-  value: z.string().optional(), // Optional static value (when not prompted)
+  type: z.enum(["plain_text", "secret", "boolean", "number"]),
+  value: z.string().optional(), // Optional static value (when not prompted). Boolean type uses "true"/"false" strings, number type uses numeric strings
   promptOnInstallation: z.boolean(), // Whether to prompt user during installation
+  required: z.boolean().optional(), // Whether this env var is required during installation (only applies when promptOnInstallation is true, defaults to false)
+  description: z.string().optional(), // Optional description to show in installation dialog
 });
 
 export const LocalConfigSchema = z
@@ -55,34 +57,22 @@ export const LocalConfigSchema = z
   );
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
-export const LocalConfigFormSchema = z
-  .object({
-    command: z.string().optional(),
-    arguments: z.string(), // UI uses string, gets parsed to array
-    environment: z.array(EnvironmentVariableSchema), // Structured environment variables
-    dockerImage: z.string().optional(), // Custom Docker image URL
-    transportType: z.enum(["stdio", "streamable-http"]).optional(),
-    httpPort: z.string().optional(), // UI uses string, gets parsed to number
-    httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
-  })
-  .refine(
-    (data) => {
-      // At least one of command or dockerImage must be provided
-      return (data.command && data.command.trim().length > 0) || data.dockerImage;
-    },
-    {
-      message:
-        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
-      path: [],
-    },
-  );
+export const LocalConfigFormSchema = z.object({
+  command: z.string().optional(),
+  arguments: z.string(), // UI uses string, gets parsed to array
+  environment: z.array(EnvironmentVariableSchema), // Structured environment variables
+  dockerImage: z.string().optional(), // Custom Docker image URL
+  transportType: z.enum(["stdio", "streamable-http"]).optional(),
+  httpPort: z.string().optional(), // UI uses string, gets parsed to number
+  httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
+});
 
-// Organization Appearance Schemas
-// All themes from https://github.com/jnsahaj/tweakcn
-// Theme IDs are generated from shared/themes/theme-config.ts
-
+/**
+ * Organization Appearance Schemas
+ * All themes from https://github.com/jnsahaj/tweakcn
+ * Theme IDs are generated from shared/themes/theme-config.ts
+ */
 export const OrganizationThemeSchema = z.enum(THEME_IDS);
-
 export const OrganizationCustomFontSchema = z.enum([
   "lato",
   "inter",
@@ -91,19 +81,221 @@ export const OrganizationCustomFontSchema = z.enum([
   "source-sans-pro",
 ]);
 
-export const OrganizationLogoTypeSchema = z.enum(["default", "custom"]);
+export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;
+export type OrganizationCustomFont = z.infer<
+  typeof OrganizationCustomFontSchema
+>;
 
-export const OrganizationLogoSchema = z.string();
+export const StatisticsTimeFrameSchema = z.union([
+  z.enum(["5m", "15m", "30m", "1h", "24h", "7d", "30d", "90d", "12m", "all"]),
+  z
+    .templateLiteral(["custom:", z.string(), "_", z.string()])
+    .describe("Custom timeframe must be in format 'custom:startTime_endTime'"),
+]);
 
-export const OrganizationAppearanceSchema = z.object({
-  theme: OrganizationThemeSchema.optional(),
-  customFont: OrganizationCustomFontSchema.optional(),
-  logoType: OrganizationLogoTypeSchema.optional(),
-  logo: OrganizationLogoSchema.optional().nullable(),
+export type StatisticsTimeFrame = z.infer<typeof StatisticsTimeFrameSchema>;
+
+/**
+ * SSO Provider Schemas
+ * NOTE: better-auth doesn't export zod schemas for these types, so to make
+ * form generation + request validation easier, we're defining them here.
+ */
+export const SsoProviderOidcConfigSchema = z
+  .object({
+    issuer: z.string(),
+    pkce: z.boolean(),
+    clientId: z.string(),
+    clientSecret: z.string(),
+    authorizationEndpoint: z.string().optional(),
+    discoveryEndpoint: z.string(),
+    userInfoEndpoint: z.string().optional(),
+    scopes: z.array(z.string()).optional(),
+    overrideUserInfo: z.boolean().optional(),
+    tokenEndpoint: z.string().optional(),
+    tokenEndpointAuthentication: z
+      .enum(["client_secret_post", "client_secret_basic"])
+      .optional(),
+    jwksEndpoint: z.string().optional(),
+    mapping: z
+      .object({
+        id: z.string().optional(),
+        email: z.string().optional(),
+        emailVerified: z.string().optional(),
+        name: z.string().optional(),
+        image: z.string().optional(),
+        extraFields: z.record(z.string(), z.string()).optional(),
+      })
+      .optional()
+      .describe(
+        "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3",
+      ),
+  })
+  .describe(
+    "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22",
+  );
+
+export const SsoProviderSamlConfigSchema = z
+  .object({
+    issuer: z.string(),
+    entryPoint: z.string(),
+    cert: z.string(),
+    callbackUrl: z.string(),
+    audience: z.string().optional(),
+    idpMetadata: z
+      .object({
+        metadata: z.string().optional(),
+        entityID: z.string().optional(),
+        entityURL: z.string().optional(),
+        redirectURL: z.string().optional(),
+        cert: z.string().optional(),
+        privateKey: z.string().optional(),
+        privateKeyPass: z.string().optional(),
+        isAssertionEncrypted: z.boolean().optional(),
+        encPrivateKey: z.string().optional(),
+        encPrivateKeyPass: z.string().optional(),
+        singleSignOnService: z
+          .array(
+            z.object({
+              Binding: z.string(),
+              Location: z.string(),
+            }),
+          )
+          .optional(),
+      })
+      .optional(),
+    spMetadata: z.object({
+      metadata: z.string().optional(),
+      entityID: z.string().optional(),
+      binding: z.string().optional(),
+      privateKey: z.string().optional(),
+      privateKeyPass: z.string().optional(),
+      isAssertionEncrypted: z.boolean().optional(),
+      encPrivateKey: z.string().optional(),
+      encPrivateKeyPass: z.string().optional(),
+    }),
+    wantAssertionsSigned: z.boolean().optional(),
+    signatureAlgorithm: z.string().optional(),
+    digestAlgorithm: z.string().optional(),
+    identifierFormat: z.string().optional(),
+    privateKey: z.string().optional(),
+    decryptionPvk: z.string().optional(),
+    additionalParams: z.record(z.string(), z.any()).optional(),
+    mapping: z
+      .object({
+        id: z.string().optional(),
+        email: z.string().optional(),
+        emailVerified: z.string().optional(),
+        name: z.string().optional(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        extraFields: z.record(z.string(), z.string()).optional(),
+      })
+      .optional()
+      .describe(
+        "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2",
+      ),
+  })
+  .describe(
+    "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40",
+  );
+
+/**
+ * Role Mapping Configuration Schema
+ * Supports Handlebars expressions for mapping SSO attributes to Archestra roles
+ */
+export const SsoRoleMappingRuleSchema = z.object({
+  /** Handlebars expression to evaluate against userInfo/token claims */
+  expression: z.string().min(1, "Expression is required"),
+  /** Archestra role to assign when expression evaluates to true */
+  role: z.string().min(1, "Role is required"),
 });
 
-export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;
-export type OrganizationCustomFont = z.infer<typeof OrganizationCustomFontSchema>;
-export type OrganizationLogoType = z.infer<typeof OrganizationLogoTypeSchema>;
-export type OrganizationLogo = z.infer<typeof OrganizationLogoSchema>;
-export type OrganizationAppearance = z.infer<typeof OrganizationAppearanceSchema>;
+export const SsoRoleMappingConfigSchema = z.object({
+  /**
+   * Ordered list of role mapping rules.
+   * First matching rule wins. If no rules match, defaultRole is used.
+   */
+  rules: z.array(SsoRoleMappingRuleSchema).optional(),
+  /**
+   * Default role when no mapping rules match.
+   * If not specified, falls back to organization default (usually "member")
+   */
+  defaultRole: z.string().optional(),
+  /**
+   * Strict mode: If enabled, denies user login when no role mapping rule matches.
+   * Without strict mode, users who don't match any rule are assigned the default role.
+   * Default: false
+   */
+  strictMode: z.boolean().optional(),
+  /**
+   * Skip role sync: If enabled, the user's role is only set on their first login.
+   * Subsequent logins will not update their role, allowing manual role management.
+   * Default: false (role is synced on every login)
+   */
+  skipRoleSync: z.boolean().optional(),
+});
+
+export type SsoRoleMappingRule = z.infer<typeof SsoRoleMappingRuleSchema>;
+export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
+
+/**
+ * Team Sync Configuration Schema
+ * Supports Handlebars expressions for extracting group identifiers from SSO claims
+ * for automatic team membership synchronization.
+ *
+ * This allows flexibility in how groups are extracted from different IdP token formats.
+ */
+export const SsoTeamSyncConfigSchema = z.object({
+  /**
+   * Handlebars expression to extract group identifiers from ID token claims.
+   * The expression should evaluate to an array of strings (group identifiers).
+   *
+   * Examples:
+   * - `{{#each groups}}{{this}},{{/each}}` - Simple array claim: ["admin", "users"]
+   * - `{{#each roles}}{{this.name}},{{/each}}` - Extract names from array of objects
+   * - `{{{json (pluck (json roles) "name")}}}` - Parse JSON string and extract names
+   *
+   * If not configured, falls back to checking common claim names:
+   * groups, group, memberOf, member_of, roles, role, teams, team
+   */
+  groupsExpression: z.string().optional(),
+  /**
+   * Whether team sync is enabled for this provider.
+   * Default: true (team sync is enabled)
+   */
+  enabled: z.boolean().optional(),
+});
+
+export type SsoTeamSyncConfig = z.infer<typeof SsoTeamSyncConfigSchema>;
+
+// Form schemas for UI
+export const SsoProviderFormSchema = z
+  .object({
+    providerId: z.string().min(1, "Provider ID is required"),
+    issuer: z.string().min(1, "Issuer is required"),
+    domain: z.string().min(1, "Domain is required"),
+    providerType: z.enum(["oidc", "saml"]),
+    oidcConfig: SsoProviderOidcConfigSchema.optional(),
+    samlConfig: SsoProviderSamlConfigSchema.optional(),
+    roleMapping: SsoRoleMappingConfigSchema.optional(),
+    teamSyncConfig: SsoTeamSyncConfigSchema.optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.providerType === "oidc") {
+        return !!data.oidcConfig;
+      }
+      if (data.providerType === "saml") {
+        return !!data.samlConfig;
+      }
+      return false;
+    },
+    {
+      message: "Configuration is required for the selected provider type",
+      path: ["oidcConfig"],
+    },
+  );
+
+export type SsoProviderOidcConfig = z.infer<typeof SsoProviderOidcConfigSchema>;
+export type SsoProviderSamlConfig = z.infer<typeof SsoProviderSamlConfigSchema>;
+export type SsoProviderFormValues = z.infer<typeof SsoProviderFormSchema>;

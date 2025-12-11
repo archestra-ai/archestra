@@ -1,14 +1,15 @@
-import { defineConfig, createClient } from '@hey-api/openapi-ts';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL } from "node:url";
+import { createClient, defineConfig } from "@hey-api/openapi-ts";
+import { MCP_CATALOG_API_BASE_URL } from "../consts";
 
 const archestraApiConfig = await defineConfig({
-  input: 'http://localhost:9000/openapi.json',
+  input: "http://localhost:9000/openapi.json",
   output: {
-    path: './hey-api/clients/api',
+    path: "./hey-api/clients/api",
     clean: false,
     indexFile: true,
-    tsConfigPath: './tsconfig.json',
-    format: 'biome',
+    tsConfigPath: "./tsconfig.json",
+    format: "biome",
   },
   /**
    * We need to define the following so that we can support setting the baseUrl of the API client AT RUNTIME
@@ -16,25 +17,25 @@ const archestraApiConfig = await defineConfig({
    */
   plugins: [
     {
-      name: '@hey-api/client-fetch',
-      runtimeConfigPath: './custom-client',
+      name: "@hey-api/client-fetch",
+      runtimeConfigPath: "./custom-client",
     },
   ],
 });
 
 const archestraCatalogConfig = await defineConfig({
-  input: 'https://www.archestra.ai/mcp-catalog/api/docs',
+  input: `${MCP_CATALOG_API_BASE_URL}/docs`,
   output: {
-    path: './hey-api/clients/archestra-catalog',
+    path: "./hey-api/clients/archestra-catalog",
     clean: false,
     indexFile: true,
-    tsConfigPath: './tsconfig.json',
-    format: 'biome',
+    tsConfigPath: "./tsconfig.json",
+    format: "biome",
   },
   plugins: [
     {
-      name: '@hey-api/client-fetch',
-      runtimeConfigPath: './custom-client',
+      name: "@hey-api/client-fetch",
+      runtimeConfigPath: "./custom-client",
     },
   ],
 });

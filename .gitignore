@@ -9,3 +9,5 @@
 *.njsproj
 *.sln
 *.sw?
+
+*.log

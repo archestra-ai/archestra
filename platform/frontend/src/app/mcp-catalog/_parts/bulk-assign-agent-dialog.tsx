@@ -3,8 +3,10 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { InstallationSelect } from "@/components/installation-select";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -17,11 +19,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAgents } from "@/lib/agent.query";
-import { useAssignTool } from "@/lib/agent-tools.query";
+import { useProfiles } from "@/lib/agent.query";
+import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 
-interface BulkAssignAgentDialogProps {
+interface BulkAssignProfileDialogProps {
   tools: Array<{
     id: string;
     name: string;
@@ -34,17 +36,17 @@ interface BulkAssignAgentDialogProps {
   catalogId: string;
 }
 
-export function BulkAssignAgentDialog({
+export function BulkAssignProfileDialog({
   tools,
   open,
   onOpenChange,
   catalogId,
-}: BulkAssignAgentDialogProps) {
-  const { data: agents } = useAgents({});
-  const assignMutation = useAssignTool();
+}: BulkAssignProfileDialogProps) {
+  const { data: agents } = useProfiles();
+  const bulkAssignMutation = useBulkAssignTools();
   const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
     useState<string | null>(null);
   const [executionSourceMcpServerId, setExecutionSourceMcpServerId] = useState<
@@ -57,7 +59,7 @@ export function BulkAssignAgentDialog({
   );
   const isLocalServer = mcpServer?.serverType === "local";
 
-  const filteredAgents = useMemo(() => {
+  const filteredProfiles = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
 
     const query = searchQuery.toLowerCase();
@@ -65,94 +67,90 @@ export function BulkAssignAgentDialog({
   }, [agents, searchQuery]);
 
   const handleAssign = useCallback(async () => {
-    if (!tools || tools.length === 0 || selectedAgentIds.length === 0) return;
+    if (!tools || tools.length === 0 || selectedProfileIds.length === 0) return;
 
-    // Helper function to check if an error is a duplicate key error
-    const isDuplicateError = (error: unknown): boolean => {
-      if (!error) return false;
-      const errorStr = JSON.stringify(error).toLowerCase();
-      return (
-        errorStr.includes("duplicate key") ||
-        errorStr.includes("agent_tools_agent_id_tool_id_unique") ||
-        errorStr.includes("already assigned")
-      );
-    };
+    // Check if dynamic credential is selected
+    const useDynamicCredential =
+      credentialSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE ||
+      executionSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE;
 
     // Assign each tool to each selected agent
     const assignments = tools.flatMap((tool) =>
-      selectedAgentIds.map((agentId) => ({
+      selectedProfileIds.map((agentId) => ({
         agentId,
         toolId: tool.id,
-        toolName: tool.name,
+        credentialSourceMcpServerId: isLocalServer
+          ? null
+          : useDynamicCredential
+            ? null
+            : credentialSourceMcpServerId,
+        executionSourceMcpServerId: isLocalServer
+          ? useDynamicCredential
+            ? null
+            : executionSourceMcpServerId
+          : null,
+        useDynamicTeamCredential: useDynamicCredential,
       })),
     );
 
-    const results = await Promise.allSettled(
-      assignments.map((assignment) =>
-        assignMutation.mutateAsync({
-          agentId: assignment.agentId,
-          toolId: assignment.toolId,
-          credentialSourceMcpServerId: isLocalServer
-            ? null
-            : credentialSourceMcpServerId,
-          executionSourceMcpServerId: isLocalServer
-            ? executionSourceMcpServerId
-            : null,
-        }),
-      ),
-    );
+    try {
+      const result = await bulkAssignMutation.mutateAsync({
+        assignments,
+        mcpServerId: mcpServer?.id,
+      });
 
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.filter((r) => r.status === "rejected").length;
-    const totalAttempted = results.length;
+      if (!result) {
+        toast.error("Failed to assign tools");
+        return;
+      }
 
-    // Check if failures are due to duplicates
-    const duplicates = results.filter(
-      (r) => r.status === "rejected" && isDuplicateError(r.reason),
-    ).length;
+      const { succeeded, failed, duplicates } = result;
 
-    const actualFailures = failed - duplicates;
-
-    if (succeeded > 0) {
-      if (duplicates > 0 && actualFailures === 0) {
-        toast.success(
-          `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
-        );
-      } else if (actualFailures > 0) {
-        toast.warning(
-          `Assigned ${succeeded} of ${totalAttempted} tool${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+      if (succeeded.length > 0) {
+        if (duplicates.length > 0 && failed.length === 0) {
+          toast.success(
+            `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}. ${duplicates.length} ${duplicates.length === 1 ? "was" : "were"} already assigned.`,
+          );
+        } else if (failed.length > 0) {
+          toast.warning(
+            `Assigned ${succeeded.length} of ${assignments.length} tool${assignments.length !== 1 ? "s" : ""}. ${failed.length} failed.`,
+          );
+        } else {
+          toast.success(
+            `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}`,
+          );
+        }
+      } else if (duplicates.length === assignments.length) {
+        toast.info(
+          "All selected tools are already assigned to the selected profiles",
         );
       } else {
-        toast.success(
-          `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}`,
-        );
+        toast.error("Failed to assign tools");
+        console.error("Bulk assignment errors:", failed);
       }
-    } else if (duplicates === failed) {
-      toast.info(
-        "All selected tools are already assigned to the selected agents",
-      );
-    } else {
-      toast.error("Failed to assign tools");
-      console.error("Bulk assignment errors:", results);
-    }
 
-    setSelectedAgentIds([]);
-    setSearchQuery("");
-    setCredentialSourceMcpServerId(null);
-    setExecutionSourceMcpServerId(null);
-    onOpenChange(false);
+      setSelectedProfileIds([]);
+      setSearchQuery("");
+      setCredentialSourceMcpServerId(null);
+      setExecutionSourceMcpServerId(null);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Failed to assign tools");
+      console.error("Bulk assignment error:", error);
+    }
   }, [
     tools,
-    selectedAgentIds,
+    selectedProfileIds,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     isLocalServer,
-    assignMutation,
+    bulkAssignMutation,
     onOpenChange,
+    mcpServer?.id,
   ]);
 
-  const toggleAgent = useCallback((agentId: string) => {
-    setSelectedAgentIds((prev) =>
+  const toggleProfile = useCallback((agentId: string) => {
+    setSelectedProfileIds((prev) =>
       prev.includes(agentId)
         ? prev.filter((id) => id !== agentId)
         : [...prev, agentId],
@@ -165,7 +163,7 @@ export function BulkAssignAgentDialog({
       onOpenChange={(newOpen) => {
         onOpenChange(newOpen);
         if (!newOpen) {
-          setSelectedAgentIds([]);
+          setSelectedProfileIds([]);
           setSearchQuery("");
           setCredentialSourceMcpServerId(null);
           setExecutionSourceMcpServerId(null);
@@ -174,9 +172,9 @@ export function BulkAssignAgentDialog({
     >
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Bulk Assign Tools to Agents</DialogTitle>
+          <DialogTitle>Bulk Assign Tools to Profiles</DialogTitle>
           <DialogDescription>
-            Select one or more agents to assign {tools?.length || 0} tool
+            Select one or more profiles to assign {tools?.length || 0} tool
             {tools && tools.length !== 1 ? "s" : ""} to.
           </DialogDescription>
         </DialogHeader>
@@ -186,7 +184,7 @@ export function BulkAssignAgentDialog({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search agents..."
+                placeholder="Search profiles..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -195,22 +193,22 @@ export function BulkAssignAgentDialog({
           </div>
 
           <div className="flex-1 overflow-y-auto border rounded-md">
-            {!filteredAgents || filteredAgents.length === 0 ? (
+            {!filteredProfiles || filteredProfiles.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
-                  ? "No agents match your search"
-                  : "No agents available"}
+                  ? "No profiles match your search"
+                  : "No profiles available"}
               </div>
             ) : (
               <div className="divide-y">
-                {filteredAgents.map((agent) => (
+                {filteredProfiles.map((agent) => (
                   <div
                     key={agent.id}
                     className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/50 w-full text-left"
                   >
                     <Checkbox
-                      checked={selectedAgentIds.includes(agent.id)}
-                      onCheckedChange={() => toggleAgent(agent.id)}
+                      checked={selectedProfileIds.includes(agent.id)}
+                      onCheckedChange={() => toggleProfile(agent.id)}
                     />
                     <span className="text-sm">{agent.name}</span>
                   </div>
@@ -220,46 +218,28 @@ export function BulkAssignAgentDialog({
           </div>
 
           <div className="mt-10">
-            {isLocalServer ? (
-              <>
-                <Label
-                  htmlFor="installation-select"
-                  className="text-md font-medium mb-1"
-                >
-                  Credential to use *
-                </Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Select whose MCP server installation will execute the tool
-                </p>
-                <InstallationSelect
-                  value={executionSourceMcpServerId}
-                  onValueChange={setExecutionSourceMcpServerId}
-                  className="w-full"
-                  catalogId={catalogId}
-                  agentIds={selectedAgentIds}
-                />
-              </>
-            ) : (
-              <>
-                <Label
-                  htmlFor="token-select"
-                  className="text-md font-medium mb-1"
-                >
-                  Credential to use *
-                </Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Select which token will be used when agents execute these
-                  tools
-                </p>
-                <TokenSelect
-                  value={credentialSourceMcpServerId}
-                  onValueChange={setCredentialSourceMcpServerId}
-                  className="w-full"
-                  catalogId={catalogId}
-                  agentIds={selectedAgentIds}
-                />
-              </>
-            )}
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Credential to use *
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which credential will be used when profiles execute these
+              tools
+            </p>
+            <TokenSelect
+              value={
+                isLocalServer
+                  ? executionSourceMcpServerId
+                  : credentialSourceMcpServerId
+              }
+              onValueChange={
+                isLocalServer
+                  ? setExecutionSourceMcpServerId
+                  : setCredentialSourceMcpServerId
+              }
+              className="w-full"
+              catalogId={catalogId}
+              shouldSetDefaultValue
+            />
           </div>
         </div>
 
@@ -267,7 +247,7 @@ export function BulkAssignAgentDialog({
           <Button
             variant="outline"
             onClick={() => {
-              setSelectedAgentIds([]);
+              setSelectedProfileIds([]);
               setSearchQuery("");
               setCredentialSourceMcpServerId(null);
               setExecutionSourceMcpServerId(null);
@@ -279,15 +259,15 @@ export function BulkAssignAgentDialog({
           <Button
             onClick={handleAssign}
             disabled={
-              selectedAgentIds.length === 0 ||
-              assignMutation.isPending ||
+              selectedProfileIds.length === 0 ||
+              bulkAssignMutation.isPending ||
               (isLocalServer && !executionSourceMcpServerId) ||
               (!isLocalServer && !credentialSourceMcpServerId)
             }
           >
-            {assignMutation.isPending
+            {bulkAssignMutation.isPending
               ? "Assigning..."
-              : `Assign to ${selectedAgentIds.length} agent${selectedAgentIds.length !== 1 ? "s" : ""}`}
+              : `Assign to ${selectedProfileIds.length} profile${selectedProfileIds.length !== 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,20 +1,25 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
-  useUpdateOrganizationAppearance,
+  useUpdateOrganization,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { FontSelector } from "./_components/font-selector";
+import { LightDarkToggle } from "./_components/light-dark-toggle";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function AppearanceSettingsPage() {
-  const updateMutation = useUpdateOrganizationAppearance();
+  const updateAppearanceSettingsMutation = useUpdateOrganization(
+    "Appearance settings updated",
+    "Failed to update appearance settings",
+  );
   const [hasChanges, setHasChanges] = useState(false);
   const queryClient = useQueryClient();
 
@@ -28,10 +33,8 @@ export default function AppearanceSettingsPage() {
     setPreviewFont,
     applyThemeOnUI,
     applyFontOnUI,
-    saveTheme,
-    saveFont,
+    saveAppearance,
     logo,
-    logoType,
     DEFAULT_THEME,
     DEFAULT_FONT,
     isLoadingAppearance,
@@ -53,14 +56,14 @@ export default function AppearanceSettingsPage() {
     }
   });
 
-  const handleLogoChange = () => {
-    // Invalidate appearance query to refresh the logo
-    queryClient.invalidateQueries({ queryKey: organizationKeys.appearance() });
-  };
+  const handleLogoChange = useCallback(() => {
+    // Invalidate organization details query to refresh the logo
+    queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+  }, [queryClient]);
 
   if (isLoadingAppearance) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+      <div>
         <div className="flex items-center justify-center h-64">
           <p className="text-lg text-muted-foreground">Loading...</p>
         </div>
@@ -69,13 +72,10 @@ export default function AppearanceSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+    <div>
       <div className="space-y-6">
-        <LogoUpload
-          currentLogo={logo}
-          logoType={logoType}
-          onLogoChange={handleLogoChange}
-        />
+        <LightDarkToggle />
+        <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
         <ThemeSelector
           selectedTheme={currentUITheme}
           onThemeSelect={(themeId) => {
@@ -96,16 +96,19 @@ export default function AppearanceSettingsPage() {
         />
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
-            <Button
+            <PermissionButton
+              permissions={{ organization: ["update"] }}
               onClick={() => {
-                saveTheme?.(currentUITheme || DEFAULT_THEME);
-                saveFont?.(currentUIFont || DEFAULT_FONT);
+                saveAppearance?.(
+                  currentUITheme || DEFAULT_THEME,
+                  currentUIFont || DEFAULT_FONT,
+                );
                 setHasChanges(false);
               }}
-              disabled={updateMutation.isPending}
+              disabled={updateAppearanceSettingsMutation.isPending}
             >
               Save
-            </Button>
+            </PermissionButton>
             <Button
               variant="outline"
               onClick={() => {
@@ -113,7 +116,7 @@ export default function AppearanceSettingsPage() {
                 setPreviewFont?.(fontFromBackend || DEFAULT_FONT);
                 setHasChanges(false);
               }}
-              disabled={updateMutation.isPending}
+              disabled={updateAppearanceSettingsMutation.isPending}
             >
               Cancel
             </Button>

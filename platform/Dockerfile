@@ -1,4 +1,4 @@
-FROM node:24-alpine AS base
+FROM node:24.11.1-alpine3.22 AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -22,6 +22,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
+# Version arg for Sentry release tracking
+ARG VERSION=dev
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
@@ -36,71 +39,78 @@ COPY shared ./shared
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build
+
+# VERSION is exported as env var for child processes (used by Sentry source map upload)
+ENV VERSION=${VERSION}
+
+# Use Docker secrets to securely pass various sensitive environment variables during build
+# These environment variables are NOT persisted in the final image
+#
+# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
+# https://turborepo.com/docs/guides/tools/docker#example
+#
+# SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
+#
+# https://docs.docker.com/build/building/secrets/#using-build-secrets
+# https://docs.docker.com/build/building/secrets/#target
+RUN --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
+    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
+    --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
+    pnpm build
 
 # <----- Final unified stage ----->
 FROM base AS unified
 WORKDIR /app
 
 ARG VERSION=dev
-ARG ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=""
-ARG ARCHESTRA_EASTER_EGG_VIDEO_URL=""
 
 ENV NODE_ENV=production
 # disable telemetry for next.js
 ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV ARCHESTRA_FRONTEND_URL=""
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_ANALYTICS="enabled"
-
-ENV ARCHESTRA_OPENAI_BASE_URL="https://api.openai.com/v1"
-ENV ARCHESTRA_ANTHROPIC_BASE_URL="https://api.anthropic.com"
-
-ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
-ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
-ENV ARCHESTRA_AUTH_COOKIE_DOMAIN=""
-ENV ARCHESTRA_AUTH_SECRET=""
-
-ENV ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="false"
-ENV ARCHESTRA_ORCHESTRATOR_KUBECONFIG=""
-ENV ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="default"
 ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
+ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
+ENV ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="false"
+ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"
+ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
+ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=""
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=""
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=""
+RUN apk --no-cache upgrade && \
+    # Install PostgreSQL 17 and supervisord
+    apk add --no-cache postgresql17 postgresql17-contrib su-exec && \
+    # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
+    # See https://github.com/grafana/grafana-image-renderer/pull/625
+    rm -rf /usr/local/lib/node_modules/npm && \
+    rm -rf /usr/local/bin/npm && \
+    rm -rf /usr/local/bin/npx && \
+    rm -rf /root/.npm && \
+    rm -rf /root/.node-gyp && \
+    mkdir -p /var/log/supervisor && \
+    # Clean up
+    rm -rf /tmp/*
 
-ENV ARCHESTRA_LOGGING_LEVEL="info"
-ENV ARCHESTRA_METRICS_SECRET="archestra-metrics-secret"
-
-ENV ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
-ENV ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
-
-# Install PostgreSQL 17 and supervisord
-RUN apk add --no-cache \
-    postgresql17 \
-    postgresql17-contrib \
-    supervisor \
-    su-exec \
-    && mkdir -p /var/log/supervisor
+# Install supervisor from edge repository to address CVE-2023-27482
+# https://nvd.nist.gov/vuln/detail/cve-2023-27482
+RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 # Mark PostgreSQL data directory as a volume for data persistence
-VOLUME /var/lib/postgresql/data
+VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY docker-banner.sh ./
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false --filter=@backend --filter=@frontend
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist
@@ -132,7 +142,7 @@ pidfile=/var/run/supervisord.pid
 
 [program:backend]
 directory=/app/backend
-command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.js"
+command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.mjs"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -154,9 +164,12 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-# HOSTNAME is a hardcoded value, and NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
+# HOSTNAME="0.0.0.0" is required for Next.js standalone server to bind to all interfaces.
+# Without this, Next.js binds only to the container's IP, breaking kubectl port-forward.
+# See: https://nextjs.org/docs/app/api-reference/config/next-config-js/output#automatically-copying-traced-files
+# NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_ARCHESTRA_EASTER_EGG_VIDEO_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s"
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)
@@ -178,6 +191,26 @@ EOF
 RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
+
+# Generate and persist ARCHESTRA_AUTH_SECRET if not set
+if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
+    SECRET_FILE="/app/data/.auth_secret"
+
+    if [ -f "$SECRET_FILE" ]; then
+        # Load existing secret
+        export ARCHESTRA_AUTH_SECRET=$(cat "$SECRET_FILE")
+        echo "Loaded existing ARCHESTRA_AUTH_SECRET from $SECRET_FILE"
+    else
+        # Generate new random secret (64 characters)
+        export ARCHESTRA_AUTH_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
+
+        # Persist it
+        mkdir -p /app/data
+        echo "$ARCHESTRA_AUTH_SECRET" > "$SECRET_FILE"
+        chmod 600 "$SECRET_FILE"
+        echo "Generated and saved new ARCHESTRA_AUTH_SECRET to $SECRET_FILE"
+    fi
+fi
 
 # Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)
 USE_EXTERNAL_DB=false
@@ -240,11 +273,27 @@ if [ -n "$ARCHESTRA_ANALYTICS" ]; then
   sed -i "s|environment=\(.*\)|environment=\1,NEXT_PUBLIC_ARCHESTRA_ANALYTICS=\"${ARCHESTRA_ANALYTICS}\"|g" /etc/supervisord.conf
 fi
 
+# Add startup banner to supervisord (sleeps 12s to ensure it prints after Next.js logs)
+cat >> /etc/supervisord.conf <<CONF
+
+[program:startup-banner]
+command=/bin/sh -c "sleep 12 && /app/docker-banner.sh"
+autostart=true
+autorestart=false
+startsecs=0
+priority=999
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+CONF
+
 # Start supervisord
 exec /usr/bin/supervisord -c /etc/supervisord.conf
 EOF
 
 RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x /app/docker-banner.sh
 
 # Expose ports
 EXPOSE 5432 9000 9050 3000

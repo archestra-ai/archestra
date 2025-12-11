@@ -1,3 +1,4 @@
+import { describe, expect, test } from "@/test";
 import { toolCallsToCommon, toolResultsToMessages } from "./anthropic";
 
 describe("Anthropic MCP Adapters", () => {
@@ -88,6 +89,7 @@ describe("Anthropic MCP Adapters", () => {
       const results = [
         {
           id: "tool_123",
+          name: "github_mcp_server__list_issues",
           content: {
             issues: [
               { number: 1, title: "First issue" },
@@ -120,6 +122,7 @@ describe("Anthropic MCP Adapters", () => {
       const results = [
         {
           id: "tool_456",
+          name: "github_mcp_server__list_issues",
           content: null,
           isError: true,
           error: "GitHub API rate limit exceeded",
@@ -147,11 +150,13 @@ describe("Anthropic MCP Adapters", () => {
       const results = [
         {
           id: "tool_1",
+          name: "test_tool",
           content: "success",
           isError: false,
         },
         {
           id: "tool_2",
+          name: "test_tool",
           content: null,
           isError: true,
           error: "Failed",
@@ -185,6 +190,7 @@ describe("Anthropic MCP Adapters", () => {
       const results = [
         {
           id: "tool_no_msg",
+          name: "test_tool",
           content: null,
           isError: true,
         },

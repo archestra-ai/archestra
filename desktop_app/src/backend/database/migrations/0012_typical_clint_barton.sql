@@ -1,1 +1,0 @@
-ALTER TABLE `mcp_servers` ADD `server_type` text DEFAULT 'local' NOT NULL;

@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -23,7 +24,9 @@ import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
 
 interface ToolDetailsDialogProps {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number] | null;
+  agentTool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -46,15 +49,17 @@ export function ToolDetailsDialog({
                 {agentTool.tool.name}
               </DialogTitle>
               {agentTool.tool.description && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {agentTool.tool.description}
-                </p>
+                <TruncatedText
+                  message={agentTool.tool.description}
+                  maxLength={200}
+                  className="text-sm text-muted-foreground mt-1"
+                />
               )}
             </div>
             <div className="flex gap-6 text-sm ml-6">
               <div>
                 <div className="text-xs font-medium text-muted-foreground">
-                  Agent
+                  Profile
                 </div>
                 <div className="text-sm text-foreground mt-0.5">
                   {agentTool.agent.name || "-"}

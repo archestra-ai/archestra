@@ -55,6 +55,7 @@ type AttachmentsContext = {
   clear: () => void;
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
+  textareaKey: number;
 };
 
 const AttachmentsContext = createContext<AttachmentsContext | null>(null);
@@ -231,6 +232,7 @@ export const PromptInput = ({
   ...props
 }: PromptInputProps) => {
   const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [textareaKey, setTextareaKey] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -417,6 +419,10 @@ export const PromptInput = ({
 
     const formData = new FormData(event.currentTarget);
     const text = (formData.get("message") as string) || "";
+    const form = event.currentTarget;
+
+    // Clear the form immediately to provide instant feedback
+    form.reset();
 
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
@@ -432,6 +438,8 @@ export const PromptInput = ({
     ).then((files: FileUIPart[]) => {
       onSubmit({ text, files }, event);
       clear();
+      // Force textarea remount to ensure it's cleared
+      setTextareaKey((prev) => prev + 1);
     });
   };
 
@@ -443,8 +451,9 @@ export const PromptInput = ({
       clear,
       openFileDialog,
       fileInputRef: inputRef,
+      textareaKey,
     }),
-    [items, add, remove, clear, openFileDialog],
+    [items, add, remove, clear, openFileDialog, textareaKey],
   );
 
   return (
@@ -520,6 +529,7 @@ export const PromptInputTextarea = ({
     }
 
     const files: File[] = [];
+    let hasText = false;
 
     for (const item of items) {
       if (item.kind === "file") {
@@ -527,10 +537,33 @@ export const PromptInputTextarea = ({
         if (file) {
           files.push(file);
         }
+      } else if (item.type === "text/plain") {
+        hasText = true;
       }
     }
 
-    if (files.length > 0) {
+    // Sanitize to remove problematic characters
+    if (hasText && files.length === 0) {
+      event.preventDefault();
+      const text = event.clipboardData.getData("text/plain");
+
+      const sanitized = text
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally filtering control characters from pasted text to prevent ms word copy paste bug (issue #1102)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+      const target = event.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const current = target.value;
+
+      target.value =
+        current.substring(0, start) + sanitized + current.substring(end);
+      target.selectionStart = target.selectionEnd = start + sanitized.length;
+
+      const changeEvent = new Event("input", { bubbles: true });
+      target.dispatchEvent(changeEvent);
+    } else if (files.length > 0) {
       event.preventDefault();
       attachments.add(files);
     }
@@ -538,6 +571,7 @@ export const PromptInputTextarea = ({
 
   return (
     <Textarea
+      key={attachments.textareaKey}
       className={cn(
         "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
         "field-sizing-content bg-transparent dark:bg-transparent",
@@ -657,6 +691,7 @@ export const PromptInputActionMenuItem = ({
 
 export type PromptInputSubmitProps = ComponentProps<typeof Button> & {
   status?: ChatStatus;
+  onStop?: () => void;
 };
 
 export const PromptInputSubmit = ({
@@ -664,6 +699,7 @@ export const PromptInputSubmit = ({
   variant = "default",
   size = "icon",
   status,
+  onStop,
   children,
   ...props
 }: PromptInputSubmitProps) => {
@@ -677,12 +713,20 @@ export const PromptInputSubmit = ({
     Icon = <XIcon className="size-4" />;
   }
 
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (status === "streaming" && onStop) {
+      e.preventDefault();
+      onStop();
+    }
+  };
+
   return (
     <Button
-      aria-label="Submit"
+      aria-label={status === "streaming" ? "Stop" : "Submit"}
       className={cn("gap-1.5 rounded-lg", className)}
+      onClick={handleClick}
       size={size}
-      type="submit"
+      type={status === "streaming" ? "button" : "submit"}
       variant={variant}
       {...props}
     >

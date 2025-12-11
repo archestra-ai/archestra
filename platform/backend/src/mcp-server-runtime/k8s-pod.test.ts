@@ -1,7 +1,10 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
+import { vi } from "vitest";
 import type { z } from "zod";
+import config from "@/config";
+import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 
@@ -17,7 +20,6 @@ function createK8sPodInstance(
     catalogId: "test-catalog-id",
     secretId: null,
     ownerId: null,
-    authType: null,
     reinstallRequired: false,
     localInstallationStatus: "idle",
     localInstallationError: null,
@@ -444,23 +446,24 @@ describe("K8sPod.constructPodName", () => {
       id: "123e4567-e89b-12d3-a456-426614174000",
       expected: "mcp-server.name",
     },
-  ])(
-    "converts server name '$name' with id '$id' to pod name '$expected'",
-    ({ name, id, expected }) => {
-      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
-      const mockServer = { name, id } as any;
-      const result = K8sPod.constructPodName(mockServer);
-      expect(result).toBe(expected);
+  ])("converts server name '$name' with id '$id' to pod name '$expected'", ({
+    name,
+    id,
+    expected,
+  }) => {
+    // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    const mockServer = { name, id } as any;
+    const result = K8sPod.constructPodName(mockServer);
+    expect(result).toBe(expected);
 
-      // Verify all results are valid Kubernetes DNS subdomain names
-      // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
-      expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
-      // Must be no longer than 253 characters
-      expect(result.length).toBeLessThanOrEqual(253);
-      // Must start with 'mcp-'
-      expect(result).toMatch(/^mcp-/);
-    },
-  );
+    // Verify all results are valid Kubernetes DNS subdomain names
+    // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
+    expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+    // Must be no longer than 253 characters
+    expect(result.length).toBeLessThanOrEqual(253);
+    // Must start with 'mcp-'
+    expect(result).toMatch(/^mcp-/);
+  });
 
   test("handles very long server names by truncating to 253 characters", () => {
     const longName = "a".repeat(300); // 300 character name
@@ -545,6 +548,25 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
       input: {},
       expected: {},
     },
+    {
+      name: "truncates label values to 63 characters",
+      input: {
+        "long-value": "a".repeat(100),
+      },
+      expected: {
+        "long-value": "a".repeat(63),
+      },
+    },
+    {
+      name: "removes trailing non-alphanumeric after truncation",
+      input: {
+        // 62 'a's followed by a hyphen = 63 chars. Truncation keeps the hyphen, regex should remove it.
+        "trailing-hyphen": `${"a".repeat(62)}-`,
+      },
+      expected: {
+        "trailing-hyphen": "a".repeat(62),
+      },
+    },
   ])("$name", ({ input, expected }) => {
     const result = K8sPod.sanitizeMetadataLabels(
       input as Record<string, string>,
@@ -561,7 +583,11 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
 
 describe("K8sPod.generatePodSpec", () => {
   // Helper function to create a mock K8sPod instance
-  function createMockK8sPod(mcpServer: McpServer): K8sPod {
+  function createMockK8sPod(
+    mcpServer: McpServer,
+    userConfigValues?: Record<string, string>,
+    environmentValues?: Record<string, string>,
+  ): K8sPod {
     const mockK8sApi = {} as k8s.CoreV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
@@ -573,6 +599,9 @@ describe("K8sPod.generatePodSpec", () => {
       mockK8sAttach,
       mockK8sLog,
       namespace,
+      null, // catalogItem
+      userConfigValues,
+      environmentValues,
     );
   }
 
@@ -701,18 +730,25 @@ describe("K8sPod.generatePodSpec", () => {
       command: "node",
       arguments: ["app.js"],
       environment: [
-        { key: "API_KEY", type: "secret", promptOnInstallation: true },
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+        },
         {
           key: "PORT",
           type: "plain_text",
           value: "3000",
           promptOnInstallation: false,
+          required: false,
         },
         {
           key: "DEBUG",
           type: "plain_text",
           value: "true",
           promptOnInstallation: false,
+          required: false,
         },
       ],
     };
@@ -850,6 +886,186 @@ describe("K8sPod.generatePodSpec", () => {
     expect(container?.args).toEqual([]);
   });
 
+  test("generates podSpec with interpolated user_config values in arguments", () => {
+    const mcpServer: McpServer = {
+      id: "args-interpolation-id",
+      name: "args-interpolation-server",
+      catalogId: "catalog-args-interpolation",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const userConfigValues = {
+      api_json_path: "/path/to/api.json",
+      output_dir: "/output",
+    };
+
+    const k8sPod = createMockK8sPod(mcpServer, userConfigValues);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "npx",
+      arguments: [
+        "-y",
+        "mcp-typescribe@latest",
+        "run-server",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of placeholders
+        "${user_config.api_json_path}",
+        "--output",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of placeholders
+        "${user_config.output_dir}",
+      ],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.args).toEqual([
+      "-y",
+      "mcp-typescribe@latest",
+      "run-server",
+      "/path/to/api.json",
+      "--output",
+      "/output",
+    ]);
+  });
+
+  test("generates podSpec with arguments without interpolation when no user config values provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-interpolation-id",
+      name: "no-interpolation-server",
+      catalogId: "catalog-no-interpolation",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    // No userConfigValues provided
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: [
+        "index.js",
+        "--file",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing placeholder is preserved when no user config
+        "${user_config.file_path}",
+      ],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    // Should keep placeholder as-is when no user config values
+    expect(container?.args).toEqual([
+      "index.js",
+      "--file",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing placeholder is preserved when no user config
+      "${user_config.file_path}",
+    ]);
+  });
+
+  test("generates podSpec with interpolated environment values in arguments (filesystem server case)", () => {
+    const mcpServer: McpServer = {
+      id: "env-interpolation-id",
+      name: "env-interpolation-server",
+      catalogId: "catalog-env-interpolation",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    // Use environmentValues instead of userConfigValues (internal catalog pattern)
+    const environmentValues = {
+      allowed_directories: "/home/user/documents",
+      read_only: "false",
+    };
+
+    const k8sPod = createMockK8sPod(mcpServer, undefined, environmentValues);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "npx",
+      arguments: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of placeholders
+        "${user_config.allowed_directories}",
+      ],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.args).toEqual([
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "/home/user/documents",
+    ]);
+  });
+
+  test("generates podSpec with environmentValues taking precedence over userConfigValues in arguments", () => {
+    const mcpServer: McpServer = {
+      id: "precedence-id",
+      name: "precedence-server",
+      catalogId: "catalog-precedence",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const userConfigValues = {
+      path: "/old/path",
+    };
+
+    const environmentValues = {
+      path: "/new/path",
+    };
+
+    const k8sPod = createMockK8sPod(
+      mcpServer,
+      userConfigValues,
+      environmentValues,
+    );
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "test",
+      arguments: [
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of placeholders
+        "${user_config.path}",
+      ],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    // environmentValues should take precedence
+    expect(container?.args).toEqual(["/new/path"]);
+  });
+
   test("generates podSpec with custom HTTP port", () => {
     const mcpServer: McpServer = {
       id: "custom-port-id",
@@ -899,19 +1115,31 @@ describe("K8sPod.generatePodSpec", () => {
       command: "python",
       arguments: ["-m", "uvicorn", "main:app"],
       environment: [
-        { key: "API_KEY", type: "secret", promptOnInstallation: true },
-        { key: "DATABASE_URL", type: "secret", promptOnInstallation: true },
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+        },
+        {
+          key: "DATABASE_URL",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+        },
         {
           key: "WORKERS",
           type: "plain_text",
           value: "4",
           promptOnInstallation: false,
+          required: false,
         },
         {
           key: "DEBUG",
           type: "plain_text",
           value: "false",
           promptOnInstallation: false,
+          required: false,
         },
       ],
       transportType: "streamable-http",
@@ -970,5 +1198,559 @@ describe("K8sPod.generatePodSpec", () => {
         protocol: "TCP",
       },
     ]);
+  });
+
+  test("rewrite localhost URLs when backend is external to MCP pods", () => {
+    // Save original value
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+
+    // Mock config to simulate backend running in-cluster (production deployment)
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
+
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "API_ENDPOINT",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "API endpoint",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "http://localhost:3002/",
+        API_ENDPOINT: "http://127.0.0.1:8080/api",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    // Find the rewritten URLs
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+    const apiEndpoint = envVars.find((env) => env.name === "API_ENDPOINT");
+
+    expect(grafanaUrl?.value).toBe("http://host.docker.internal:3002/");
+    expect(apiEndpoint?.value).toBe("http://host.docker.internal:8080/api");
+
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
+  });
+
+  test("does not rewrite non-localhost URLs", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "https://grafana.example.com:3000/",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+
+    // Should NOT be rewritten
+    expect(grafanaUrl?.value).toBe("https://grafana.example.com:3000/");
+  });
+
+  test("does not rewrite non-HTTP/HTTPS protocols (MongoDB, PostgreSQL, etc.)", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "DATABASE_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Database URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "MONGODB_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "MongoDB URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "REDIS_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "Redis URL",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        DATABASE_URL: "postgresql://localhost:5432/mydb",
+        MONGODB_URL: "mongodb://127.0.0.1:27017/mydb",
+        REDIS_URL: "redis://localhost:6379",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    const databaseUrl = envVars.find((env) => env.name === "DATABASE_URL");
+    const mongodbUrl = envVars.find((env) => env.name === "MONGODB_URL");
+    const redisUrl = envVars.find((env) => env.name === "REDIS_URL");
+
+    // Should NOT be rewritten - only HTTP/HTTPS protocols are rewritten
+    expect(databaseUrl?.value).toBe("postgresql://localhost:5432/mydb");
+    expect(mongodbUrl?.value).toBe("mongodb://127.0.0.1:27017/mydb");
+    expect(redisUrl?.value).toBe("redis://localhost:6379");
+  });
+
+  test("does not rewrite localhost URLs when backend shares environment with K8s cluster", () => {
+    // Save original value
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+
+    // Mock config to simulate backend running in-cluster (production deployment)
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "API_ENDPOINT",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "API endpoint",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "http://localhost:3002/",
+        API_ENDPOINT: "http://127.0.0.1:8080/api",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    // Find the URLs
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+    const apiEndpoint = envVars.find((env) => env.name === "API_ENDPOINT");
+
+    // Should NOT be rewritten when backend runs in cluster
+    expect(grafanaUrl?.value).toBe("http://localhost:3002/");
+    expect(apiEndpoint?.value).toBe("http://127.0.0.1:8080/api");
+
+    // Restore original value
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
+  });
+});
+
+describe("K8sPod.createK8sSecret", () => {
+  // Helper function to create a K8sPod instance with mocked K8s API
+  function createK8sPodWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+    secretData?: Record<string, string>,
+  ): K8sPod {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sPod(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      secretData,
+    );
+  }
+
+  test("creates K8s secret successfully", async () => {
+    const mockCreateSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const secretData = {
+      API_KEY: "secret-123",
+      DATABASE_URL: "postgresql://localhost:5432/db",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    expect(mockCreateSecret).toHaveBeenCalledWith({
+      namespace: "default",
+      body: {
+        metadata: {
+          name: "mcp-server-test-server-id-secrets",
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            "mcp-server-name": "test-server",
+          },
+        },
+        type: "Opaque",
+        data: {
+          API_KEY: Buffer.from("secret-123").toString("base64"),
+          DATABASE_URL: Buffer.from("postgresql://localhost:5432/db").toString(
+            "base64",
+          ),
+        },
+      },
+    });
+  });
+
+  test("skips secret creation when no secret data provided", async () => {
+    const mockCreateSecret = vi.fn();
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi);
+    await k8sPod.createK8sSecret({});
+
+    expect(mockCreateSecret).not.toHaveBeenCalled();
+  });
+
+  test("updates existing secret when creation fails with 409 conflict (statusCode)", async () => {
+    const conflictError = {
+      statusCode: 409,
+      message: 'secrets "mcp-server-test-server-id-secrets" already exists',
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(conflictError);
+    const mockReplaceSecret = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      API_KEY: "updated-secret-456",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).toHaveBeenCalledWith({
+      name: "mcp-server-test-server-id-secrets",
+      namespace: "default",
+      body: {
+        metadata: {
+          name: "mcp-server-test-server-id-secrets",
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            "mcp-server-name": "test-server",
+          },
+        },
+        type: "Opaque",
+        data: {
+          API_KEY: Buffer.from("updated-secret-456").toString("base64"),
+        },
+      },
+    });
+  });
+
+  test("updates existing secret when creation fails with 409 conflict (code)", async () => {
+    const conflictError = {
+      code: 409,
+      message: 'secrets "mcp-server-test-server-id-secrets" already exists',
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(conflictError);
+    const mockReplaceSecret = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      DATABASE_PASSWORD: "new-password",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).toHaveBeenCalledTimes(1);
+  });
+
+  test("throws error for non-conflict errors during creation", async () => {
+    const networkError = {
+      statusCode: 500,
+      message: "Internal server error",
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(networkError);
+    const mockReplaceSecret = vi.fn();
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      API_KEY: "secret-123",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+
+    await expect(k8sPod.createK8sSecret(secretData)).rejects.toEqual(
+      networkError,
+    );
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).not.toHaveBeenCalled();
+  });
+
+  test("throws error when replace operation fails", async () => {
+    const conflictError = {
+      statusCode: 409,
+      message: 'secrets "mcp-server-test-server-id-secrets" already exists',
+    };
+
+    const replaceError = {
+      statusCode: 403,
+      message: "Forbidden",
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(conflictError);
+    const mockReplaceSecret = vi.fn().mockRejectedValue(replaceError);
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      API_KEY: "secret-123",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+
+    await expect(k8sPod.createK8sSecret(secretData)).rejects.toEqual(
+      replaceError,
+    );
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).toHaveBeenCalledTimes(1);
+  });
+
+  test("handles multiple secret data fields correctly", async () => {
+    const mockCreateSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const secretData = {
+      API_KEY: "key-123",
+      DATABASE_URL: "postgres://localhost:5432",
+      SECRET_TOKEN: "token-456",
+      PASSWORD: "password123",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    const expectedData = {
+      API_KEY: Buffer.from("key-123").toString("base64"),
+      DATABASE_URL: Buffer.from("postgres://localhost:5432").toString("base64"),
+      SECRET_TOKEN: Buffer.from("token-456").toString("base64"),
+      PASSWORD: Buffer.from("password123").toString("base64"),
+    };
+
+    expect(mockCreateSecret).toHaveBeenCalledWith({
+      namespace: "default",
+      body: {
+        metadata: {
+          name: "mcp-server-test-server-id-secrets",
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            "mcp-server-name": "test-server",
+          },
+        },
+        type: "Opaque",
+        data: expectedData,
+      },
+    });
+  });
+
+  test("handles empty string values in secret data", async () => {
+    const mockCreateSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const secretData = {
+      API_KEY: "",
+      DATABASE_URL: "postgres://localhost:5432",
+      EMPTY_SECRET: "",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    const expectedData = {
+      API_KEY: Buffer.from("").toString("base64"),
+      DATABASE_URL: Buffer.from("postgres://localhost:5432").toString("base64"),
+      EMPTY_SECRET: Buffer.from("").toString("base64"),
+    };
+
+    expect(mockCreateSecret).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          data: expectedData,
+        }),
+      }),
+    );
+  });
+});
+
+describe("K8sPod.constructK8sSecretName", () => {
+  test.each([
+    {
+      testName: "constructs secret name with valid UUID",
+      mcpServerId: "123e4567-e89b-12d3-a456-426614174000",
+      expected: "mcp-server-123e4567-e89b-12d3-a456-426614174000-secrets",
+    },
+    {
+      testName: "constructs secret name with simple ID",
+      mcpServerId: "simple-id",
+      expected: "mcp-server-simple-id-secrets",
+    },
+    {
+      testName: "constructs secret name with numeric ID",
+      mcpServerId: "12345",
+      expected: "mcp-server-12345-secrets",
+    },
+    {
+      testName: "constructs secret name with alphanumeric ID",
+      mcpServerId: "abc123def456",
+      expected: "mcp-server-abc123def456-secrets",
+    },
+  ])("$testName", ({ mcpServerId, expected }) => {
+    const result = K8sPod.constructK8sSecretName(mcpServerId);
+    expect(result).toBe(expected);
+    expect(result).toMatch(/^mcp-server-.+-secrets$/);
   });
 });

@@ -8,7 +8,7 @@ import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
@@ -43,7 +43,7 @@ export default function McpGatewayLogsPage({
   };
 }) {
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
+    <div>
       <ErrorBoundary>
         <McpToolCallsTable initialData={initialData} />
       </ErrorBoundary>
@@ -78,9 +78,11 @@ function McpToolCallsTable({
       ? "agentId"
       : sortBy === "mcpServerName"
         ? "mcpServerName"
-        : sortBy === "createdAt"
-          ? "createdAt"
-          : undefined;
+        : sortBy === "method"
+          ? "method"
+          : sortBy === "createdAt"
+            ? "createdAt"
+            : undefined;
 
   const { data: mcpToolCallsResponse } = useMcpToolCalls({
     limit: pagination.pageSize,
@@ -90,7 +92,7 @@ function McpToolCallsTable({
     initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: agents } = useAgents({
+  const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
 
@@ -115,10 +117,28 @@ function McpToolCallsTable({
       cell: ({ row }) => (
         <div className="font-mono text-xs">
           {formatDate({
-            date: new Date(row.original.createdAt).toLocaleDateString(),
+            date: row.original.createdAt,
           })}
         </div>
       ),
+    },
+    {
+      id: "method",
+      header: "Method",
+      cell: ({ row }) => {
+        const method = row.original.method || "tools/call";
+        const variant =
+          method === "initialize"
+            ? "outline"
+            : method === "tools/list"
+              ? "secondary"
+              : "default";
+        return (
+          <Badge variant={variant} className="text-xs whitespace-nowrap">
+            {method}
+          </Badge>
+        );
+      },
     },
     {
       id: "agent",
@@ -133,7 +153,7 @@ function McpToolCallsTable({
             className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Agent
+            Profile
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         );
@@ -162,7 +182,10 @@ function McpToolCallsTable({
       cell: ({ row }) => {
         return (
           <Badge variant="secondary" className="text-xs whitespace-normal">
-            {row.original.mcpServerName}
+            <TruncatedText
+              message={row.original.mcpServerName}
+              maxLength={15}
+            />
           </Badge>
         );
       },
@@ -171,12 +194,13 @@ function McpToolCallsTable({
       id: "toolName",
       header: "Tool Name",
       cell: ({ row }) => {
+        const toolName = row.original.toolCall?.name;
+        if (!toolName) {
+          return <div className="text-xs text-muted-foreground">—</div>;
+        }
         return (
           <div className="text-xs">
-            <TruncatedText
-              message={row.original.toolCall.name}
-              maxLength={40}
-            />
+            <TruncatedText message={toolName} maxLength={40} />
           </div>
         );
       },
@@ -185,7 +209,11 @@ function McpToolCallsTable({
       id: "arguments",
       header: "Arguments",
       cell: ({ row }) => {
-        const argsString = JSON.stringify(row.original.toolCall.arguments);
+        const args = row.original.toolCall?.arguments;
+        if (!args) {
+          return <div className="text-xs text-muted-foreground">—</div>;
+        }
+        const argsString = JSON.stringify(args);
         return (
           <div className="text-xs font-mono">
             <TruncatedText message={argsString} maxLength={60} />
@@ -197,13 +225,31 @@ function McpToolCallsTable({
       id: "status",
       header: "Status",
       cell: ({ row }) => {
-        const isError = row.original.toolResult.isError;
+        const result = row.original.toolResult;
+        const method = row.original.method || "tools/call";
+
+        // For tools/call, check isError
+        if (
+          method === "tools/call" &&
+          result &&
+          typeof result === "object" &&
+          "isError" in result
+        ) {
+          const isError = (result as { isError: boolean }).isError;
+          return (
+            <Badge
+              variant={isError ? "destructive" : "default"}
+              className="text-xs whitespace-nowrap"
+            >
+              {isError ? "Error" : "Success"}
+            </Badge>
+          );
+        }
+
+        // For other methods, just show success
         return (
-          <Badge
-            variant={isError ? "destructive" : "default"}
-            className="text-xs whitespace-nowrap"
-          >
-            {isError ? "Error" : "Success"}
+          <Badge variant="default" className="text-xs whitespace-nowrap">
+            Success
           </Badge>
         );
       },
@@ -213,23 +259,47 @@ function McpToolCallsTable({
       header: "Result",
       cell: ({ row }) => {
         const result = row.original.toolResult;
-        if (result.isError) {
+        const method = row.original.method || "tools/call";
+
+        // Handle tools/call with standard result structure
+        if (
+          method === "tools/call" &&
+          result &&
+          typeof result === "object" &&
+          "isError" in result
+        ) {
+          const toolResult = result as {
+            isError: boolean;
+            error?: string;
+            content?: unknown;
+          };
+          if (toolResult.isError) {
+            return (
+              <div className="text-xs text-destructive">
+                <TruncatedText
+                  message={toolResult.error || "Unknown error"}
+                  maxLength={60}
+                />
+              </div>
+            );
+          }
+          const contentString =
+            typeof toolResult.content === "string"
+              ? toolResult.content
+              : JSON.stringify(toolResult.content);
           return (
-            <div className="text-xs text-destructive">
-              <TruncatedText
-                message={result.error || "Unknown error"}
-                maxLength={60}
-              />
+            <div className="text-xs">
+              <TruncatedText message={contentString} maxLength={60} />
             </div>
           );
         }
-        const contentString =
-          typeof result.content === "string"
-            ? result.content
-            : JSON.stringify(result.content);
+
+        // For other methods, just stringify the result
+        const resultString =
+          typeof result === "string" ? result : JSON.stringify(result);
         return (
           <div className="text-xs">
-            <TruncatedText message={contentString} maxLength={60} />
+            <TruncatedText message={resultString} maxLength={60} />
           </div>
         );
       },

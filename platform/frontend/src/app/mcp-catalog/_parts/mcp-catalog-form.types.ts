@@ -22,6 +22,14 @@ export const formSchema = z
     authMethod: z.enum(["none", "pat", "oauth"]),
     oauthConfig: oauthConfigSchema.optional(),
     localConfig: LocalConfigFormSchema.optional(),
+    // BYOS: External Vault path for OAuth client secret
+    oauthClientSecretVaultPath: z.string().optional(),
+    // BYOS: External Vault key for OAuth client secret
+    oauthClientSecretVaultKey: z.string().optional(),
+    // BYOS: External Vault path for local config secret env vars
+    localConfigVaultPath: z.string().optional(),
+    // BYOS: External Vault key for local config secret env vars
+    localConfigVaultKey: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -51,8 +59,9 @@ export const formSchema = z
       return true;
     },
     {
-      message: "Either command or Docker image must be provided.",
-      path: [],
+      message:
+        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
+      path: ["localConfig", "command"],
     },
   );
 

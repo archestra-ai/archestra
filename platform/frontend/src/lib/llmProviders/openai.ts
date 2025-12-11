@@ -17,7 +17,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
       interaction.request as archestraApiTypes.OpenAiChatCompletionRequest;
     this.response =
       interaction.response as archestraApiTypes.OpenAiChatCompletionResponse;
-    this.modelName = this.request.model;
+    this.modelName = interaction.model ?? this.request.model;
   }
 
   isLastMessageToolCall(): boolean {

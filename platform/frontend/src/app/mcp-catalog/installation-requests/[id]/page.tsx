@@ -9,14 +9,16 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useCallback, useState } from "react";
+import Divider from "@/components/divider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useRole } from "@/lib/auth.hook";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   useAddMcpServerInstallationRequestNote,
   useApproveMcpServerInstallationRequest,
@@ -30,8 +32,6 @@ export default function InstallationRequestDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const userRole = useRole();
-  const isAdmin = userRole === "admin";
 
   const { data: request, isLoading } = useMcpServerInstallationRequest(id);
   const approveMutation = useApproveMcpServerInstallationRequest();
@@ -43,27 +43,31 @@ export default function InstallationRequestDetailPage({
   const [showApprovalForm, setShowApprovalForm] = useState(false);
   const [showDeclineForm, setShowDeclineForm] = useState(false);
 
-  const handleApprove = async () => {
+  const { data: userIsMcpServerAdmin } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
+
+  const handleApprove = useCallback(async () => {
     await approveMutation.mutateAsync({ id, adminResponse });
     setAdminResponse("");
     setShowApprovalForm(false);
-  };
+  }, [approveMutation, id, adminResponse]);
 
-  const handleDecline = async () => {
+  const handleDecline = useCallback(async () => {
     await declineMutation.mutateAsync({ id, adminResponse });
     setAdminResponse("");
     setShowDeclineForm(false);
-  };
+  }, [declineMutation, id, adminResponse]);
 
-  const handleAddNote = async () => {
+  const handleAddNote = useCallback(async () => {
     if (!newNote.trim()) return;
     await addNoteMutation.mutateAsync({ id, content: newNote });
     setNewNote("");
-  };
+  }, [addNoteMutation, id, newNote]);
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6 max-w-5xl">
+      <div>
         <Skeleton className="h-8 w-48 mb-6" />
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2 space-y-6">
@@ -95,7 +99,7 @@ export default function InstallationRequestDetailPage({
 
   if (!request) {
     return (
-      <div className="container mx-auto p-6 max-w-5xl">
+      <div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <p className="text-muted-foreground">Request not found</p>
@@ -128,32 +132,28 @@ export default function InstallationRequestDetailPage({
   const isPending = request.status === "pending";
 
   return (
-    <div className="w-full h-full">
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <div className="flex items-center gap-4 mb-2">
-            <Link href="/mcp-catalog/installation-requests">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Installation Request
-            </h1>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground ml-14">
-              Review and manage this installation request
-            </p>
-            <Badge variant="outline" className={status.color}>
-              <StatusIcon className="h-4 w-4 mr-2" />
-              {status.label}
-            </Badge>
-          </div>
-        </div>
+    <div>
+      <div className="flex items-center gap-4 mb-2">
+        <Link href="/mcp-catalog/installation-requests">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Installation Request
+        </h1>
       </div>
-
-      <div className="max-w-5xl mx-auto px-8 py-8">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground ml-14">
+          Review and manage this installation request
+        </p>
+        <Badge variant="outline" className={status.color}>
+          <StatusIcon className="h-4 w-4 mr-2" />
+          {status.label}
+        </Badge>
+      </div>
+      <Divider className="my-6" />
+      <div>
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2 space-y-6">
             <Card>
@@ -360,7 +360,7 @@ export default function InstallationRequestDetailPage({
               </CardContent>
             </Card>
 
-            {isAdmin && isPending && (
+            {userIsMcpServerAdmin && isPending && (
               <Card>
                 <CardHeader>
                   <CardTitle>Admin Actions</CardTitle>
@@ -368,21 +368,27 @@ export default function InstallationRequestDetailPage({
                 <CardContent className="space-y-4">
                   {!showApprovalForm && !showDeclineForm && (
                     <div className="flex gap-3">
-                      <Button
+                      <PermissionButton
+                        permissions={{
+                          mcpServerInstallationRequest: ["admin"],
+                        }}
                         onClick={() => setShowApprovalForm(true)}
                         className="flex-1"
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Approve Request
-                      </Button>
-                      <Button
+                      </PermissionButton>
+                      <PermissionButton
+                        permissions={{
+                          mcpServerInstallationRequest: ["admin"],
+                        }}
                         variant="destructive"
                         onClick={() => setShowDeclineForm(true)}
                         className="flex-1"
                       >
                         <XCircle className="h-4 w-4 mr-2" />
                         Decline Request
-                      </Button>
+                      </PermissionButton>
                     </div>
                   )}
 
@@ -395,7 +401,10 @@ export default function InstallationRequestDetailPage({
                         rows={3}
                       />
                       <div className="flex gap-2">
-                        <Button
+                        <PermissionButton
+                          permissions={{
+                            mcpServerInstallationRequest: ["admin"],
+                          }}
                           onClick={handleApprove}
                           disabled={approveMutation.isPending}
                           className="flex-1"
@@ -404,7 +413,7 @@ export default function InstallationRequestDetailPage({
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
                           Confirm Approval
-                        </Button>
+                        </PermissionButton>
                         <Button
                           variant="outline"
                           onClick={() => {
@@ -427,7 +436,10 @@ export default function InstallationRequestDetailPage({
                         rows={3}
                       />
                       <div className="flex gap-2">
-                        <Button
+                        <PermissionButton
+                          permissions={{
+                            mcpServerInstallationRequest: ["admin"],
+                          }}
                           variant="destructive"
                           onClick={handleDecline}
                           disabled={declineMutation.isPending}
@@ -437,7 +449,7 @@ export default function InstallationRequestDetailPage({
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
                           Confirm Decline
-                        </Button>
+                        </PermissionButton>
                         <Button
                           variant="outline"
                           onClick={() => {

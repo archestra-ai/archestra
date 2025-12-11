@@ -2,7 +2,6 @@
   "bootstrap-sha": "975dd9685457d367d96d55cb50c198715f4dc365",
   "changelog-path": "CHANGELOG.md",
   "changelog-type": "default",
-  "bump-minor-pre-major": true,
   "pull-request-footer": "",
   "include-v-in-tag": true,
   "draft": false,
@@ -56,29 +55,21 @@
     {
       "section": "Miscellaneous Chores",
       "type": "chore",
-      "hidden": true
+      "hidden": false
     },
     {
       "section": "Other",
       "type": "*",
-      "hidden": true
+      "hidden": false
     }
   ],
   "packages": {
-    "desktop_app": {
-      "component": "desktop_app",
-      "release-type": "node",
-      "prerelease": true,
-      "include-component-in-tag": false,
-      "initial-version": "0.0.1",
-      "bump-patch-for-minor-pre-major": true
-    },
     "platform": {
       "component": "platform",
       "release-type": "node",
-      "prerelease": true,
+      "versioning": "always-bump-patch",
+      "prerelease": false,
       "initial-version": "0.0.1",
-      "bump-patch-for-minor-pre-major": false,
       "extra-files": [
         {
           "type": "json",

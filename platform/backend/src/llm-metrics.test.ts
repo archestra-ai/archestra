@@ -1,5 +1,6 @@
 import type { GoogleGenAI } from "@google/genai";
-import { AgentModel } from "@/models";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
 const histogramObserve = vi.fn();
@@ -31,22 +32,24 @@ import {
   getObservableFetch,
   getObservableGenAI,
   initializeMetrics,
+  reportBlockedTools,
+  reportLLMCost,
+  reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
 } from "./llm-metrics";
 
 describe("getObservableFetch", () => {
   let testAgent: Agent;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
-    testAgent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    testAgent = await makeAgent();
     // Initialize metrics so the observable fetch can record metrics
     initializeMetrics([]);
   });
 
-  it("records duration and tokens on successful request", async () => {
+  test("records duration and tokens on successful request", async () => {
     const mockResponse = {
       ok: true,
       status: 200,
@@ -54,6 +57,7 @@ describe("getObservableFetch", () => {
       clone: () => ({
         json: async () => ({
           usage: { prompt_tokens: 100, completion_tokens: 50 },
+          model: "gpt-4",
         }),
       }),
     } as Response;
@@ -64,13 +68,16 @@ describe("getObservableFetch", () => {
 
     await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
+      body: JSON.stringify({ model: "gpt-4" }),
     });
 
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
         status_code: "200",
       },
       expect.any(Number),
@@ -79,8 +86,10 @@ describe("getObservableFetch", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
         type: "input",
       },
       100,
@@ -89,15 +98,17 @@ describe("getObservableFetch", () => {
     expect(counterInc).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
         type: "output",
       },
       50,
     );
   });
 
-  it("records duration with 4xx status code", async () => {
+  test("records duration with 4xx status code", async () => {
     const mockResponse = {
       ok: false,
       status: 400,
@@ -115,15 +126,17 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         status_code: "400",
       },
       expect.any(Number),
     );
   });
 
-  it("records duration with 5xx status code", async () => {
+  test("records duration with 5xx status code", async () => {
     const mockResponse = {
       ok: false,
       status: 503,
@@ -141,15 +154,17 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         status_code: "503",
       },
       expect.any(Number),
     );
   });
 
-  it("records duration with status_code 0 on network error", async () => {
+  test("records duration with status_code 0 on network error", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     const observableFetch = getObservableFetch("openai", testAgent);
@@ -161,15 +176,17 @@ describe("getObservableFetch", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "openai",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         status_code: "0",
       },
       expect.any(Number),
     );
   });
 
-  it("records tokens for Anthropic response format", async () => {
+  test("records tokens for Anthropic response format", async () => {
     const mockResponse = {
       ok: true,
       status: 200,
@@ -190,27 +207,31 @@ describe("getObservableFetch", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         type: "input",
-      },
+      }),
       200,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "anthropic",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         type: "output",
-      },
+      }),
       75,
     );
   });
 
-  it("calls original fetch with correct arguments and returns response", async () => {
+  test("calls original fetch with correct arguments and returns response", async () => {
     const mockResponse = {
       ok: true,
       status: 200,
@@ -231,7 +252,7 @@ describe("getObservableFetch", () => {
     expect(result).toBe(mockResponse);
   });
 
-  it("propagates errors from original fetch", async () => {
+  test("propagates errors from original fetch", async () => {
     const testError = new Error("Fetch failed");
     globalThis.fetch = vi.fn().mockRejectedValue(testError);
 
@@ -262,17 +283,14 @@ describe("getObservableGenAI", () => {
 
   let testAgent: Agent;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
-    testAgent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    testAgent = await makeAgent();
     // Initialize metrics so the observable GenAI can record metrics
     initializeMetrics([]);
   });
 
-  it("records duration and tokens on successful Gemini request", async () => {
+  test("records duration and tokens on successful Gemini request", async () => {
     const mockGenAI = getGenAIMock({
       usageMetadata: {
         promptTokenCount: 150,
@@ -288,35 +306,41 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         status_code: "200",
       },
       expect.any(Number),
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         type: "input",
-      },
+      }),
       150,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         type: "output",
-      },
+      }),
       80,
     );
   });
 
-  it("records duration with HTTP status on Gemini error", async () => {
+  test("records duration with HTTP status on Gemini error", async () => {
     const errorWithStatus = new Error("Bad request");
     Object.assign(errorWithStatus, { status: 400 });
 
@@ -331,15 +355,17 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         status_code: "400",
       },
       expect.any(Number),
     );
   });
 
-  it("records duration with status_code 0 on Gemini network error", async () => {
+  test("records duration with status_code 0 on Gemini network error", async () => {
     const mockGenAI = getGenAIMock(new Error("Network timeout"));
 
     const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
@@ -352,15 +378,17 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent_id: testAgent.id,
-        agent_name: testAgent.name,
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
         status_code: "0",
       },
       expect.any(Number),
     );
   });
 
-  it("calls original generateContent with correct arguments and returns result", async () => {
+  test("calls original generateContent with correct arguments and returns result", async () => {
     const mockResult = {
       usageMetadata: {
         promptTokenCount: 100,
@@ -389,7 +417,7 @@ describe("getObservableGenAI", () => {
     expect(result).toBe(mockResult);
   });
 
-  it("propagates errors from original generateContent", async () => {
+  test("propagates errors from original generateContent", async () => {
     const testError = new Error("Gemini API failed");
     Object.assign(testError, { status: 500 });
 
@@ -417,7 +445,7 @@ describe("initializeMetrics", () => {
     vi.clearAllMocks();
   });
 
-  it("skips reinitialization when label keys haven't changed", () => {
+  test("skips reinitialization when label keys haven't changed", () => {
     initializeMetrics(["environment", "team", "region"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -426,7 +454,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
   });
 
-  it("reinitializes metrics when label keys are added", () => {
+  test("reinitializes metrics when label keys are added", () => {
     initializeMetrics(["environment", "team"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -438,7 +466,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
   });
 
-  it("reinitializes metrics when label keys are removed", () => {
+  test("reinitializes metrics when label keys are removed", () => {
     initializeMetrics(["environment", "team", "region"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -450,7 +478,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
   });
 
-  it("reinitializes metrics when label keys are changed", () => {
+  test("reinitializes metrics when label keys are changed", () => {
     initializeMetrics(["environment", "team"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -462,7 +490,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
   });
 
-  it("doesn't reinit if keys with special characters didn't change", () => {
+  test("doesn't reinit if keys with special characters didn't change", () => {
     initializeMetrics(["env-name", "team.id", "region@aws"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -471,12 +499,377 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
   });
 
-  it("doesn't reinit if keys are the same but in different order", () => {
+  test("doesn't reinit if keys are the same but in different order", () => {
     initializeMetrics(["team", "environment", "region"]);
     registerRemoveSingleMetric.mockClear();
 
     initializeMetrics(["region", "team", "environment"]);
 
     expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
+  });
+});
+
+describe("reportLLMCost", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records cost with model", () => {
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05);
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.05,
+    );
+  });
+
+  test("records cost without model", () => {
+    reportLLMCost("anthropic", testAgent, "unknown", 0.02);
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
+      },
+      0.02,
+    );
+  });
+
+  test("records cost with external agent id", () => {
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "external-123");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-123",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.05,
+    );
+  });
+});
+
+describe("reportLLMTokens with model", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records tokens with model specified", () => {
+    reportLLMTokens("openai", testAgent, { input: 100, output: 50 }, "gpt-4");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "input",
+      },
+      100,
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "output",
+      },
+      50,
+    );
+  });
+
+  test("records tokens with external agent id", () => {
+    reportLLMTokens(
+      "openai",
+      testAgent,
+      { input: 100, output: 50 },
+      "gpt-4",
+      "external-456",
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-456",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "input",
+      },
+      100,
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-456",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "output",
+      },
+      50,
+    );
+  });
+});
+
+describe("reportBlockedTools with model", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records blocked tools with model", () => {
+    reportBlockedTools("openai", testAgent, 3, "gpt-4");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      3,
+    );
+  });
+
+  test("records blocked tools with external agent id", () => {
+    reportBlockedTools("openai", testAgent, 3, "gpt-4", "external-789");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-789",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      3,
+    );
+  });
+});
+
+describe("reportTimeToFirstToken", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records time to first token with model", () => {
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0.5);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.5,
+    );
+  });
+
+  test("records time to first token without model", () => {
+    reportTimeToFirstToken("anthropic", testAgent, undefined, 0.25);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
+      },
+      0.25,
+    );
+  });
+
+  test("skips reporting for invalid TTFT value", () => {
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0);
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", -1);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("records TTFT for different providers", () => {
+    reportTimeToFirstToken("gemini", testAgent, "gemini-pro", 0.3);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "gemini",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gemini-pro",
+      },
+      0.3,
+    );
+  });
+
+  test("records TTFT with external agent id", () => {
+    reportTimeToFirstToken(
+      "openai",
+      testAgent,
+      "gpt-4",
+      0.5,
+      "external-ttft-123",
+    );
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-ttft-123",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.5,
+    );
+  });
+});
+
+describe("reportTokensPerSecond", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records tokens per second with model", () => {
+    // 100 tokens in 2 seconds = 50 tokens/sec
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 2);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      50,
+    );
+  });
+
+  test("records tokens per second without model", () => {
+    // 150 tokens in 3 seconds = 50 tokens/sec
+    reportTokensPerSecond("anthropic", testAgent, undefined, 150, 3);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
+      },
+      50,
+    );
+  });
+
+  test("skips reporting for zero output tokens", () => {
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 0, 2);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("skips reporting for zero duration", () => {
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 0);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("skips reporting for negative duration", () => {
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, -1);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("calculates correct tokens/sec for fast response", () => {
+    // 50 tokens in 0.5 seconds = 100 tokens/sec
+    reportTokensPerSecond("gemini", testAgent, "gemini-pro", 50, 0.5);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "gemini",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gemini-pro",
+      },
+      100,
+    );
+  });
+
+  test("calculates correct tokens/sec for slow response", () => {
+    // 200 tokens in 10 seconds = 20 tokens/sec
+    reportTokensPerSecond("anthropic", testAgent, "claude-3", 200, 10);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: "",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "claude-3",
+      },
+      20,
+    );
+  });
+
+  test("records tokens per second with external agent id", () => {
+    // 100 tokens in 2 seconds = 50 tokens/sec
+    reportTokensPerSecond(
+      "openai",
+      testAgent,
+      "gpt-4",
+      100,
+      2,
+      "external-tps-123",
+    );
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: "external-tps-123",
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      50,
+    );
   });
 });

@@ -1,5 +1,4 @@
 import type { archestraApiTypes } from "@shared";
-import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,51 +11,18 @@ import {
 import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
-import {
-  transformCatalogItemToFormValues,
-  transformFormToApiData,
-} from "./mcp-catalog-form.utils";
+import { transformFormToApiData } from "./mcp-catalog-form.utils";
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
-  onReinstallRequired: (
-    catalogId: string,
-    updatedData: { name?: string; serverUrl?: string },
-  ) => void;
 }
 
-export function EditCatalogDialog({
-  item,
-  onClose,
-  onReinstallRequired,
-}: EditCatalogDialogProps) {
+export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleClose = () => {
     onClose();
-  };
-
-  const requiresReinstall = (values: McpCatalogFormValues): boolean => {
-    if (!item) return false;
-
-    const originalValues = transformCatalogItemToFormValues(item);
-
-    // Name, serverUrl, and authentication changes require reinstall
-    if (values.name !== originalValues.name) return true;
-    if (values.serverUrl !== originalValues.serverUrl) return true;
-    if (values.authMethod !== originalValues.authMethod) return true;
-
-    // Check OAuth config changes (deep comparison)
-    if (
-      JSON.stringify(values.oauthConfig) !==
-      JSON.stringify(originalValues.oauthConfig)
-    ) {
-      return true;
-    }
-
-    return false;
   };
 
   const onSubmit = async (values: McpCatalogFormValues) => {
@@ -70,23 +36,16 @@ export function EditCatalogDialog({
       data: apiData,
     });
 
-    const needsReinstall = requiresReinstall(values);
-
-    // Close the edit dialog first
+    // Close the edit dialog
     handleClose();
 
-    // Then notify parent about reinstall requirement with updated data
-    if (needsReinstall) {
-      onReinstallRequired(item.id, {
-        name: values.name,
-        serverUrl: values.serverUrl,
-      });
-    }
+    // Note: The backend sets reinstallRequired flag on all installations when critical fields change
+    // Users will see "Reinstall Required" button on their installed servers automatically
   };
 
   return (
     <Dialog open={!!item} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit MCP Server</DialogTitle>
           <DialogDescription>
@@ -99,21 +58,18 @@ export function EditCatalogDialog({
             mode="edit"
             initialValues={item}
             onSubmit={onSubmit}
-            submitButtonRef={submitButtonRef}
+            footer={
+              <DialogFooter>
+                <Button variant="outline" onClick={handleClose} type="button">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            }
           />
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} type="button">
-            Cancel
-          </Button>
-          <Button
-            onClick={() => submitButtonRef.current?.click()}
-            disabled={updateMutation.isPending}
-          >
-            {updateMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

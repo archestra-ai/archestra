@@ -18,17 +18,16 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strict": true,
-    "rootDir": "./src",
-    "types": ["node", "vitest/globals"],
+    "types": ["node"],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "*.config.ts"
   ],
   "exclude": [
-    "node_modules",
-    "src/test-setup.ts"
+    "node_modules"
   ]
 }

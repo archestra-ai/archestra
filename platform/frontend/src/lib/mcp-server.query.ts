@@ -5,7 +5,9 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { toast } from "sonner";
+import { authClient } from "./clients/auth/auth-client";
 
 const {
   deleteMcpServer,
@@ -13,18 +15,67 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
-  getAgentAvailableTokens,
   getMcpServerLogs,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
+  hasInstallingServers?: boolean;
+  catalogId?: string;
 }) {
   return useSuspenseQuery({
-    queryKey: ["mcp-servers"],
-    queryFn: async () => (await getMcpServers()).data ?? [],
+    // Include catalogId in queryKey only when provided to maintain cache separation
+    queryKey: params?.catalogId
+      ? ["mcp-servers", { catalogId: params.catalogId }]
+      : ["mcp-servers"],
+    queryFn: async () => {
+      const response = await getMcpServers({
+        query: params?.catalogId ? { catalogId: params.catalogId } : undefined,
+      });
+      return response.data ?? [];
+    },
     initialData: params?.initialData,
+    refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
+}
+
+/**
+ * Get MCP servers grouped by catalogId with current user's credentials first.
+ * Used for credential/installation selection in tool configuration.
+ *
+ * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
+ */
+export function useMcpServersGroupedByCatalog(params?: { catalogId?: string }) {
+  const { data: servers } = useMcpServers({ catalogId: params?.catalogId });
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
+
+  return useMemo(() => {
+    if (!servers) return {};
+
+    // Filter out servers without catalogId
+    const withCatalog = servers.filter(
+      (s): s is typeof s & { catalogId: string } => !!s.catalogId,
+    );
+
+    // Sort: current user's credentials first
+    const sorted = [...withCatalog].sort((a, b) => {
+      const aIsOwner = a.ownerId === currentUserId ? 1 : 0;
+      const bIsOwner = b.ownerId === currentUserId ? 1 : 0;
+      return bIsOwner - aIsOwner;
+    });
+
+    // Group by catalogId
+    return sorted.reduce(
+      (acc, server) => {
+        const key = server.catalogId;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(server);
+        return acc;
+      },
+      {} as Record<string, typeof servers>,
+    );
+  }, [servers, currentUserId]);
 }
 
 export function useInstallMcpServer() {
@@ -35,13 +86,23 @@ export function useInstallMcpServer() {
         dontShowToast?: boolean;
       },
     ) => {
-      const { data: installedServer } = await installMcpServer({ body: data });
-      if (!data.dontShowToast) {
-        toast.success(`Successfully installed ${data.name}`);
+      const { data: installedServer, error } = await installMcpServer({
+        body: data,
+      });
+      if (error) {
+        const msg =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Unknown error";
+        toast.error(`Failed to install ${data.name}: ${msg}`);
       }
-      return installedServer;
+      return { installedServer, dontShowToast: data.dontShowToast };
     },
-    onSuccess: async (installedServer) => {
+    onSuccess: async ({ installedServer, dontShowToast }, variables) => {
+      // Show success toast for remote servers (local servers show toast after async tool fetch completes)
+      if (!dontShowToast && installedServer) {
+        toast.success(`Successfully installed ${variables.name}`);
+      }
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since MCP server installation creates new tools
@@ -54,6 +115,8 @@ export function useInstallMcpServer() {
           queryKey: ["mcp-servers", installedServer.id, "tools"],
         });
       }
+      // Invalidate all chat MCP tools (new tools may be available)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },
     onError: (_error, variables) => {
       toast.error(`Failed to install ${variables.name}`);
@@ -75,124 +138,13 @@ export function useDeleteMcpServer() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate all chat MCP tools (tools are now unavailable)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       toast.success(`Successfully uninstalled ${variables.name}`);
     },
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
-    },
-  });
-}
-
-export function useRevokeUserMcpServerAccess() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      catalogId,
-      userId,
-    }: {
-      catalogId: string;
-      userId: string;
-    }) => {
-      await archestraApiSdk.revokeUserMcpServerAccess({
-        path: { catalogId, userId },
-      });
-    },
-    onSuccess: async () => {
-      // Wait for refetch to complete so UI updates immediately
-      await queryClient.refetchQueries({
-        queryKey: ["mcp-servers"],
-        type: "active",
-      });
-      toast.success("User access revoked successfully");
-    },
-    onError: (error) => {
-      console.error("Error revoking user access:", error);
-      toast.error("Failed to revoke user access");
-    },
-  });
-}
-
-export function useGrantTeamMcpServerAccess() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      catalogId,
-      teamIds,
-      userId,
-    }: {
-      catalogId: string;
-      teamIds: string[];
-      userId?: string;
-    }) => {
-      await archestraApiSdk.grantTeamMcpServerAccess({
-        path: { catalogId },
-        body: { teamIds, userId },
-      });
-    },
-    onSuccess: async () => {
-      // Wait for refetch to complete so UI updates immediately
-      await queryClient.refetchQueries({
-        queryKey: ["mcp-servers"],
-        type: "active",
-      });
-      toast.success("Team access granted successfully");
-    },
-    onError: (error) => {
-      console.error("Error granting team access:", error);
-      toast.error("Failed to grant team access");
-    },
-  });
-}
-
-export function useRevokeTeamMcpServerAccess() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      serverId,
-      teamId,
-    }: {
-      serverId: string;
-      teamId: string;
-    }) => {
-      await archestraApiSdk.revokeTeamMcpServerAccess({
-        path: { id: serverId, teamId },
-      });
-    },
-    onSuccess: async () => {
-      // Wait for refetch to complete so UI updates immediately
-      await queryClient.refetchQueries({
-        queryKey: ["mcp-servers"],
-        type: "active",
-      });
-      toast.success("Team access revoked successfully");
-    },
-    onError: (error) => {
-      console.error("Error revoking team access:", error);
-      toast.error("Failed to revoke team access");
-    },
-  });
-}
-
-export function useRevokeAllTeamsMcpServerAccess() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ catalogId }: { catalogId: string }) => {
-      await archestraApiSdk.revokeAllTeamsMcpServerAccess({
-        path: { catalogId },
-      });
-    },
-    onSuccess: async () => {
-      // Wait for refetch to complete so UI updates immediately
-      await queryClient.refetchQueries({
-        queryKey: ["mcp-servers"],
-        type: "active",
-      });
-      toast.success("Team token revoked successfully");
-    },
-    onError: (error) => {
-      console.error("Error revoking team token:", error);
-      toast.error("Failed to revoke team token");
     },
   });
 }
@@ -236,6 +188,7 @@ export function useMcpServerInstallationStatus(
         toast.success(`Successfully installed server`);
       }
       if (result === "error") {
+        await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
         toast.error("Failed to install server");
       }
       return result;
@@ -253,43 +206,6 @@ export function useMcpServerInstallationStatus(
       );
     },
     enabled: !!installingMcpServerId,
-  });
-}
-
-/**
- * Get MCP servers (tokens) available for use with specific agents' tools.
- * Filters based on team membership and admin status.
- *
- * @param agentIds - Array of agent IDs to filter tokens for. If null/empty, returns all servers.
- * @param catalogId - Optional catalog ID to further filter tokens.
- */
-export function useAgentAvailableTokens(params: {
-  agentIds: string[];
-  catalogId: string;
-}) {
-  const { agentIds, catalogId } = params;
-
-  return useQuery({
-    queryKey: ["agent-available-tokens", { agentIds, catalogId }],
-    queryFn: async () => {
-      if (!agentIds || agentIds.length === 0) {
-        // If no agentIds, fallback to fetching all servers
-        const response = await getMcpServers({});
-        const servers = response.data ?? [];
-        return catalogId
-          ? servers.filter((server) => server.catalogId === catalogId)
-          : servers;
-      }
-
-      // Use dedicated endpoint when agentIds are provided
-      const response = await getAgentAvailableTokens({
-        query: {
-          agentIds: agentIds.join(","),
-          ...(catalogId ? { catalogId } : {}),
-        },
-      });
-      return response.data ?? [];
-    },
   });
 }
 

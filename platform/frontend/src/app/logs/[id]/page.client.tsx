@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
+import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
+import { Savings } from "@/components/savings";
 import {
   Accordion,
   AccordionContent,
@@ -67,7 +69,9 @@ function LogDetail({
   }
 
   const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = initialData?.agents?.find((a) => a.id === interaction.agentId);
+  const agent = initialData?.agents?.find(
+    (a) => a.id === interaction.profileId,
+  );
   const toolsUsed = interaction.getToolNamesUsed();
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();
@@ -82,34 +86,42 @@ function LogDetail({
 
   return (
     <>
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-          <div className="flex items-center gap-4 mb-2">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/logs">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Log Details
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground ml-14">
-            {formatDate({ date: interaction.createdAt })}
-          </p>
+      <div className="mb-6">
+        <div className="flex items-center gap-4 mb-2">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/logs">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">Log Details</h1>
         </div>
+        <p className="text-sm text-muted-foreground ml-14">
+          {formatDate({ date: interaction.createdAt })}
+        </p>
       </div>
-
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
-        <div>
+      <Divider className="my-6" />
+      <div>
+        <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Metadata</h2>
           <div className="border border-border rounded-lg p-6 bg-card">
             <div className="grid grid-cols-2 gap-x-12 gap-y-6">
               <div>
                 <div className="text-sm text-muted-foreground mb-2">
-                  Agent Name
+                  Profile Name
                 </div>
                 <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  External Agent ID
+                </div>
+                <div className="font-medium font-mono">
+                  {dynamicInteraction.externalAgentId || (
+                    <span className="text-muted-foreground font-normal">
+                      Not set
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">
@@ -151,6 +163,49 @@ function LogDetail({
                   <div className="text-muted-foreground">None</div>
                 )}
               </div>
+              {dynamicInteraction.cost && dynamicInteraction.baselineCost && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Cost savings
+                  </div>
+                  <div className="flex gap-3">
+                    <Savings
+                      cost={dynamicInteraction.cost}
+                      baselineCost={dynamicInteraction.baselineCost}
+                      format="percent"
+                      tooltip="always"
+                    />
+                  </div>
+                </div>
+              )}
+              {(() => {
+                const toonSavings = interaction.getToonSavings();
+                if (!toonSavings) return null;
+
+                const percentage =
+                  toonSavings.percentageSaved % 1 === 0
+                    ? toonSavings.percentageSaved.toFixed(0)
+                    : toonSavings.percentageSaved.toFixed(1);
+
+                return (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      TOON Compression Savings
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-green-600 dark:text-green-400 font-medium">
+                        -{percentage}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {toonSavings.savedCharacters.toLocaleString()}{" "}
+                        {toonSavings.savedCharacters === 1 ? "token" : "tokens"}{" "}
+                        saved ({toonSavings.compressedSize.toLocaleString()} /{" "}
+                        {toonSavings.originalSize.toLocaleString()})
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {isDualLlmRelevant && (
                 <div>
                   <div className="text-sm text-muted-foreground mb-2">
@@ -175,7 +230,7 @@ function LogDetail({
           </div>
         </div>
 
-        <div>
+        <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Conversation</h2>
           <div className="border border-border rounded-lg bg-card overflow-hidden">
             <ChatBotDemo
@@ -191,24 +246,57 @@ function LogDetail({
           <Accordion type="single" collapsible defaultValue="response">
             <AccordionItem value="request" className="border rounded-lg mb-2">
               <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                <span className="text-base font-semibold">Raw Request</span>
+                <span className="text-base font-semibold">
+                  Raw Request (Original)
+                </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-x-auto">
-                  <pre className="text-xs">
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                  <pre className="text-xs whitespace-pre-wrap break-words">
                     {JSON.stringify(dynamicInteraction.request, null, 2)}
                   </pre>
                 </div>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="response" className="border rounded-lg">
+            {dynamicInteraction.processedRequest && (
+              <AccordionItem
+                value="processedRequest"
+                className="border rounded-lg mb-2"
+              >
+                <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                  <span className="text-base font-semibold">
+                    Processed Request (Sent to LLM)
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-4">
+                  <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                    <pre className="text-xs whitespace-pre-wrap break-words">
+                      {JSON.stringify(
+                        dynamicInteraction.processedRequest,
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This shows the request after processing (e.g., TOON
+                    conversion, trusted data filtering, etc.)
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+
+            <AccordionItem
+              value="response"
+              className="border rounded-lg !border-b"
+            >
               <AccordionTrigger className="px-6 py-4 hover:no-underline">
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-x-auto">
-                  <pre className="text-xs">
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                  <pre className="text-xs whitespace-pre-wrap break-words">
                     {JSON.stringify(dynamicInteraction.response, null, 2)}
                   </pre>
                 </div>

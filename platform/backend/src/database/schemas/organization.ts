@@ -1,4 +1,4 @@
-import type { OrganizationAppearance } from "@shared";
+import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import {
   boolean,
   pgTable,
@@ -6,6 +6,10 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import type {
+  OrganizationCompressionScope,
+  OrganizationLimitCleanupInterval,
+} from "@/types";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -14,24 +18,25 @@ const organizationsTable = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
-  hasSeededMcpCatalog: boolean("has_seeded_mcp_catalog")
-    .default(false)
-    .notNull(),
-  limitCleanupInterval: varchar("limit_cleanup_interval", {
-    enum: ["1h", "12h", "24h", "1w", "1m"],
-  }).default("1h"),
+  limitCleanupInterval: varchar("limit_cleanup_interval")
+    .$type<OrganizationLimitCleanupInterval>()
+    .default("1h"),
+  onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
-    .$type<OrganizationAppearance["theme"]>()
+    .$type<OrganizationTheme>()
     .notNull()
     .default("cosmic-night"),
   customFont: text("custom_font")
-    .$type<OrganizationAppearance["customFont"]>()
+    .$type<OrganizationCustomFont>()
     .notNull()
     .default("lato"),
-  logoType: text("logo_type")
-    .$type<OrganizationAppearance["logoType"]>()
+  convertToolResultsToToon: boolean("convert_tool_results_to_toon")
     .notNull()
-    .default("default"),
+    .default(true),
+  compressionScope: varchar("compression_scope")
+    .$type<OrganizationCompressionScope>()
+    .notNull()
+    .default("organization"),
 });
 
 export default organizationsTable;

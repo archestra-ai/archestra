@@ -1,164 +1,91 @@
-import { and, eq } from "drizzle-orm";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
-import TokenPriceModel from "@/models/token-price";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import { LimitModel, OptimizationRuleModel, TokenPriceModel } from "@/models";
 import {
+  ApiError,
   CreateLimitSchema,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
+  LimitWithUsageSchema,
   SelectLimitSchema,
   UpdateLimitSchema,
-} from "@/types/limit";
-import { getUserFromRequest } from "@/utils";
-import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
+  UuidIdSchema,
+} from "@/types";
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Get all limits with optional filtering
-   */
   fastify.get(
     "/api/limits",
     {
       schema: {
         operationId: RouteId.GetLimits,
-        description: "Get all limits with optional filtering",
+        description:
+          "Get all limits with optional filtering and per-model usage breakdown",
         tags: ["Limits"],
         querystring: z.object({
           entityType: LimitEntityTypeSchema.optional(),
           entityId: z.string().optional(),
           limitType: LimitTypeSchema.optional(),
         }),
-        response: {
-          200: z.array(SelectLimitSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(LimitWithUsageSchema)),
       },
     },
-    async (request, reply) => {
-      try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        // Cleanup limits if needed before fetching
-        if (user.organizationId) {
-          await cleanupLimitsIfNeeded(user.organizationId);
-        }
-
-        // Ensure all models from interactions have pricing records
-        await TokenPriceModel.ensureAllModelsHavePricing();
-
-        const conditions = [];
-
-        if (request.query.entityType) {
-          conditions.push(
-            eq(schema.limitsTable.entityType, request.query.entityType),
-          );
-        }
-
-        if (request.query.entityId) {
-          conditions.push(
-            eq(schema.limitsTable.entityId, request.query.entityId),
-          );
-        }
-
-        if (request.query.limitType) {
-          conditions.push(
-            eq(schema.limitsTable.limitType, request.query.limitType),
-          );
-        }
-
-        const limits = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(conditions.length > 0 ? and(...conditions) : undefined);
-        return reply.send(limits);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+    async (
+      { query: { entityType, entityId, limitType }, organizationId },
+      reply,
+    ) => {
+      // Cleanup limits if needed before fetching
+      if (organizationId) {
+        await LimitModel.cleanupLimitsIfNeeded(organizationId);
       }
+
+      // Ensure default token prices and optimization rules exist
+      if (organizationId) {
+        await OptimizationRuleModel.ensureDefaultOptimizationRules(
+          organizationId,
+        );
+      }
+
+      // Ensure all models from interactions have pricing records
+      await TokenPriceModel.ensureAllModelsHavePricing();
+
+      const limits = await LimitModel.findAll(entityType, entityId, limitType);
+
+      // Add per-model usage breakdown for token_cost limits
+      const limitsWithUsage = await Promise.all(
+        limits.map(async (limit) => {
+          if (limit.limitType === "token_cost") {
+            const modelUsage = await LimitModel.getModelUsageBreakdown(
+              limit.id,
+            );
+            return { ...limit, modelUsage };
+          }
+          return limit;
+        }),
+      );
+
+      return reply.send(limitsWithUsage);
     },
   );
 
-  /**
-   * Create a new limit (Admin only)
-   */
   fastify.post(
     "/api/limits",
     {
       schema: {
         operationId: RouteId.CreateLimit,
-        description: "Create a new limit (Admin only)",
+        description: "Create a new limit",
         tags: ["Limits"],
         body: CreateLimitSchema,
-        response: {
-          200: SelectLimitSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can create limits",
-              type: "forbidden",
-            },
-          });
-        }
-
-        const [limit] = await db
-          .insert(schema.limitsTable)
-          .values(request.body)
-          .returning();
-
-        return reply.send(limit);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+    async ({ body }, reply) => {
+      return reply.send(await LimitModel.create(body));
     },
   );
 
-  /**
-   * Get a limit by ID
-   */
   fastify.get(
     "/api/limits/:id",
     {
@@ -167,199 +94,68 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a limit by ID",
         tags: ["Limits"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        response: {
-          200: SelectLimitSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const user = await getUserFromRequest(request);
+    async ({ params: { id } }, reply) => {
+      const limit = await LimitModel.findById(id);
 
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const [limit] = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
-
-        if (!limit) {
-          return reply.status(404).send({
-            error: {
-              message: "Limit not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(limit);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!limit) {
+        throw new ApiError(404, "Limit not found");
       }
+
+      return reply.send(limit);
     },
   );
 
-  /**
-   * Update a limit (Admin only)
-   */
-  fastify.put(
+  fastify.patch(
     "/api/limits/:id",
     {
       schema: {
         operationId: RouteId.UpdateLimit,
-        description: "Update a limit (Admin only)",
+        description: "Update a limit",
         tags: ["Limits"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        body: UpdateLimitSchema.omit({ id: true }),
-        response: {
-          200: SelectLimitSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        body: UpdateLimitSchema.partial(),
+        response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const user = await getUserFromRequest(request);
+    async ({ params: { id }, body }, reply) => {
+      const limit = await LimitModel.patch(id, body);
 
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can update limits",
-              type: "forbidden",
-            },
-          });
-        }
-
-        const [limit] = await db
-          .update(schema.limitsTable)
-          .set({ ...request.body, updatedAt: new Date() })
-          .where(eq(schema.limitsTable.id, request.params.id))
-          .returning();
-
-        if (!limit) {
-          return reply.status(404).send({
-            error: {
-              message: "Limit not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(limit);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!limit) {
+        throw new ApiError(404, "Limit not found");
       }
+
+      return reply.send(limit);
     },
   );
 
-  /**
-   * Delete a limit (Admin only)
-   */
   fastify.delete(
     "/api/limits/:id",
     {
       schema: {
         operationId: RouteId.DeleteLimit,
-        description: "Delete a limit (Admin only)",
+        description: "Delete a limit",
         tags: ["Limits"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const user = await getUserFromRequest(request);
+    async ({ params: { id } }, reply) => {
+      const deleted = await LimitModel.delete(id);
 
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete limits",
-              type: "forbidden",
-            },
-          });
-        }
-
-        const result = await db
-          .delete(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
-
-        if (result.rowCount === 0) {
-          return reply.status(404).send({
-            error: {
-              message: "Limit not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!deleted) {
+        throw new ApiError(404, "Limit not found");
       }
+
+      return reply.send({ success: true });
     },
   );
 };

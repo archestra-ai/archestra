@@ -1,14 +1,21 @@
 "use client";
 
 import { AuthUIProvider } from "@daveyplate/better-auth-ui";
-import { EMAIL_PLACEHOLDER, PASSWORD_PLACEHOLDER } from "@shared";
+import {
+  EDITOR_ROLE_NAME,
+  EMAIL_PLACEHOLDER,
+  PASSWORD_PLACEHOLDER,
+} from "@shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useCustomRoles } from "@/lib/role.query";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { data: customRoles } = useCustomRoles();
+
   return (
     <AuthUIProvider
       authClient={authClient}
@@ -20,6 +27,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       Link={Link}
       organization={{
         logo: true,
+        /**
+         * NOTE: interesting.. this would allow us to tie an API key to the org, or a user, just
+         * by setting this to true.. would need to test though..
+         */
+        // apiKey: true,
+        customRoles: [
+          { role: EDITOR_ROLE_NAME, label: "Editor" },
+          ...(customRoles || []).map(({ role, name }) => ({
+            role,
+            label: name,
+          })),
+        ],
       }}
       localization={{
         EMAIL_PLACEHOLDER,

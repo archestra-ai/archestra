@@ -47,7 +47,28 @@ export function useMcpRegistryServersInfinite(
   });
 }
 
-// Fetch available categories
+export function useMcpRegistryServer(serverName: string | null) {
+  return useQuery({
+    queryKey: ["archestra-catalog", "server-details", serverName],
+    queryFn: async (): Promise<
+      archestraCatalogTypes.GetMcpServerResponses[200] | null
+    > => {
+      if (!serverName) {
+        return null;
+      }
+      const response = await archestraCatalogSdk.getMcpServer({
+        path: {
+          name: serverName,
+        },
+      });
+      if (!response.data) {
+        return null;
+      }
+      return response.data;
+    },
+  });
+}
+
 export function useMcpServerCategories() {
   return useQuery({
     queryKey: ["archestra-catalog", "categories"],

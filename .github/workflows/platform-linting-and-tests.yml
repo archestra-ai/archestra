@@ -7,14 +7,57 @@ on:
         description: "Whether to force the checks to succeed"
         required: false
         type: boolean
+      is-release-please-pr:
+        description: "Whether this is a release-please PR (enables auto-commit of codegen changes)"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: true
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
 
 jobs:
+  paths-filter:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mcp-server-base-image: ${{ steps.filter.outputs.mcp-server-base-image }}
+    steps:
+      - name: Checkout repository
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Filter paths
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            mcp-server-base-image:
+              - 'platform/mcp_server_docker_image/**'
+              - '.github/workflows/build-base-mcp-server-docker-image.yml'
+
   platform-linting-and-tests:
     name: Platform Linting and Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -39,13 +82,19 @@ jobs:
 
   platform-e2e-tests:
     name: Platform e2e Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
+          # Persist credentials for release-please PRs to allow auto-committing codegen changes
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked] -- persist-credentials is conditionally true only for release-please PRs
+          # For release-please PRs, checkout the actual PR branch (not the merge commit)
+          # to avoid detached HEAD state which would cause git push to fail
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -53,46 +102,147 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Setup Blacksmith Builder
+      - name: Setup environment variables
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        working-directory: ./platform
+        run: cp .env.example .env
 
-      - name: Build Docker image
+      - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/setup-archestra-platform
         with:
-          context: ./platform
-          file: ./platform/Dockerfile
-          push: false
-          load: true
-          tags: archestra/platform:ci-test
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          build-platform-image: "true"
+          platform-image-tag: archestra/platform:ci-test
+          platform-context: ./platform
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Start platform with docker compose
+      # Check migration consistency using drizzle-kit check
+      # https://orm.drizzle.team/docs/drizzle-kit-check
+      # The drizzle-kit check command lets you check consistency of your generated SQL migrations history
+      - name: Check drizzle-kit migrations consistency
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
+        working-directory: ./platform/backend
+        run: pnpm drizzle-kit check
 
-      - name: Get Playwright version
+      - name: Check for codegen'd changes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
+        working-directory: ./platform
+        env:
+          IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
         run: |
-          echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
+          pnpm codegen
+          # Ensure generated files are properly formatted and linted
+          pnpm lint:fix
 
-      - name: Cache Playwright binaries and dependencies
+          # Check both unstaged and staged changes
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            # For release-please PRs, auto-commit the codegen changes
+            # This is needed because release-please bumps the version in package.json,
+            # which causes generated files (like docs/openapi.json) to be out of date
+            if [ "$IS_RELEASE_PLEASE_PR" == "true" ]; then
+              echo "📦 Release-please PR with codegen changes detected. Auto-committing..."
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              # Add all changes from repo root (docs/openapi.json is outside platform/)
+              git -C "$GITHUB_WORKSPACE" add -A
+              git commit -m "chore: update generated files for release"
+              git push
+              echo "✅ Changes committed. Workflow will be re-triggered."
+              # Exit early - the push triggers a new workflow run with the updated code
+              exit 0
+            else
+              echo "::error::Generated code is not up to date. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the changes."
+              exit 1
+            fi
+          else
+            echo "Generated code is up to date"
+            echo "codegen-changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify no pending database migrations
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
+        id: db-migration-check
+        working-directory: ./platform
+        run: |
+          # Run db generate with timeout to prevent hanging on interactive prompts
+          set +e  # Don't exit on command failure
 
-      - name: Install Playwright browsers
+          echo "Running pnpm db:generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
+
+          # Use timeout and expect no interaction - if it hangs, it means there's a pending migration which requires
+          # user input to continue
+          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
+            # Command completed successfully within timeout
+            output=$(cat /tmp/db_generate_output.txt)
+            echo "Output from pnpm db:generate:"
+            echo "$output"
+
+            # Check if there's an interactive prompt in the output (shouldn't happen if it completed)
+            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
+              echo "❌ Interactive prompt detected - there are pending database migrations that need to be committed"
+              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
+              exit 1
+            fi
+          else
+            # Command timed out or failed
+            exit_code=$?
+            output=$(cat /tmp/db_generate_output.txt 2>/dev/null || echo "No output captured")
+
+            echo "Output from pnpm db:generate (before timeout/failure):"
+            echo "$output"
+
+            if [ $exit_code -eq 124 ]; then
+              # Timeout occurred - likely waiting for interactive input
+              echo "❌ Command timed out - likely waiting for interactive input about pending database migrations"
+              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
+            else
+              echo "❌ pnpm db:generate failed with exit code $exit_code"
+            fi
+            exit 1
+          fi
+
+          set -e  # Re-enable exit on error
+
+          # Check both unstaged and staged changes
+          # If db:generate produced new migration files, it means the PR is missing migrations
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            echo "::error::Database schema has changed but migrations are missing. Please run 'pnpm db:generate' locally and commit the resulting migration files."
+            git diff --name-only
+            git diff --cached --name-only
+            exit 1
+          else
+            echo "✅ No new migration files were generated - schema is in sync with migrations"
+          fi
+
+      # Resolve Playwright version for the container used to run e2e tests
+      - name: Resolve Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
+        run: |
+          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
+          echo "Resolved Playwright version: $VERSION"
+          echo "PLAYWRIGHT_VERSION=$VERSION" >> $GITHUB_ENV
 
+      # Run E2E tests inside the official Playwright container
+      # This eliminates the need for manual Playwright browser installation and caching
+      # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
-        run: pnpm test:e2e
+        run: |
+          docker run --rm \
+            --network host \
+            --ipc=host \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work/platform \
+            -e CI=true \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e"
 
       - name: Upload Playwright report
         if: failure()
@@ -102,31 +252,97 @@ jobs:
           path: platform/e2e-tests/playwright-report/
           retention-days: 30
 
-      - name: Show container logs on failure
+      - name: Show logs on failure
         if: failure()
         run: |
-          echo "=== Container Status ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -o wide
 
-          echo "=== Platform Container Logs ==="
-          docker logs archestra-platform-test
+          echo "=== Kubernetes Services ==="
+          kubectl get services
 
-          echo "=== PostgreSQL Container Logs ==="
-          docker logs archestra-platform-test-postgresql
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
 
-          echo "=== WireMock Container Logs ==="
-          docker logs archestra-platform-test-wiremock
+          echo "=== PostgreSQL Logs ==="
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
 
-          echo "=== All Container Stats ==="
+          echo "=== WireMock Logs ==="
+          kubectl logs -l app=e2e-tests-wiremock --tail=200
 
-          docker stats --no-stream
+          echo "=== Keycloak Logs ==="
+          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200
+
+          echo "=== Describe Archestra Platform Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=archestra-platform
+
+          echo "=== Describe PostgreSQL Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=postgresql
+
+  platform-docker-image-scanning:
+    name: Platform Docker Image Scanning
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+
+      - name: Build Docker image
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/build-platform-docker-image
+        with:
+          context: ./platform
+          load: "true"
+          tags: archestra/platform:ci-test
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      # Run docker scout to check for vulnerabilities and recommendations
+      # https://github.com/docker/scout-action
+      #
+      # Branch ruleset has been configured to block PRs with critical or high vulnerabilities.
+      # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
+      #
+      # NOTE: This step is skipped for PRs from forks because GitHub doesn't expose
+      # repository secrets to workflows triggered by fork PRs (for security reasons).
+      # Docker Scout requires Docker Hub authentication to run.
+      - name: Docker Scout
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
+        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
+        with:
+          command: cves,recommendations,compare
+          image: archestra/platform:ci-test
+          to: docker.io/archestra/platform:latest
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          ignore-unchanged: true
+          only-severities: critical,high
+          write-comment: false
+          sarif-file: sarif.output.json
+
+      # Upload SARIF result to GitHub Code Scanning
+      # https://github.com/docker/scout-action?tab=readme-ov-file#analyze-vulnerabilities-and-upload-report-to-github-code-scanning
+      #
+      # NOTE: Skipped for fork PRs since Docker Scout step is skipped (no SARIF file generated).
+      - name: Upload SARIF result
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          sarif_file: sarif.output.json
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     defaults:
       run:
-        working-directory: ./platform/helm
+        working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -150,3 +366,17 @@ jobs:
         # and helm package explicitly checks this
         run: |
           helm package . --version v0.0.1 --app-version v0.0.1
+
+  # Test that the MCP server base Docker image builds successfully
+  # Only runs when relevant files are changed
+  mcp-server-base-image-build:
+    name: MCP Server Base Image Build
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.mcp-server-base-image == 'true' }}
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
+    with:
+      push_to_gcr: false
+      version: test

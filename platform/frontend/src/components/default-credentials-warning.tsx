@@ -105,7 +105,7 @@ export function DefaultCredentialsWarning({
         </div>
         <p className="mt-1">
           <a
-            href="https://www.archestra.ai/docs/platform-deployment#environment-variables"
+            href="https://archestra.ai/docs/platform-deployment#environment-variables"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center underline"

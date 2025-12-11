@@ -1,16 +1,17 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { InteractionModel } from "@/models";
 import {
+  ApiError,
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   PaginationQuerySchema,
-  RouteId,
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -22,55 +23,111 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Interaction"],
         querystring: z
           .object({
-            agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
+            profileId: UuidIdSchema.optional().describe(
+              "Filter by profile ID (internal Archestra profile)",
+            ),
+            externalAgentId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by external agent ID (from X-Archestra-Agent-Id header)",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
             createSortingQuerySchema([
               "createdAt",
-              "agentId",
+              "profileId",
+              "externalAgentId",
               "model",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectInteractionSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectInteractionSchema),
+        ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { agentId, limit, offset, sortBy, sortDirection } = request.query;
+    async (
+      {
+        query: {
+          profileId,
+          externalAgentId,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
+        user,
+        headers,
+      },
+      reply,
+    ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
-      if (agentId) {
-        const result =
-          await InteractionModel.getAllInteractionsForAgentPaginated(
-            agentId,
-            pagination,
-            sorting,
-          );
-        return reply.send(result);
-      }
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      fastify.log.info(
+        {
+          userId: user.id,
+          email: user.email,
+          isAgentAdmin,
+          profileId,
+          externalAgentId,
+          pagination,
+          sorting,
+        },
+        "GetInteractions request",
+      );
 
       const result = await InteractionModel.findAllPaginated(
         pagination,
         sorting,
         user.id,
-        user.isAdmin,
+        isAgentAdmin,
+        { profileId, externalAgentId },
       );
+
+      fastify.log.info(
+        {
+          resultCount: result.data.length,
+          total: result.pagination.total,
+        },
+        "GetInteractions result",
+      );
+
       return reply.send(result);
+    },
+  );
+
+  // Note: This specific route must come before the :interactionId param route
+  // to prevent Fastify from matching "external-agent-ids" as an interactionId
+  fastify.get(
+    "/api/interactions/external-agent-ids",
+    {
+      schema: {
+        operationId: RouteId.GetUniqueExternalAgentIds,
+        description:
+          "Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)",
+        tags: ["Interaction"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
+        user.id,
+        isAgentAdmin,
+      );
+
+      return reply.send(externalAgentIds);
     },
   );
 
@@ -84,38 +141,23 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           interactionId: UuidIdSchema,
         }),
-        response: {
-          200: SelectInteractionSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInteractionSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
+    async ({ params: { interactionId }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
       const interaction = await InteractionModel.findById(
-        request.params.interactionId,
+        interactionId,
         user.id,
-        user.isAdmin,
+        isAgentAdmin,
       );
 
       if (!interaction) {
-        return reply.status(404).send({
-          error: {
-            message: "Interaction not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Interaction not found");
       }
 
       return reply.send(interaction);

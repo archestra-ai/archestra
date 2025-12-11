@@ -1,17 +1,29 @@
-import { jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  jsonb,
+  pgTable,
+  timestamp,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
+import type { SecretValue } from "@/types";
 
-/**
- * Secrets table - stores sensitive credentials for MCP servers
- *
- * The secret column stores authentication data in flexible JSON format:
- * - For OAuth: { "access_token": "...", "refresh_token": "...", "expires_in": ..., "token_type": "Bearer" }
- * - For Personal Access Tokens: { "access_token": "token_value" }
- *
- * Note: We use "access_token" consistently for both OAuth and PAT tokens to simplify the code
- */
 const secretTable = pgTable("secret", {
   id: uuid("id").primaryKey().defaultRandom(),
-  secret: jsonb("secret").notNull().default({}),
+  /** Human-readable name to identify the secret in external storage */
+  name: varchar("name", { length: 256 }).notNull().default("secret"),
+  /**
+   * Stores secret data. Format depends on storage type:
+   * - For DB-stored secrets (isVault=false, isByosVault=false): { "access_token": "actual_value", ... }
+   * - For Archestra-managed Vault (isVault=true): references resolved via Vault path
+   * - For BYOS Vault (isByosVault=true): { "access_token": "vault/path#key_name", ... }
+   *   where the value is a reference in "path#key" format
+   */
+  secret: jsonb("secret").$type<SecretValue>().notNull().default({}),
+  /** When true, secret is stored in Archestra-managed Vault */
+  isVault: boolean("is_vault").notNull().default(false),
+  /** When true, secret field contains BYOS Vault path#key references that need resolution */
+  isByosVault: boolean("is_byos_vault").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

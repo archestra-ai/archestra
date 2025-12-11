@@ -1,11 +1,14 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { isEqual, omitBy } from "lodash-es";
 import { z } from "zod";
-import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import logger from "@/logging";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
-  ErrorResponseSchema,
+  ApiError,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
   InsertInternalMcpCatalogSchema,
-  RouteId,
   SelectInternalMcpCatalogSchema,
   UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
@@ -19,25 +22,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
-        response: {
-          200: z.array(SelectInternalMcpCatalogSchema),
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(SelectInternalMcpCatalogSchema),
+        ),
       },
     },
     async (_request, reply) => {
-      try {
-        return reply.send(await InternalMcpCatalogModel.findAll());
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      // Don't expand secrets for list view
+      return reply.send(
+        await InternalMcpCatalogModel.findAll({ expandSecrets: false }),
+      );
     },
   );
 
@@ -48,30 +42,134 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateInternalMcpCatalogItem,
         description: "Create a new Internal MCP catalog item",
         tags: ["MCP Catalog"],
-        body: InsertInternalMcpCatalogSchema.omit({
-          id: true,
-          createdAt: true,
-          updatedAt: true,
+        body: InsertInternalMcpCatalogSchema.extend({
+          // BYOS: External Vault path for OAuth client secret
+          oauthClientSecretVaultPath: z.string().optional(),
+          // BYOS: External Vault key for OAuth client secret
+          oauthClientSecretVaultKey: z.string().optional(),
+          // BYOS: External Vault path for local config secret env vars
+          localConfigVaultPath: z.string().optional(),
+          // BYOS: External Vault key for local config secret env vars
+          localConfigVaultKey: z.string().optional(),
         }),
-        response: {
-          200: SelectInternalMcpCatalogSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        return reply.send(await InternalMcpCatalogModel.create(request.body));
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+    async ({ body }, reply) => {
+      const {
+        oauthClientSecretVaultPath,
+        oauthClientSecretVaultKey,
+        localConfigVaultPath,
+        localConfigVaultKey,
+        ...restBody
+      } = body;
+      let clientSecretId: string | undefined;
+      let localConfigSecretId: string | undefined;
+
+      // Handle OAuth client secret - either via BYOS or direct value
+      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
+        // BYOS flow for OAuth client secret
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+          );
+        }
+
+        // Store as { client_secret: "path#key" } format
+        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { client_secret: vaultReference },
+          `${restBody.name}-oauth-client-secret-vault`,
+        );
+        clientSecretId = secret.id;
+        restBody.clientSecretId = clientSecretId;
+
+        // Remove client_secret from oauthConfig if present
+        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+          delete restBody.oauthConfig.client_secret;
+        }
+
+        logger.info(
+          "Created Readonly Vault external vault secret reference for OAuth client secret",
+        );
+      } else if (
+        restBody.oauthConfig &&
+        "client_secret" in restBody.oauthConfig
+      ) {
+        // Direct client_secret value
+        const clientSecret = restBody.oauthConfig.client_secret;
+        const secret = await secretManager.createSecret(
+          { client_secret: clientSecret },
+          `${restBody.name}-oauth-client-secret`,
+        );
+        clientSecretId = secret.id;
+
+        restBody.clientSecretId = clientSecretId;
+        delete restBody.oauthConfig.client_secret;
       }
+
+      // Handle local config secrets - either via Readonly Vault or direct values
+      if (localConfigVaultPath && localConfigVaultKey) {
+        // Readonly Vault flow for local config secrets
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+          );
+        }
+
+        // Store as { vaultKey: "path#vaultKey" } format
+        // The vault key becomes both the Archestra key and references itself in the vault
+        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { [localConfigVaultKey]: vaultReference },
+          `${restBody.name}-local-config-env-vault`,
+        );
+        localConfigSecretId = secret.id;
+        restBody.localConfigSecretId = localConfigSecretId;
+
+        // Remove values from secret env vars in catalog template
+        if (restBody.localConfig?.environment) {
+          for (const envVar of restBody.localConfig.environment) {
+            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+              delete envVar.value;
+            }
+          }
+        }
+
+        logger.info(
+          "Created Readonly Vault external vault secret reference for local config secrets",
+        );
+      } else if (restBody.localConfig?.environment) {
+        // Extract secret env vars from localConfig.environment
+        const secretEnvVars: Record<string, string> = {};
+        for (const envVar of restBody.localConfig.environment) {
+          if (
+            envVar.type === "secret" &&
+            envVar.value &&
+            !envVar.promptOnInstallation
+          ) {
+            secretEnvVars[envVar.key] = envVar.value;
+            delete envVar.value; // Remove value from catalog template
+          }
+        }
+
+        // Store secret env vars if any exist
+        if (Object.keys(secretEnvVars).length > 0) {
+          const secret = await secretManager.createSecret(
+            secretEnvVars,
+            `${restBody.name}-local-config-env`,
+          );
+          localConfigSecretId = secret.id;
+          restBody.localConfigSecretId = localConfigSecretId;
+        }
+      }
+
+      const catalogItem = await InternalMcpCatalogModel.create(restBody);
+      return reply.send(catalogItem);
     },
   );
 
@@ -85,39 +183,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectInternalMcpCatalogSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const catalogItem = await InternalMcpCatalogModel.findById(
-          request.params.id,
-        );
+    async ({ params: { id } }, reply) => {
+      const catalogItem = await InternalMcpCatalogModel.findById(id);
 
-        if (!catalogItem) {
-          return reply.status(404).send({
-            error: {
-              message: "Catalog item not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(catalogItem);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
       }
+
+      return reply.send(catalogItem);
     },
   );
 
@@ -131,102 +207,189 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateInternalMcpCatalogSchema.omit({
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-        }).partial(),
-        response: {
-          200: SelectInternalMcpCatalogSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        body: UpdateInternalMcpCatalogSchema.partial().extend({
+          // BYOS: External Vault path for OAuth client secret
+          oauthClientSecretVaultPath: z.string().optional(),
+          // BYOS: External Vault key for OAuth client secret
+          oauthClientSecretVaultKey: z.string().optional(),
+          // BYOS: External Vault path for local config secret env vars
+          localConfigVaultPath: z.string().optional(),
+          // BYOS: External Vault key for local config secret env vars
+          localConfigVaultKey: z.string().optional(),
+        }),
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        // Get the original catalog item to check if name or serverUrl changed
-        const originalCatalogItem = await InternalMcpCatalogModel.findById(
-          request.params.id,
-        );
+    async ({ params: { id }, body }, reply) => {
+      const {
+        oauthClientSecretVaultPath,
+        oauthClientSecretVaultKey,
+        localConfigVaultPath,
+        localConfigVaultKey,
+        ...restBody
+      } = body;
 
-        if (!originalCatalogItem) {
-          return reply.status(404).send({
-            error: {
-              message: "Catalog item not found",
-              type: "not_found",
-            },
-          });
+      // Get the original catalog item to check if name or serverUrl changed
+      const originalCatalogItem = await InternalMcpCatalogModel.findById(id);
+
+      if (!originalCatalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      let clientSecretId = originalCatalogItem.clientSecretId;
+      let localConfigSecretId = originalCatalogItem.localConfigSecretId;
+
+      // Handle OAuth client secret - either via Readonly Vault or direct value
+      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
+        // Readonly Vault flow for OAuth client secret
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+          );
         }
 
-        // Update the catalog item
-        const catalogItem = await InternalMcpCatalogModel.update(
-          request.params.id,
-          request.body,
-        );
-
-        if (!catalogItem) {
-          return reply.status(404).send({
-            error: {
-              message: "Catalog item not found",
-              type: "not_found",
-            },
-          });
+        // Delete existing secret if any
+        if (clientSecretId) {
+          await secretManager.deleteSecret(clientSecretId);
         }
 
-        // Check if name, serverUrl, or authentication changed
-        const nameChanged =
-          "name" in request.body &&
-          request.body.name !== originalCatalogItem.name;
-        const urlChanged =
-          "serverUrl" in request.body &&
-          request.body.serverUrl !== originalCatalogItem.serverUrl;
+        // Store as { client_secret: "path#key" } format
+        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { client_secret: vaultReference },
+          `${originalCatalogItem.name}-oauth-client-secret-vault`,
+        );
+        clientSecretId = secret.id;
+        restBody.clientSecretId = clientSecretId;
 
-        // For OAuth config, use lodash to normalize and compare
-        // Remove falsy values (null, undefined, empty strings) before comparison
-        const normalizeOAuthConfig = (config: unknown) => {
-          if (!config || typeof config !== "object") return null;
-          return omitBy(
-            config as Record<string, unknown>,
-            (value, key) =>
-              value === null ||
-              value === undefined ||
-              value === "" ||
-              ["name", "description"].includes(key),
+        // Remove client_secret from oauthConfig if present
+        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
+          delete restBody.oauthConfig.client_secret;
+        }
+
+        logger.info(
+          "Created Readonly Vault external vault secret reference for OAuth client secret",
+        );
+      } else if (
+        restBody.oauthConfig &&
+        "client_secret" in restBody.oauthConfig
+      ) {
+        // Direct client_secret value
+        const clientSecret = restBody.oauthConfig.client_secret;
+        if (clientSecretId) {
+          // Update existing secret
+          await secretManager.updateSecret(clientSecretId, {
+            client_secret: clientSecret,
+          });
+        } else {
+          // Create new secret
+          const secret = await secretManager.createSecret(
+            { client_secret: clientSecret },
+            `${originalCatalogItem.name}-oauth-client-secret`,
           );
-        };
+          clientSecretId = secret.id;
+        }
 
-        const oauthConfigChanged =
-          "oauthConfig" in request.body &&
-          !isEqual(
-            normalizeOAuthConfig(request.body.oauthConfig),
-            normalizeOAuthConfig(originalCatalogItem.oauthConfig),
+        restBody.clientSecretId = clientSecretId;
+        delete restBody.oauthConfig.client_secret;
+      }
+
+      // Handle local config secrets - either via Readonly Vault or direct values
+      if (localConfigVaultPath && localConfigVaultKey) {
+        // Readonly Vault flow for local config secrets
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "Readonly Vault is not enabled. " +
+              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
           );
+        }
 
-        // If critical fields changed, mark all installed servers for reinstall
-        if (nameChanged || urlChanged || oauthConfigChanged) {
-          const installedServers = await McpServerModel.findByCatalogId(
-            request.params.id,
-          );
+        // Delete existing secret if any
+        if (localConfigSecretId) {
+          await secretManager.deleteSecret(localConfigSecretId);
+        }
 
-          for (const server of installedServers) {
-            await McpServerModel.update(server.id, {
-              reinstallRequired: true,
-            });
+        // Store as { vaultKey: "path#vaultKey" } format
+        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
+        const secret = await secretManager.createSecret(
+          { [localConfigVaultKey]: vaultReference },
+          `${originalCatalogItem.name}-local-config-env-vault`,
+        );
+        localConfigSecretId = secret.id;
+        restBody.localConfigSecretId = localConfigSecretId;
+
+        // Remove values from secret env vars in catalog template
+        if (restBody.localConfig?.environment) {
+          for (const envVar of restBody.localConfig.environment) {
+            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+              delete envVar.value;
+            }
           }
         }
 
-        return reply.send(catalogItem);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
+        logger.info(
+          "Created Readonly Vault external vault secret reference for local config secrets",
+        );
+      } else if (restBody.localConfig?.environment) {
+        // Extract secret env vars from localConfig.environment
+        const secretEnvVars: Record<string, string> = {};
+
+        for (const envVar of restBody.localConfig.environment) {
+          if (
+            envVar.type === "secret" &&
+            envVar.value &&
+            !envVar.promptOnInstallation
+          ) {
+            secretEnvVars[envVar.key] = envVar.value;
+            delete envVar.value; // Remove value from catalog template
+          }
+        }
+
+        // Store secret env vars if any exist
+        if (Object.keys(secretEnvVars).length > 0) {
+          if (localConfigSecretId) {
+            // Update existing secret
+            await secretManager.updateSecret(
+              localConfigSecretId,
+              secretEnvVars,
+            );
+          } else {
+            // Create new secret
+            const secret = await secretManager.createSecret(
+              secretEnvVars,
+              `${originalCatalogItem.name}-local-config-env`,
+            );
+            localConfigSecretId = secret.id;
+          }
+          restBody.localConfigSecretId = localConfigSecretId;
+        }
+      }
+
+      // Update the catalog item
+      const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Mark all installed servers for reinstall
+      // and delete existing tools so they can be rediscovered
+      const installedServers = await McpServerModel.findByCatalogId(id);
+
+      for (const server of installedServers) {
+        await McpServerModel.update(server.id, {
+          reinstallRequired: true,
         });
       }
+
+      // Delete all tools associated with this catalog id
+      // This ensures tools are rediscovered with updated configuration during reinstall
+      await ToolModel.deleteByCatalogId(id);
+
+      return reply.send(catalogItem);
     },
   );
 
@@ -240,28 +403,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        return reply.send({
-          success: await InternalMcpCatalogModel.delete(request.params.id),
-        });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+    async ({ params: { id } }, reply) => {
+      // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        expandSecrets: false,
+      });
+
+      if (catalogItem?.clientSecretId) {
+        // Delete the associated OAuth secret
+        await secretManager.deleteSecret(catalogItem.clientSecretId);
       }
+
+      if (catalogItem?.localConfigSecretId) {
+        // Delete the associated local config secret
+        await secretManager.deleteSecret(catalogItem.localConfigSecretId);
+      }
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.delete(id),
+      });
     },
   );
 };

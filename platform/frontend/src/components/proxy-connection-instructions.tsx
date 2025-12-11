@@ -152,7 +152,7 @@ export function ProxyConnectionInstructions({
         <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText>{" "}
         environment variable. See{" "}
         <a
-          href="https://www.archestra.ai/docs/platform-deployment#environment-variables"
+          href="https://archestra.ai/docs/platform-deployment#environment-variables"
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-500"

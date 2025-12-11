@@ -1,12 +1,13 @@
-import db, { schema } from "@/database";
+import { vi } from "vitest";
 import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  SecretModel,
   ToolModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
+import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK
@@ -28,15 +29,18 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
-const { mockUsesStreamableHttp, mockGetHttpEndpointUrl } = vi.hoisted(() => ({
-  mockUsesStreamableHttp: vi.fn(),
-  mockGetHttpEndpointUrl: vi.fn(),
-}));
+const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetPod } =
+  vi.hoisted(() => ({
+    mockUsesStreamableHttp: vi.fn(),
+    mockGetHttpEndpointUrl: vi.fn(),
+    mockGetPod: vi.fn(),
+  }));
 
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
+    getPod: mockGetPod,
   },
 }));
 
@@ -51,11 +55,10 @@ describe("McpClient", () => {
     agentId = agent.id;
 
     // Create secret with access token
-    const secret = await SecretModel.create({
-      secret: {
-        access_token: "test-github-token-123",
-      },
-    });
+    const secret = await secretManager.createSecret(
+      { access_token: "test-github-token-123" },
+      "testmcptoken",
+    );
 
     // Create catalog entry for the MCP server
     const catalogItem = await InternalMcpCatalogModel.create({
@@ -81,53 +84,23 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
+    mockGetPod.mockReset();
   });
 
-  describe("executeToolCalls", () => {
-    test("returns empty array when no tool calls provided", async () => {
-      const result = await mcpClient.executeToolCalls([], agentId);
-      expect(result).toEqual([]);
-    });
+  describe("executeToolCall", () => {
+    test("returns error when tool not found for agent", async () => {
+      const toolCall = {
+        id: "call_123",
+        name: "non_mcp_tool",
+        arguments: { param: "value" },
+      };
 
-    test("returns empty array when no MCP tools found for agent", async () => {
-      const toolCalls = [
-        {
-          id: "call_123",
-          name: "non_mcp_tool",
-          arguments: { param: "value" },
-        },
-      ];
-
-      const result = await mcpClient.executeToolCalls(toolCalls, agentId);
-      expect(result).toEqual([]);
-    });
-
-    test("skips non-MCP tools and only executes MCP tools", async () => {
-      // Create a proxy-sniffed tool (no mcpServerId)
-      await ToolModel.createToolIfNotExists({
-        name: "proxy_tool",
-        description: "Proxy tool",
-        parameters: {},
+      const result = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(result).toMatchObject({
+        id: "call_123",
+        isError: true,
+        error: expect.stringContaining("Tool not found"),
       });
-
-      // Create an MCP tool but don't set it up properly for this test
-      const toolCalls = [
-        {
-          id: "call_1",
-          name: "proxy_tool",
-          arguments: { param: "value" },
-        },
-        {
-          id: "call_2",
-          name: "mcp_tool",
-          arguments: { param: "value" },
-        },
-      ];
-
-      const result = await mcpClient.executeToolCalls(toolCalls, agentId);
-
-      // Should return empty since no MCP tools with GitHub tokens exist
-      expect(result).toEqual([]);
     });
 
     describe("Response Modifier Templates", () => {
@@ -143,6 +116,7 @@ describe("McpClient", () => {
 
         // Assign tool to agent with response modifier
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Modified: {{{lookup (lookup response 0) "text"}}}',
         });
@@ -158,18 +132,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__test_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__test_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: [
             {
@@ -178,6 +149,7 @@ describe("McpClient", () => {
             },
           ],
           isError: false,
+          name: "github-mcp-server__test_tool",
         });
       });
 
@@ -192,6 +164,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             '{{#with (lookup response 0)}}{"formatted": true, "data": "{{{this.text}}}"}{{/with}}',
         });
@@ -201,21 +174,19 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__json_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__json_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: { formatted: true, data: "test data" },
           isError: false,
+          name: "github-mcp-server__json_tool",
         });
       });
 
@@ -229,8 +200,9 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: `{{#with (lookup response 0)}}{{#with (json this.text)}}
-{
+  {
   {{#each this.issues}}
     "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
   {{/each}}
@@ -249,24 +221,22 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__github_issues",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__github_issues",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: {
             "3550499726": "Add authentication for MCP gateways",
             "3550391199": 'ERROR: role "postgres" already exists',
           },
           isError: false,
+          name: "github-mcp-server__github_issues",
         });
       });
 
@@ -280,6 +250,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: "{{{json response}}}",
         });
 
@@ -291,18 +262,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__content_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__content_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]?.content).toEqual([
+        expect(result?.content).toEqual([
           { type: "text", text: "Line 1" },
           { type: "text", text: "Line 2" },
         ]);
@@ -319,6 +287,7 @@ describe("McpClient", () => {
 
         // Invalid Handlebars template
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: "{{#invalid",
         });
 
@@ -328,22 +297,21 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__bad_template",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__bad_template",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Should fall back to original content when template fails
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: originalContent,
           isError: false,
+          name: "github-mcp-server__bad_template",
         });
       });
 
@@ -357,6 +325,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Type: {{lookup (lookup response 0) "type"}}',
         });
@@ -367,18 +336,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__image_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__image_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]?.content).toEqual([
+        expect(result?.content).toEqual([
           { type: "text", text: "Type: image" },
         ]);
       });
@@ -394,6 +360,7 @@ describe("McpClient", () => {
 
         // Assign tool without response modifier template
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: null,
         });
 
@@ -403,21 +370,19 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__no_template",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__no_template",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: originalContent,
           isError: false,
+          name: "github-mcp-server__no_template",
         });
       });
 
@@ -440,11 +405,13 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Template 1: {{lookup (lookup response 0) "text"}}',
         });
 
         await AgentToolModel.create(agentId, tool2.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Template 2: {{lookup (lookup response 0) "text"}}',
         });
@@ -459,31 +426,32 @@ describe("McpClient", () => {
             isError: false,
           });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__tool1",
-            arguments: {},
-          },
-          {
-            id: "call_2",
-            name: "github-mcp-server__tool2",
-            arguments: {},
-          },
-        ];
+        const toolCall1 = {
+          id: "call_1",
+          name: "github-mcp-server__tool1",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const toolCall2 = {
+          id: "call_2",
+          name: "github-mcp-server__tool2",
+          arguments: {},
+        };
 
-        expect(results).toHaveLength(2);
-        expect(results[0]).toEqual({
+        const result1 = await mcpClient.executeToolCall(toolCall1, agentId);
+        const result2 = await mcpClient.executeToolCall(toolCall2, agentId);
+
+        expect(result1).toEqual({
           id: "call_1",
           content: [{ type: "text", text: "Template 1: Response 1" }],
           isError: false,
+          name: "github-mcp-server__tool1",
         });
-        expect(results[1]).toEqual({
+        expect(result2).toEqual({
           id: "call_2",
           content: [{ type: "text", text: "Template 2: Response 2" }],
           isError: false,
+          name: "github-mcp-server__tool2",
         });
       });
     });
@@ -492,14 +460,10 @@ describe("McpClient", () => {
       let localMcpServerId: string;
       let localCatalogId: string;
 
-      beforeEach(async () => {
+      beforeEach(async ({ makeUser }) => {
         // Create test user for local MCP servers
-        const testUserId = "test-user-id";
-        await db.insert(schema.usersTable).values({
-          id: testUserId,
-          name: "Test User",
-          email: "test@example.com",
-          emailVerified: true,
+        const testUser = await makeUser({
+          email: "test-local-mcp@example.com",
         });
 
         // Create catalog entry for local streamable-http server
@@ -524,7 +488,7 @@ describe("McpClient", () => {
           name: "local-streamable-http-server",
           catalogId: localCatalogId,
           serverType: "local",
-          userId: testUserId,
+          userId: testUser.id,
         });
         localMcpServerId = localMcpServer.id;
 
@@ -545,7 +509,9 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager responses
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -557,15 +523,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__test_tool",
-            arguments: { input: "test" },
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__test_tool",
+          arguments: { input: "test" },
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify HTTP transport was detected
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -578,11 +542,12 @@ describe("McpClient", () => {
         });
 
         // Verify result
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: [{ type: "text", text: "Success from HTTP transport" }],
           isError: false,
+          name: "local-streamable-http-server__test_tool",
         });
       });
 
@@ -596,29 +561,30 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager responses - no endpoint URL
         mockUsesStreamableHttp.mockResolvedValue(true);
         mockGetHttpEndpointUrl.mockReturnValue(undefined);
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__test_tool",
-            arguments: { input: "test" },
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__test_tool",
+          arguments: { input: "test" },
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify error result
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: null,
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
+          name: "local-streamable-http-server__test_tool",
         });
       });
 
@@ -633,6 +599,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
           responseModifierTemplate:
             'Result: {{{lookup (lookup response 0) "text"}}}',
         });
@@ -647,76 +614,78 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__formatted_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__formatted_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify template was applied
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: [{ type: "text", text: "Result: Original content" }],
           isError: false,
+          name: "local-streamable-http-server__formatted_tool",
         });
       });
 
-      test("uses stdio transport when streamable-http is false", async () => {
+      test("uses K8s attach transport when streamable-http is false", async () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
           name: "local-streamable-http-server__stdio_tool",
-          description: "Tool using stdio",
+          description: "Tool using K8s attach",
           parameters: {},
           catalogId: localCatalogId,
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
-
-        // Mock runtime manager to indicate stdio transport
-        mockUsesStreamableHttp.mockResolvedValue(false);
-
-        // Mock fetch for stdio proxy endpoint
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({
-            result: {
-              content: [{ type: "text", text: "Success from stdio" }],
-              isError: false,
-            },
-          }),
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__stdio_tool",
-            arguments: { input: "test" },
-          },
-        ];
+        // Mock runtime manager to indicate stdio transport (not HTTP)
+        mockUsesStreamableHttp.mockResolvedValue(false);
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        // Mock K8sPod instance
+        const mockK8sPod = {
+          k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
+          k8sNamespace: "default",
+          k8sPodName: "mcp-test-pod",
+        };
+        mockGetPod.mockReturnValue(mockK8sPod);
 
-        // Verify stdio proxy was used (not HTTP transport)
+        // Mock the tool call response
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Success from K8s attach" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__stdio_tool",
+          arguments: { input: "test" },
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
         expect(mockGetHttpEndpointUrl).not.toHaveBeenCalled();
-        expect(mockCallTool).not.toHaveBeenCalled();
+        expect(mockGetPod).toHaveBeenCalledWith(localMcpServerId);
 
-        // Verify fetch was called with proxy endpoint
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining("/mcp_proxy/"),
-          expect.any(Object),
-        );
+        // Verify MCP SDK client was used
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "stdio_tool",
+          arguments: { input: "test" },
+        });
 
         // Verify result
-        expect(results).toHaveLength(1);
-        expect(results[0]).toMatchObject({
+        expect(result).toMatchObject({
           id: "call_1",
+          content: [{ type: "text", text: "Success from K8s attach" }],
           isError: false,
         });
       });

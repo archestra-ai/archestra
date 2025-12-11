@@ -10,7 +10,9 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
+import { createContext, useContext, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,13 +23,36 @@ import { CodeBlock } from "./code-block";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
-export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible
-    defaultOpen={false}
-    className={cn("not-prose mb-4 w-full rounded-md border", className)}
-    {...props}
-  />
-);
+const ToolContext = createContext<{ hasOpened: boolean }>({ hasOpened: false });
+
+export const Tool = ({
+  className,
+  onOpenChange,
+  children,
+  ...props
+}: ToolProps) => {
+  const [hasOpened, setHasOpened] = useState(
+    props.defaultOpen || props.open || false,
+  );
+
+  const handleOpenChange = (open: boolean) => {
+    if (open) setHasOpened(true);
+    onOpenChange?.(open);
+  };
+
+  return (
+    <ToolContext.Provider value={{ hasOpened }}>
+      <Collapsible
+        defaultOpen={false}
+        className={cn("not-prose mb-4 w-full rounded-md border", className)}
+        onOpenChange={handleOpenChange}
+        {...props}
+      >
+        {children}
+      </Collapsible>
+    </ToolContext.Provider>
+  );
+};
 
 export type ToolHeaderProps = {
   title?: string;
@@ -35,6 +60,8 @@ export type ToolHeaderProps = {
   state: ToolUIPart["state"] | "output-available-dual-llm";
   className?: string;
   icon?: React.ReactNode;
+  errorText?: ToolUIPart["errorText"];
+  isCollapsible?: boolean;
 };
 
 const getStatusBadge = (
@@ -55,7 +82,7 @@ const getStatusBadge = (
     "output-available-dual-llm": (
       <CheckCircleIcon className="size-4 text-green-600" />
     ),
-    "output-error": <XCircleIcon className="size-4 text-red-600" />,
+    "output-error": <XCircleIcon className="size-4 text-destructive" />,
   } as const;
 
   return (
@@ -71,38 +98,60 @@ export const ToolHeader = ({
   title,
   type,
   state,
+  errorText,
   icon,
+  isCollapsible = true,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
     className={cn(
       "flex w-full items-center justify-between gap-4 p-3 cursor-pointer group",
+      isCollapsible ? "cursor-pointer" : "!cursor-default",
       className,
     )}
     {...props}
   >
-    <div className="flex items-center gap-2">
-      {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
-      <span className="font-medium text-sm">
-        {title ?? type.split("-").slice(1).join("-")}
-      </span>
-      {getStatusBadge(state)}
+    <div>
+      <div className="flex items-center gap-2">
+        {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
+        <span className="font-medium text-sm">
+          {title ?? type.split("-").slice(1).join("-")}
+        </span>
+        {getStatusBadge(state)}
+      </div>
+      {errorText && (
+        <div className="text-destructive text-xs mt-2 text-left">
+          {errorText}
+        </div>
+      )}
     </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    {isCollapsible && (
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    )}
   </CollapsibleTrigger>
 );
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
-export const ToolContent = ({ className, ...props }: ToolContentProps) => (
-  <CollapsibleContent
-    className={cn(
-      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-      className,
-    )}
-    {...props}
-  />
-);
+export const ToolContent = ({
+  className,
+  children,
+  ...props
+}: ToolContentProps) => {
+  const { hasOpened } = useContext(ToolContext);
+
+  return (
+    <CollapsibleContent
+      className={cn(
+        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+        className,
+      )}
+      {...props}
+    >
+      {hasOpened ? children : null}
+    </CollapsibleContent>
+  );
+};
 
 export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
@@ -137,12 +186,14 @@ export const ToolOutput = ({
   conversations,
   ...props
 }: ToolOutputProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (!(output || errorText || conversations)) {
     return null;
   }
 
   // Render conversations as chat bubbles if provided
-  // Note: In Dual LLM context, "user" = Main Agent (questions), "assistant" = Quarantined Agent (answers)
+  // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
   if (conversations && conversations.length > 0) {
     return (
       <div className={cn("space-y-2 p-4", className)} {...props}>
@@ -186,12 +237,48 @@ export const ToolOutput = ({
 
   let Output = <div>{output as ReactNode}</div>;
 
-  if (typeof output === "object") {
+  if (typeof output === "object" || typeof output === "string") {
+    const codeString =
+      typeof output === "object" ? JSON.stringify(output, null, 2) : output;
+    const lines = codeString.split("\n");
+    const MAX_LINES = 50;
+    const isLarge = lines.length > MAX_LINES;
+
+    const displayCode =
+      isExpanded || !isLarge
+        ? codeString
+        : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${
+            lines.length - MAX_LINES
+          } more lines)`;
+
     Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+      <div className="relative group">
+        <CodeBlock code={displayCode} language="json" />
+        {isLarge && (
+          <div
+            className={cn(
+              "absolute bottom-4 left-0 right-0 flex justify-center transition-all duration-200",
+              !isExpanded &&
+                "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
+            )}
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+              className="h-7 text-xs shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
+            >
+              {isExpanded
+                ? "Show Less"
+                : `Show ${lines.length - MAX_LINES} more lines`}
+            </Button>
+          </div>
+        )}
+      </div>
     );
-  } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
   }
 
   return (
@@ -207,7 +294,6 @@ export const ToolOutput = ({
             : "bg-muted/50 text-foreground",
         )}
       >
-        {errorText && <div>{errorText}</div>}
         {Output}
       </div>
     </div>

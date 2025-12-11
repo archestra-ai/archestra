@@ -11,8 +11,9 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
+import logger from "@/logging";
 import type { CommonToolCall, CommonToolResult, Gemini } from "@/types";
-import type { CommonMessage, ToolResultUpdates } from "../types";
+import type { CommonMessage, ToolResultUpdates } from "@/types/llm-proxy";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
 
@@ -20,6 +21,10 @@ type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
  * Convert Gemini contents to common format for trusted data evaluation
  */
 export function toCommonFormat(contents: GeminiContents): CommonMessage[] {
+  logger.debug(
+    { contentsCount: contents?.length || 0 },
+    "[adapters/gemini] toCommonFormat: starting conversion",
+  );
   const commonMessages: CommonMessage[] = [];
 
   for (const content of contents) {
@@ -62,6 +67,10 @@ export function toCommonFormat(contents: GeminiContents): CommonMessage[] {
     commonMessages.push(commonMessage);
   }
 
+  logger.debug(
+    { commonMessageCount: commonMessages.length },
+    "[adapters/gemini] toCommonFormat: conversion complete",
+  );
   return commonMessages;
 }
 
@@ -73,7 +82,14 @@ export function applyUpdates(
   contents: GeminiContents,
   updates: ToolResultUpdates,
 ): GeminiContents {
-  if (Object.keys(updates).length === 0) {
+  const updateCount = Object.keys(updates).length;
+  logger.debug(
+    { contentsCount: contents?.length || 0, updateCount },
+    "[adapters/gemini] applyUpdates: starting",
+  );
+
+  if (updateCount === 0) {
+    logger.debug("[adapters/gemini] applyUpdates: no updates to apply");
     return contents;
   }
 
@@ -154,6 +170,9 @@ export function extractUserRequest(contents: GeminiContents): string {
  * - SDK expects contents as an array of Content objects
  * - SDK expects tools, systemInstruction, and generationConfig at top level
  * - SDK doesn't use a nested "config" object for these parameters
+ *
+ * Note: Gemini SDK and REST API have different schemas. See:
+ * https://ai.google.dev/api/generate-content
  */
 export function restToSdkGenerateContentParams(
   body: Partial<Gemini.Types.GenerateContentRequest>,
@@ -457,7 +476,9 @@ export function sdkUsageToRestUsageMetadata(
 }
 
 /**
- * Convert common tool results to Gemini user message with tool_result blocks
+ * Convert common tool results to Gemini function response format.
+ * Unlike other adapters that use JSON.stringify for content,
+ * Gemini expects structured response objects.
  */
 export function toolResultsToMessages(
   results: CommonToolResult[],
@@ -471,9 +492,9 @@ export function toolResultsToMessages(
     name: commonToolCalls.find((tc) => tc.id === result.id)?.name || "unknown",
     response: result.isError
       ? { error: result.error || "Tool execution failed" }
-      : (Object.fromEntries(
-          (result.content as []).map((item, index) => [index, item]),
-        ) as Record<string, unknown>),
+      : typeof result.content === "string"
+        ? { result: result.content }
+        : (result.content as Record<string, unknown>),
     is_error: result.isError,
   }));
 }

@@ -1,10 +1,9 @@
-import type { IncomingMessage } from "node:http";
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
-import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
-import McpServerModel from "@/models/mcp-server";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 import type {
@@ -25,9 +24,9 @@ const {
  * This is analogous to McpServerSandboxManager in the desktop app,
  * but uses Kubernetes instead of Podman.
  */
-class McpServerRuntimeManager {
+export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
-  private k8sApi: k8s.CoreV1Api;
+  private k8sApi?: k8s.CoreV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
   private namespace: string;
@@ -58,21 +57,36 @@ class McpServerRuntimeManager {
         // Load from default location (~/.kube/config)
         this.k8sConfig.loadFromDefault();
       }
+
+      // Only create API client if K8s config loaded successfully
+      this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config:");
       this.status = "error";
     }
 
-    this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     this.k8sAttach = new Attach(this.k8sConfig);
     this.k8sLog = new k8s.Log(this.k8sConfig);
     this.namespace = namespace;
   }
 
   /**
+   * Check if the orchestrator K8s runtime is enabled
+   * Returns true if the K8s config loaded successfully (constructor didn't fail)
+   * and the runtime hasn't been stopped
+   */
+  get isEnabled(): boolean {
+    return this.status !== "error" && this.status !== "stopped";
+  }
+
+  /**
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
     try {
       this.status = "initializing";
       logger.info("Initializing Kubernetes MCP Server Runtime...");
@@ -141,6 +155,10 @@ class McpServerRuntimeManager {
    * Verify that we can connect to Kubernetes
    */
   private async verifyK8sConnection(): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
     try {
       logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
 
@@ -163,6 +181,10 @@ class McpServerRuntimeManager {
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
     const { id, name } = mcpServer;
     logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
 
@@ -190,10 +212,9 @@ class McpServerRuntimeManager {
       this.mcpServerIdToPodMap.set(id, k8sPod);
       logger.info(`Registered MCP server pod ${id} in map`);
 
-      // If MCP server has a secretId, fetch secret from database and create K8s Secret
+      // If MCP server has a secretId, fetch secret and create K8s Secret
       if (mcpServer.secretId) {
-        const SecretModel = (await import("@/models/secret")).default;
-        const secret = await SecretModel.getMcpServerSecret(mcpServer.secretId);
+        const secret = await secretManager.getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
           const secretData: Record<string, string> = {};
@@ -203,11 +224,11 @@ class McpServerRuntimeManager {
             secretData[key] = String(value);
           }
 
-          // Create K8s Secret from database secret
+          // Create K8s Secret
           await k8sPod.createK8sSecret(secretData);
           logger.info(
             { mcpServerId: id, secretId: mcpServer.secretId },
-            "Created K8s Secret from database secret",
+            "Created K8s Secret from secret manager",
           );
         }
       }
@@ -309,23 +330,6 @@ class McpServerRuntimeManager {
       );
       throw error;
     }
-  }
-
-  /**
-   * Stream data to/from a pod (for stdio-based MCP servers)
-   */
-  async streamToPod(
-    mcpServerId: string,
-    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-    request: any,
-    responseStream: IncomingMessage,
-  ): Promise<void> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
-    }
-
-    await k8sPod.streamToPod(request, responseStream);
   }
 
   /**

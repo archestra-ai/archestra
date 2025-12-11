@@ -1,95 +1,61 @@
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import type { StatisticsTimeFrame } from "@shared";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type {
+  AgentStatistics,
+  CostSavingsStatistics,
+  ModelStatistics,
+  OverviewStatistics,
+  StatisticsTimeSeriesData,
+  TeamStatistics,
+} from "@/types";
 import AgentTeamModel from "./agent-team";
-
-export type TimeFrame = "1h" | "24h" | "7d" | "30d" | "90d" | "12m" | "all";
-
-export interface TimeSeriesPoint {
-  timestamp: string;
-  value: number;
-}
-
-export interface TeamStatistics {
-  teamId: string;
-  teamName: string;
-  members: number;
-  agents: number;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  timeSeries: TimeSeriesPoint[];
-}
-
-export interface AgentStatistics {
-  agentId: string;
-  agentName: string;
-  teamName: string;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  timeSeries: TimeSeriesPoint[];
-}
-
-export interface ModelStatistics {
-  model: string;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  percentage: number;
-  timeSeries: TimeSeriesPoint[];
-}
-
-export interface OverviewStatistics {
-  totalRequests: number;
-  totalTokens: number;
-  totalCost: number;
-  topTeam: string;
-  topAgent: string;
-  topModel: string;
-}
-
-// Base time series interface
-export interface BaseTimeSeriesData {
-  timeBucket: string;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-}
-
-// Team-specific time series data
-export interface TeamTimeSeriesData extends BaseTimeSeriesData {
-  teamId: string;
-  teamName: string;
-}
-
-// Agent-specific time series data
-export interface AgentTimeSeriesData extends BaseTimeSeriesData {
-  agentId: string;
-  agentName: string;
-  teamName: string | null;
-}
-
-// Model-specific time series data
-export interface ModelTimeSeriesData extends BaseTimeSeriesData {
-  model: string | null;
-}
-
-// Union type for all time series data
-export type TimeSeriesData =
-  | BaseTimeSeriesData
-  | TeamTimeSeriesData
-  | AgentTimeSeriesData
-  | ModelTimeSeriesData;
 
 class StatisticsModel {
   /**
-   * Convert timeframe to SQL interval
+   * Parse custom timeframe to get start and end dates
    */
-  private static getTimeframeInterval(timeframe: TimeFrame): string {
+  private static parseCustomTimeframe(
+    timeframe: string,
+  ): { startTime: Date; endTime: Date } | null {
+    if (!timeframe.startsWith("custom:")) {
+      return null;
+    }
+
+    const timeframeValue = timeframe.replace("custom:", "");
+    const [startTimeStr, endTimeStr] = timeframeValue.split("_");
+
+    if (!startTimeStr || !endTimeStr) {
+      return null;
+    }
+
+    const startTime = new Date(startTimeStr);
+    const endTime = new Date(endTimeStr);
+
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+      return null;
+    }
+
+    return { startTime, endTime };
+  }
+
+  /**
+   * Convert timeframe to SQL interval or return null for custom timeframes
+   */
+  private static getTimeframeInterval(
+    timeframe: StatisticsTimeFrame,
+  ): string | null {
+    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+      return null; // Custom timeframes use date range filtering instead
+    }
+
     switch (timeframe) {
+      case "5m":
+        return "5 minutes";
+      case "15m":
+        return "15 minutes";
+      case "30m":
+        return "30 minutes";
       case "1h":
         return "1 hour";
       case "24h":
@@ -112,8 +78,28 @@ class StatisticsModel {
   /**
    * Get time bucket size for aggregation
    */
-  private static getTimeBucket(timeframe: TimeFrame): string {
+  private static getTimeBucket(timeframe: StatisticsTimeFrame): string {
+    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+      const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+      if (!customRange) return "hour";
+
+      const durationMs =
+        customRange.endTime.getTime() - customRange.startTime.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+
+      if (durationHours <= 2) return "minute";
+      if (durationHours <= 48) return "hour";
+      if (durationHours <= 720) return "day"; // 30 days
+      return "week";
+    }
+
     switch (timeframe) {
+      case "5m":
+        return "minute"; // Will show individual minutes for 5-minute range
+      case "15m":
+        return "minute"; // Will show individual minutes for 15-minute range
+      case "30m":
+        return "minute"; // We'll round to 5-minute intervals in post-processing
       case "1h":
         return "minute"; // We'll round to 5-minute intervals in post-processing
       case "24h":
@@ -136,8 +122,30 @@ class StatisticsModel {
   /**
    * Get time bucket interval in minutes for custom grouping
    */
-  private static getBucketIntervalMinutes(timeframe: TimeFrame): number {
+  private static getBucketIntervalMinutes(
+    timeframe: StatisticsTimeFrame,
+  ): number {
+    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+      const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+      if (!customRange) return 60;
+
+      const durationMs =
+        customRange.endTime.getTime() - customRange.startTime.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+
+      if (durationHours <= 2) return 5; // 5-minute buckets for short periods
+      if (durationHours <= 48) return 60; // 1-hour buckets for up to 2 days
+      if (durationHours <= 720) return 1440; // 1-day buckets for up to 30 days
+      return 10080; // 1-week buckets for longer periods
+    }
+
     switch (timeframe) {
+      case "5m":
+        return 1; // 1-minute buckets for 5-minute range
+      case "15m":
+        return 1; // 1-minute buckets for 15-minute range
+      case "30m":
+        return 5; // 5-minute buckets for 30-minute range
       case "1h":
         return 5; // 5-minute buckets
       case "24h":
@@ -198,9 +206,9 @@ class StatisticsModel {
   /**
    * Group time series data by custom bucket intervals
    */
-  private static groupTimeSeries<T extends BaseTimeSeriesData>(
+  private static groupTimeSeries<T extends StatisticsTimeSeriesData>(
     timeSeriesData: T[],
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
   ): T[] {
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
 
@@ -251,10 +259,10 @@ class StatisticsModel {
   }> {
     const result = await db
       .select({
-        avgInputPrice: sql<number>`AVG(CAST(${schema.tokenPriceTable.pricePerMillionInput} AS DECIMAL))`,
-        avgOutputPrice: sql<number>`AVG(CAST(${schema.tokenPriceTable.pricePerMillionOutput} AS DECIMAL))`,
+        avgInputPrice: sql<number>`AVG(CAST(${schema.tokenPricesTable.pricePerMillionInput} AS DECIMAL))`,
+        avgOutputPrice: sql<number>`AVG(CAST(${schema.tokenPricesTable.pricePerMillionOutput} AS DECIMAL))`,
       })
-      .from(schema.tokenPriceTable);
+      .from(schema.tokenPricesTable);
 
     return {
       avgInputPrice: result[0]?.avgInputPrice || 0,
@@ -280,18 +288,18 @@ class StatisticsModel {
    * Get team statistics
    */
   static async getTeamStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<TeamStatistics[]> {
     const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const { avgInputPrice, avgOutputPrice } =
       await StatisticsModel.getAverageTokenPrices();
 
-    // Get accessible agent IDs for non-admin users
+    // Get accessible agent IDs for users that are not agent admins
     let accessibleAgentIds: string[] = [];
-    if (userId && !isAdmin) {
+    if (userId && !isAgentAdmin) {
       accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -304,8 +312,8 @@ class StatisticsModel {
     // Base query for team statistics
     const query = db
       .select({
-        teamId: schema.team.id,
-        teamName: schema.team.name,
+        teamId: schema.teamsTable.id,
+        teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
@@ -314,27 +322,49 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .innerJoin(
-        schema.agentTeamTable,
-        eq(schema.agentsTable.id, schema.agentTeamTable.agentId),
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
       )
-      .innerJoin(schema.team, eq(schema.agentTeamTable.teamId, schema.team.id))
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
-          gte(
-            schema.interactionsTable.createdAt,
-            sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-          ),
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
         ),
       )
       .groupBy(
-        schema.team.id,
-        schema.team.name,
+        schema.teamsTable.id,
+        schema.teamsTable.name,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
       .orderBy(
@@ -358,28 +388,31 @@ class StatisticsModel {
     // Get team member counts
     const teamMemberCounts = await db
       .select({
-        teamId: schema.team.id,
-        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.member.userId}) AS INTEGER)`,
+        teamId: schema.teamsTable.id,
+        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.membersTable.userId}) AS INTEGER)`,
       })
-      .from(schema.team)
+      .from(schema.teamsTable)
       .leftJoin(
-        schema.member,
-        eq(schema.team.organizationId, schema.member.organizationId),
+        schema.membersTable,
+        eq(
+          schema.teamsTable.organizationId,
+          schema.membersTable.organizationId,
+        ),
       )
-      .groupBy(schema.team.id);
+      .groupBy(schema.teamsTable.id);
 
     // Get agent counts per team
     const teamAgentCounts = await db
       .select({
-        teamId: schema.team.id,
-        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentTeamTable.agentId}) AS INTEGER)`,
+        teamId: schema.teamsTable.id,
+        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentTeamsTable.agentId}) AS INTEGER)`,
       })
-      .from(schema.team)
+      .from(schema.teamsTable)
       .leftJoin(
-        schema.agentTeamTable,
-        eq(schema.team.id, schema.agentTeamTable.teamId),
+        schema.agentTeamsTable,
+        eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
       )
-      .groupBy(schema.team.id);
+      .groupBy(schema.teamsTable.id);
 
     // Aggregate data by team
     const teamMap = new Map<string, TeamStatistics>();
@@ -431,18 +464,18 @@ class StatisticsModel {
    * Get agent statistics
    */
   static async getAgentStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<AgentStatistics[]> {
     const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const { avgInputPrice, avgOutputPrice } =
       await StatisticsModel.getAverageTokenPrices();
 
-    // Get accessible agent IDs for non-admin users
+    // Get accessible agent IDs for users that are non-agent admins
     let accessibleAgentIds: string[] = [];
-    if (userId && !isAdmin) {
+    if (userId && !isAgentAdmin) {
       accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -456,7 +489,7 @@ class StatisticsModel {
       .select({
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
-        teamName: schema.team.name,
+        teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
@@ -465,19 +498,41 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .leftJoin(
-        schema.agentTeamTable,
-        eq(schema.agentsTable.id, schema.agentTeamTable.agentId),
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
       )
-      .leftJoin(schema.team, eq(schema.agentTeamTable.teamId, schema.team.id))
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
-          gte(
-            schema.interactionsTable.createdAt,
-            sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-          ),
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -486,7 +541,7 @@ class StatisticsModel {
       .groupBy(
         schema.agentsTable.id,
         schema.agentsTable.name,
-        schema.team.name,
+        schema.teamsTable.name,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
       .orderBy(
@@ -550,22 +605,23 @@ class StatisticsModel {
    * Get model statistics
    */
   static async getModelStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<ModelStatistics[]> {
     const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const { avgInputPrice, avgOutputPrice } =
       await StatisticsModel.getAverageTokenPrices();
 
-    // Get accessible agent IDs for non-admin users
+    // Get accessible agent IDs for users that are non-agent admins
     let accessibleAgentIds: string[] = [];
-    if (userId && !isAdmin) {
+    if (userId && !isAgentAdmin) {
       accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
       );
+
       if (accessibleAgentIds.length === 0) {
         return [];
       }
@@ -582,14 +638,33 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
       )
       .where(
         and(
-          gte(
-            schema.interactionsTable.createdAt,
-            sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-          ),
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -662,14 +737,14 @@ class StatisticsModel {
    * Get overview statistics
    */
   static async getOverviewStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<OverviewStatistics> {
     const [teamStats, agentStats, modelStats] = await Promise.all([
-      StatisticsModel.getTeamStatistics(timeframe, userId, isAdmin),
-      StatisticsModel.getAgentStatistics(timeframe, userId, isAdmin),
-      StatisticsModel.getModelStatistics(timeframe, userId, isAdmin),
+      StatisticsModel.getTeamStatistics(timeframe, userId, isAgentAdmin),
+      StatisticsModel.getAgentStatistics(timeframe, userId, isAgentAdmin),
+      StatisticsModel.getModelStatistics(timeframe, userId, isAgentAdmin),
     ]);
 
     const totalRequests = teamStats.reduce(
@@ -683,19 +758,25 @@ class StatisticsModel {
     const totalCost = teamStats.reduce((sum, team) => sum + team.cost, 0);
 
     const topTeam =
-      teamStats.reduce((top, team) =>
-        team.cost > (top?.cost || 0) ? team : top,
-      )?.teamName || "";
+      teamStats.length > 0
+        ? teamStats.reduce((top, team) =>
+            team.cost > (top?.cost || 0) ? team : top,
+          )?.teamName || ""
+        : "";
 
     const topAgent =
-      agentStats.reduce((top, agent) =>
-        agent.cost > (top?.cost || 0) ? agent : top,
-      )?.agentName || "";
+      agentStats.length > 0
+        ? agentStats.reduce((top, agent) =>
+            agent.cost > (top?.cost || 0) ? agent : top,
+          )?.agentName || ""
+        : "";
 
     const topModel =
-      modelStats.reduce((top, model) =>
-        model.cost > (top?.cost || 0) ? model : top,
-      )?.model || "";
+      modelStats.length > 0
+        ? modelStats.reduce((top, model) =>
+            model.cost > (top?.cost || 0) ? model : top,
+          )?.model || ""
+        : "";
 
     return {
       totalRequests,
@@ -704,6 +785,183 @@ class StatisticsModel {
       topTeam,
       topAgent,
       topModel,
+    };
+  }
+
+  /**
+   * Calculate actual cost: cost - toon_savings
+   * This represents the final cost after all optimizations
+   * - cost = cost after model optimization
+   * - toonSavings = savings from TOON compression
+   * - actual cost = cost after both model optimization and TOON
+   */
+  private static calculateActualCost(
+    cost: number,
+    toonSavings: number,
+  ): number {
+    return cost - toonSavings;
+  }
+
+  /**
+   * Get cost savings statistics
+   */
+  static async getCostSavingsStatistics(
+    timeframe: StatisticsTimeFrame,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<CostSavingsStatistics> {
+    const interval = StatisticsModel.getTimeframeInterval(timeframe);
+    const timeBucket = StatisticsModel.getTimeBucket(timeframe);
+
+    // Get accessible agent IDs for users that are non-agent admins
+    let accessibleAgentIds: string[] = [];
+    if (userId && !isAgentAdmin) {
+      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return {
+          totalBaselineCost: 0,
+          totalActualCost: 0,
+          totalSavings: 0,
+          totalOptimizationSavings: 0,
+          totalToonSavings: 0,
+          timeSeries: [],
+        };
+      }
+    }
+
+    const query = db
+      .select({
+        timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+        baselineCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.baselineCost}), 0) AS DECIMAL)`,
+        actualCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DECIMAL)`,
+        toonSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.toonCostSavings}), 0) AS DECIMAL)`,
+      })
+      .from(schema.interactionsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
+          ...(accessibleAgentIds.length > 0
+            ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
+            : []),
+        ),
+      )
+      .groupBy(
+        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+      )
+      .orderBy(
+        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+      );
+
+    const rawTimeSeriesData = await query;
+
+    // Custom grouping for cost savings data
+    interface CostSavingsRow {
+      timeBucket: string;
+      baselineCost: number;
+      actualCost: number;
+      toonSavings: number;
+    }
+
+    const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
+
+    // Group by custom intervals if needed
+    const grouped = new Map<string, CostSavingsRow>();
+
+    for (const row of rawTimeSeriesData) {
+      const bucketKey =
+        intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d"
+          ? row.timeBucket
+          : StatisticsModel.roundToBucket(row.timeBucket, intervalMinutes);
+
+      if (!grouped.has(bucketKey)) {
+        grouped.set(bucketKey, {
+          timeBucket: bucketKey,
+          baselineCost: 0,
+          actualCost: 0,
+          toonSavings: 0,
+        });
+      }
+
+      const existing = grouped.get(bucketKey);
+      if (!existing) continue;
+
+      existing.baselineCost += Number(row.baselineCost);
+      existing.actualCost += Number(row.actualCost);
+      existing.toonSavings += Number(row.toonSavings);
+    }
+
+    const timeSeriesData = Array.from(grouped.values()).sort(
+      (a, b) =>
+        new Date(a.timeBucket).getTime() - new Date(b.timeBucket).getTime(),
+    );
+
+    // Calculate totals and build time series
+    let totalBaselineCost = 0;
+    let totalActualCost = 0;
+    let totalOptimizationSavings = 0;
+    let totalToonSavings = 0;
+
+    const timeSeries = timeSeriesData.map((row) => {
+      const baselineCost = Number(row.baselineCost);
+      const cost = Number(row.actualCost);
+      const toonSavings = Number(row.toonSavings);
+
+      const actualCost = StatisticsModel.calculateActualCost(cost, toonSavings);
+      const optimizationSavings = baselineCost - cost;
+
+      totalBaselineCost += baselineCost;
+      totalActualCost += actualCost;
+      totalOptimizationSavings += optimizationSavings;
+      totalToonSavings += toonSavings;
+
+      return {
+        timestamp: row.timeBucket,
+        baselineCost,
+        actualCost,
+        optimizationSavings,
+        toonSavings,
+      };
+    });
+
+    const totalSavings = totalBaselineCost - totalActualCost;
+
+    return {
+      totalBaselineCost,
+      totalActualCost,
+      totalSavings,
+      totalOptimizationSavings,
+      totalToonSavings,
+      timeSeries,
     };
   }
 }

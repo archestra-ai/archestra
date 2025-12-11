@@ -1,12 +1,11 @@
-import type { IncomingMessage } from "node:http";
-import { PassThrough, Readable, Writable } from "node:stream";
+import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
 
@@ -35,9 +34,6 @@ export default class K8sPod {
   assignedHttpPort?: number;
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
-
-  // Mutex to serialize attach sessions (only one at a time)
-  private attachQueue: Promise<void> = Promise.resolve();
 
   constructor(
     mcpServer: McpServer,
@@ -101,14 +97,19 @@ export default class K8sPod {
 
   /**
    * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
+   * Also ensures values are no longer than 63 characters as per Kubernetes label requirements.
    */
   static sanitizeMetadataLabels(
     labels: Record<string, string>,
   ): Record<string, string> {
     const sanitized: Record<string, string> = {};
     for (const [key, value] of Object.entries(labels)) {
-      sanitized[K8sPod.ensureStringIsRfc1123Compliant(key)] =
-        K8sPod.ensureStringIsRfc1123Compliant(value);
+      // Labels values must be 63 characters or less and end with alphanumeric
+      const compliantValue = K8sPod.ensureStringIsRfc1123Compliant(value)
+        .substring(0, 63)
+        .replace(/[^a-z0-9]+$/, "");
+
+      sanitized[K8sPod.ensureStringIsRfc1123Compliant(key)] = compliantValue;
     }
     return sanitized;
   }
@@ -125,7 +126,7 @@ export default class K8sPod {
   }
 
   /**
-   * Create a Kubernetes Secret for environment variables marked as "secret" type
+   * Create or update a Kubernetes Secret for environment variables marked as "secret" type
    */
   async createK8sSecret(secretData: Record<string, string>): Promise<void> {
     const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
@@ -158,19 +159,58 @@ export default class K8sPod {
         data,
       };
 
-      await this.k8sApi.createNamespacedSecret({
-        namespace: this.namespace,
-        body: secret,
-      });
-
-      logger.info(
-        {
-          mcpServerId: this.mcpServer.id,
-          secretName: k8sSecretName,
+      try {
+        // Try to create the secret
+        await this.k8sApi.createNamespacedSecret({
           namespace: this.namespace,
-        },
-        "Created K8s Secret for MCP server",
-      );
+          body: secret,
+        });
+
+        logger.info(
+          {
+            mcpServerId: this.mcpServer.id,
+            secretName: k8sSecretName,
+            namespace: this.namespace,
+          },
+          "Created K8s Secret for MCP server",
+        );
+      } catch (createError: unknown) {
+        // If secret already exists (409), update it instead
+        const isConflict =
+          createError &&
+          typeof createError === "object" &&
+          (("statusCode" in createError && createError.statusCode === 409) ||
+            ("code" in createError && createError.code === 409));
+
+        if (isConflict) {
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: k8sSecretName,
+              namespace: this.namespace,
+            },
+            "K8s Secret already exists, updating it",
+          );
+
+          await this.k8sApi.replaceNamespacedSecret({
+            name: k8sSecretName,
+            namespace: this.namespace,
+            body: secret,
+          });
+
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: k8sSecretName,
+              namespace: this.namespace,
+            },
+            "Updated existing K8s Secret for MCP server",
+          );
+        } else {
+          // Re-throw other errors
+          throw createError;
+        }
+      }
     } catch (error) {
       logger.error(
         {
@@ -178,7 +218,7 @@ export default class K8sPod {
           mcpServerId: this.mcpServer.id,
           secretName: k8sSecretName,
         },
-        "Failed to create K8s Secret",
+        "Failed to create or update K8s Secret",
       );
       throw error;
     }
@@ -205,13 +245,14 @@ export default class K8sPod {
         "Deleted K8s Secret for MCP server",
       );
     } catch (error: unknown) {
-      // If secret doesn't exist (404), that's okay
-      if (
+      // If secret doesn't exist (404), that's okay - it may have been deleted already or never created
+      const is404 =
         error &&
         typeof error === "object" &&
-        "statusCode" in error &&
-        error.statusCode === 404
-      ) {
+        (("statusCode" in error && error.statusCode === 404) ||
+          ("code" in error && error.code === 404));
+
+      if (is404) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -273,7 +314,23 @@ export default class K8sPod {
                   command: [localConfig.command],
                 }
               : {}),
-            args: localConfig.arguments || [],
+            args: (localConfig.arguments || []).map((arg) => {
+              // Interpolate ${user_config.xxx} placeholders with actual values
+              // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
+              if (this.environmentValues || this.userConfigValues) {
+                return arg.replace(
+                  /\$\{user_config\.([^}]+)\}/g,
+                  (match, configKey) => {
+                    return (
+                      this.environmentValues?.[configKey] ||
+                      this.userConfigValues?.[configKey] ||
+                      match
+                    );
+                  },
+                );
+              }
+              return arg;
+            }),
             // For stdio-based MCP servers, we use stdin/stdout
             stdin: true,
             tty: false,
@@ -294,6 +351,42 @@ export default class K8sPod {
   }
 
   /**
+   * Rewrite localhost URLs to host.docker.internal for Docker Desktop Kubernetes.
+   * This allows pods to access services running on the host machine.
+   *
+   * Note: This assumes Docker Desktop. Other local K8s environments may need different
+   * hostnames (e.g., host.minikube.internal for Minikube, or host-gateway for kind).
+   */
+  private rewriteLocalhostUrl(value: string): string {
+    try {
+      const url = new URL(value);
+      const isHttp = url.protocol === "http:" || url.protocol === "https:";
+      if (!isHttp) {
+        return value;
+      }
+      if (
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1" ||
+        url.hostname === "::1"
+      ) {
+        url.hostname = "host.docker.internal";
+        logger.info(
+          {
+            mcpServerId: this.mcpServer.id,
+            originalUrl: value,
+            rewrittenUrl: url.toString(),
+          },
+          "Rewrote localhost URL to host.docker.internal for K8s pod",
+        );
+        return url.toString();
+      }
+    } catch {
+      // Not a valid URL, return as-is
+    }
+    return value;
+  }
+
+  /**
    * Create environment variables for the pod
    *
    * This method processes environment variables from the local config and ensures
@@ -307,6 +400,9 @@ export default class K8sPod {
    * For environment variables marked as "secret" type in the catalog, this method
    * will use valueFrom.secretKeyRef to reference the Kubernetes Secret instead of
    * including the value directly in the pod spec.
+   *
+   * For Docker Desktop Kubernetes environments, localhost URLs are automatically
+   * rewritten to host.docker.internal to allow pods to access services on the host.
    */
   createPodEnvFromConfig(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
@@ -329,11 +425,26 @@ export default class K8sPod {
         } else {
           // Static value from catalog - get from envDef.value
           value = envDef.value;
+
+          // Interpolate ${user_config.xxx} placeholders with actual values
+          // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
+          if (value && (this.environmentValues || this.userConfigValues)) {
+            value = value.replace(
+              /\$\{user_config\.([^}]+)\}/g,
+              (match, configKey) => {
+                return (
+                  this.environmentValues?.[configKey] ||
+                  this.userConfigValues?.[configKey] ||
+                  match
+                );
+              },
+            );
+          }
         }
-        // Add to envMap if value exists
-        // (Only non-secret plain_text vars will be used directly in pod env)
-        if (value) {
-          envMap.set(envDef.key, value);
+        // Add to envMap if value exists, OR if it's a secret-type (needs secretKeyRef even without value)
+        // Secret-type vars will reference K8s Secret via secretKeyRef, plain_text vars use value directly
+        if (value || envDef.type === "secret") {
+          envMap.set(envDef.key, value || "");
         }
       }
     } else if (this.environmentValues) {
@@ -357,6 +468,10 @@ export default class K8sPod {
     envMap.forEach((value, key) => {
       // If this env var is marked as "secret" type, use valueFrom.secretKeyRef
       if (secretEnvVars.has(key)) {
+        // Skip secret-type env vars with empty values (no K8s Secret will be created)
+        if (!value || value.trim() === "") {
+          return;
+        }
         const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
         env.push({
           name: key,
@@ -381,6 +496,13 @@ export default class K8sPod {
             (processedValue.startsWith('"') && processedValue.endsWith('"')))
         ) {
           processedValue = processedValue.slice(1, -1);
+        }
+
+        // Rewrite localhost URLs to host.docker.internal for Docker Desktop K8s
+        // Only when backend is running on host machine (connecting to K8s from outside)
+        // When backend runs inside cluster, pods shouldn't access host services
+        if (!config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+          processedValue = this.rewriteLocalhostUrl(processedValue);
         }
 
         env.push({
@@ -498,20 +620,29 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
+      // Normalize localConfig to ensure required and description have defaults
+      const normalizedLocalConfig = {
+        ...catalogItem.localConfig,
+        environment: catalogItem.localConfig.environment?.map((env) => ({
+          ...env,
+          required: env.required ?? false,
+          description: env.description ?? "",
+        })),
+      };
+
       const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
         body: this.generatePodSpec(
           dockerImage,
-          catalogItem.localConfig,
+          normalizedLocalConfig,
           needsHttp,
           httpPort,
         ),
       });
 
-      logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);
-
-      // Wait for pod to be ready
-      await this.waitForPodReady();
+      logger.info(
+        `Pod ${this.podName} created, will check status asynchronously`,
+      );
 
       // For HTTP servers, create a K8s Service and set endpoint URL
       if (needsHttp) {
@@ -665,16 +796,40 @@ export default class K8sPod {
   /**
    * Wait for pod to be in running state
    */
-  private async waitForPodReady(
-    maxAttempts = 60,
-    intervalMs = 2000,
-  ): Promise<void> {
+  async waitForPodReady(maxAttempts = 60, intervalMs = 2000): Promise<void> {
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const pod = await this.k8sApi.readNamespacedPod({
           name: this.podName,
           namespace: this.namespace,
         });
+
+        // Check for failure states in container statuses
+        if (pod.status?.containerStatuses) {
+          for (const containerStatus of pod.status.containerStatuses) {
+            const waitingReason = containerStatus.state?.waiting?.reason;
+            if (waitingReason) {
+              const failureStates = [
+                "CrashLoopBackOff",
+                "ImagePullBackOff",
+                "ErrImagePull",
+                "CreateContainerConfigError",
+                "CreateContainerError",
+                "RunContainerError",
+              ];
+              if (failureStates.includes(waitingReason)) {
+                const message =
+                  containerStatus.state?.waiting?.message ||
+                  `Container in ${waitingReason} state`;
+                this.state = "failed";
+                this.errorMessage = message;
+                throw new Error(
+                  `Pod ${this.podName} failed: ${waitingReason} - ${message}`,
+                );
+              }
+            }
+          }
+        }
 
         if (pod.status?.phase === "Running") {
           // Check if all containers are ready
@@ -687,16 +842,19 @@ export default class K8sPod {
         }
 
         if (pod.status?.phase === "Failed") {
+          this.state = "failed";
+          this.errorMessage = `Pod phase is Failed`;
           throw new Error(`Pod ${this.podName} failed to start`);
         }
       } catch (error: unknown) {
         if (
           error instanceof Error &&
-          error.message.includes("failed to start")
+          (error.message.includes("failed to start") ||
+            error.message.includes("failed:"))
         ) {
           throw error;
         }
-        // Continue waiting for other errors
+        // Continue waiting for other errors (e.g., network issues)
       }
 
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -717,15 +875,47 @@ export default class K8sPod {
         name: this.podName,
         namespace: this.namespace,
       });
+
+      // Wait for pod to actually terminate (up to 30 seconds)
+      const maxWaitTime = 30000; // 30 seconds
+      const pollInterval = 1000; // 1 second
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        try {
+          // Try to get the pod - if it doesn't exist, we're done
+          await this.k8sApi.readNamespacedPod({
+            name: this.podName,
+            namespace: this.namespace,
+          });
+          // Pod still exists, wait and retry
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        } catch (error: unknown) {
+          // Pod not found (404) means it's been deleted
+          if (error instanceof Error && error.message.includes("404")) {
+            logger.info(`Pod ${this.podName} successfully terminated`);
+            this.state = "not_created";
+            return;
+          }
+          // Other errors, rethrow
+          throw error;
+        }
+      }
+
+      // Timeout reached but pod still exists
+      logger.warn(
+        `Pod ${this.podName} deletion timeout after ${maxWaitTime}ms, may still be terminating`,
+      );
       this.state = "not_created";
-      logger.info(`Pod ${this.podName} stopped`);
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("404")) {
-        logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
-        throw error;
+        // Pod already doesn't exist, that's fine
+        logger.info(`Pod ${this.podName} already deleted`);
+        this.state = "not_created";
+        return;
       }
-      // Pod doesn't exist, that's fine
-      this.state = "not_created";
+      logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
+      throw error;
     }
   }
 
@@ -735,147 +925,6 @@ export default class K8sPod {
   async removePod(): Promise<void> {
     await this.stopPod();
     await this.deleteK8sSecret();
-  }
-
-  /**
-   * Stream data to/from the pod (for stdio-based MCP servers)
-   */
-  async streamToPod(
-    request: unknown,
-    responseStream: IncomingMessage,
-  ): Promise<void> {
-    // Serialize attach sessions using a queue to prevent concurrent sessions
-    // (kubectl attach doesn't support multiple simultaneous sessions to the same pod)
-    const result = new Promise<void>((resolveOuter, rejectOuter) => {
-      this.attachQueue = this.attachQueue.then(async () => {
-        try {
-          await this.doStreamToPod(request, responseStream);
-          resolveOuter();
-        } catch (error) {
-          rejectOuter(error);
-        }
-      });
-    });
-
-    return result;
-  }
-
-  /**
-   * Internal method to stream data to/from the pod
-   */
-  private async doStreamToPod(
-    request: unknown,
-    responseStream: IncomingMessage,
-  ): Promise<void> {
-    try {
-      // Use attach to connect to the main MCP server process stdin/stdout
-      // This allows us to send JSON-RPC requests and receive responses
-
-      return new Promise((resolve, reject) => {
-        let responseData = "";
-        let isResolved = false;
-
-        // Create a readable stream for stdin
-        const stdinStream = new Readable({
-          read() {
-            // This will be called when data is needed
-          },
-        });
-
-        // Create a writable stream for stdout that collects the response
-        const stdoutStream = new Writable({
-          write(chunk, _encoding, callback) {
-            responseData += chunk.toString();
-
-            // MCP JSON-RPC responses are newline-delimited
-            // Check if we have a complete JSON response
-            if (responseData.includes("\n")) {
-              const lines = responseData.split("\n");
-              for (const line of lines) {
-                if (line.trim()) {
-                  try {
-                    // Try to parse as JSON to verify it's a complete response
-                    JSON.parse(line);
-                    // Write the response to the HTTP response stream
-                    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-                    (responseStream as any).write(line);
-                    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-                    (responseStream as any).end();
-                    if (!isResolved) {
-                      isResolved = true;
-                      resolve();
-                    }
-                    return callback();
-                  } catch (_e) {
-                    // Not valid JSON yet, continue accumulating
-                  }
-                }
-              }
-            }
-            callback();
-          },
-          final(callback) {
-            if (!isResolved) {
-              // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-              (responseStream as any).end();
-              isResolved = true;
-              resolve();
-            }
-            callback();
-          },
-        });
-
-        // Handle errors
-        stdoutStream.on("error", (error) => {
-          if (!isResolved) {
-            isResolved = true;
-            reject(error);
-          }
-        });
-
-        stdinStream.on("error", (error) => {
-          if (!isResolved) {
-            isResolved = true;
-            reject(error);
-          }
-        });
-
-        // Attach to the pod's main process
-        this.k8sAttach
-          .attach(
-            this.namespace,
-            this.podName,
-            "mcp-server",
-            stdoutStream,
-            null, // stderr - not needed for MCP JSON-RPC
-            stdinStream,
-            false /* tty */,
-          )
-          .then((ws) => {
-            // Send the JSON-RPC request to the MCP server's stdin
-            const requestJson = `${JSON.stringify(request)}\n`;
-            stdinStream.push(requestJson);
-
-            // Set a timeout to close the connection if no response
-            setTimeout(() => {
-              if (!isResolved) {
-                isResolved = true;
-                ws.close();
-                reject(new Error("Timeout waiting for MCP server response"));
-              }
-            }, 30000); // 30 second timeout
-          })
-          .catch((error) => {
-            if (!isResolved) {
-              isResolved = true;
-              reject(error);
-            }
-          });
-      });
-    } catch (error) {
-      logger.error({ err: error }, `Failed to stream to pod ${this.podName}:`);
-      throw error;
-    }
   }
 
   /**
@@ -1020,6 +1069,27 @@ export default class K8sPod {
   }
 
   get containerName(): string {
+    return this.podName;
+  }
+
+  /**
+   * Get the Kubernetes Attach API client
+   */
+  get k8sAttachClient(): Attach {
+    return this.k8sAttach;
+  }
+
+  /**
+   * Get the Kubernetes namespace
+   */
+  get k8sNamespace(): string {
+    return this.namespace;
+  }
+
+  /**
+   * Get the pod name
+   */
+  get k8sPodName(): string {
     return this.podName;
   }
 

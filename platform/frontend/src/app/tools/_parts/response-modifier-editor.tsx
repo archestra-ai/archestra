@@ -21,16 +21,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 
 interface ResponseModifierEditorProps {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }
 
 export function ResponseModifierEditor({
   agentTool: { id, responseModifierTemplate, tool },
 }: ResponseModifierEditorProps) {
-  const agentToolPatchMutation = useAgentToolPatchMutation();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
   const [template, setTemplate] = useState<string>(
     responseModifierTemplate || "",
   );
@@ -138,7 +138,7 @@ export function ResponseModifierEditor({
         <Accordion type="single" collapsible className="mt-6">
           <AccordionItem
             value="cheat-sheet"
-            className="border border-border rounded-lg bg-card"
+            className="border border-border rounded-lg bg-card !border-b"
           >
             <AccordionTrigger className="px-4 hover:no-underline">
               <span className="text-sm font-medium">

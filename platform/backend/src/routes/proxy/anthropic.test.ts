@@ -1,391 +1,309 @@
-import type { z } from "zod";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
-import type { Anthropic } from "@/types";
-import { injectTools } from "./anthropic";
+import Fastify, { type FastifyInstance } from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import config from "@/config";
+import { AgentModel, TokenPriceModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import anthropicProxyRoutes from "./anthropic";
 
-describe("Anthropic injectTools", () => {
-  let agentId: string;
+describe("Anthropic cost tracking", () => {
+  test("stores cost and baselineCost in interaction", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
 
-  beforeEach(async () => {
-    // Create test agent
+    await app.register(anthropicProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      provider: "anthropic",
+      model: "claude-opus-4-20250514",
+      pricePerMillionInput: "15.00",
+      pricePerMillionOutput: "75.00",
+    });
+
+    // Create a test agent with cost optimization enabled
     const agent = await AgentModel.create({
-      name: "Test Agent",
+      name: "Test Cost Agent",
       teams: [],
     });
-    agentId = agent.id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "Hello!" }],
+        max_tokens: 1024,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Find the created interaction
+    const { InteractionModel } = await import("@/models");
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBeGreaterThan(0);
+
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
+    expect(typeof interaction.cost).toBe("string");
+    expect(typeof interaction.baselineCost).toBe("string");
+  });
+});
+
+describe("Anthropic streaming mode", () => {
+  test("streaming mode completes normally and records interaction", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(anthropicProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      provider: "anthropic",
+      model: "claude-opus-4-20250514",
+      pricePerMillionInput: "15.00",
+      pricePerMillionOutput: "75.00",
+    });
+
+    // Create a test agent
+    const agent = await AgentModel.create({
+      name: "Test Streaming Agent",
+      teams: [],
+    });
+
+    const { InteractionModel } = await import("@/models");
+
+    // Get initial interaction count
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+    const initialCount = initialInteractions.length;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "Hello!" }],
+        max_tokens: 1024,
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Verify the response contains SSE events (content-type may not be preserved by inject)
+    const body = response.body;
+    expect(body).toContain("event: message_start");
+    expect(body).toContain("event: content_block_delta");
+    expect(body).toContain("event: message_stop");
+
+    // Wait a bit for async interaction recording
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Find the created interaction
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialCount + 1);
+
+    const interaction = interactions[interactions.length - 1];
+
+    // Verify interaction was recorded with proper fields
+    expect(interaction.type).toBe("anthropic:messages");
+    expect(interaction.model).toBe("claude-opus-4-20250514");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
+    expect(typeof interaction.cost).toBe("string");
+    expect(typeof interaction.baselineCost).toBe("string");
   });
 
-  describe("basic functionality", () => {
-    test("returns empty array when no assigned tools and no request tools", async () => {
-      const result = await injectTools(undefined, agentId);
-      expect(result).toEqual([]);
-    });
+  test(
+    "streaming mode interrupted still records interaction",
+    { timeout: 10000 },
+    async () => {
+      const app = Fastify().withTypeProvider<ZodTypeProvider>();
+      app.setValidatorCompiler(validatorCompiler);
+      app.setSerializerCompiler(serializerCompiler);
 
-    test("returns request tools when no assigned tools exist", async () => {
-      const requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] = [
-        {
-          name: "test_tool",
-          type: "custom",
-          description: "A test tool",
-          input_schema: { type: "object", properties: {} },
-        },
-      ];
+      // Enable mock mode
+      config.benchmark.mockMode = true;
 
-      const result = await injectTools(requestTools, agentId);
-      expect(result).toEqual(requestTools);
-    });
+      // Configure mock to interrupt at chunk 3 (after message_start, content_block_start, content_block_delta)
+      const { MockAnthropicClient } = await import("./mock-anthropic-client");
+      MockAnthropicClient.setStreamOptions({ interruptAtChunk: 3 });
 
-    test("returns assigned tools when no request tools provided", async () => {
-      // Create assigned tool
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "assigned_tool",
-        description: "An assigned tool",
-        parameters: {
-          type: "object",
-          properties: { param1: { type: "string" } },
-        },
-      });
+      try {
+        await app.register(anthropicProxyRoutes);
 
-      const tool = await ToolModel.findByName("assigned_tool");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
+        // Create token pricing for the model
+        await TokenPriceModel.create({
+          provider: "anthropic",
+          model: "claude-opus-4-20250514",
+          pricePerMillionInput: "15.00",
+          pricePerMillionOutput: "75.00",
+        });
 
-      const result = await injectTools(undefined, agentId);
+        // Create a test agent
+        const agent = await AgentModel.create({
+          name: "Test Interrupted Streaming Agent",
+          teams: [],
+        });
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        name: "assigned_tool",
-        type: "custom",
-        description: "An assigned tool",
-        input_schema: {
-          type: "object",
-          properties: { param1: { type: "string" } },
-        },
-      });
-    });
+        const { InteractionModel } = await import("@/models");
 
-    test("properly merges assigned and request tools", async () => {
-      // Create assigned tool
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "assigned_tool",
-        description: "An assigned tool",
-        parameters: { type: "object" },
-      });
+        // Get initial interaction count
+        const initialInteractions =
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
+        const initialCount = initialInteractions.length;
 
-      const tool = await ToolModel.findByName("assigned_tool");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
-
-      const requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] = [
-        {
-          name: "request_tool",
-          type: "custom",
-          description: "A request tool",
-          input_schema: { type: "object" },
-        },
-      ];
-
-      const result = await injectTools(requestTools, agentId);
-
-      expect(result).toHaveLength(2);
-      const toolNames = result.map((tool) => tool.name);
-      expect(toolNames).toContain("assigned_tool");
-      expect(toolNames).toContain("request_tool");
-    });
-  });
-
-  describe("tool priority", () => {
-    test("assigned tools take priority over request tools with same name", async () => {
-      // Create assigned tool
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "shared_tool",
-        description: "Assigned version",
-        parameters: {
-          type: "object",
-          properties: { assigned: { type: "boolean" } },
-        },
-      });
-
-      const tool = await ToolModel.findByName("shared_tool");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
-
-      const requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] = [
-        {
-          name: "shared_tool",
-          type: "custom",
-          description: "Request version",
-          input_schema: {
-            type: "object",
-            properties: { request: { type: "boolean" } },
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/anthropic/${agent.id}/v1/messages`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            "user-agent": "test-client",
+            "anthropic-version": "2023-06-01",
+            "x-api-key": "test-anthropic-key",
           },
-        },
-      ];
-
-      const result = await injectTools(requestTools, agentId);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        name: "shared_tool",
-        type: "custom",
-        description: "Assigned version",
-        input_schema: {
-          type: "object",
-          properties: { assigned: { type: "boolean" } },
-        },
-      });
-    });
-
-    test("different tools are merged correctly", async () => {
-      // Create multiple assigned tools
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "assigned_tool_1",
-        description: "First assigned tool",
-        parameters: { type: "object" },
-      });
-
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "assigned_tool_2",
-        description: "Second assigned tool",
-        parameters: { type: "object" },
-      });
-
-      const tool1 = await ToolModel.findByName("assigned_tool_1");
-      const tool2 = await ToolModel.findByName("assigned_tool_2");
-
-      if (!tool1) throw new Error("Tool not found");
-      if (!tool2) throw new Error("Tool not found");
-
-      await AgentToolModel.createIfNotExists(agentId, tool1.id);
-      await AgentToolModel.createIfNotExists(agentId, tool2.id);
-
-      const requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] = [
-        {
-          name: "request_tool_1",
-          type: "custom",
-          description: "First request tool",
-          input_schema: { type: "object" },
-        },
-        {
-          name: "request_tool_2",
-          type: "custom",
-          description: "Second request tool",
-          input_schema: { type: "object" },
-        },
-      ];
-
-      const result = await injectTools(requestTools, agentId);
-
-      expect(result).toHaveLength(4);
-      const toolNames = result.map((tool) => tool.name);
-      expect(toolNames).toContain("assigned_tool_1");
-      expect(toolNames).toContain("assigned_tool_2");
-      expect(toolNames).toContain("request_tool_1");
-      expect(toolNames).toContain("request_tool_2");
-    });
-  });
-
-  describe("Anthropic tool format conversion", () => {
-    test("assigned MCP tools are converted to CustomTool format with correct fields", async () => {
-      // Create assigned tool with complex parameters
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "mcp_tool",
-        description: "An MCP tool",
-        parameters: {
-          type: "object",
-          properties: {
-            input: { type: "string", description: "Input parameter" },
-            count: { type: "number", minimum: 1 },
+          payload: {
+            model: "claude-opus-4-20250514",
+            messages: [{ role: "user", content: "Hello!" }],
+            max_tokens: 1024,
+            stream: true,
           },
-          required: ["input"],
+        });
+
+        // Stream ends early but request should complete successfully
+        expect(response.statusCode).toBe(200);
+
+        // Wait for async interaction recording (longer timeout for error handling)
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        // Verify interaction was still recorded despite interruption
+        const interactions =
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
+        expect(interactions.length).toBe(initialCount + 1);
+
+        const interaction = interactions[interactions.length - 1];
+
+        // Verify interaction was recorded even though stream was interrupted
+        expect(interaction.type).toBe("anthropic:messages");
+        expect(interaction.model).toBe("claude-opus-4-20250514");
+        expect(interaction.inputTokens).toBe(12);
+        expect(interaction.outputTokens).toBe(10); // Usage from message_start event
+        expect(interaction.cost).toBeTruthy();
+        expect(interaction.baselineCost).toBeTruthy();
+      } finally {
+        // Reset mock options for other tests
+        MockAnthropicClient.resetStreamOptions();
+      }
+    },
+  );
+});
+
+describe("Anthropic tool call accumulation", () => {
+  test("accumulates tool call input without [object Object] bug", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(anthropicProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Configure mock to include tool_use block
+    const { MockAnthropicClient } = await import("./mock-anthropic-client");
+    MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+
+    try {
+      // Create token pricing for the model
+      await TokenPriceModel.create({
+        provider: "anthropic",
+        model: "claude-opus-4-20250514",
+        pricePerMillionInput: "15.00",
+        pricePerMillionOutput: "75.00",
+      });
+
+      // Create a test agent
+      const agent = await AgentModel.create({
+        name: "Test Tool Call Agent",
+        teams: [],
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "test-anthropic-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          max_tokens: 1024,
+          stream: true,
         },
       });
 
-      const tool = await ToolModel.findByName("mcp_tool");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
+      expect(response.statusCode).toBe(200);
 
-      const result = await injectTools(undefined, agentId);
+      const body = response.body;
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        name: "mcp_tool",
-        type: "custom",
-        description: "An MCP tool",
-        input_schema: {
-          type: "object",
-          properties: {
-            input: { type: "string", description: "Input parameter" },
-            count: { type: "number", minimum: 1 },
-          },
-          required: ["input"],
-        },
-      });
-    });
+      // Verify stream contains tool_use events
+      expect(body).toContain("event: content_block_start");
+      expect(body).toContain('"type":"tool_use"');
+      expect(body).toContain('"name":"get_weather"');
 
-    test("handles undefined description correctly", async () => {
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "tool_no_desc",
-        description: undefined,
-        parameters: { type: "object" },
-      });
+      // Verify tool input is properly accumulated without [object Object]
+      expect(body).not.toContain("[object Object]");
 
-      const tool = await ToolModel.findByName("tool_no_desc");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
-
-      const result = (await injectTools(undefined, agentId)) as z.infer<
-        typeof Anthropic.Tools.CustomToolSchema
-      >[];
-
-      expect(result).toHaveLength(1);
-      expect(result[0].description).toBeUndefined();
-    });
-
-    test("handles null description correctly", async () => {
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "tool_null_desc",
-        description: null,
-        parameters: { type: "object" },
-      });
-
-      const tool = await ToolModel.findByName("tool_null_desc");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
-
-      const result = (await injectTools(undefined, agentId)) as z.infer<
-        typeof Anthropic.Tools.CustomToolSchema
-      >[];
-
-      expect(result).toHaveLength(1);
-      expect(result[0].description).toBeUndefined();
-    });
-
-    test("handles empty parameters correctly", async () => {
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "tool_empty_params",
-        description: "Tool with empty params",
-        parameters: {},
-      });
-
-      const tool = await ToolModel.findByName("tool_empty_params");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
-
-      const result = await injectTools(undefined, agentId);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        name: "tool_empty_params",
-        type: "custom",
-        description: "Tool with empty params",
-        input_schema: {},
-      });
-    });
-
-    test("handles null parameters correctly", async () => {
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: "tool_null_params",
-        description: "Tool with null params",
-        parameters: undefined,
-      });
-
-      const tool = await ToolModel.findByName("tool_null_params");
-      if (!tool) throw new Error("Tool not found");
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
-
-      const result = await injectTools(undefined, agentId);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        name: "tool_null_params",
-        type: "custom",
-        description: "Tool with null params",
-        input_schema: {},
-      });
-    });
-  });
-
-  describe("edge cases", () => {
-    test("handles empty request tools array", async () => {
-      const result = await injectTools([], agentId);
-      expect(result).toEqual([]);
-    });
-
-    test("handles multiple tools with same name in request tools", async () => {
-      // This tests the implementation handles duplicate names in request tools gracefully
-      const requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] = [
-        {
-          name: "duplicate_tool",
-          type: "custom",
-          description: "First version",
-          input_schema: { version: 1 },
-        },
-        {
-          name: "duplicate_tool",
-          type: "custom",
-          description: "Second version",
-          input_schema: { version: 2 },
-        },
-      ];
-
-      const result = (await injectTools(requestTools, agentId)) as z.infer<
-        typeof Anthropic.Tools.CustomToolSchema
-      >[];
-
-      // The map implementation should keep the last one
-      expect(result).toHaveLength(1);
-      expect(result[0].input_schema).toEqual({ version: 2 });
-    });
-
-    test("handles tools with different Anthropic tool types", async () => {
-      const requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] = [
-        {
-          name: "bash",
-          type: "bash_20250124",
-        },
-        {
-          name: "str_replace_editor",
-          type: "text_editor_20250124",
-        },
-        {
-          name: "custom_tool",
-          type: "custom",
-          description: "Custom tool",
-          input_schema: { type: "object" },
-        },
-      ];
-
-      const result = await injectTools(requestTools, agentId);
-
-      expect(result).toHaveLength(3);
-      expect(result.map((tool) => tool.name)).toEqual([
-        "bash",
-        "str_replace_editor",
-        "custom_tool",
-      ]);
-    });
+      // Verify the tool input contains valid JSON parts
+      expect(body).toContain("location");
+      expect(body).toContain("San Francisco");
+      expect(body).toContain("fahrenheit");
+    } finally {
+      // Reset mock options for other tests
+      MockAnthropicClient.resetStreamOptions();
+    }
   });
 });
 
 describe("Anthropic proxy routing", () => {
-  let app: import("fastify").FastifyInstance;
-  let mockUpstream: import("fastify").FastifyInstance;
+  let app: FastifyInstance;
+  let mockUpstream: FastifyInstance;
   let upstreamPort: number;
 
   beforeEach(async () => {
-    const Fastify = (await import("fastify")).default;
-
     // Create a mock upstream server
     mockUpstream = Fastify();
 

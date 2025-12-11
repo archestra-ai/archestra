@@ -24,6 +24,10 @@ export function useLimits(params?: {
       });
       return response.data ?? [];
     },
+    // Automatically refetch every 5 seconds to keep usage data fresh
+    refetchInterval: 5000,
+    // Refetch when window regains focus
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -45,8 +49,8 @@ export function useCreateLimit() {
       const response = await createLimit({ body: data });
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["limits"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["limits"] });
       toast.success("Limit created successfully");
     },
     onError: (error) => {
@@ -69,9 +73,11 @@ export function useUpdateLimit() {
       });
       return response.data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["limits"] });
-      queryClient.invalidateQueries({ queryKey: ["limits", variables.id] });
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["limits"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["limits", variables.id],
+      });
       toast.success("Limit updated successfully");
     },
     onError: (error) => {
@@ -88,8 +94,8 @@ export function useDeleteLimit() {
       const response = await deleteLimit({ path: { id } });
       return response.data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["limits"] });
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["limits"] });
       queryClient.removeQueries({ queryKey: ["limits", variables.id] });
       toast.success("Limit deleted successfully");
     },

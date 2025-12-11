@@ -1,10 +1,18 @@
 "use client";
 
-import { type UIMessage, useChat } from "@ai-sdk/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DefaultChatTransport } from "ai";
+import type { UIMessage } from "@ai-sdk/react";
+import { Eye, EyeOff, Plus } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
+import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import {
   PromptInput,
   PromptInputBody,
@@ -13,331 +21,578 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { ConversationList } from "@/components/chat/conversation-list";
-import { N8nConnectionDialog } from "@/components/chat/n8n-connection-dialog";
-import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
+import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
+import { PromptDialog } from "@/components/chat/prompt-dialog";
+import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
+import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
+import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { PageLayout } from "@/components/page-layout";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useChatSession } from "@/contexts/global-chat-context";
+import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
+import { useConversation, useCreateConversation } from "@/lib/chat.query";
+import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
+import { useDialogs } from "@/lib/dialog.hook";
+import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
-interface Conversation {
-  id: string;
-  title: string | null;
-  selectedModel: string;
-  userId: string;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ConversationWithMessages extends Conversation {
-  messages: UIMessage[];
-}
-
-interface McpTool {
-  name: string;
-  description?: string;
-  // biome-ignore lint/suspicious/noExplicitAny: MCP tool schemas are dynamic and come from server
-  inputSchema: any;
-}
+const CONVERSATION_QUERY_PARAM = "conversation";
 
 export default function ChatPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
+  const [hideToolCalls, setHideToolCalls] = useState(() => {
+    // Initialize from localStorage
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("archestra-chat-hide-tool-calls") === "true";
+    }
+    return false;
+  });
   const loadedConversationRef = useRef<string | undefined>(undefined);
+  const pendingPromptRef = useRef<string | undefined>(undefined);
+  const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
 
-  // Initialize conversation ID from URL on mount
+  // Dialog management for MCP installation
+  const { isDialogOpened, openDialog, closeDialog } = useDialogs<
+    "custom-request" | "create-catalog"
+  >();
+
+  // Check if user can create catalog items directly
+  const { data: canCreateCatalog } = useHasPermissions({
+    internalMcpCatalog: ["create"],
+  });
+
+  // State for prompt management
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<
+    (typeof prompts)[number] | null
+  >(null);
+
+  // Fetch prompts and current editing prompt
+  const { data: prompts = [] } = usePrompts();
+  const { data: editingPrompt } = usePrompt(editingPromptId || "");
+  const deletePromptMutation = useDeletePrompt();
+  const { data: allProfiles = [] } = useProfiles();
+
+  const chatSession = useChatSession(conversationId);
+
+  // Check if API key is configured
+  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
+  const hasAnyApiKey = chatApiKeys.some(
+    (k) => k.provider === "anthropic" && k.secretId,
+  );
+
+  // Sync conversation ID with URL
   useEffect(() => {
-    const conversationParam = searchParams.get("conversation");
-    if (conversationParam && conversationParam !== conversationId) {
-      setConversationId(conversationParam);
+    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
+    if (conversationParam !== conversationId) {
+      setConversationId(conversationParam || undefined);
     }
   }, [searchParams, conversationId]);
 
   // Update URL when conversation changes
-  const selectConversation = (id: string | undefined) => {
-    setConversationId(id);
-    if (id) {
-      router.push(`${pathname}?conversation=${id}`);
-    } else {
-      router.push(pathname);
-    }
-  };
-
-  // Fetch conversations
-  const { data: conversations = [] } = useQuery<Conversation[]>({
-    queryKey: ["conversations"],
-    queryFn: async () => {
-      const res = await fetch("/api/chat/conversations");
-      if (!res.ok) throw new Error("Failed to fetch conversations");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes - don't refetch unless explicitly invalidated
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-  });
-
-  // Fetch conversation with messages
-  const { data: conversation } = useQuery<ConversationWithMessages>({
-    queryKey: ["conversation", conversationId],
-    queryFn: async () => {
-      if (!conversationId) return null;
-      const res = await fetch(`/api/chat/conversations/${conversationId}`);
-      if (!res.ok) throw new Error("Failed to fetch conversation");
-      return res.json();
-    },
-    enabled: !!conversationId,
-    staleTime: 0, // Always refetch to ensure we have the latest messages
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-  });
-
-  // Fetch available MCP tools
-  const { data: mcpTools = [] } = useQuery<McpTool[]>({
-    queryKey: ["mcp-tools"],
-    queryFn: async () => {
-      const res = await fetch("/api/chat/mcp-tools");
-      if (!res.ok) throw new Error("Failed to fetch MCP tools");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  // Create conversation mutation
-  const createConversation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/chat/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) throw new Error("Failed to create conversation");
-      return res.json();
-    },
-    onSuccess: (newConversation) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      selectConversation(newConversation.id);
-    },
-  });
-
-  // Delete conversation mutation
-  const deleteConversation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/chat/conversations/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete conversation");
-      return res.json();
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
-
-      // If we deleted the selected conversation, clear the selection
-      if (conversationId === deletedId) {
-        setConversationId(undefined);
-        setMessages([]);
+  const selectConversation = useCallback(
+    (id: string | undefined) => {
+      setConversationId(id);
+      if (id) {
+        router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
+      } else {
         router.push(pathname);
       }
     },
-  });
+    [pathname, router],
+  );
 
-  // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat", // Must match backend route
-      credentials: "include", // Send cookies for authentication
-    }),
-    id: conversationId,
-    onFinish: () => {
-      // Invalidate the conversation query to refetch with new messages
-      if (conversationId) {
-        queryClient.invalidateQueries({
-          queryKey: ["conversation", conversationId],
+  // Fetch conversation with messages
+  const { data: conversation } = useConversation(conversationId);
+
+  // Find the specific prompt for this conversation (if any)
+  const conversationPrompt = conversation?.promptId
+    ? prompts.find((p) => p.id === conversation.promptId)
+    : undefined;
+
+  // Get current agent info
+  const currentProfileId = conversation?.agentId;
+
+  // Clear MCP Gateway sessions when opening a NEW conversation
+  useEffect(() => {
+    // Only clear sessions if this is a newly created conversation
+    if (
+      currentProfileId &&
+      conversationId &&
+      newlyCreatedConversationRef.current === conversationId
+    ) {
+      // Clear sessions for this agent to ensure fresh MCP state
+      fetch("/v1/mcp/sessions", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${currentProfileId}`,
+        },
+      })
+        .then(async () => {
+          // Clear the ref after clearing sessions
+          newlyCreatedConversationRef.current = undefined;
+        })
+        .catch((error) => {
+          console.error("[Chat] Failed to clear MCP sessions:", {
+            conversationId,
+            agentId: currentProfileId,
+            error,
+          });
+          // Clear the ref even on error to avoid retry loops
+          newlyCreatedConversationRef.current = undefined;
         });
+    }
+  }, [conversationId, currentProfileId]);
+
+  // Create conversation mutation (requires agentId)
+  const createConversationMutation = useCreateConversation();
+
+  // Handle prompt selection from library
+  const handleSelectPrompt = useCallback(
+    async (agentId: string, promptId?: string) => {
+      // If promptId is provided, fetch the prompt and use its userPrompt
+      if (promptId) {
+        const selectedPrompt = prompts.find((p) => p.id === promptId);
+        if (selectedPrompt?.userPrompt) {
+          pendingPromptRef.current = selectedPrompt.userPrompt;
+        }
+      }
+
+      // Create conversation for the selected agent with optional promptId
+      const newConversation = await createConversationMutation.mutateAsync({
+        agentId,
+        promptId,
+      });
+      if (newConversation) {
+        // Mark this as a newly created conversation
+        newlyCreatedConversationRef.current = newConversation.id;
+        selectConversation(newConversation.id);
       }
     },
-  });
+    [createConversationMutation, selectConversation, prompts],
+  );
+
+  const handleEditPrompt = useCallback((prompt: (typeof prompts)[number]) => {
+    setEditingPromptId(prompt.id);
+    setIsPromptDialogOpen(true);
+  }, []);
+
+  const handleCreatePrompt = useCallback(() => {
+    setEditingPromptId(null);
+    setIsPromptDialogOpen(true);
+  }, []);
+
+  // Listen for custom event from layout to open dialog
+  useEffect(() => {
+    const handleOpenDialog = () => {
+      handleCreatePrompt();
+    };
+    window.addEventListener("open-prompt-dialog", handleOpenDialog);
+    return () => {
+      window.removeEventListener("open-prompt-dialog", handleOpenDialog);
+    };
+  }, [handleCreatePrompt]);
+
+  const handleDeletePrompt = useCallback(
+    async (promptId: string) => {
+      try {
+        await deletePromptMutation.mutateAsync(promptId);
+      } catch (error) {
+        console.error("Failed to delete prompt:", error);
+      }
+    },
+    [deletePromptMutation],
+  );
+
+  // Persist hide tool calls preference
+  const toggleHideToolCalls = useCallback(() => {
+    const newValue = !hideToolCalls;
+    setHideToolCalls(newValue);
+    localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
+  }, [hideToolCalls]);
+
+  // Extract chat session properties (or use defaults if session not ready)
+  const messages = chatSession?.messages ?? [];
+  const sendMessage = chatSession?.sendMessage;
+  const status = chatSession?.status ?? "ready";
+  const setMessages = chatSession?.setMessages;
+  const stop = chatSession?.stop;
+  const error = chatSession?.error;
+  const addToolResult = chatSession?.addToolResult;
+  const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
+  const setPendingCustomServerToolCall =
+    chatSession?.setPendingCustomServerToolCall;
+
+  useEffect(() => {
+    if (
+      !pendingCustomServerToolCall ||
+      !addToolResult ||
+      !setPendingCustomServerToolCall
+    ) {
+      return;
+    }
+
+    // Open the appropriate dialog based on user permissions
+    if (canCreateCatalog) {
+      openDialog("create-catalog");
+    } else {
+      openDialog("custom-request");
+    }
+
+    void (async () => {
+      try {
+        await addToolResult({
+          tool: pendingCustomServerToolCall.toolName as never,
+          toolCallId: pendingCustomServerToolCall.toolCallId,
+          output: {
+            type: "text",
+            text: canCreateCatalog
+              ? "Opening the Add MCP Server to Private Registry dialog."
+              : "Opening the custom MCP server installation request dialog.",
+          } as never,
+        });
+      } catch (toolError) {
+        console.error("[Chat] Failed to add custom server tool result", {
+          toolCallId: pendingCustomServerToolCall.toolCallId,
+          toolError,
+        });
+      }
+    })();
+
+    setPendingCustomServerToolCall(null);
+  }, [
+    pendingCustomServerToolCall,
+    addToolResult,
+    setPendingCustomServerToolCall,
+    canCreateCatalog,
+    openDialog,
+  ]);
 
   // Sync messages when conversation loads or changes
   useEffect(() => {
+    if (!setMessages || !sendMessage) {
+      return;
+    }
+
     // When switching to a different conversation, reset the loaded ref
     if (loadedConversationRef.current !== conversationId) {
       loadedConversationRef.current = undefined;
     }
 
-    // If we have conversation data and haven't synced it yet, sync it
+    // Only sync messages from backend if:
+    // 1. We have conversation data
+    // 2. We haven't synced this conversation yet
+    // 3. The session doesn't already have messages (don't overwrite active session)
     if (
       conversation?.messages &&
       conversation.id === conversationId &&
-      loadedConversationRef.current !== conversationId
+      loadedConversationRef.current !== conversationId &&
+      messages.length === 0 // Only sync if session is empty
     ) {
-      setMessages(conversation.messages);
+      setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
-    } else if (conversationId && !conversation) {
-      // Clear messages when switching to a conversation that's loading
-      setMessages([]);
-    }
-  }, [conversationId, conversation, setMessages]);
 
-  const handleSubmit = (
-    // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
-    message: { text?: string; files?: any[] },
-    e: FormEvent<HTMLFormElement>,
-  ) => {
-    e.preventDefault();
-    if (
-      !message.text?.trim() ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
-      return;
-    }
-
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: message.text }],
-    });
-  };
-
-  const handleSelectPrompt = (prompt: string) => {
-    // Send the message directly instead of just filling the input
-    if (status === "submitted" || status === "streaming") {
-      return;
-    }
-
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: prompt }],
-    });
-  };
-
-  // Group tools by MCP server (prefix before "__")
-  const mcpServerGroups = mcpTools.reduce(
-    (acc, tool) => {
-      const prefix = tool.name.includes("__")
-        ? tool.name.split("__")[0]
-        : "other";
-
-      if (!acc[prefix]) {
-        acc[prefix] = [];
+      // If there's a pending prompt and the conversation is empty, send it
+      if (
+        pendingPromptRef.current &&
+        conversation.messages.length === 0 &&
+        status !== "submitted" &&
+        status !== "streaming"
+      ) {
+        const promptToSend = pendingPromptRef.current;
+        pendingPromptRef.current = undefined;
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: promptToSend }],
+        });
       }
-      acc[prefix].push(tool);
-      return acc;
+    }
+  }, [
+    conversationId,
+    conversation,
+    setMessages,
+    sendMessage,
+    status,
+    messages,
+  ]);
+
+  const handleSubmit = useCallback(
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
+      message: { text?: string; files?: any[] },
+      e: FormEvent<HTMLFormElement>,
+    ) => {
+      e.preventDefault();
+      if (
+        !sendMessage ||
+        !message.text?.trim() ||
+        status === "submitted" ||
+        status === "streaming"
+      ) {
+        return;
+      }
+
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: message.text }],
+      });
     },
-    {} as Record<string, McpTool[]>,
+    [sendMessage, status],
   );
 
-  return (
-    <div className="flex h-screen">
-      {/* Sidebar - Conversation List */}
-      <ConversationList
-        conversations={conversations}
-        selectedConversationId={conversationId}
-        onSelectConversation={selectConversation}
-        onCreateConversation={() => createConversation.mutate()}
-        onDeleteConversation={(id) => deleteConversation.mutate(id)}
-        isCreatingConversation={createConversation.isPending}
-      />
+  // If API key is not configured, show setup message
+  if (!hasAnyApiKey) {
+    return (
+      <div className="flex h-screen items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>LLM Provider API Key Required</CardTitle>
+            <CardDescription>
+              The chat feature requires an LLM provider API key to function.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please configure an LLM provider API key in Chat Settings to start
+              using the chat feature.
+            </p>
+            <Button asChild>
+              <Link href="/settings/chat">Go to Chat Settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {!conversationId ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <p className="text-lg mb-2">No conversation selected</p>
-              <p className="text-sm">Create a new chat to get started</p>
+  const profileName = conversationPrompt?.agentId
+    ? allProfiles.find((a) => a.id === conversationPrompt.agentId)?.name
+    : null;
+  const promptBadge = (
+    <>
+      {conversationPrompt ? (
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs font-medium cursor-help">
+                  Prompt: {conversationPrompt.name}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                className="max-w-md max-h-64 overflow-y-auto"
+              >
+                <div className="space-y-2">
+                  {profileName && (
+                    <div>
+                      <div className="font-semibold text-xs mb-1">Profile:</div>
+                      <div className="text-xs">{profileName}</div>
+                    </div>
+                  )}
+                  {conversationPrompt.systemPrompt && (
+                    <div>
+                      <div className="font-semibold text-xs mb-1">
+                        System Prompt:
+                      </div>
+                      <pre className="text-xs whitespace-pre-wrap">
+                        {conversationPrompt.systemPrompt}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (!conversationId) {
+    const hasNoProfiles = allProfiles.length === 0;
+
+    return (
+      <PageLayout
+        title="New Chat"
+        description="Start a free chat or select a prompt from your library to start a guided chat"
+        actionButton={
+          <WithPermissions
+            permissions={{ prompt: ["create"] }}
+            noPermissionHandle="hide"
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      onClick={handleCreatePrompt}
+                      size="sm"
+                      disabled={hasNoProfiles}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Prompt
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {hasNoProfiles && (
+                  <TooltipContent>
+                    <p>No profiles available</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </WithPermissions>
+        }
+      >
+        <PromptLibraryGrid
+          prompts={prompts}
+          onSelectPrompt={handleSelectPrompt}
+          onEdit={handleEditPrompt}
+          onDelete={handleDeletePrompt}
+          onViewVersionHistory={setVersionHistoryPrompt}
+        />
+        <PromptDialog
+          open={isPromptDialogOpen}
+          onOpenChange={(open) => {
+            setIsPromptDialogOpen(open);
+            if (!open) {
+              setEditingPromptId(null);
+            }
+          }}
+          prompt={editingPrompt}
+          onViewVersionHistory={setVersionHistoryPrompt}
+        />
+        <PromptVersionHistoryDialog
+          open={!!versionHistoryPrompt}
+          onOpenChange={(open) => {
+            if (!open) {
+              setVersionHistoryPrompt(null);
+            }
+          }}
+          prompt={versionHistoryPrompt}
+        />
+      </PageLayout>
+    );
+  }
+
+  return (
+    <div className="flex h-screen w-full">
+      <div className="flex-1 flex flex-col w-full">
+        <div className="flex flex-col h-full">
+          {error && <ChatError error={error} />}
+          <StreamTimeoutWarning status={status} messages={messages} />
+
+          <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
+            <div className="flex-1" />
+            {conversation?.agent?.name && (
+              <div className="flex-1 text-center">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {conversation.agent.name}
+                </span>
+              </div>
+            )}
+            <div className="flex-1 flex justify-end gap-2 items-center">
+              {promptBadge}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleHideToolCalls}
+                className="text-xs"
+              >
+                {hideToolCalls ? (
+                  <>
+                    <Eye className="h-3 w-3 mr-1" />
+                    Show tool calls
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    Hide tool calls
+                  </>
+                )}
+              </Button>
             </div>
           </div>
-        ) : (
-          <>
-            {messages.length === 0 ? (
-              <PromptSuggestions onSelectPrompt={handleSelectPrompt} />
-            ) : (
-              <ChatMessages messages={messages} />
-            )}
-            <div className="border-t p-4">
-              <div className="max-w-3xl mx-auto space-y-3">
-                {mcpTools.length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    <TooltipProvider>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(mcpServerGroups).map(
-                            ([serverName, tools]) => (
-                              <Tooltip key={serverName}>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
-                                    <span className="font-medium">
-                                      {serverName}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      ({tools.length}{" "}
-                                      {tools.length === 1 ? "tool" : "tools"})
-                                    </span>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  className="max-w-sm max-h-64 overflow-y-auto"
-                                >
-                                  <div className="space-y-1">
-                                    {tools.map((tool) => (
-                                      <div
-                                        key={tool.name}
-                                        className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                      >
-                                        <div className="font-mono font-medium">
-                                          {tool.name.split("__")[1] ||
-                                            tool.name}
-                                        </div>
-                                        {tool.description && (
-                                          <div className="text-muted-foreground mt-0.5">
-                                            {tool.description}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            ),
-                          )}
-                        </div>
-                        <N8nConnectionDialog />
-                      </div>
-                    </TooltipProvider>
-                  </div>
-                )}
-                {mcpTools.length === 0 && (
-                  <div className="flex justify-end">
-                    <N8nConnectionDialog />
-                  </div>
-                )}
-                <PromptInput onSubmit={handleSubmit}>
-                  <PromptInputBody>
-                    <PromptInputTextarea placeholder="Type a message..." />
-                  </PromptInputBody>
-                  <PromptInputToolbar>
-                    <PromptInputTools />
-                    <PromptInputSubmit status={status} />
-                  </PromptInputToolbar>
-                </PromptInput>
-              </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <ChatMessages
+              messages={messages}
+              hideToolCalls={hideToolCalls}
+              status={status}
+            />
+          </div>
+
+          <div className="sticky bottom-0 bg-background border-t p-4">
+            <div className="max-w-3xl mx-auto space-y-3">
+              {currentProfileId && (
+                <WithPermissions
+                  permissions={{ profile: ["read"] }}
+                  noPermissionHandle="tooltip"
+                >
+                  {({ hasPermission }) => {
+                    return hasPermission ===
+                      undefined ? null : hasPermission ? (
+                      <McpToolsDisplay
+                        agentId={currentProfileId}
+                        className="text-xs text-muted-foreground"
+                      />
+                    ) : (
+                      <Badge variant="outline" className="text-xs my-2">
+                        Unable to show the list of tools
+                      </Badge>
+                    );
+                  }}
+                </WithPermissions>
+              )}
+              <PromptInput onSubmit={handleSubmit}>
+                <PromptInputBody>
+                  <PromptInputTextarea placeholder="Type a message..." />
+                </PromptInputBody>
+                <PromptInputToolbar>
+                  <PromptInputTools />
+                  <PromptInputSubmit
+                    status={status === "error" ? "ready" : status}
+                    onStop={stop}
+                  />
+                </PromptInputToolbar>
+              </PromptInput>
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </div>
+
+      <CustomServerRequestDialog
+        isOpen={isDialogOpened("custom-request")}
+        onClose={() => closeDialog("custom-request")}
+      />
+      <CreateCatalogDialog
+        isOpen={isDialogOpened("create-catalog")}
+        onClose={() => closeDialog("create-catalog")}
+        onSuccess={() => router.push("/mcp-catalog/registry")}
+      />
     </div>
   );
 }

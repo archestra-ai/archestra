@@ -18,7 +18,8 @@
     "jsx": "preserve",
     "incremental": true,
     "types": [
-      "vitest/globals"
+      "vitest/globals",
+      "@testing-library/jest-dom/vitest"
     ],
     "plugins": [
       {
@@ -40,6 +41,7 @@
   ],
   "exclude": [
     "node_modules",
-    ".next"
+    ".next",
+    ".turbo"
   ]
 }

@@ -2,16 +2,92 @@ import { z } from "zod";
 
 export const UuidIdSchema = z.uuidv4();
 
-export const ErrorResponseSchema = z.object({
-  error: z.union([
-    z.string(),
-    z.object({
+export const ApiErrorTypeSchema = z.enum([
+  "api_internal_server_error",
+  "api_validation_error",
+  "api_authentication_error",
+  "api_authorization_error",
+  "api_not_found_error",
+  "unknown_api_error",
+  "api_conflict_error",
+]);
+
+/**
+ * https://stackoverflow.com/a/70765851
+ */
+export class ApiError extends Error {
+  type: z.infer<typeof ApiErrorTypeSchema>;
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+
+    switch (statusCode) {
+      case 500:
+        this.type = "api_internal_server_error";
+        break;
+      case 400:
+        this.type = "api_validation_error";
+        break;
+      case 401:
+        this.type = "api_authentication_error";
+        break;
+      case 403:
+        this.type = "api_authorization_error";
+        break;
+      case 404:
+        this.type = "api_not_found_error";
+        break;
+      case 409:
+        this.type = "api_conflict_error";
+        break;
+      default:
+        this.type = "unknown_api_error";
+        break;
+    }
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
+  {
+    error: {
+      message: string;
+      type: T;
+    };
+  };
+
+export const generateErrorResponseSchema = <
+  T extends z.infer<typeof ApiErrorTypeSchema>,
+>(
+  errorType: T,
+) =>
+  z.object({
+    error: z.object({
       message: z.string(),
-      type: z.string(),
+      type: z.literal(errorType),
     }),
-  ]),
+  });
+
+export const ErrorResponsesSchema = {
+  400: generateErrorResponseSchema("api_validation_error"),
+  401: generateErrorResponseSchema("api_authentication_error"),
+  403: generateErrorResponseSchema("api_authorization_error"),
+  404: generateErrorResponseSchema("api_not_found_error"),
+  409: generateErrorResponseSchema("api_conflict_error"),
+  500: generateErrorResponseSchema("api_internal_server_error"),
+};
+
+export const constructResponseSchema = <T extends z.ZodTypeAny>(
+  schema: T,
+): typeof ErrorResponsesSchema & {
+  200: T;
+} => ({
+  200: schema,
+  ...ErrorResponsesSchema,
 });
-export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 /**
  * Pagination query parameters schema
@@ -92,158 +168,4 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortDirection?: "asc" | "desc";
 };
 
-export const RouteId = {
-  // Agent Routes
-  GetAgents: "getAgents",
-  GetAllAgents: "getAllAgents",
-  CreateAgent: "createAgent",
-  GetAgent: "getAgent",
-  GetDefaultAgent: "getDefaultAgent",
-  UpdateAgent: "updateAgent",
-  DeleteAgent: "deleteAgent",
-  GetLabelKeys: "getLabelKeys",
-  GetLabelValues: "getLabelValues",
-
-  // Agent Tool Routes
-  AssignToolToAgent: "assignToolToAgent",
-  UnassignToolFromAgent: "unassignToolFromAgent",
-  GetAgentTools: "getAgentTools",
-  GetAllAgentTools: "getAllAgentTools",
-  UpdateAgentTool: "updateAgentTool",
-  GetAgentAvailableTokens: "getAgentAvailableTokens",
-
-  // Features Routes
-  GetFeatures: "getFeatures",
-
-  // Auth Routes
-  GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
-
-  // MCP Catalog Routes
-  GetInternalMcpCatalog: "getInternalMcpCatalog",
-  CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
-  GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
-  UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
-  DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
-
-  // MCP Server Routes
-  GetMcpServers: "getMcpServers",
-  GetMcpServer: "getMcpServer",
-  GetMcpServerTools: "getMcpServerTools",
-  GetMcpServerLogs: "getMcpServerLogs",
-  InstallMcpServer: "installMcpServer",
-  DeleteMcpServer: "deleteMcpServer",
-  RevokeUserMcpServerAccess: "revokeUserMcpServerAccess",
-  GrantTeamMcpServerAccess: "grantTeamMcpServerAccess",
-  RevokeTeamMcpServerAccess: "revokeTeamMcpServerAccess",
-  RevokeAllTeamsMcpServerAccess: "revokeAllTeamsMcpServerAccess",
-  RestartMcpServer: "restartMcpServer",
-  GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
-
-  // MCP Server Installation Request Routes
-  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
-  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
-  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
-  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
-  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
-  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
-  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
-  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
-
-  // OAuth Routes
-  InitiateOAuth: "initiateOAuth",
-  HandleOAuthCallback: "handleOAuthCallback",
-
-  // Team Routes
-  GetTeams: "getTeams",
-  CreateTeam: "createTeam",
-  GetTeam: "getTeam",
-  UpdateTeam: "updateTeam",
-  DeleteTeam: "deleteTeam",
-  GetTeamMembers: "getTeamMembers",
-  AddTeamMember: "addTeamMember",
-  RemoveTeamMember: "removeTeamMember",
-
-  // Tool Routes
-  GetTools: "getTools",
-  GetUnassignedTools: "getUnassignedTools",
-
-  // Interaction Routes
-  GetInteractions: "getInteractions",
-  GetInteraction: "getInteraction",
-
-  // MCP Tool Call Routes
-  GetMcpToolCalls: "getMcpToolCalls",
-  GetMcpToolCall: "getMcpToolCall",
-
-  // Autonomy Policy Routes
-  GetOperators: "getOperators",
-  GetToolInvocationPolicies: "getToolInvocationPolicies",
-  CreateToolInvocationPolicy: "createToolInvocationPolicy",
-  GetToolInvocationPolicy: "getToolInvocationPolicy",
-  UpdateToolInvocationPolicy: "updateToolInvocationPolicy",
-  DeleteToolInvocationPolicy: "deleteToolInvocationPolicy",
-  GetTrustedDataPolicies: "getTrustedDataPolicies",
-  CreateTrustedDataPolicy: "createTrustedDataPolicy",
-  GetTrustedDataPolicy: "getTrustedDataPolicy",
-  UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
-  DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
-
-  // Dual LLM Config Routes
-  GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
-  GetDualLlmConfigs: "getDualLlmConfigs",
-  CreateDualLlmConfig: "createDualLlmConfig",
-  GetDualLlmConfig: "getDualLlmConfig",
-  UpdateDualLlmConfig: "updateDualLlmConfig",
-  DeleteDualLlmConfig: "deleteDualLlmConfig",
-
-  // Dual LLM Result Routes
-  GetDualLlmResultByToolCallId: "getDualLlmResultByToolCallId",
-  GetDualLlmResultsByInteraction: "getDualLlmResultsByInteraction",
-
-  // Proxy Routes - OpenAI
-  OpenAiChatCompletionsWithDefaultAgent:
-    "openAiChatCompletionsWithDefaultAgent",
-  OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
-
-  // Proxy Routes - Anthropic
-  AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
-  AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
-
-  // Chat Routes
-  StreamChat: "streamChat",
-  GetChatConversations: "getChatConversations",
-  GetChatConversation: "getChatConversation",
-  CreateChatConversation: "createChatConversation",
-  UpdateChatConversation: "updateChatConversation",
-  DeleteChatConversation: "deleteChatConversation",
-  GetChatMcpTools: "getChatMcpTools",
-  // Limits Routes
-  GetLimits: "getLimits",
-  CreateLimit: "createLimit",
-  GetLimit: "getLimit",
-  UpdateLimit: "updateLimit",
-  DeleteLimit: "deleteLimit",
-
-  // Organization Routes
-  GetOrganization: "getOrganization",
-  UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
-
-  // Token Price Routes
-  GetTokenPrices: "getTokenPrices",
-  CreateTokenPrice: "createTokenPrice",
-  GetTokenPrice: "getTokenPrice",
-  UpdateTokenPrice: "updateTokenPrice",
-  DeleteTokenPrice: "deleteTokenPrice",
-
-  // Statistics Routes
-  GetTeamStatistics: "getTeamStatistics",
-  GetAgentStatistics: "getAgentStatistics",
-  GetModelStatistics: "getModelStatistics",
-  GetOverviewStatistics: "getOverviewStatistics",
-  // Organization Routes
-  GetOrganizationAppearance: "getOrganizationAppearance",
-  UpdateOrganizationAppearance: "updateOrganizationAppearance",
-  UploadOrganizationLogo: "uploadOrganizationLogo",
-  DeleteOrganizationLogo: "deleteOrganizationLogo",
-} as const;
-export type RouteId = (typeof RouteId)[keyof typeof RouteId];
+export const DeleteObjectResponseSchema = z.object({ success: z.boolean() });

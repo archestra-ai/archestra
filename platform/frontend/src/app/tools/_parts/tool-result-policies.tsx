@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
   useOperators,
   useToolResultPolicies,
@@ -148,20 +148,20 @@ function AttributePathExamples() {
 export function ToolResultPolicies({
   agentTool,
 }: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
   const {
-    data: { byAgentToolId },
+    data: { byProfileToolId },
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
-  const policies = byAgentToolId[agentTool.id] || [];
+  const policies = byProfileToolId[agentTool.id] || [];
   const toolResultPoliciesUpdateMutation =
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
     useToolResultPoliciesDeleteMutation();
-  const agentToolPatchMutation = useAgentToolPatchMutation();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
@@ -173,7 +173,7 @@ export function ToolResultPolicies({
             to mark tool results as &ldquo;trusted&rdquo; or
             &ldquo;untrusted&rdquo; to prevent agent acting on untrusted data.{" "}
             <a
-              href="https://www.archestra.ai/docs/platform-dynamic-tools"
+              href="https://archestra.ai/docs/platform-dynamic-tools"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"

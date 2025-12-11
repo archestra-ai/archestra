@@ -3,7 +3,7 @@
 This example demonstrates how to use Pydantic AI to build an autonomous AI agent and connect the Archestra Platform as
 a security layer to protect against prompt injection attacks.
 
-<https://www.archestra.ai/docs/platform-pydantic-example>
+<https://archestra.ai/docs/platform-pydantic-example>
 
 ## Overview
 
@@ -116,4 +116,4 @@ Without the Archestra Platform, the agent may follow instructions from the untru
 maliciously. With the Archestra Platform, the platform recognizes that the GitHub API response is untrusted and blocks subsequent
 dangerous tool calls.
 
-To learn more about the Archestra Platform head [to our docs](https://www.archestra.ai/docs/platform-dynamic-tools) 🙂.
+To learn more about the Archestra Platform head [to our docs](https://archestra.ai/docs/platform-dynamic-tools) 🙂.

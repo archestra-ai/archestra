@@ -20,21 +20,6 @@ on:
     types: [submitted]
 
 jobs:
-  joey-claude-code:
-    if: |
-      (github.event_name == 'issue_comment' && github.event.comment.user.login == 'joeyorlando') ||
-      (github.event_name == 'pull_request_review_comment' && github.event.comment.user.login == 'joeyorlando') ||
-      (github.event_name == 'pull_request_review' && github.event.review.user.login == 'joeyorlando')
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-code.yml
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEYORLANDO_CLAUDE_CODE_OAUTH_TOKEN }}
-
   ildar-claude-code:
     if: |
       (github.event_name == 'issue_comment' && github.event.comment.user.login == 'iskhakov') ||

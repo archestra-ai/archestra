@@ -1,5 +1,6 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { get } from "lodash-es";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
 import AgentToolModel from "./agent-tool";
@@ -66,6 +67,13 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     isContextTrusted: boolean,
   ): Promise<EvaluationResult> {
+    if (isArchestraMcpServerTool(toolName)) {
+      return {
+        isAllowed: true,
+        reason: "Archestra MCP server tool",
+      };
+    }
+
     /**
      * Get policies assigned to this agent that also match the tool name,
      * along with the tool's configuration
@@ -103,8 +111,8 @@ class ToolInvocationPolicyModel {
         ? applicablePoliciesForAgent[0].allowUsageWhenUntrustedDataIsPresent
         : null;
 
-    // If we don't have the tool config from policies, fetch it from agent-tool relationship
     if (allowUsageWhenUntrustedDataIsPresent === null) {
+      // If we don't have the tool config from policies, fetch it from agent-tool relationship
       const securityConfig = await AgentToolModel.getSecurityConfig(
         agentId,
         toolName,
@@ -115,15 +123,9 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // If context is untrusted and tool allows usage with untrusted data, allow immediately
-    if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
-      return {
-        isAllowed: true,
-        reason: "",
-      };
-    }
-
     // Evaluate each policy
+    // IMPORTANT: block_always policies must be evaluated BEFORE checking allowUsageWhenUntrustedDataIsPresent
+    // to ensure that explicit block rules always take precedence
     for (const {
       argumentName,
       operator,
@@ -135,11 +137,17 @@ class ToolInvocationPolicyModel {
       const argumentValue = get(toolInput, argumentName);
 
       if (argumentValue === undefined) {
-        // If the argument doesn't exist and we have a block policy, that's okay
+        // If the argument doesn't exist and we have a block policy, that's okay - skip it
+        // (can't block based on a value that doesn't exist)
         if (action === "block_always") {
           continue;
         }
-        // If it's an allow policy and the argument is missing, that's a problem
+        // If it's an allow policy and the argument is missing:
+        // - If tool allows usage when untrusted data is present, skip this policy
+        // - Otherwise, it's an error (because we can't evaluate if the call should be allowed)
+        if (allowUsageWhenUntrustedDataIsPresent) {
+          continue;
+        }
         return {
           isAllowed: false,
           reason: `Missing required argument: ${argumentName}`,
@@ -200,8 +208,17 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // If context is untrusted and we don't have an explicit allow rule, block
+    if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
+      // After evaluating all block_always policies, check if context is untrusted
+      // and tool allows usage with untrusted data
+      return {
+        isAllowed: true,
+        reason: "",
+      };
+    }
+
     if (!isContextTrusted && !hasExplicitAllowRule) {
+      // If context is untrusted and we don't have an explicit allow rule, block
       return {
         isAllowed: false,
         reason: "Tool invocation blocked: context contains untrusted data",

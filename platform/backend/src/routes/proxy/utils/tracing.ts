@@ -1,6 +1,6 @@
 import { type Span, trace } from "@opentelemetry/api";
-import type { Agent } from "@/types";
-import type { SupportedProvider } from "@/types/llm-providers";
+import logger from "@/logging";
+import type { Agent, SupportedProvider } from "@/types";
 
 /**
  * Route categories for tracing
@@ -20,7 +20,8 @@ export enum RouteCategory {
  * @param provider - The LLM provider (openai, gemini, or anthropic)
  * @param llmModel - The LLM model being used
  * @param stream - Whether this is a streaming request
- * @param agent - The agent object (optional, if provided will add agent.id, agent.name and agent labels)
+ * @param agent - The agent/profile object (optional, if provided will add both agent.* and profile.* attributes)
+ *                Note: agent.* attributes are deprecated in favor of profile.* attributes
  * @param callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
@@ -32,6 +33,10 @@ export async function startActiveLlmSpan<T>(
   agent: Agent | undefined,
   callback: (span: Span) => Promise<T>,
 ): Promise<T> {
+  logger.debug(
+    { spanName, provider, llmModel, stream, agentId: agent?.id },
+    "[tracing] startActiveLlmSpan: creating span",
+  );
   const tracer = trace.getTracer("archestra");
 
   return tracer.startActiveSpan(
@@ -45,19 +50,37 @@ export async function startActiveLlmSpan<T>(
       },
     },
     async (span) => {
-      // Set agent attributes if agent is provided
+      // Set agent/profile attributes if agent is provided
+      // NOTE: profile.* attributes are the preferred attributes going forward.
+      // agent.* attributes are deprecated and will be removed in a future release.
+      // Both are emitted during the transition period to allow dashboards/traces to migrate.
       if (agent) {
+        logger.debug(
+          {
+            agentId: agent.id,
+            agentName: agent.name,
+            labelCount: agent.labels?.length || 0,
+          },
+          "[tracing] startActiveLlmSpan: setting agent attributes",
+        );
         span.setAttribute("agent.id", agent.id);
         span.setAttribute("agent.name", agent.name);
+        span.setAttribute("profile.id", agent.id);
+        span.setAttribute("profile.name", agent.name);
 
-        // Add all agent labels as attributes with agent.<key>=<value> format
+        // Add all labels as attributes with both agent.<key>=<value> and profile.<key>=<value> format
         if (agent.labels && agent.labels.length > 0) {
           for (const label of agent.labels) {
             span.setAttribute(`agent.${label.key}`, label.value);
+            span.setAttribute(`profile.${label.key}`, label.value);
           }
         }
       }
 
+      logger.debug(
+        { spanName },
+        "[tracing] startActiveLlmSpan: executing callback",
+      );
       return await callback(span);
     },
   );

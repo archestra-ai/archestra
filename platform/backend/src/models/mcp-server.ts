@@ -1,44 +1,37 @@
-import { eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { secretManager } from "@/secretsmanager";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
-import McpServerTeamModel from "./mcp-server-team";
 import McpServerUserModel from "./mcp-server-user";
-import SecretModel from "./secret";
 import ToolModel from "./tool";
-
-// Get the API base URL from config
-const API_BASE_URL =
-  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
-    const { teams, userId, ...serverData } = server;
+    const { userId, ...serverData } = server;
 
     // For local servers, add a unique identifier to the name to avoid conflicts
+    // Use teamId for team installations, userId for personal installations
     let mcpServerName = serverData.name;
     if (serverData.serverType === "local") {
-      if (serverData.authType === "personal" && userId) {
+      if (serverData.teamId) {
+        // Team installation: use teamId for unique pod name
+        mcpServerName = `${serverData.name}-${serverData.teamId}`;
+      } else if (userId) {
+        // Personal installation: use userId for unique pod name
         mcpServerName = `${serverData.name}-${userId}`;
-      } else if (serverData.authType === "team") {
-        mcpServerName = `${serverData.name}-team-${serverData.ownerId}`;
       }
     }
 
-    // ownerId and authType are part of serverData and will be inserted
+    // ownerId is part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
       .values({ ...serverData, name: mcpServerName })
       .returning();
-
-    // Assign teams to the MCP server if provided
-    if (teams && teams.length > 0) {
-      await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
-    }
 
     // Assign user to the MCP server if provided (personal auth)
     if (userId) {
@@ -47,38 +40,94 @@ class McpServerModel {
 
     return {
       ...createdServer,
-      teams: teams || [],
       users: userId ? [userId] : [],
     };
   }
 
+  /**
+   * Get all MCP server IDs that a user has access to through team membership.
+   * Simplified query now that teamId is directly on mcp_server table.
+   */
+  private static async getUserAccessibleMcpServerIdsByTeam(
+    userId: string,
+  ): Promise<string[]> {
+    // Get all MCP servers where the server's teamId matches a team the user is a member of
+    const mcpServers = await db
+      .select({ mcpServerId: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(eq(schema.teamMembersTable.userId, userId));
+
+    return mcpServers.map((s) => s.mcpServerId);
+  }
+
+  /**
+   * Check if a user has access to a specific MCP server through team membership.
+   */
+  private static async userHasMcpServerAccessByTeam(
+    userId: string,
+    mcpServerId: string,
+  ): Promise<boolean> {
+    // Check if the MCP server's teamId matches any team the user is a member of
+    const result = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, mcpServerId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    return result.length > 0;
+  }
+
   static async findAll(
     userId?: string,
-    isAdmin?: boolean,
+    isMcpServerAdmin?: boolean,
   ): Promise<McpServer[]> {
     let query = db
       .select({
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
+        catalogName: schema.internalMcpCatalogTable.name,
+        teamName: schema.teamsTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
         schema.usersTable,
         eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
       )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
       .$dynamic();
 
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      // Get MCP servers accessible through team membership
-      const teamAccessibleMcpServerIds =
-        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+    // Apply access control filtering for non-MCP server admins
+    if (userId && !isMcpServerAdmin) {
+      // Get MCP servers accessible through:
+      // 1. Team membership (servers assigned to user's teams)
+      // 2. Personal access (user's own servers)
+      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
+        await Promise.all([
+          McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+          McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        ]);
 
-      // Get MCP servers with personal access
-      const personalMcpServerIds =
-        await McpServerUserModel.getUserPersonalMcpServerIds(userId);
-
-      // Combine both lists
+      // Combine all lists
       const accessibleMcpServerIds = [
         ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
       ];
@@ -94,25 +143,34 @@ class McpServerModel {
 
     const results = await query;
 
-    // Populate teams and user details for each MCP server
-    const serversWithRelations: McpServer[] = await Promise.all(
-      results.map(async (result) => {
-        const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(
-          result.server.id,
-        );
-        const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(
-          result.server.id,
-        );
-        return {
-          ...result.server,
-          ownerEmail: result.ownerEmail,
-          teams: teamDetails.map((t) => t.teamId),
-          users: userDetails.map((u) => u.userId),
-          userDetails,
-          teamDetails,
-        };
-      }),
-    );
+    const serverIds = results.map((result) => result.server.id);
+
+    // Populate user details for all MCP servers with bulk query to avoid N+1
+    const userDetailsMap =
+      await McpServerUserModel.getUserDetailsForMcpServers(serverIds);
+
+    // Build the servers with relations
+    const serversWithRelations: McpServer[] = results.map((result) => {
+      const userDetails = userDetailsMap.get(result.server.id) || [];
+
+      // Build teamDetails from the joined team data
+      const teamDetails = result.server.teamId
+        ? {
+            teamId: result.server.teamId,
+            name: result.teamName || "",
+            createdAt: result.server.createdAt, // Use server createdAt as team assignment time
+          }
+        : null;
+
+      return {
+        ...result.server,
+        ownerEmail: result.ownerEmail,
+        catalogName: result.catalogName,
+        users: userDetails.map((u) => u.userId),
+        userDetails,
+        teamDetails,
+      };
+    });
 
     return serversWithRelations;
   }
@@ -120,17 +178,14 @@ class McpServerModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
+    isMcpServerAdmin?: boolean,
   ): Promise<McpServer | null> {
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
-      const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
-        userId,
-        id,
-        false,
-      );
-      const hasPersonalAccess =
-        await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);
+    // Check access control for non-MCP server admins
+    if (userId && !isMcpServerAdmin) {
+      const [hasTeamAccess, hasPersonalAccess] = await Promise.all([
+        McpServerModel.userHasMcpServerAccessByTeam(userId, id),
+        McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
+      ]);
 
       if (!hasTeamAccess && !hasPersonalAccess) {
         return null;
@@ -141,11 +196,16 @@ class McpServerModel {
       .select({
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
+        teamName: schema.teamsTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
         schema.usersTable,
         eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
       .where(eq(schema.mcpServersTable.id, id));
 
@@ -153,13 +213,20 @@ class McpServerModel {
       return null;
     }
 
-    const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(id);
     const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
+
+    // Build teamDetails from the joined team data
+    const teamDetails = result.server.teamId
+      ? {
+          teamId: result.server.teamId,
+          name: result.teamName || "",
+          createdAt: result.server.createdAt,
+        }
+      : null;
 
     return {
       ...result.server,
       ownerEmail: result.ownerEmail,
-      teams: teamDetails.map((t) => t.teamId),
       users: userDetails.map((u) => u.userId),
       userDetails,
       teamDetails,
@@ -185,7 +252,7 @@ class McpServerModel {
     id: string,
     server: Partial<UpdateMcpServer>,
   ): Promise<McpServer | null> {
-    const { teams, ...serverData } = server;
+    const serverData = server;
 
     let updatedServer: McpServer | undefined;
 
@@ -201,7 +268,7 @@ class McpServerModel {
         return null;
       }
     } else {
-      // If only updating teams, fetch the existing server
+      // No fields to update, fetch the existing server
       const [existingServer] = await db
         .select()
         .from(schema.mcpServersTable)
@@ -214,18 +281,23 @@ class McpServerModel {
       updatedServer = existingServer;
     }
 
-    // Sync team assignments if teams is provided
-    if (teams !== undefined) {
-      await McpServerTeamModel.syncMcpServerTeams(id, teams);
-    }
+    return updatedServer;
+  }
 
-    // Fetch current teams
-    const currentTeams = await McpServerTeamModel.getTeamsForMcpServer(id);
+  /**
+   * Set the team for an MCP server. Pass null to remove team assignment.
+   */
+  static async setTeam(
+    id: string,
+    teamId: string | null,
+  ): Promise<McpServer | null> {
+    const [updatedServer] = await db
+      .update(schema.mcpServersTable)
+      .set({ teamId })
+      .where(eq(schema.mcpServersTable.id, id))
+      .returning();
 
-    return {
-      ...updatedServer,
-      teams: currentTeams,
-    };
+    return updatedServer || null;
   }
 
   static async delete(id: string): Promise<boolean> {
@@ -238,6 +310,24 @@ class McpServerModel {
 
     // For local servers, stop and remove the K8s pod
     if (mcpServer.serverType === "local") {
+      // Clean up agent_tools that use this server as execution source
+      // Must be done before deletion to ensure agents do not retain unusable tool assignments; FK constraint would only null out the reference, not remove the assignment
+      try {
+        const deletedAgentTools =
+          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
+        if (deletedAgentTools > 0) {
+          logger.info(
+            `Deleted ${deletedAgentTools} agent tool assignments for local MCP server: ${mcpServer.name}`,
+          );
+        }
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
+        );
+        // Continue with deletion even if agent tool cleanup fails
+      }
+
       try {
         await McpServerRuntimeManager.removeMcpServer(id);
         logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
@@ -260,7 +350,7 @@ class McpServerModel {
 
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
-      await SecretModel.delete(mcpServer.secretId);
+      await secretManager.deleteSecret(mcpServer.secretId);
     }
 
     // If the MCP server was deleted and had a catalogId, check if this was the last installation
@@ -309,97 +399,94 @@ class McpServerModel {
       catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
     }
 
+    if (!catalogItem) {
+      logger.warn(
+        `No catalog item found for MCP server ${mcpServer.name}, cannot fetch tools`,
+      );
+      return [];
+    }
+
     // Load secrets if secretId is present
     let secrets: Record<string, unknown> = {};
     if (mcpServer.secretId) {
-      const secretRecord = await SecretModel.findById(mcpServer.secretId);
+      const secretRecord = await secretManager.getSecret(mcpServer.secretId);
       if (secretRecord) {
         secrets = secretRecord.secret;
       }
     }
 
-    /**
-     * For remote servers, connect using the server URL and secrets
-     */
-    if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-      try {
-        const config = mcpClient.createServerConfig({
-          name: mcpServer.name,
-          url: catalogItem.serverUrl,
-          secrets,
-        });
-        const tools = await mcpClient.connectAndGetTools(config);
-        // Transform to ensure description is always a string
-        return tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description || `Tool: ${tool.name}`,
-          inputSchema: tool.inputSchema,
-        }));
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to get tools from remote MCP server ${mcpServer.name}:`,
-        );
-        throw error;
-      }
+    try {
+      // Use the new structured API for all server types
+      const tools = await mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId: mcpServer.id,
+        secrets,
+      });
+
+      // Transform to ensure description is always a string
+      return tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description || `Tool: ${tool.name}`,
+        inputSchema: tool.inputSchema,
+      }));
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to get tools from MCP server ${mcpServer.name} (type: ${catalogItem.serverType}):`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find an MCP server by catalogId that has a matching team from the provided team IDs.
+   * Returns the first matching server with a secretId for credential resolution.
+   * Used for dynamic team-based credential resolution.
+   */
+  static async findByCatalogIdWithMatchingTeams(
+    catalogId: string,
+    teamIds: string[],
+  ): Promise<McpServer | null> {
+    if (teamIds.length === 0) {
+      return null;
     }
 
-    /**
-     * For local servers, check transport type and use appropriate endpoint
-     */
-    if (catalogItem?.serverType === "local") {
-      try {
-        // Check if this is a streamable-http server
-        const usesStreamableHttp =
-          await McpServerRuntimeManager.usesStreamableHttp(mcpServer.id);
+    // Find MCP server with matching catalog AND matching team AND has a secretId
+    const [result] = await db
+      .select({
+        server: schema.mcpServersTable,
+        teamName: schema.teamsTable.name,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          inArray(schema.mcpServersTable.teamId, teamIds),
+          isNotNull(schema.mcpServersTable.secretId),
+        ),
+      )
+      .limit(1);
 
-        let url: string;
-        if (usesStreamableHttp) {
-          // Use the HTTP endpoint URL for streamable-http servers
-          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
-            mcpServer.id,
-          );
-          if (!httpEndpointUrl) {
-            throw new Error(
-              `No HTTP endpoint URL found for streamable-http server ${mcpServer.name}`,
-            );
-          }
-          url = httpEndpointUrl;
-        } else {
-          // Use the MCP proxy endpoint for stdio servers
-          url = `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`;
+    if (!result) {
+      return null;
+    }
+
+    const teamDetails = result.server.teamId
+      ? {
+          teamId: result.server.teamId,
+          name: result.teamName || "",
+          createdAt: result.server.createdAt,
         }
+      : null;
 
-        const config = mcpClient.createServerConfig({
-          name: mcpServer.name,
-          url,
-          secrets, // Local servers might still use secrets for API keys etc.
-        });
-
-        logger.warn(
-          `Attempting to get tools from local MCP server ${mcpServer.name} with config ${JSON.stringify(config)}`,
-        );
-
-        const tools = await mcpClient.connectAndGetTools(config);
-        // Transform to ensure description is always a string
-        return tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description || `Tool: ${tool.name}`,
-          inputSchema: tool.inputSchema,
-        }));
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to get tools from local MCP server ${mcpServer.name}:`,
-        );
-        throw error;
-      }
-    }
-
-    /**
-     * For other/unknown servers, return empty array
-     */
-    return [];
+    return {
+      ...result.server,
+      teamDetails,
+    };
   }
 
   /**
@@ -413,24 +500,24 @@ class McpServerModel {
     // Load secrets if secretId is provided
     let secrets: Record<string, unknown> = {};
     if (secretId) {
-      const secretRecord = await SecretModel.findById(secretId);
+      const secretRecord = await secretManager.getSecret(secretId);
       if (secretRecord) {
         secrets = secretRecord.secret;
       }
     }
 
-    // For other remote servers, check if we can connect using catalog info
+    // Check if we can connect using catalog info
     if (catalogId) {
       try {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
-        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          const config = mcpClient.createServerConfig({
-            name: serverName,
-            url: catalogItem.serverUrl,
+        if (catalogItem?.serverType === "remote") {
+          // Use a temporary ID for validation (we don't have a real server ID yet)
+          const tools = await mcpClient.connectAndGetTools({
+            catalogItem,
+            mcpServerId: "validation",
             secrets,
           });
-          const tools = await mcpClient.connectAndGetTools(config);
           return tools.length > 0;
         }
       } catch (error) {

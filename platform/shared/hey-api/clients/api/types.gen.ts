@@ -1615,6 +1615,13 @@ export type AnthropicMessagesResponseInput = {
     };
 };
 
+export type WebSocketMessageInput = {
+    type: 'hello-world';
+    payload: {
+        [key: string]: unknown;
+    };
+};
+
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
 
 export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
@@ -3226,6 +3233,13 @@ export type AnthropicMessagesResponse = {
     };
 };
 
+export type WebSocketMessage = {
+    type: 'hello-world';
+    payload: {
+        [key: string]: never;
+    };
+};
+
 export type GetHealthData = {
     body?: never;
     path?: never;
@@ -3266,19 +3280,55 @@ export type GetAgentsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3295,6 +3345,7 @@ export type GetAgentsResponses = {
             name: string;
             isDemo: boolean;
             isDefault: boolean;
+            considerContextUntrusted: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -3322,7 +3373,10 @@ export type GetAgentsResponses = {
                 createdAt: string;
                 updatedAt: string;
             }>;
-            teams: Array<string>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -3348,6 +3402,7 @@ export type CreateAgentData = {
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
+        considerContextUntrusted?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -3365,19 +3420,55 @@ export type CreateAgentErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3393,6 +3484,7 @@ export type CreateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3420,7 +3512,10 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3443,19 +3538,55 @@ export type GetAllAgentsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3471,6 +3602,7 @@ export type GetAllAgentsResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3498,7 +3630,10 @@ export type GetAllAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3521,19 +3656,55 @@ export type GetDefaultAgentErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3549,6 +3720,7 @@ export type GetDefaultAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3576,7 +3748,10 @@ export type GetDefaultAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3601,19 +3776,55 @@ export type DeleteAgentErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3644,28 +3855,55 @@ export type GetAgentErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3681,6 +3919,7 @@ export type GetAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3708,7 +3947,10 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3725,6 +3967,7 @@ export type UpdateAgentData = {
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
+        considerContextUntrusted?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3744,19 +3987,55 @@ export type UpdateAgentErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3772,6 +4051,7 @@ export type UpdateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3799,7 +4079,10 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3822,19 +4105,55 @@ export type GetLabelKeysErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3866,19 +4185,55 @@ export type GetLabelValuesErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3897,7 +4252,26 @@ export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValue
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        agentId?: string;
+        /**
+         * Can be 'llm-proxy' or a catalogId
+         */
+        origin?: string;
+        /**
+         * Filter by MCP server owner user ID
+         */
+        mcpServerOwnerId?: string;
+        /**
+         * For test isolation
+         */
+        excludeArchestraTools?: boolean;
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
+        sortDirection?: 'asc' | 'desc';
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/agent-tools';
 };
 
@@ -3905,19 +4279,55 @@ export type GetAllAgentToolsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3928,46 +4338,57 @@ export type GetAllAgentToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate: string | null;
-        credentialSourceMcpServerId: string | null;
-        executionSourceMcpServerId: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
+    200: {
+        data: Array<{
             id: string;
-            name: string;
-        };
-        tool: {
-            id: string;
-            name: string;
-            description: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+            responseModifierTemplate: string | null;
+            credentialSourceMcpServerId: string | null;
+            executionSourceMcpServerId: string | null;
+            useDynamicTeamCredential: boolean;
             createdAt: string;
             updatedAt: string;
-            catalogId: string | null;
-            mcpServerId: string | null;
-            mcpServerName: string | null;
-            mcpServerCatalogId: string | null;
+            agent: {
+                id: string;
+                name: string;
+            };
+            tool: {
+                id: string;
+                name: string;
+                description: string | null;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                createdAt: string;
+                updatedAt: string;
+                catalogId: string | null;
+                mcpServerId: string | null;
+                mcpServerName: string | null;
+                mcpServerCatalogId: string | null;
+            };
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-    }>;
+    };
 };
 
 export type GetAllAgentToolsResponse = GetAllAgentToolsResponses[keyof GetAllAgentToolsResponses];
@@ -3986,10 +4407,55 @@ export type UnassignToolFromAgentErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4011,6 +4477,7 @@ export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
     } | null;
     path: {
         agentId: string;
@@ -4025,27 +4492,54 @@ export type AssignToolToAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4063,6 +4557,184 @@ export type AssignToolToAgentResponses = {
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
 
+export type BulkAssignToolsData = {
+    body: {
+        assignments: Array<{
+            agentId: string;
+            toolId: string;
+            credentialSourceMcpServerId?: string | null;
+            executionSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/tools/bulk-assign';
+};
+
+export type BulkAssignToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkAssignToolsError = BulkAssignToolsErrors[keyof BulkAssignToolsErrors];
+
+export type BulkAssignToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        succeeded: Array<{
+            agentId: string;
+            toolId: string;
+        }>;
+        failed: Array<{
+            agentId: string;
+            toolId: string;
+            error: string;
+        }>;
+        duplicates: Array<{
+            agentId: string;
+            toolId: string;
+        }>;
+    };
+};
+
+export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
+
+export type BulkUpdateAgentToolsData = {
+    body: {
+        ids: Array<string>;
+        field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
+        value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-tools/bulk-update';
+};
+
+export type BulkUpdateAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
+
+export type BulkUpdateAgentToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updatedCount: number;
+    };
+};
+
+export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
+
 export type GetAgentToolsData = {
     body?: never;
     path: {
@@ -4076,19 +4748,55 @@ export type GetAgentToolsErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4135,6 +4843,7 @@ export type UpdateAgentToolData = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
     };
     path: {
         id: string;
@@ -4148,27 +4857,54 @@ export type UpdateAgentToolErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4188,85 +4924,13 @@ export type UpdateAgentToolResponses = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
         createdAt?: string;
         updatedAt?: string;
     };
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
-
-export type GetAgentAvailableTokensData = {
-    body?: never;
-    path?: never;
-    query: {
-        agentIds: string;
-        catalogId?: string;
-    };
-    url: '/api/agents/available-tokens';
-};
-
-export type GetAgentAvailableTokensErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
-
-export type GetAgentAvailableTokensResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        authType: 'personal' | 'team';
-        serverType: 'local' | 'remote';
-        catalogId: string | null;
-        ownerId: string | null;
-        ownerEmail: string | null;
-        teamDetails?: Array<{
-            teamId: string;
-            name: string;
-            createdAt: string;
-        }>;
-    }>;
-};
-
-export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -4288,36 +4952,54 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4355,36 +5037,54 @@ export type AnthropicMessagesWithAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4429,6 +5129,20 @@ export type GetDefaultCredentialsStatusResponses = {
 
 export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
 
+export type PostApiAuthOrganizationRemoveMemberData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/organization/remove-member';
+};
+
+export type PostApiAuthOrganizationRemoveMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {
@@ -4468,6 +5182,65 @@ export type GetOperatorsData = {
     url: '/api/autonomy-policies/operators';
 };
 
+export type GetOperatorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOperatorsError = GetOperatorsErrors[keyof GetOperatorsErrors];
+
 export type GetOperatorsResponses = {
     /**
      * Default Response
@@ -4491,10 +5264,55 @@ export type GetToolInvocationPoliciesErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4538,10 +5356,55 @@ export type CreateToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4580,19 +5443,55 @@ export type DeleteToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4623,19 +5522,55 @@ export type GetToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4681,19 +5616,55 @@ export type UpdateToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4730,10 +5701,55 @@ export type GetTrustedDataPoliciesErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4777,10 +5793,55 @@ export type CreateTrustedDataPolicyErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4819,19 +5880,55 @@ export type DeleteTrustedDataPolicyErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4862,19 +5959,55 @@ export type GetTrustedDataPolicyErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4920,19 +6053,55 @@ export type UpdateTrustedDataPolicyErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4958,9 +6127,708 @@ export type UpdateTrustedDataPolicyResponses = {
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
 
+export type GetChatApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys';
+};
+
+export type GetChatApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatApiKeysError = GetChatApiKeysErrors[keyof GetChatApiKeysErrors];
+
+export type GetChatApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    }>;
+};
+
+export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKeysResponses];
+
+export type CreateChatApiKeyData = {
+    body: {
+        name: string;
+        provider: 'anthropic' | 'openai';
+        apiKey: string;
+        isOrganizationDefault?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys';
+};
+
+export type CreateChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateChatApiKeyError = CreateChatApiKeyErrors[keyof CreateChatApiKeyErrors];
+
+export type CreateChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateChatApiKeyResponse = CreateChatApiKeyResponses[keyof CreateChatApiKeyResponses];
+
+export type DeleteChatApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type DeleteChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteChatApiKeyError = DeleteChatApiKeyErrors[keyof DeleteChatApiKeyErrors];
+
+export type DeleteChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatApiKeyResponse = DeleteChatApiKeyResponses[keyof DeleteChatApiKeyResponses];
+
+export type GetChatApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type GetChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatApiKeyError = GetChatApiKeyErrors[keyof GetChatApiKeyErrors];
+
+export type GetChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type GetChatApiKeyResponse = GetChatApiKeyResponses[keyof GetChatApiKeyResponses];
+
+export type UpdateChatApiKeyData = {
+    body?: {
+        name?: string;
+        apiKey?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type UpdateChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatApiKeyError = UpdateChatApiKeyErrors[keyof UpdateChatApiKeyErrors];
+
+export type UpdateChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatApiKeyResponse = UpdateChatApiKeyResponses[keyof UpdateChatApiKeyResponses];
+
+export type SetChatApiKeyDefaultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/set-default';
+};
+
+export type SetChatApiKeyDefaultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetChatApiKeyDefaultError = SetChatApiKeyDefaultErrors[keyof SetChatApiKeyDefaultErrors];
+
+export type SetChatApiKeyDefaultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetChatApiKeyDefaultResponse = SetChatApiKeyDefaultResponses[keyof SetChatApiKeyDefaultResponses];
+
+export type UnsetChatApiKeyDefaultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/unset-default';
+};
+
+export type UnsetChatApiKeyDefaultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnsetChatApiKeyDefaultError = UnsetChatApiKeyDefaultErrors[keyof UnsetChatApiKeyDefaultErrors];
+
+export type UnsetChatApiKeyDefaultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UnsetChatApiKeyDefaultResponse = UnsetChatApiKeyDefaultResponses[keyof UnsetChatApiKeyDefaultResponses];
+
+export type UpdateChatApiKeyProfilesData = {
+    body: {
+        profileIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/profiles';
+};
+
+export type UpdateChatApiKeyProfilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatApiKeyProfilesError = UpdateChatApiKeyProfilesErrors[keyof UpdateChatApiKeyProfilesErrors];
+
+export type UpdateChatApiKeyProfilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type UpdateChatApiKeyProfilesResponse = UpdateChatApiKeyProfilesResponses[keyof UpdateChatApiKeyProfilesResponses];
+
 export type StreamChatData = {
     body: {
-        id?: string;
+        id: string;
         messages: Array<unknown>;
         trigger?: 'submit-message' | 'regenerate-message';
     };
@@ -4974,27 +6842,54 @@ export type StreamChatErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5012,10 +6907,55 @@ export type GetChatConversationsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5030,17 +6970,26 @@ export type GetChatConversationsResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     }>;
 };
 
 export type GetChatConversationsResponse = GetChatConversationsResponses[keyof GetChatConversationsResponses];
 
 export type CreateChatConversationData = {
-    body?: {
+    body: {
+        agentId: string;
+        promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
     };
@@ -5053,10 +7002,55 @@ export type CreateChatConversationErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5071,10 +7065,17 @@ export type CreateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 
@@ -5093,10 +7094,55 @@ export type DeleteChatConversationErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5127,19 +7173,55 @@ export type GetChatConversationErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5154,10 +7236,16 @@ export type GetChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
         messages: Array<unknown>;
     };
 };
@@ -5180,19 +7268,55 @@ export type UpdateChatConversationErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5207,48 +7331,201 @@ export type UpdateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
 
-export type GetChatMcpToolsData = {
+export type GetChatAgentMcpToolsData = {
     body?: never;
-    path?: never;
+    path: {
+        agentId: string;
+    };
     query?: never;
-    url: '/api/chat/mcp-tools';
+    url: '/api/chat/agents/{agentId}/mcp-tools';
 };
 
-export type GetChatMcpToolsErrors = {
+export type GetChatAgentMcpToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
 
-export type GetChatMcpToolsError = GetChatMcpToolsErrors[keyof GetChatMcpToolsErrors];
+export type GetChatAgentMcpToolsError = GetChatAgentMcpToolsErrors[keyof GetChatAgentMcpToolsErrors];
 
-export type GetChatMcpToolsResponses = {
+export type GetChatAgentMcpToolsResponses = {
     /**
      * Default Response
      */
     200: Array<{
         name: string;
-        description?: string;
-        inputSchema: unknown;
+        description: string;
+        parameters: {
+            [key: string]: unknown;
+        } | null;
     }>;
 };
 
-export type GetChatMcpToolsResponse = GetChatMcpToolsResponses[keyof GetChatMcpToolsResponses];
+export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
+export type GenerateChatConversationTitleData = {
+    body?: {
+        /**
+         * Force regeneration even if title already exists (for manual regeneration)
+         */
+        regenerate?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/generate-title';
+};
+
+export type GenerateChatConversationTitleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
+
+export type GenerateChatConversationTitleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string;
+        promptId: string | null;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
+    };
+};
+
+export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -5261,10 +7538,55 @@ export type GetDefaultDualLlmConfigErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5300,10 +7622,55 @@ export type GetDualLlmConfigsErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5345,10 +7712,55 @@ export type CreateDualLlmConfigErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5386,19 +7798,55 @@ export type DeleteDualLlmConfigErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5429,19 +7877,55 @@ export type GetDualLlmConfigErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5485,19 +7969,55 @@ export type UpdateDualLlmConfigErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5535,10 +8055,55 @@ export type GetDualLlmResultByToolCallIdErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5576,28 +8141,55 @@ export type GetDualLlmResultsByInteractionErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5634,7 +8226,9 @@ export type GetFeaturesResponses = {
      * Default Response
      */
     200: {
-        [key: string]: never;
+        'orchestrator-k8s-runtime': boolean;
+        byosEnabled: boolean;
+        byosVaultKvVersion: '1' | '2';
     };
 };
 
@@ -5667,36 +8261,54 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5739,36 +8351,54 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5803,36 +8433,54 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5876,36 +8524,54 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5917,12 +8583,16 @@ export type GetInteractionsData = {
     path?: never;
     query?: {
         /**
-         * Filter by agent ID
+         * Filter by profile ID (internal Archestra profile)
          */
-        agentId?: string;
+        profileId?: string;
+        /**
+         * Filter by external agent ID (from X-Archestra-Agent-Id header)
+         */
+        externalAgentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -5932,10 +8602,55 @@ export type GetInteractionsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5949,33 +8664,54 @@ export type GetInteractionsResponses = {
     200: {
         data: Array<{
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: OpenAiChatCompletionRequest;
+            processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: GeminiGenerateContentRequest;
+            processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: AnthropicMessagesRequest;
+            processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -5991,6 +8727,81 @@ export type GetInteractionsResponses = {
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
 
+export type GetUniqueExternalAgentIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/external-agent-ids';
+};
+
+export type GetUniqueExternalAgentIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+
+export type GetUniqueExternalAgentIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
+
 export type GetInteractionData = {
     body?: never;
     path: {
@@ -6004,19 +8815,55 @@ export type GetInteractionErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6029,33 +8876,54 @@ export type GetInteractionResponses = {
      */
     200: {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: OpenAiChatCompletionRequest;
+        processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: GeminiGenerateContentRequest;
+        processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: AnthropicMessagesRequest;
+        processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     };
 };
@@ -6073,10 +8941,55 @@ export type GetInternalMcpCatalogErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6092,6 +9005,7 @@ export type GetInternalMcpCatalogResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -6106,14 +9020,18 @@ export type GetInternalMcpCatalogResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -6167,6 +9085,7 @@ export type CreateInternalMcpCatalogItemData = {
         name: string;
         version?: string | null;
         description?: string | null;
+        instructions?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
@@ -6181,14 +9100,18 @@ export type CreateInternalMcpCatalogItemData = {
         serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
+        localConfigSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -6230,6 +9153,10 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
+        localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path?: never;
     query?: never;
@@ -6240,10 +9167,55 @@ export type CreateInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6259,6 +9231,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -6273,14 +9246,18 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -6342,19 +9319,55 @@ export type DeleteInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6385,19 +9398,55 @@ export type GetInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6413,6 +9462,7 @@ export type GetInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -6427,14 +9477,18 @@ export type GetInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -6488,6 +9542,7 @@ export type UpdateInternalMcpCatalogItemData = {
         name?: string;
         version?: string | null;
         description?: string | null;
+        instructions?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
@@ -6502,14 +9557,18 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
+        localConfigSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -6551,6 +9610,10 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
+        localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path: {
         id: string;
@@ -6563,19 +9626,55 @@ export type UpdateInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6591,6 +9690,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -6605,14 +9705,18 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -6660,341 +9764,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
-
-export type GetLimitsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        entityType?: 'organization' | 'team' | 'agent';
-        entityId?: string;
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-    };
-    url: '/api/limits';
-};
-
-export type GetLimitsErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetLimitsError = GetLimitsErrors[keyof GetLimitsErrors];
-
-export type GetLimitsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-        limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
-        mcpServerName: string | null;
-        toolName: string | null;
-        model: string | null;
-        lastCleanup: string | null;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
-
-export type CreateLimitData = {
-    body: {
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-        limitValue: number;
-        mcpServerName?: string | null;
-        toolName?: string | null;
-        model?: string | null;
-        lastCleanup?: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/limits';
-};
-
-export type CreateLimitErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateLimitError = CreateLimitErrors[keyof CreateLimitErrors];
-
-export type CreateLimitResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-        limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
-        mcpServerName: string | null;
-        toolName: string | null;
-        model: string | null;
-        lastCleanup: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateLimitResponse = CreateLimitResponses[keyof CreateLimitResponses];
-
-export type DeleteLimitData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/limits/{id}';
-};
-
-export type DeleteLimitErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteLimitError = DeleteLimitErrors[keyof DeleteLimitErrors];
-
-export type DeleteLimitResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteLimitResponse = DeleteLimitResponses[keyof DeleteLimitResponses];
-
-export type GetLimitData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/limits/{id}';
-};
-
-export type GetLimitErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetLimitError = GetLimitErrors[keyof GetLimitErrors];
-
-export type GetLimitResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-        limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
-        mcpServerName: string | null;
-        toolName: string | null;
-        model: string | null;
-        lastCleanup: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
-
-export type UpdateLimitData = {
-    body?: {
-        entityType?: 'organization' | 'team' | 'agent';
-        entityId?: string;
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-        limitValue?: number;
-        mcpServerName?: string | null;
-        toolName?: string | null;
-        model?: string | null;
-        lastCleanup?: unknown;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/limits/{id}';
-};
-
-export type UpdateLimitErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateLimitError = UpdateLimitErrors[keyof UpdateLimitErrors];
-
-export type UpdateLimitResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
-        limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
-        mcpServerName: string | null;
-        toolName: string | null;
-        model: string | null;
-        lastCleanup: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
 export type GetV1McpData = {
     body?: never;
@@ -7048,6 +9817,496 @@ export type PostV1McpResponses = {
     200: unknown;
 };
 
+export type DeleteV1McpSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp/sessions';
+};
+
+export type DeleteV1McpSessionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
+
+export type DeleteV1McpSessionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
+
+export type GetLimitsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+    };
+    url: '/api/limits';
+};
+
+export type GetLimitsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLimitsError = GetLimitsErrors[keyof GetLimitsErrors];
+
+export type GetLimitsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model?: Array<string> | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+        modelUsage?: Array<{
+            model: string;
+            tokensIn: number;
+            tokensOut: number;
+            cost: number;
+        }>;
+    }>;
+};
+
+export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
+
+export type CreateLimitData = {
+    body: {
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: Array<string> | null;
+        lastCleanup?: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/limits';
+};
+
+export type CreateLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateLimitError = CreateLimitErrors[keyof CreateLimitErrors];
+
+export type CreateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model?: Array<string> | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLimitResponse = CreateLimitResponses[keyof CreateLimitResponses];
+
+export type DeleteLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type DeleteLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteLimitError = DeleteLimitErrors[keyof DeleteLimitErrors];
+
+export type DeleteLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLimitResponse = DeleteLimitResponses[keyof DeleteLimitResponses];
+
+export type GetLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type GetLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetLimitError = GetLimitErrors[keyof GetLimitErrors];
+
+export type GetLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model?: Array<string> | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
+
+export type UpdateLimitData = {
+    body?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue?: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: Array<string> | null;
+        lastCleanup?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type UpdateLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateLimitError = UpdateLimitErrors[keyof UpdateLimitErrors];
+
+export type UpdateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model?: Array<string> | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
+
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
     path?: never;
@@ -7064,19 +10323,55 @@ export type GetMcpServerInstallationRequestsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7137,9 +10432,11 @@ export type GetMcpServerInstallationRequestsResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7212,9 +10509,11 @@ export type CreateMcpServerInstallationRequestData = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7233,27 +10532,54 @@ export type CreateMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7314,9 +10640,11 @@ export type CreateMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7354,37 +10682,55 @@ export type DeleteMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7415,37 +10761,55 @@ export type GetMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7506,9 +10870,11 @@ export type GetMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7581,9 +10947,11 @@ export type UpdateMcpServerInstallationRequestData = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7613,37 +10981,55 @@ export type UpdateMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7704,9 +11090,11 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7746,37 +11134,55 @@ export type ApproveMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7837,9 +11243,11 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -7879,37 +11287,55 @@ export type DeclineMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7970,9 +11396,11 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -8012,37 +11440,55 @@ export type AddMcpServerInstallationRequestNoteErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8103,9 +11549,11 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
+                    required?: boolean;
+                    description?: string;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -8134,7 +11582,7 @@ export type GetMcpServersData = {
     body?: never;
     path?: never;
     query?: {
-        authType?: 'personal' | 'team';
+        catalogId?: string;
     };
     url: '/api/mcp_server';
 };
@@ -8143,19 +11591,55 @@ export type GetMcpServersErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8173,25 +11657,25 @@ export type GetMcpServersResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
-        teams?: Array<string>;
+        catalogName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     }>;
 };
 
@@ -8203,11 +11687,10 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         ownerId?: string | null;
-        authType?: 'personal' | 'team';
+        teamId?: string | null;
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
-        teams?: Array<string>;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -8217,6 +11700,7 @@ export type InstallMcpServerData = {
         };
         agentIds?: Array<string>;
         accessToken?: string;
+        isByosVault?: boolean;
     };
     path?: never;
     query?: never;
@@ -8228,36 +11712,54 @@ export type InstallMcpServerErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8275,25 +11777,25 @@ export type InstallMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
-        teams?: Array<string>;
+        catalogName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     };
 };
 
@@ -8312,19 +11814,55 @@ export type DeleteMcpServerErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8355,28 +11893,55 @@ export type GetMcpServerErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8394,25 +11959,25 @@ export type GetMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
-        teams?: Array<string>;
+        catalogName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
     };
 };
 
@@ -8431,19 +11996,55 @@ export type GetMcpServerInstallationStatusErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8475,19 +12076,55 @@ export type GetMcpServerToolsErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8532,19 +12169,55 @@ export type GetMcpServerLogsErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8578,19 +12251,55 @@ export type RestartMcpServerErrors = {
     /**
      * Default Response
      */
-    404: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8609,219 +12318,6 @@ export type RestartMcpServerResponses = {
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
-export type RevokeUserMcpServerAccessData = {
-    body?: never;
-    path: {
-        catalogId: string;
-        userId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
-};
-
-export type RevokeUserMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
-
-export type RevokeUserMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
-
-export type RevokeAllTeamsMcpServerAccessData = {
-    body?: never;
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/teams';
-};
-
-export type RevokeAllTeamsMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
-
-export type RevokeAllTeamsMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
-
-export type GrantTeamMcpServerAccessData = {
-    body: {
-        teamIds: Array<string>;
-        userId?: string;
-    };
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/teams';
-};
-
-export type GrantTeamMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
-
-export type GrantTeamMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
-
-export type RevokeTeamMcpServerAccessData = {
-    body?: never;
-    path: {
-        id: string;
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/{id}/team/{teamId}';
-};
-
-export type RevokeTeamMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
-
-export type RevokeTeamMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
-
 export type GetMcpToolCallsData = {
     body?: never;
     path?: never;
@@ -8832,7 +12328,7 @@ export type GetMcpToolCallsData = {
         agentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
@@ -8842,10 +12338,55 @@ export type GetMcpToolCallsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8861,19 +12402,18 @@ export type GetMcpToolCallsResponses = {
             id: string;
             agentId: string;
             mcpServerName: string;
+            method: string;
+            /**
+             * Represents a tool call in a provider-agnostic way
+             */
             toolCall: {
                 id: string;
                 name: string;
                 arguments: {
                     [key: string]: unknown;
                 };
-            };
-            toolResult: {
-                id: string;
-                content: unknown;
-                isError: boolean;
-                error?: string;
-            };
+            } | null;
+            toolResult: unknown;
             createdAt: string;
         }>;
         pagination: {
@@ -8902,19 +12442,55 @@ export type GetMcpToolCallErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8929,24 +12505,117 @@ export type GetMcpToolCallResponses = {
         id: string;
         agentId: string;
         mcpServerName: string;
+        method: string;
+        /**
+         * Represents a tool call in a provider-agnostic way
+         */
         toolCall: {
             id: string;
             name: string;
             arguments: {
                 [key: string]: unknown;
             };
-        };
-        toolResult: {
-            id: string;
-            content: unknown;
-            isError: boolean;
-            error?: string;
-        };
+        } | null;
+        toolResult: unknown;
         createdAt: string;
     };
 };
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
+
+export type GetV1McpByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type GetV1McpByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+
+export type GetV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+        tokenAuth?: {
+            tokenId: string;
+            teamId: string | null;
+            isOrganizationToken: boolean;
+        };
+    };
+};
+
+export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+
+export type PostV1McpByProfileIdData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type PostV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/sessions/{profileId}';
+};
+
+export type DeleteV1McpSessionsByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdError = DeleteV1McpSessionsByProfileIdErrors[keyof DeleteV1McpSessionsByProfileIdErrors];
+
+export type DeleteV1McpSessionsByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdResponse = DeleteV1McpSessionsByProfileIdResponses[keyof DeleteV1McpSessionsByProfileIdResponses];
 
 export type InitiateOAuthData = {
     body: {
@@ -8963,27 +12632,54 @@ export type InitiateOAuthErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9017,18 +12713,54 @@ export type HandleOAuthCallbackErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9074,36 +12806,54 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9143,36 +12893,54 @@ export type OpenAiChatCompletionsWithAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9188,195 +12956,381 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
-export type UpdateOrganizationCleanupIntervalData = {
-    body: {
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-    };
+export type GetOptimizationRulesData = {
+    body?: never;
     path?: never;
     query?: never;
-    url: '/api/organization/cleanup-interval';
+    url: '/api/optimization-rules';
 };
 
-export type UpdateOrganizationCleanupIntervalErrors = {
+export type GetOptimizationRulesErrors = {
     /**
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
-
-export type UpdateOrganizationCleanupIntervalResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-    };
-};
-
-export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
-
-export type GetOrganizationAppearanceData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/appearance';
-};
-
-export type GetOrganizationAppearanceErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
 
-export type GetOrganizationAppearanceError = GetOrganizationAppearanceErrors[keyof GetOrganizationAppearanceErrors];
+export type GetOptimizationRulesError = GetOptimizationRulesErrors[keyof GetOptimizationRulesErrors];
 
-export type GetOrganizationAppearanceResponses = {
+export type GetOptimizationRulesResponses = {
     /**
      * Default Response
      */
-    200: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
-        logoType?: 'default' | 'custom';
-        logo?: string | null;
-    };
+    200: Array<{
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: SupportedProviders;
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
 };
 
-export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceResponses[keyof GetOrganizationAppearanceResponses];
+export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof GetOptimizationRulesResponses];
 
-export type UpdateOrganizationAppearanceData = {
-    body?: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
-        logoType?: 'default' | 'custom';
-        logo?: string | null;
+export type CreateOptimizationRuleData = {
+    body: {
+        id?: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: SupportedProvidersInput;
+        targetModel: string;
+        enabled?: boolean;
+        createdAt?: unknown;
+        updatedAt?: unknown;
     };
     path?: never;
     query?: never;
-    url: '/api/organization/appearance';
+    url: '/api/optimization-rules';
 };
 
-export type UpdateOrganizationAppearanceErrors = {
+export type CreateOptimizationRuleErrors = {
     /**
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
 
-export type UpdateOrganizationAppearanceError = UpdateOrganizationAppearanceErrors[keyof UpdateOrganizationAppearanceErrors];
+export type CreateOptimizationRuleError = CreateOptimizationRuleErrors[keyof CreateOptimizationRuleErrors];
 
-export type UpdateOrganizationAppearanceResponses = {
+export type CreateOptimizationRuleResponses = {
     /**
      * Default Response
      */
     200: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
-        logoType?: 'default' | 'custom';
-        logo?: string | null;
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: SupportedProviders;
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
     };
 };
 
-export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
+export type CreateOptimizationRuleResponse = CreateOptimizationRuleResponses[keyof CreateOptimizationRuleResponses];
+
+export type DeleteOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type DeleteOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteOptimizationRuleError = DeleteOptimizationRuleErrors[keyof DeleteOptimizationRuleErrors];
+
+export type DeleteOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
+
+export type UpdateOptimizationRuleData = {
+    body?: {
+        id?: string;
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        conditions?: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider?: SupportedProvidersInput;
+        targetModel?: string;
+        enabled?: boolean;
+        createdAt?: unknown;
+        updatedAt?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type UpdateOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateOptimizationRuleError = UpdateOptimizationRuleErrors[keyof UpdateOptimizationRuleErrors];
+
+export type UpdateOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: SupportedProviders;
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[keyof UpdateOptimizationRuleResponses];
 
 export type GetOrganizationData = {
     body?: never;
@@ -9390,36 +13344,54 @@ export type GetOrganizationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9434,129 +13406,2183 @@ export type GetOrganizationResponses = {
         id: string;
         name: string;
         slug: string;
+        logo: string | null;
+        createdAt: string;
+        metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
     };
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
 
-export type DeleteOrganizationLogoData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/logo';
-};
-
-export type DeleteOrganizationLogoErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
-
-export type DeleteOrganizationLogoResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
-
-export type UploadOrganizationLogoData = {
-    body: {
-        logo: string;
+export type UpdateOrganizationData = {
+    body?: {
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        compressionScope?: 'organization' | 'team';
+        logo?: string | null;
+        onboardingComplete?: boolean;
+        convertToolResultsToToon?: boolean;
     };
     path?: never;
     query?: never;
-    url: '/api/organization/logo';
+    url: '/api/organization';
 };
 
-export type UploadOrganizationLogoErrors = {
+export type UpdateOrganizationErrors = {
     /**
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
 
-export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
+export type UpdateOrganizationError = UpdateOrganizationErrors[keyof UpdateOrganizationErrors];
 
-export type UploadOrganizationLogoResponses = {
+export type UpdateOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+    };
+};
+
+export type UpdateOrganizationResponse = UpdateOrganizationResponses[keyof UpdateOrganizationResponses];
+
+export type GetOnboardingStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/onboarding-status';
+};
+
+export type GetOnboardingStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetOnboardingStatusError = GetOnboardingStatusErrors[keyof GetOnboardingStatusErrors];
+
+export type GetOnboardingStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasLlmProxyLogs: boolean;
+        hasMcpGatewayLogs: boolean;
+    };
+};
+
+export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
+
+export type GetPromptsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/prompts';
+};
+
+export type GetPromptsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptsError = GetPromptsErrors[keyof GetPromptsErrors];
+
+export type GetPromptsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
+
+export type CreatePromptData = {
+    body: {
+        name: string;
+        agentId: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
+        version?: number;
+        parentPromptId?: string | null;
+        isActive?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/prompts';
+};
+
+export type CreatePromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreatePromptError = CreatePromptErrors[keyof CreatePromptErrors];
+
+export type CreatePromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreatePromptResponse = CreatePromptResponses[keyof CreatePromptResponses];
+
+export type DeletePromptData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}';
+};
+
+export type DeletePromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
+
+export type DeletePromptResponses = {
     /**
      * Default Response
      */
     200: {
         success: boolean;
-        logo: string | null;
     };
 };
 
-export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
+export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
+
+export type GetPromptData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}';
+};
+
+export type GetPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
+
+export type GetPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
+
+export type UpdatePromptData = {
+    body?: {
+        name?: string;
+        agentId?: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}';
+};
+
+export type UpdatePromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdatePromptError = UpdatePromptErrors[keyof UpdatePromptErrors];
+
+export type UpdatePromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdatePromptResponse = UpdatePromptResponses[keyof UpdatePromptResponses];
+
+export type GetPromptVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/versions';
+};
+
+export type GetPromptVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptVersionsError = GetPromptVersionsErrors[keyof GetPromptVersionsErrors];
+
+export type GetPromptVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
+
+export type RollbackPromptData = {
+    body: {
+        versionId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/rollback';
+};
+
+export type RollbackPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
+
+export type RollbackPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
+
+export type GetSecretsTypeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/type';
+};
+
+export type GetSecretsTypeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSecretsTypeError = GetSecretsTypeErrors[keyof GetSecretsTypeErrors];
+
+export type GetSecretsTypeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+        meta: {
+            [key: string]: string;
+        };
+    };
+};
+
+export type GetSecretsTypeResponse = GetSecretsTypeResponses[keyof GetSecretsTypeResponses];
+
+export type GetSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/{id}';
+};
+
+export type GetSecretErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSecretError = GetSecretErrors[keyof GetSecretErrors];
+
+export type GetSecretResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        secret: {
+            [key: string]: unknown;
+        };
+        isVault: boolean;
+        isByosVault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetSecretResponse = GetSecretResponses[keyof GetSecretResponses];
+
+export type CheckSecretsConnectivityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/check-connectivity';
+};
+
+export type CheckSecretsConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckSecretsConnectivityError = CheckSecretsConnectivityErrors[keyof CheckSecretsConnectivityErrors];
+
+export type CheckSecretsConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        secretCount: number;
+    };
+};
+
+export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
+
+export type GetPublicSsoProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers/public';
+};
+
+export type GetPublicSsoProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPublicSsoProvidersError = GetPublicSsoProvidersErrors[keyof GetPublicSsoProvidersErrors];
+
+export type GetPublicSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        providerId: string;
+    }>;
+};
+
+export type GetPublicSsoProvidersResponse = GetPublicSsoProvidersResponses[keyof GetPublicSsoProvidersResponses];
+
+export type GetSsoProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers';
+};
+
+export type GetSsoProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProvidersError = GetSsoProvidersErrors[keyof GetSsoProvidersErrors];
+
+export type GetSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    }>;
+};
+
+export type GetSsoProvidersResponse = GetSsoProvidersResponses[keyof GetSsoProvidersResponses];
+
+export type CreateSsoProviderData = {
+    body: {
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId?: string | null;
+        providerId: string;
+        domain: string;
+        domainVerified?: boolean | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers';
+};
+
+export type CreateSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateSsoProviderError = CreateSsoProviderErrors[keyof CreateSsoProviderErrors];
+
+export type CreateSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type CreateSsoProviderResponse = CreateSsoProviderResponses[keyof CreateSsoProviderResponses];
+
+export type DeleteSsoProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type DeleteSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteSsoProviderError = DeleteSsoProviderErrors[keyof DeleteSsoProviderErrors];
+
+export type DeleteSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteSsoProviderResponse = DeleteSsoProviderResponses[keyof DeleteSsoProviderResponses];
+
+export type GetSsoProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type GetSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProviderError = GetSsoProviderErrors[keyof GetSsoProviderErrors];
+
+export type GetSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type GetSsoProviderResponse = GetSsoProviderResponses[keyof GetSsoProviderResponses];
+
+export type UpdateSsoProviderData = {
+    body?: {
+        issuer?: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        providerId?: string;
+        domain?: string;
+        domainVerified?: boolean | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type UpdateSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateSsoProviderError = UpdateSsoProviderErrors[keyof UpdateSsoProviderErrors];
+
+export type UpdateSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type UpdateSsoProviderResponse = UpdateSsoProviderResponses[keyof UpdateSsoProviderResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/teams';
 };
@@ -9565,10 +15591,55 @@ export type GetTeamStatisticsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9601,7 +15672,7 @@ export type GetAgentStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/agents';
 };
@@ -9610,10 +15681,55 @@ export type GetAgentStatisticsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9645,7 +15761,7 @@ export type GetModelStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/models';
 };
@@ -9654,10 +15770,55 @@ export type GetModelStatisticsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9688,7 +15849,7 @@ export type GetOverviewStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/overview';
 };
@@ -9697,10 +15858,55 @@ export type GetOverviewStatisticsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9723,6 +15929,96 @@ export type GetOverviewStatisticsResponses = {
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
+export type GetCostSavingsStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/cost-savings';
+};
+
+export type GetCostSavingsStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetCostSavingsStatisticsError = GetCostSavingsStatisticsErrors[keyof GetCostSavingsStatisticsErrors];
+
+export type GetCostSavingsStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalBaselineCost: number;
+        totalActualCost: number;
+        totalSavings: number;
+        totalOptimizationSavings: number;
+        totalToonSavings: number;
+        timeSeries: Array<{
+            timestamp: string;
+            baselineCost: number;
+            actualCost: number;
+            optimizationSavings: number;
+            toonSavings: number;
+        }>;
+    };
+};
+
+export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses[keyof GetCostSavingsStatisticsResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;
@@ -9734,19 +16030,55 @@ export type GetTeamsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9765,11 +16097,13 @@ export type GetTeamsResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     }>;
@@ -9791,28 +16125,55 @@ export type CreateTeamErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9831,11 +16192,13 @@ export type CreateTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -9856,37 +16219,55 @@ export type DeleteTeamErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9917,28 +16298,55 @@ export type GetTeamErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9957,11 +16365,13 @@ export type GetTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -9973,6 +16383,7 @@ export type UpdateTeamData = {
     body?: {
         name?: string;
         description?: string;
+        convertToolResultsToToon?: boolean;
     };
     path: {
         id: string;
@@ -9985,37 +16396,55 @@ export type UpdateTeamErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10034,11 +16463,13 @@ export type UpdateTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -10059,28 +16490,55 @@ export type GetTeamMembersErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10096,6 +16554,7 @@ export type GetTeamMembersResponses = {
         teamId: string;
         userId: string;
         role: string;
+        syncedFromSso: boolean;
         createdAt: string;
     }>;
 };
@@ -10118,37 +16577,55 @@ export type AddTeamMemberErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10164,6 +16641,7 @@ export type AddTeamMemberResponses = {
         teamId: string;
         userId: string;
         role: string;
+        syncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -10184,37 +16662,55 @@ export type RemoveTeamMemberErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10232,6 +16728,743 @@ export type RemoveTeamMemberResponses = {
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
 
+export type GetTeamExternalGroupsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups';
+};
+
+export type GetTeamExternalGroupsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamExternalGroupsError = GetTeamExternalGroupsErrors[keyof GetTeamExternalGroupsErrors];
+
+export type GetTeamExternalGroupsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        teamId: string;
+        groupIdentifier: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetTeamExternalGroupsResponse = GetTeamExternalGroupsResponses[keyof GetTeamExternalGroupsResponses];
+
+export type AddTeamExternalGroupData = {
+    body: {
+        groupIdentifier: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups';
+};
+
+export type AddTeamExternalGroupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AddTeamExternalGroupError = AddTeamExternalGroupErrors[keyof AddTeamExternalGroupErrors];
+
+export type AddTeamExternalGroupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        groupIdentifier: string;
+        createdAt: string;
+    };
+};
+
+export type AddTeamExternalGroupResponse = AddTeamExternalGroupResponses[keyof AddTeamExternalGroupResponses];
+
+export type RemoveTeamExternalGroupData = {
+    body?: never;
+    path: {
+        id: string;
+        groupId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups/{groupId}';
+};
+
+export type RemoveTeamExternalGroupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RemoveTeamExternalGroupError = RemoveTeamExternalGroupErrors[keyof RemoveTeamExternalGroupErrors];
+
+export type RemoveTeamExternalGroupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
+
+export type DeleteTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type DeleteTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
+
+export type DeleteTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
+
+export type GetTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type GetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
+
+export type GetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    } | null;
+};
+
+export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
+
+export type SetTeamVaultFolderData = {
+    body: {
+        vaultPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type SetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
+
+export type SetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
+
+export type CheckTeamVaultFolderConnectivityData = {
+    body?: {
+        vaultPath?: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
+};
+
+export type CheckTeamVaultFolderConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
+
+export type CheckTeamVaultFolderConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connected: boolean;
+        secretCount: number;
+        error?: string;
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
+
+export type ListTeamVaultFolderSecretsData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets';
+};
+
+export type ListTeamVaultFolderSecretsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
+
+export type ListTeamVaultFolderSecretsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        path: string;
+    }>;
+};
+
+export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
+
+export type GetTeamVaultSecretKeysData = {
+    body: {
+        secretPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
+};
+
+export type GetTeamVaultSecretKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
+
+export type GetTeamVaultSecretKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<string>;
+    };
+};
+
+export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
+
 export type GetTokenPricesData = {
     body?: never;
     path?: never;
@@ -10243,19 +17476,55 @@ export type GetTokenPricesErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10268,6 +17537,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -10280,6 +17550,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
+        provider: SupportedProvidersInput;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -10293,37 +17564,55 @@ export type CreateTokenPriceErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
         };
     };
     /**
      * Default Response
      */
     409: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10336,6 +17625,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -10359,37 +17649,55 @@ export type DeleteTokenPriceErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10420,28 +17728,55 @@ export type GetTokenPriceErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10454,6 +17789,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -10466,6 +17802,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
+        provider?: SupportedProvidersInput;
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -10481,37 +17818,55 @@ export type UpdateTokenPriceErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10524,6 +17879,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -10533,6 +17889,260 @@ export type UpdateTokenPriceResponses = {
 };
 
 export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
+
+export type GetTokensData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tokens';
+};
+
+export type GetTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTokensError = GetTokensErrors[keyof GetTokensErrors];
+
+export type GetTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        tokenStart: string;
+        isOrganizationToken: boolean;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetTokensResponse = GetTokensResponses[keyof GetTokensResponses];
+
+export type GetTokenValueData = {
+    body?: never;
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/tokens/{tokenId}/value';
+};
+
+export type GetTokenValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTokenValueError = GetTokenValueErrors[keyof GetTokenValueErrors];
+
+export type GetTokenValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetTokenValueResponse = GetTokenValueResponses[keyof GetTokenValueResponses];
+
+export type RotateTokenData = {
+    body?: never;
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/tokens/{tokenId}/rotate';
+};
+
+export type RotateTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RotateTokenError = RotateTokenErrors[keyof RotateTokenErrors];
+
+export type RotateTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        isOrganizationToken: boolean;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        value: string;
+    };
+};
+
+export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponses];
 
 export type GetToolsData = {
     body?: never;
@@ -10545,19 +18155,55 @@ export type GetToolsErrors = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
+    400: {
+        error: {
             message: string;
-            type: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10603,71 +18249,525 @@ export type GetToolsResponses = {
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 
-export type GetUnassignedToolsData = {
+export type GetRolesData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/tools/unassigned';
+    url: '/api/roles';
 };
 
-export type GetUnassignedToolsErrors = {
+export type GetRolesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: string;
+            type: 'api_internal_server_error';
         };
     };
 };
 
-export type GetUnassignedToolsError = GetUnassignedToolsErrors[keyof GetUnassignedToolsErrors];
+export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
 
-export type GetUnassignedToolsResponses = {
+export type GetRolesResponses = {
     /**
      * Default Response
      */
     200: Array<{
         id: string;
-        catalogId: string | null;
+        organizationId?: string;
+        role: string;
         name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
-        description: string | null;
         createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        mcpServer: {
-            id: string;
-            name: string;
-        } | null;
+        updatedAt: string | null;
+        predefined: boolean;
     }>;
 };
 
-export type GetUnassignedToolsResponse = GetUnassignedToolsResponses[keyof GetUnassignedToolsResponses];
+export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
+
+export type CreateRoleData = {
+    body: {
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type CreateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
+
+export type CreateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
+
+export type DeleteRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Custom role ID (base62)
+         */
+        roleId: string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type DeleteRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
+
+export type DeleteRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
+
+export type GetRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type GetRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
+
+export type GetRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
+
+export type UpdateRoleData = {
+    body?: {
+        name?: string;
+        permission?: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+    };
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
+
+export type GetUserPermissionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/user/permissions';
+};
+
+export type GetUserPermissionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUserPermissionsError = GetUserPermissionsErrors[keyof GetUserPermissionsErrors];
+
+export type GetUserPermissionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+    };
+};
+
+export type GetUserPermissionsResponse = GetUserPermissionsResponses[keyof GetUserPermissionsResponses];

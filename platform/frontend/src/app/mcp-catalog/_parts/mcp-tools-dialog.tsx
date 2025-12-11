@@ -1,6 +1,7 @@
 "use client";
 
-import { UserPlus, Users } from "lucide-react";
+import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -58,6 +60,25 @@ interface McpToolsDialogProps {
   ) => void;
 }
 
+const formatToolName = (toolName: string) => {
+  // Remove the MCP server name prefix from the tool name
+  // For example:
+  // - "huggingface__remote-mcp__hf_doc_fetch" -> "hf_doc_fetch"
+  // - "github_mcp_server__update_pull_request_branch" -> "update_pull_request_branch"
+
+  // Find the last occurrence of "__" and take everything after it
+  const lastDoubleUnderscore = toolName.lastIndexOf(
+    MCP_SERVER_TOOL_NAME_SEPARATOR,
+  );
+
+  if (lastDoubleUnderscore !== -1) {
+    return toolName.substring(lastDoubleUnderscore + 2);
+  }
+
+  // Fallback: if no "__" found, return the original name
+  return toolName;
+};
+
 export function McpToolsDialog({
   open,
   onOpenChange,
@@ -68,37 +89,36 @@ export function McpToolsDialog({
   onBulkAssignTools,
 }: McpToolsDialogProps) {
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const formatToolName = (toolName: string) => {
-    // Remove the MCP server name prefix from the tool name
-    // For example:
-    // - "github_mcp_server__update_pull_request_branch" -> "update_pull_request_branch"
-    // - "huggingface__remote-mcp__hf_doc_fetch" -> "hf_doc_fetch"
+  const filteredTools = useMemo(() => {
+    if (!searchQuery.trim()) return tools;
 
-    // Find the last occurrence of "__" and take everything after it
-    const lastDoubleUnderscore = toolName.lastIndexOf("__");
-
-    if (lastDoubleUnderscore !== -1) {
-      return toolName.substring(lastDoubleUnderscore + 2);
-    }
-
-    // Fallback: if no "__" found, return the original name
-    return toolName;
-  };
+    const query = searchQuery.toLowerCase();
+    return tools.filter((tool) =>
+      formatToolName(tool.name).toLowerCase().includes(query),
+    );
+  }, [tools, searchQuery]);
 
   const allSelected = useMemo(() => {
-    return tools.length > 0 && selectedToolIds.length === tools.length;
-  }, [tools, selectedToolIds]);
+    return (
+      filteredTools.length > 0 &&
+      selectedToolIds.length === filteredTools.length
+    );
+  }, [filteredTools, selectedToolIds]);
 
   const someSelected = useMemo(() => {
-    return selectedToolIds.length > 0 && selectedToolIds.length < tools.length;
-  }, [tools, selectedToolIds]);
+    return (
+      selectedToolIds.length > 0 &&
+      selectedToolIds.length < filteredTools.length
+    );
+  }, [filteredTools, selectedToolIds]);
 
   const toggleAll = () => {
     if (allSelected) {
       setSelectedToolIds([]);
     } else {
-      setSelectedToolIds(tools.map((tool) => tool.id));
+      setSelectedToolIds(filteredTools.map((tool) => tool.id));
     }
   };
 
@@ -122,13 +142,18 @@ export function McpToolsDialog({
     onOpenChange(newOpen);
     if (!newOpen) {
       setSelectedToolIds([]);
+      setSearchQuery("");
     }
   };
 
   const hasSelection = selectedToolIds.length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogChange}>
+    <Dialog
+      open={open}
+      onOpenChange={handleDialogChange}
+      data-testid={E2eTestId.McpToolsDialog}
+    >
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Tools - {serverName}</DialogTitle>
@@ -136,6 +161,18 @@ export function McpToolsDialog({
             View and manage tools provided by this MCP server
           </DialogDescription>
         </DialogHeader>
+
+        {!isLoading && tools.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search tools by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        )}
 
         {!isLoading && tools.length > 0 && (
           <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
@@ -155,7 +192,7 @@ export function McpToolsDialog({
                 </>
               ) : (
                 <span className="text-sm text-muted-foreground">
-                  Select tools to bulk assign to agents
+                  Select tools to bulk assign to profiles
                 </span>
               )}
             </div>
@@ -167,7 +204,7 @@ export function McpToolsDialog({
                 className="gap-2"
               >
                 <Users className="h-4 w-4" />
-                Bulk Assign to Agents
+                Bulk Assign to Profiles
               </Button>
               {hasSelection && (
                 <>
@@ -194,6 +231,19 @@ export function McpToolsDialog({
             <div className="text-center py-8 text-muted-foreground">
               No tools found for this server
             </div>
+          ) : filteredTools.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 space-y-4">
+              <div className="text-center text-muted-foreground">
+                No tools match your search
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSearchQuery("")}
+              >
+                Clear search
+              </Button>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -210,12 +260,14 @@ export function McpToolsDialog({
                   </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead className="text-center">Assigned Agents</TableHead>
+                  <TableHead className="text-center">
+                    Assigned Profiles
+                  </TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tools.map((tool) => (
+                {filteredTools.map((tool) => (
                   <TableRow key={tool.id}>
                     <TableCell>
                       <Checkbox
@@ -263,7 +315,7 @@ export function McpToolsDialog({
                         variant="ghost"
                         size="sm"
                         onClick={() => onAssignTool(tool)}
-                        title="Assign Tool to Agents"
+                        title="Assign Tool to Profiles"
                       >
                         <UserPlus className="h-4 w-4" />
                       </Button>

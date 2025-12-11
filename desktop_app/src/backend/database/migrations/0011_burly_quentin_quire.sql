@@ -1,1 +1,0 @@
-ALTER TABLE `mcp_servers` ADD `status` text DEFAULT 'installing' NOT NULL;

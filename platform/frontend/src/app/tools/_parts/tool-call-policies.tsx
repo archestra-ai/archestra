@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
   useOperators,
   useToolInvocationPolicies,
@@ -24,12 +24,12 @@ import { PolicyCard } from "./policy-card";
 export function ToolCallPolicies({
   agentTool,
 }: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }) {
   const {
-    data: { byAgentToolId },
+    data: { byProfileToolId },
   } = useToolInvocationPolicies();
-  const agentToolPatchMutation = useAgentToolPatchMutation();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
@@ -38,7 +38,7 @@ export function ToolCallPolicies({
     useToolInvocationPolicyUpdateMutation();
   const { data: operators } = useOperators();
 
-  const policies = byAgentToolId[agentTool.id] || [];
+  const policies = byProfileToolId[agentTool.id] || [];
 
   const argumentNames = Object.keys(
     agentTool.tool.parameters?.properties || [],

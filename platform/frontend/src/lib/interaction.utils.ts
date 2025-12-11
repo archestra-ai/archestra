@@ -11,9 +11,11 @@ import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 
 export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
+  private interaction: Interaction;
 
   id: string;
-  agentId: string;
+  profileId: string;
+  externalAgentId: string | null;
   type: Interaction["type"];
   provider: archestraApiTypes.SupportedProviders;
   endpoint: string;
@@ -23,8 +25,10 @@ export class DynamicInteraction implements InteractionUtils {
   constructor(interaction: Interaction) {
     const [provider, endpoint] = interaction.type.split(":");
 
+    this.interaction = interaction;
     this.id = interaction.id;
-    this.agentId = interaction.agentId;
+    this.profileId = interaction.profileId;
+    this.externalAgentId = interaction.externalAgentId;
     this.type = interaction.type;
     this.provider = provider as archestraApiTypes.SupportedProviders;
     this.endpoint = endpoint;
@@ -81,5 +85,44 @@ export class DynamicInteraction implements InteractionUtils {
    */
   mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
     return this.interactionClass.mapToUiMessages(dualLlmResults);
+  }
+
+  /**
+   * Get TOON compression savings from database-stored token counts
+   * Returns null if no TOON compression data available
+   */
+  getToonSavings(): {
+    originalSize: number;
+    compressedSize: number;
+    savedCharacters: number;
+    percentageSaved: number;
+  } | null {
+    const toonTokensBefore = this.interaction.toonTokensBefore;
+    const toonTokensAfter = this.interaction.toonTokensAfter;
+
+    // Return null if no TOON compression data
+    if (
+      toonTokensBefore === null ||
+      toonTokensAfter === null ||
+      toonTokensBefore === undefined ||
+      toonTokensAfter === undefined
+    ) {
+      return null;
+    }
+
+    // Only show savings if there was actual compression
+    if (toonTokensAfter >= toonTokensBefore || toonTokensBefore === 0) {
+      return null;
+    }
+
+    const savedCharacters = toonTokensBefore - toonTokensAfter;
+    const percentageSaved = (savedCharacters / toonTokensBefore) * 100;
+
+    return {
+      originalSize: toonTokensBefore,
+      compressedSize: toonTokensAfter,
+      savedCharacters,
+      percentageSaved,
+    };
   }
 }

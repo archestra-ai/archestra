@@ -6,7 +6,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { CommonToolCall, CommonToolResult } from "@/types";
+import type { CommonToolCall } from "@/types";
 import agentsTable from "./agent";
 
 const mcpToolCallsTable = pgTable(
@@ -17,8 +17,13 @@ const mcpToolCallsTable = pgTable(
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     mcpServerName: varchar("mcp_server_name", { length: 255 }).notNull(),
-    toolCall: jsonb("tool_call").$type<CommonToolCall>().notNull(),
-    toolResult: jsonb("tool_result").$type<CommonToolResult>().notNull(),
+    method: varchar("method", { length: 255 }).notNull(),
+    toolCall: jsonb("tool_call").$type<CommonToolCall | null>(),
+    // toolResult structure varies by method type:
+    // - tools/call: { id, content, isError, error? }
+    // - tools/list: { tools: [...] }
+    // - initialize: { capabilities, serverInfo }
+    toolResult: jsonb("tool_result").$type<unknown>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

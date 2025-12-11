@@ -8,20 +8,38 @@ import { schema } from "@/database";
 import { AgentLabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 
-export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
-  tools: z.array(SelectToolSchema),
-  teams: z.array(z.string()),
-  labels: z.array(AgentLabelWithDetailsSchema),
-});
-export const InsertAgentSchema = createInsertSchema(schema.agentsTable).extend({
-  teams: z.array(z.string()),
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+// Team info schema for agent responses (just id and name)
+export const AgentTeamInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
 });
 
-export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable).extend({
-  teams: z.array(z.string()),
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
+  tools: z.array(SelectToolSchema),
+  teams: z.array(AgentTeamInfoSchema),
+  labels: z.array(AgentLabelWithDetailsSchema),
 });
+export const InsertAgentSchema = createInsertSchema(schema.agentsTable)
+  .extend({
+    teams: z.array(z.string()),
+    labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
+
+export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable)
+  .extend({
+    teams: z.array(z.string()),
+    labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;
 export type InsertAgent = z.infer<typeof InsertAgentSchema>;

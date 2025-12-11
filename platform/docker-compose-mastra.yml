@@ -87,7 +87,7 @@ services:
         cp /app/mastra-ai/package*.json /app/mastra-ai/tsconfig.json mastra-app/
         cp -r /app/mastra-ai/src mastra-app/
         cd mastra-app
-        npm install
+        npm install @ai-sdk/openai @mastra/core @mastra/libsql @mastra/loggers @mastra/memory zod
         echo 'OPENAI_API_KEY='$OPENAI_API_KEY > .env
         echo 'GITHUB_TOKEN='$GITHUB_TOKEN >> .env
         if [ ! -z \"$OPENAI_PROXY_URL\" ]; then echo 'OPENAI_PROXY_URL='$OPENAI_PROXY_URL >> .env; fi

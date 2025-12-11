@@ -1,8 +1,15 @@
 "use client";
 
+import {
+  ADMIN_ROLE_NAME,
+  type AnyRoleName,
+  E2eTestId,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+} from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
@@ -16,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -24,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateInvitation } from "@/lib/organization.query";
+import { useRoles } from "@/lib/role.query";
 
 interface InviteByLinkCardProps {
   organizationId?: string;
@@ -35,16 +44,17 @@ function InviteByLinkCardContent({
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<AnyRoleName>(MEMBER_ROLE_NAME);
   const [invitationLink, setInvitationLink] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
   const createMutation = useCreateInvitation(organizationId);
+  const { data: roles } = useRoles();
 
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const handleGenerateLink = async () => {
+  const handleGenerateLink = useCallback(async () => {
     const data = await createMutation.mutateAsync({ email, role });
 
     if (data) {
@@ -52,9 +62,9 @@ function InviteByLinkCardContent({
       setInvitationLink(link);
       onInvitationCreated?.();
     }
-  };
+  }, [email, role, createMutation, onInvitationCreated]);
 
-  const handleCopyLink = async () => {
+  const handleCopyLink = useCallback(async () => {
     if (!invitationLink) return;
 
     await navigator.clipboard.writeText(invitationLink);
@@ -64,14 +74,14 @@ function InviteByLinkCardContent({
     });
 
     setTimeout(() => setIsCopied(false), 2000);
-  };
+  }, [invitationLink]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setEmail("");
-    setRole("member");
+    setRole(MEMBER_ROLE_NAME);
     setInvitationLink("");
     setIsCopied(false);
-  };
+  }, []);
 
   return (
     <Card className="w-full">
@@ -97,6 +107,7 @@ function InviteByLinkCardContent({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={createMutation.isPending}
+                data-testid={E2eTestId.InviteEmailInput}
               />
               <p className="text-xs text-muted-foreground">
                 The email of the person you want to invite
@@ -107,15 +118,26 @@ function InviteByLinkCardContent({
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
-                onValueChange={(value: "member" | "admin") => setRole(value)}
+                onValueChange={(value: AnyRoleName) => setRole(value)}
                 disabled={createMutation.isPending}
               >
-                <SelectTrigger id="role">
+                <SelectTrigger
+                  id="role"
+                  data-testid={E2eTestId.InviteRoleSelect}
+                >
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                  <SelectItem value={EDITOR_ROLE_NAME}>Editor</SelectItem>
+                  <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
+                  {roles
+                    ?.filter((r) => !r.predefined)
+                    .map((r) => (
+                      <SelectItem key={r.id} value={r.name}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -123,28 +145,36 @@ function InviteByLinkCardContent({
               </p>
             </div>
 
-            <Button
+            <PermissionButton
+              permissions={{ invitation: ["create"] }}
               onClick={handleGenerateLink}
               disabled={createMutation.isPending || !isValidEmail}
               className="w-full"
+              data-testid={E2eTestId.GenerateInvitationButton}
             >
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Generate Invitation Link
-            </Button>
+            </PermissionButton>
           </>
         ) : (
           <>
             <div className="space-y-2">
               <Label>Invitation Link</Label>
               <div className="flex items-center gap-2">
-                <Input value={invitationLink} readOnly className="flex-1" />
+                <Input
+                  value={invitationLink}
+                  readOnly
+                  className="flex-1"
+                  data-testid={E2eTestId.InvitationLinkInput}
+                />
                 <Button
                   type="button"
                   size="icon"
                   variant="outline"
                   onClick={handleCopyLink}
+                  data-testid={E2eTestId.InvitationLinkCopyButton}
                 >
                   {isCopied ? (
                     <Check className="h-4 w-4 text-green-600" />
@@ -193,7 +223,10 @@ export function InviteByLinkCard({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
+                <p
+                  className="text-sm text-muted-foreground mb-4"
+                  data-testid={E2eTestId.InvitationErrorMessage}
+                >
                   {error?.message || "Failed to create invitation"}
                 </p>
                 <Button onClick={resetErrorBoundary} variant="outline">

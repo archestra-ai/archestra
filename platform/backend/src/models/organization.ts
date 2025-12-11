@@ -1,76 +1,118 @@
-import type { OrganizationAppearance } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  InsertOrganization,
-  Organization,
-  UpdateOrganization,
-} from "@/types";
+import logger from "@/logging";
+import type { Organization, UpdateOrganization } from "@/types";
 
 class OrganizationModel {
-  static async getOrCreateDefaultOrganization(): Promise<Organization> {
-    // Try to get existing default organization
-    const [existingOrg] = await db
+  /**
+   * Get the first organization in the database (fallback for various operations)
+   */
+  static async getFirst(): Promise<Organization | null> {
+    logger.debug("OrganizationModel.getFirst: fetching first organization");
+    const [organization] = await db
       .select()
       .from(schema.organizationsTable)
       .limit(1);
+    logger.debug(
+      { found: !!organization },
+      "OrganizationModel.getFirst: completed",
+    );
+    return organization || null;
+  }
+
+  /**
+   * Get or create the default organization
+   */
+  static async getOrCreateDefaultOrganization(): Promise<Organization> {
+    logger.debug("OrganizationModel.getOrCreateDefaultOrganization: starting");
+    // Try to get existing default organization
+    const existingOrg = await OrganizationModel.getFirst();
 
     if (existingOrg) {
+      logger.debug(
+        { organizationId: existingOrg.id },
+        "OrganizationModel.getOrCreateDefaultOrganization: found existing organization",
+      );
       return existingOrg;
     }
 
     // Create default organization if none exists
-    const defaultOrgData: InsertOrganization = {
-      id: "default-org",
-      name: "Default Organization",
-      slug: "default",
-      createdAt: new Date(),
-      hasSeededMcpCatalog: false,
-    };
-
+    logger.debug(
+      "OrganizationModel.getOrCreateDefaultOrganization: creating default organization",
+    );
     const [createdOrg] = await db
       .insert(schema.organizationsTable)
-      .values(defaultOrgData)
+      .values({
+        id: "default-org",
+        name: "Default Organization",
+        slug: "default",
+        createdAt: new Date(),
+      })
       .returning();
 
+    logger.debug(
+      { organizationId: createdOrg.id },
+      "OrganizationModel.getOrCreateDefaultOrganization: completed",
+    );
     return createdOrg;
   }
 
-  static async update(
+  /**
+   * Update an organization with partial data
+   */
+  static async patch(
     id: string,
-    organization: Partial<UpdateOrganization>,
+    data: Partial<UpdateOrganization>,
   ): Promise<Organization | null> {
+    logger.debug(
+      { id, dataKeys: Object.keys(data) },
+      "OrganizationModel.patch: updating organization",
+    );
+    if ("logo" in data && data.logo) {
+      const logo = data.logo;
+
+      if (!logo.startsWith("data:image/png;base64,")) {
+        throw new Error("Logo must be a PNG image in base64 format");
+      }
+
+      // Check size (rough estimate: base64 is ~1.33x original size)
+      // 2MB * 1.33 = ~2.66MB in base64
+      const maxSize = 2.66 * 1024 * 1024;
+      if (logo.length > maxSize) {
+        // ~2.66MB
+        throw new Error("Logo must be less than 2MB");
+      }
+    }
+
     const [updatedOrganization] = await db
       .update(schema.organizationsTable)
-      .set(organization)
+      .set(data)
       .where(eq(schema.organizationsTable.id, id))
       .returning();
 
+    logger.debug(
+      { id, updated: !!updatedOrganization },
+      "OrganizationModel.patch: completed",
+    );
     return updatedOrganization || null;
   }
 
-  static async updateSeededMcpCatalogFlag(
-    id: string,
-    hasSeeded: boolean,
-  ): Promise<Organization | null> {
-    return OrganizationModel.update(id, { hasSeededMcpCatalog: hasSeeded });
-  }
-
+  /**
+   * Get an organization by ID
+   */
   static async getById(id: string): Promise<Organization | null> {
+    logger.debug({ id }, "OrganizationModel.getById: fetching organization");
     const [organization] = await db
       .select()
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, id))
       .limit(1);
 
+    logger.debug(
+      { id, found: !!organization },
+      "OrganizationModel.getById: completed",
+    );
     return organization || null;
-  }
-
-  static async updateAppearance(
-    id: string,
-    appearance: OrganizationAppearance,
-  ): Promise<Organization | null> {
-    return OrganizationModel.update(id, appearance);
   }
 }
 

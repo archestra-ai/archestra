@@ -1,392 +1,38 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { convertToModelMessages, stepCountIs, streamText } from "ai";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
+import {
+  convertToModelMessages,
+  generateText,
+  stepCountIs,
+  streamText,
+} from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
+import { hasPermission } from "@/auth";
+import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
-import { ConversationModel, MessageModel } from "@/models";
+import logger from "@/logging";
 import {
-  ErrorResponseSchema,
+  AgentModel,
+  ChatApiKeyModel,
+  ConversationModel,
+  MessageModel,
+  PromptModel,
+} from "@/models";
+import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
+import { secretManager } from "@/secretsmanager";
+import {
+  ApiError,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
+  ErrorResponsesSchema,
   InsertConversationSchema,
-  RouteId,
   SelectConversationSchema,
-  SelectConversationWithMessagesSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
-
-const N8N_SYSTEM_PROMPT = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
-
-## Core Principles
-
-### 1. Silent Execution
-CRITICAL: Execute tools without commentary. Only respond AFTER all tools complete.
-
-❌ BAD: "Let me search for Slack nodes... Great! Now let me get details..."
-✅ GOOD: [Execute search_nodes and get_node_essentials in parallel, then respond]
-
-### 2. Parallel Execution
-When operations are independent, execute them in parallel for maximum performance.
-
-✅ GOOD: Call search_nodes, list_nodes, and search_templates simultaneously
-❌ BAD: Sequential tool calls (await each one before the next)
-
-### 3. Templates First
-ALWAYS check templates before building from scratch (2,709 available).
-
-### 4. Multi-Level Validation
-Use validate_node_minimal → validate_node_operation → validate_workflow pattern.
-
-### 5. Never Trust Defaults
-⚠️ CRITICAL: Default parameter values are the #1 source of runtime failures.
-ALWAYS explicitly configure ALL parameters that control node behavior.
-
-## Workflow Process
-
-1. **Start**: Call \`tools_documentation()\` for best practices
-
-2. **Template Discovery Phase** (FIRST - parallel when searching multiple)
-   - \`search_templates_by_metadata({complexity: "simple"})\` - Smart filtering
-   - \`get_templates_for_task('webhook_processing')\` - Curated by task
-   - \`search_templates('slack notification')\` - Text search
-   - \`list_node_templates(['n8n-nodes-base.slack'])\` - By node type
-
-   **Filtering strategies**:
-   - Beginners: \`complexity: "simple"\` + \`maxSetupMinutes: 30\`
-   - By role: \`targetAudience: "marketers"\` | \`"developers"\` | \`"analysts"\`
-   - By time: \`maxSetupMinutes: 15\` for quick wins
-   - By service: \`requiredService: "openai"\` for compatibility
-
-3. **Node Discovery** (if no suitable template - parallel execution)
-   - Think deeply about requirements. Ask clarifying questions if unclear.
-   - \`search_nodes({query: 'keyword', includeExamples: true})\` - Parallel for multiple nodes
-   - \`list_nodes({category: 'trigger'})\` - Browse by category
-   - \`list_ai_tools()\` - AI-capable nodes
-
-4. **Configuration Phase** (parallel for multiple nodes)
-   - \`get_node_essentials(nodeType, {includeExamples: true})\` - 10-20 key properties
-   - \`search_node_properties(nodeType, 'auth')\` - Find specific properties
-   - \`get_node_documentation(nodeType)\` - Human-readable docs
-   - Show workflow architecture to user for approval before proceeding
-
-5. **Validation Phase** (parallel for multiple nodes)
-   - \`validate_node_minimal(nodeType, config)\` - Quick required fields check
-   - \`validate_node_operation(nodeType, config, 'runtime')\` - Full validation with fixes
-   - Fix ALL errors before proceeding
-
-6. **Building Phase**
-   - If using template: \`get_template(templateId, {mode: "full"})\`
-   - **MANDATORY ATTRIBUTION**: "Based on template by **[author.name]** (@[username]). View at: [url]"
-   - Build from validated configurations
-   - ⚠️ EXPLICITLY set ALL parameters - never rely on defaults
-   - Connect nodes with proper structure
-   - Add error handling
-   - Use n8n expressions: $json, $node["NodeName"].json
-   - Build in artifact (unless deploying to n8n instance)
-
-7. **Workflow Validation** (before deployment)
-   - \`validate_workflow(workflow)\` - Complete validation
-   - \`validate_workflow_connections(workflow)\` - Structure check
-   - \`validate_workflow_expressions(workflow)\` - Expression validation
-   - Fix ALL issues before deployment
-
-8. **Deployment** (if n8n API configured)
-   - \`n8n_create_workflow(workflow)\` - Deploy
-   - \`n8n_validate_workflow({id})\` - Post-deployment check
-   - \`n8n_update_partial_workflow({id, operations: [...]})\` - Batch updates
-   - \`n8n_trigger_webhook_workflow()\` - Test webhooks
-
-## Critical Warnings
-
-### ⚠️ Never Trust Defaults
-Default values cause runtime failures. Example:
-\`\`\`json
-// ❌ FAILS at runtime
-{resource: "message", operation: "post", text: "Hello"}
-
-// ✅ WORKS - all parameters explicit
-{resource: "message", operation: "post", select: "channel", channelId: "C123", text: "Hello"}
-\`\`\`
-
-### ⚠️ Example Availability
-\`includeExamples: true\` returns real configurations from workflow templates.
-- Coverage varies by node popularity
-- When no examples available, use \`get_node_essentials\` + \`validate_node_minimal\`
-
-## Validation Strategy
-
-### Level 1 - Quick Check (before building)
-\`validate_node_minimal(nodeType, config)\` - Required fields only (<100ms)
-
-### Level 2 - Comprehensive (before building)
-\`validate_node_operation(nodeType, config, 'runtime')\` - Full validation with fixes
-
-### Level 3 - Complete (after building)
-\`validate_workflow(workflow)\` - Connections, expressions, AI tools
-
-### Level 4 - Post-Deployment
-1. \`n8n_validate_workflow({id})\` - Validate deployed workflow
-2. \`n8n_autofix_workflow({id})\` - Auto-fix common errors
-3. \`n8n_list_executions()\` - Monitor execution status
-
-## Response Format
-
-### Initial Creation
-\`\`\`
-[Silent tool execution in parallel]
-
-Created workflow:
-- Webhook trigger → Slack notification
-- Configured: POST /webhook → #general channel
-
-Validation: ✅ All checks passed
-\`\`\`
-
-### Modifications
-\`\`\`
-[Silent tool execution]
-
-Updated workflow:
-- Added error handling to HTTP node
-- Fixed required Slack parameters
-
-Changes validated successfully.
-\`\`\`
-
-## Batch Operations
-
-Use \`n8n_update_partial_workflow\` with multiple operations in a single call:
-
-✅ GOOD - Batch multiple operations:
-\`\`\`json
-n8n_update_partial_workflow({
-  id: "wf-123",
-  operations: [
-    {type: "updateNode", nodeId: "slack-1", changes: {...}},
-    {type: "updateNode", nodeId: "http-1", changes: {...}},
-    {type: "cleanStaleConnections"}
-  ]
-})
-\`\`\`
-
-❌ BAD - Separate calls:
-\`\`\`json
-n8n_update_partial_workflow({id: "wf-123", operations: [{...}]})
-n8n_update_partial_workflow({id: "wf-123", operations: [{...}]})
-\`\`\`
-
-###   CRITICAL: addConnection Syntax
-
-The \`addConnection\` operation requires **four separate string parameters**. Common mistakes cause misleading errors.
-
-❌ WRONG - Object format (fails with "Expected string, received object"):
-\`\`\`json
-{
-  "type": "addConnection",
-  "connection": {
-    "source": {"nodeId": "node-1", "outputIndex": 0},
-    "destination": {"nodeId": "node-2", "inputIndex": 0}
-  }
-}
-\`\`\`
-
-❌ WRONG - Combined string (fails with "Source node not found"):
-\`\`\`json
-{
-  "type": "addConnection",
-  "source": "node-1:main:0",
-  "target": "node-2:main:0"
-}
-\`\`\`
-
-✅ CORRECT - Four separate string parameters:
-\`\`\`json
-{
-  "type": "addConnection",
-  "source": "node-id-string",
-  "target": "target-node-id-string",
-  "sourcePort": "main",
-  "targetPort": "main"
-}
-\`\`\`
-
-**Reference**: [GitHub Issue #327](https://github.com/czlonkowski/n8n-mcp/issues/327)
-
-### ⚠️ CRITICAL: IF Node Multi-Output Routing
-
-IF nodes have **two outputs** (TRUE and FALSE). Use the **\`branch\` parameter** to route to the correct output:
-
-✅ CORRECT - Route to TRUE branch (when condition is met):
-\`\`\`json
-{
-  "type": "addConnection",
-  "source": "if-node-id",
-  "target": "success-handler-id",
-  "sourcePort": "main",
-  "targetPort": "main",
-  "branch": "true"
-}
-\`\`\`
-
-✅ CORRECT - Route to FALSE branch (when condition is NOT met):
-\`\`\`json
-{
-  "type": "addConnection",
-  "source": "if-node-id",
-  "target": "failure-handler-id",
-  "sourcePort": "main",
-  "targetPort": "main",
-  "branch": "false"
-}
-\`\`\`
-
-**Common Pattern** - Complete IF node routing:
-\`\`\`json
-n8n_update_partial_workflow({
-  id: "workflow-id",
-  operations: [
-    {type: "addConnection", source: "If Node", target: "True Handler", sourcePort: "main", targetPort: "main", branch: "true"},
-    {type: "addConnection", source: "If Node", target: "False Handler", sourcePort: "main", targetPort: "main", branch: "false"}
-  ]
-})
-\`\`\`
-
-**Note**: Without the \`branch\` parameter, both connections may end up on the same output, causing logic errors!
-
-### removeConnection Syntax
-
-Use the same four-parameter format:
-\`\`\`json
-{
-  "type": "removeConnection",
-  "source": "source-node-id",
-  "target": "target-node-id",
-  "sourcePort": "main",
-  "targetPort": "main"
-}
-\`\`\`
-
-## Example Workflow
-
-### Template-First Approach
-
-\`\`\`
-// STEP 1: Template Discovery (parallel execution)
-[Silent execution]
-search_templates_by_metadata({
-  requiredService: 'slack',
-  complexity: 'simple',
-  targetAudience: 'marketers'
-})
-get_templates_for_task('slack_integration')
-
-// STEP 2: Use template
-get_template(templateId, {mode: 'full'})
-validate_workflow(workflow)
-
-// Response after all tools complete:
-"Found template by **David Ashby** (@cfomodz).
-View at: https://n8n.io/workflows/2414
-
-Validation: ✅ All checks passed"
-\`\`\`
-
-### Building from Scratch (if no template)
-
-\`\`\`
-// STEP 1: Discovery (parallel execution)
-[Silent execution]
-search_nodes({query: 'slack', includeExamples: true})
-list_nodes({category: 'communication'})
-
-// STEP 2: Configuration (parallel execution)
-[Silent execution]
-get_node_essentials('n8n-nodes-base.slack', {includeExamples: true})
-get_node_essentials('n8n-nodes-base.webhook', {includeExamples: true})
-
-// STEP 3: Validation (parallel execution)
-[Silent execution]
-validate_node_minimal('n8n-nodes-base.slack', config)
-validate_node_operation('n8n-nodes-base.slack', fullConfig, 'runtime')
-
-// STEP 4: Build
-// Construct workflow with validated configs
-// ⚠️ Set ALL parameters explicitly
-
-// STEP 5: Validate
-[Silent execution]
-validate_workflow(workflowJson)
-
-// Response after all tools complete:
-"Created workflow: Webhook → Slack
-Validation: ✅ Passed"
-\`\`\`
-
-### Batch Updates
-
-\`\`\`json
-// ONE call with multiple operations
-n8n_update_partial_workflow({
-  id: "wf-123",
-  operations: [
-    {type: "updateNode", nodeId: "slack-1", changes: {position: [100, 200]}},
-    {type: "updateNode", nodeId: "http-1", changes: {position: [300, 200]}},
-    {type: "cleanStaleConnections"}
-  ]
-})
-\`\`\`
-
-## Important Rules
-
-### Core Behavior
-1. **Silent execution** - No commentary between tools
-2. **Parallel by default** - Execute independent operations simultaneously
-3. **Templates first** - Always check before building (2,709 available)
-4. **Multi-level validation** - Quick check → Full validation → Workflow validation
-5. **Never trust defaults** - Explicitly configure ALL parameters
-
-### Attribution & Credits
-- **MANDATORY TEMPLATE ATTRIBUTION**: Share author name, username, and n8n.io link
-- **Template validation** - Always validate before deployment (may need updates)
-
-### Performance
-- **Batch operations** - Use diff operations with multiple changes in one call
-- **Parallel execution** - Search, validate, and configure simultaneously
-- **Template metadata** - Use smart filtering for faster discovery
-
-### Code Node Usage
-- **Avoid when possible** - Prefer standard nodes
-- **Only when necessary** - Use code node as last resort
-- **AI tool capability** - ANY node can be an AI tool (not just marked ones)
-
-### Most Popular n8n Nodes (for get_node_essentials):
-
-1. **n8n-nodes-base.code** - JavaScript/Python scripting
-2. **n8n-nodes-base.httpRequest** - HTTP API calls
-3. **n8n-nodes-base.webhook** - Event-driven triggers
-4. **n8n-nodes-base.set** - Data transformation
-5. **n8n-nodes-base.if** - Conditional routing
-6. **n8n-nodes-base.manualTrigger** - Manual workflow execution
-7. **n8n-nodes-base.respondToWebhook** - Webhook responses
-8. **n8n-nodes-base.scheduleTrigger** - Time-based triggers
-9. **@n8n/n8n-nodes-langchain.agent** - AI agents
-10. **n8n-nodes-base.googleSheets** - Spreadsheet integration
-11. **n8n-nodes-base.merge** - Data merging
-12. **n8n-nodes-base.switch** - Multi-branch routing
-13. **n8n-nodes-base.telegram** - Telegram bot integration
-14. **@n8n/n8n-nodes-langchain.lmChatOpenAi** - OpenAI chat models
-15. **n8n-nodes-base.splitInBatches** - Batch processing
-16. **n8n-nodes-base.openAi** - OpenAI legacy node
-17. **n8n-nodes-base.gmail** - Email automation
-18. **n8n-nodes-base.function** - Custom functions
-19. **n8n-nodes-base.stickyNote** - Workflow documentation
-20. **n8n-nodes-base.executeWorkflowTrigger** - Sub-workflow calls
-
-**Note:** LangChain nodes use the \`@n8n/n8n-nodes-langchain.\` prefix, core nodes use \`n8n-nodes-base.\``;
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // ========== Streaming (useChat format) ==========
   fastify.post(
     "/api/chat",
     {
@@ -395,85 +41,164 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Stream chat response with MCP tools (useChat format)",
         tags: ["Chat"],
         body: z.object({
-          id: UuidIdSchema.optional(), // Chat ID from useChat
+          id: UuidIdSchema, // Chat ID from useChat
           messages: z.array(z.any()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
         }),
-        response: {
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
-    async (request, reply) => {
-      const { id: conversationId, messages } = request.body;
-      const user = await getUserFromRequest(request);
+    async (
+      { body: { id: conversationId, messages }, user, organizationId, headers },
+      reply,
+    ) => {
+      const { success: userIsProfileAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      // Conversation ID is required
-      if (!conversationId) {
-        return reply.status(400).send({
-          error: {
-            message: "Conversation ID is required",
-            type: "bad_request",
-          },
-        });
-      }
+      // Extract external agent ID from incoming request headers to forward to LLM Proxy
+      const externalAgentId = getExternalAgentId(headers);
 
       // Get conversation
       const conversation = await ConversationModel.findById(
         conversationId,
         user.id,
-        user.organizationId,
+        organizationId,
       );
 
       if (!conversation) {
-        return reply.status(404).send({
-          error: {
-            message: "Conversation not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
-      // Get MCP tools from remote server
-      const mcpTools = await getChatMcpTools();
+      // Fetch MCP tools and agent prompts in parallel
+      const [mcpTools, prompt] = await Promise.all([
+        getChatMcpTools({
+          agentName: conversation.agent.name,
+          agentId: conversation.agentId,
+          userId: user.id,
+          userIsProfileAdmin,
+        }),
+        PromptModel.findById(conversation.promptId),
+      ]);
 
-      fastify.log.info(
+      // Build system prompt from prompts' systemPrompt and userPrompt fields
+      let systemPrompt: string | undefined;
+      const systemPromptParts: string[] = [];
+      const userPromptParts: string[] = [];
+
+      // Collect system and user prompts from all assigned prompts
+      if (prompt?.systemPrompt) {
+        systemPromptParts.push(prompt.systemPrompt);
+      }
+      if (prompt?.userPrompt) {
+        userPromptParts.push(prompt.userPrompt);
+      }
+
+      // Combine all prompts into system prompt (system prompts first, then user prompts)
+      if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
+        const allParts = [...systemPromptParts, ...userPromptParts];
+        systemPrompt = allParts.join("\n\n");
+      }
+
+      logger.info(
         {
           conversationId,
+          agentId: conversation.agentId,
           userId: user.id,
-          orgId: user.organizationId,
+          orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
+          promptId: prompt?.id,
+          hasSystemPromptParts: systemPromptParts.length > 0,
+          hasUserPromptParts: userPromptParts.length > 0,
+          systemPromptProvided: !!systemPrompt,
+          externalAgentId,
         },
         "Starting chat stream",
       );
 
-      // Create Anthropic client (call directly to Anthropic API)
+      // Resolve API key: profile-specific -> org default -> env var
+      let anthropicApiKey: string | undefined;
+      let apiKeySource = "environment";
+
+      // Try profile-specific API key first (getProfileApiKey already falls back to org default)
+      const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+        conversation.agentId,
+        "anthropic",
+        organizationId,
+      );
+
+      if (profileApiKey?.secretId) {
+        const secret = await secretManager.getSecret(profileApiKey.secretId);
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+        if (secretValue) {
+          anthropicApiKey = secretValue as string;
+          apiKeySource = profileApiKey.isOrganizationDefault
+            ? "organization default"
+            : "profile-specific";
+        }
+      }
+
+      // If profileApiKey exists but has no secretId, or getProfileApiKey returned null,
+      // explicitly try organization default as a fallback
+      if (!anthropicApiKey) {
+        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+          organizationId,
+          "anthropic",
+        );
+        if (orgDefault?.secretId) {
+          const secret = await secretManager.getSecret(orgDefault.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+            apiKeySource = "organization default";
+          }
+        }
+      }
+
+      // Fall back to environment variable
+      if (!anthropicApiKey) {
+        anthropicApiKey = config.chat.anthropic.apiKey;
+        apiKeySource = "environment";
+      }
+
+      logger.info({ apiKeySource }, "Using Anthropic API key");
+
+      if (!anthropicApiKey) {
+        throw new ApiError(
+          400,
+          "LLM Provider API key not configured. Please configure it in Chat Settings.",
+        );
+      }
+
+      // Create Anthropic client pointing to LLM Proxy
+      // URL format: /v1/anthropic/:agentId/v1/messages
+      // Forward external agent ID header if present
       const anthropic = createAnthropic({
-        apiKey: config.chat.anthropic.apiKey,
-        baseURL: config.chat.anthropic.baseUrl,
+        apiKey: anthropicApiKey,
+        baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
+        headers: externalAgentId
+          ? {
+              [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
+            }
+          : undefined,
       });
 
       // Stream with AI SDK
-      const result = streamText({
+      // Build streamText config conditionally
+      const streamTextConfig: Parameters<typeof streamText>[0] = {
         model: anthropic(conversation.selectedModel),
-        system: N8N_SYSTEM_PROMPT,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {
-          fastify.log.info(
+          logger.info(
             {
               conversationId,
               usage,
@@ -482,7 +207,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream finished",
           );
         },
-      });
+      };
+
+      // Only include system property if we have actual content
+      if (systemPrompt) {
+        streamTextConfig.system = systemPrompt;
+      }
+
+      const result = streamText(streamTextConfig);
 
       // Convert to UI message stream response (Response object)
       const response = result.toUIMessageStreamResponse({
@@ -493,7 +225,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          return JSON.stringify(error);
+          logger.error(
+            { error, conversationId, agentId: conversation.agentId },
+            "Chat stream error occurred",
+          );
+
+          // Return full error as JSON string for debugging
+          try {
+            const fullError = JSON.stringify(error, null, 2);
+            logger.info(
+              { fullError, willBeSentToFrontend: true },
+              "Returning full error to frontend via stream",
+            );
+            return fullError;
+          } catch (stringifyError) {
+            // If stringify fails (circular reference), fall back to error message
+            const fallbackMessage =
+              error instanceof Error ? error.message : String(error);
+            logger.info(
+              { fallbackMessage, stringifyError },
+              "Failed to stringify error, using fallback",
+            );
+            return fallbackMessage;
+          }
         },
         onFinish: async ({ messages: finalMessages }) => {
           if (!conversationId) return;
@@ -529,7 +283,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               await MessageModel.bulkCreate(messageData);
 
-              fastify.log.info(
+              logger.info(
                 `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
               );
             }
@@ -538,7 +292,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Log response headers for debugging
-      fastify.log.info(
+      logger.info(
         {
           conversationId,
           headers: Object.fromEntries(response.headers.entries()),
@@ -554,54 +308,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Send the Response body stream directly
       if (!response.body) {
-        return reply.status(400).send({
-          error: {
-            message: "No response body",
-            type: "bad_request",
-          },
-        });
+        throw new ApiError(400, "No response body");
       }
       // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
       return reply.send(response.body as any);
     },
   );
 
-  // ========== Conversations CRUD ==========
-
-  // List conversations
   fastify.get(
     "/api/chat/conversations",
     {
       schema: {
         operationId: RouteId.GetChatConversations,
-        description: "List all conversations for current user",
+        description:
+          "List all conversations for current user with agent details",
         tags: ["Chat"],
-        response: {
-          200: z.array(SelectConversationSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const conversations = await ConversationModel.findAll(
-        user.id,
-        user.organizationId,
+      return reply.send(
+        await ConversationModel.findAll(
+          request.user.id,
+          request.organizationId,
+        ),
       );
-      return reply.send(conversations);
     },
   );
 
-  // Get conversation with messages
   fastify.get(
     "/api/chat/conversations/:id",
     {
@@ -610,84 +344,132 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get conversation with messages",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: {
-          200: SelectConversationWithMessagesSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const conversation = await ConversationModel.findByIdWithMessages(
-        request.params.id,
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const conversation = await ConversationModel.findById(
+        id,
         user.id,
-        user.organizationId,
+        organizationId,
       );
 
       if (!conversation) {
-        return reply.status(404).send({
-          error: {
-            message: "Conversation not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       return reply.send(conversation);
     },
   );
 
-  // Create conversation
+  fastify.get(
+    "/api/chat/agents/:agentId/mcp-tools",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentMcpTools,
+        description: "Get MCP tools available for an agent via MCP Gateway",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              name: z.string(),
+              description: z.string(),
+              parameters: z.record(z.string(), z.any()).nullable(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { agentId }, user, headers }, reply) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Verify agent exists and user has access
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+
+      if (!agent) {
+        return [];
+      }
+
+      // Fetch MCP tools from gateway (same as used in chat)
+      const mcpTools = await getChatMcpTools({
+        agentName: agent.name,
+        agentId,
+        userId: user.id,
+        userIsProfileAdmin: isAgentAdmin,
+      });
+
+      // Convert AI SDK Tool format to simple array for frontend
+      const tools = Object.entries(mcpTools).map(([name, tool]) => ({
+        name,
+        description: tool.description || "",
+        parameters:
+          (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
+            ?.jsonSchema || null,
+      }));
+
+      return reply.send(tools);
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations",
     {
       schema: {
         operationId: RouteId.CreateChatConversation,
-        description: "Create a new conversation",
+        description: "Create a new conversation with an agent",
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
+          agentId: true,
+          promptId: true,
           title: true,
           selectedModel: true,
-        }).partial(),
-        response: {
-          200: SelectConversationSchema,
-          401: ErrorResponseSchema,
-        },
+        })
+          .required({ agentId: true })
+          .partial({ promptId: true, title: true, selectedModel: true }),
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
+    async (
+      {
+        body: { agentId, promptId, title, selectedModel },
+        user,
+        organizationId,
+        headers,
+      },
+      reply,
+    ) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Validate that the agent exists and user has access to it
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
       }
 
-      const conversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId: user.organizationId,
-        title: request.body.title,
-        selectedModel: request.body.selectedModel || config.chat.defaultModel,
-      });
-
-      return reply.send(conversation);
+      // Create conversation with agent and optional prompt
+      return reply.send(
+        await ConversationModel.create({
+          userId: user.id,
+          organizationId,
+          agentId,
+          promptId,
+          title,
+          selectedModel: selectedModel || config.chat.defaultModel,
+        }),
+      );
     },
   );
 
-  // Update conversation
   fastify.patch(
     "/api/chat/conversations/:id",
     {
@@ -697,45 +479,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
-        response: {
-          200: SelectConversationSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       const conversation = await ConversationModel.update(
-        request.params.id,
+        id,
         user.id,
-        user.organizationId,
-        request.body,
+        organizationId,
+        body,
       );
 
       if (!conversation) {
-        return reply.status(404).send({
-          error: {
-            message: "Conversation not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       return reply.send(conversation);
     },
   );
 
-  // Delete conversation
   fastify.delete(
     "/api/chat/conversations/:id",
     {
@@ -744,77 +506,199 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Delete a conversation",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      await ConversationModel.delete(
-        request.params.id,
-        user.id,
-        user.organizationId,
-      );
-
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
     },
   );
 
-  // ========== MCP Tools ==========
-
-  // List available MCP tools
-  fastify.get(
-    "/api/chat/mcp-tools",
+  fastify.post(
+    "/api/chat/conversations/:id/generate-title",
     {
       schema: {
-        operationId: RouteId.GetChatMcpTools,
-        description: "List available MCP tools for chat",
+        operationId: RouteId.GenerateChatConversationTitle,
+        description:
+          "Generate a title for the conversation based on the first user message and assistant response",
         tags: ["Chat"],
-        response: {
-          200: z.array(
-            z.object({
-              name: z.string(),
-              description: z.string().optional(),
-              inputSchema: z.any(),
-            }),
-          ),
-          401: ErrorResponseSchema,
-        },
+        params: z.object({ id: UuidIdSchema }),
+        body: z
+          .object({
+            regenerate: z
+              .boolean()
+              .optional()
+              .describe(
+                "Force regeneration even if title already exists (for manual regeneration)",
+              ),
+          })
+          .optional(),
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const regenerate = body?.regenerate ?? false;
+
+      // Get conversation with messages
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
       }
 
-      const client = await getChatMcpClient();
-      if (!client) {
-        return reply.send([]);
+      // Skip if title is already set (unless regenerating)
+      if (conversation.title && !regenerate) {
+        logger.info(
+          { conversationId: id, existingTitle: conversation.title },
+          "Skipping title generation - title already set",
+        );
+        return reply.send(conversation);
       }
+
+      // Extract first user message and first assistant message text
+      const messages = conversation.messages || [];
+      let firstUserMessage = "";
+      let firstAssistantMessage = "";
+
+      for (const msg of messages) {
+        // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+        const msgContent = msg as any;
+        if (!firstUserMessage && msgContent.role === "user") {
+          // Extract text from parts
+          for (const part of msgContent.parts || []) {
+            if (part.type === "text" && part.text) {
+              firstUserMessage = part.text;
+              break;
+            }
+          }
+        }
+        if (!firstAssistantMessage && msgContent.role === "assistant") {
+          // Extract text from parts (skip tool calls)
+          for (const part of msgContent.parts || []) {
+            if (part.type === "text" && part.text) {
+              firstAssistantMessage = part.text;
+              break;
+            }
+          }
+        }
+        if (firstUserMessage && firstAssistantMessage) break;
+      }
+
+      // Need at least user message to generate title
+      if (!firstUserMessage) {
+        logger.info(
+          { conversationId: id },
+          "Skipping title generation - no user message found",
+        );
+        return reply.send(conversation);
+      }
+
+      // Resolve API key: profile-specific -> org default -> env var
+      let anthropicApiKey: string | undefined;
+
+      // Try profile-specific API key first (if conversation has an agent)
+      if (conversation.agentId) {
+        const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+          conversation.agentId,
+          "anthropic",
+          organizationId,
+        );
+
+        if (profileApiKey?.secretId) {
+          const secret = await secretManager.getSecret(profileApiKey.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+          }
+        }
+      }
+
+      // If profileApiKey doesn't work, explicitly try organization default as a fallback
+      if (!anthropicApiKey) {
+        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+          organizationId,
+          "anthropic",
+        );
+        if (orgDefault?.secretId) {
+          const secret = await secretManager.getSecret(orgDefault.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+          }
+        }
+      }
+
+      // Fall back to environment variable
+      if (!anthropicApiKey) {
+        anthropicApiKey = config.chat.anthropic.apiKey;
+      }
+
+      if (!anthropicApiKey) {
+        throw new ApiError(
+          400,
+          "LLM Provider API key not configured. Please configure it in Chat Settings.",
+        );
+      }
+
+      // Create Anthropic client (direct, not through LLM proxy - this is a meta operation)
+      const anthropic = createAnthropic({
+        apiKey: anthropicApiKey,
+      });
+
+      // Build prompt for title generation
+      const contextMessages = firstAssistantMessage
+        ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
+        : `User: ${firstUserMessage}`;
+
+      const titlePrompt = `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
+
+${contextMessages}
+
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
 
       try {
-        const { tools } = await client.listTools();
-        return reply.send(tools);
+        // Generate title using a fast model
+        const result = await generateText({
+          model: anthropic("claude-3-5-haiku-20241022"),
+          prompt: titlePrompt,
+        });
+
+        const generatedTitle = result.text.trim();
+
+        logger.info(
+          { conversationId: id, generatedTitle },
+          "Generated conversation title",
+        );
+
+        // Update conversation with generated title
+        const updatedConversation = await ConversationModel.update(
+          id,
+          user.id,
+          organizationId,
+          { title: generatedTitle },
+        );
+
+        if (!updatedConversation) {
+          throw new ApiError(500, "Failed to update conversation with title");
+        }
+
+        return reply.send(updatedConversation);
       } catch (error) {
-        fastify.log.error({ error }, "Failed to list MCP tools");
-        return reply.send([]);
+        logger.error(
+          { conversationId: id, error },
+          "Failed to generate conversation title",
+        );
+        // Return the conversation without title update on error
+        return reply.send(conversation);
       }
     },
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,6 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
+import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
@@ -23,6 +30,7 @@ import { transformFormToApiData } from "./mcp-catalog-form.utils";
 interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 type TabType = "archestra-catalog" | "remote" | "local";
@@ -30,11 +38,12 @@ type TabType = "archestra-catalog" | "remote" | "local";
 export function CreateCatalogDialog({
   isOpen,
   onClose,
+  onSuccess,
 }: CreateCatalogDialogProps) {
   const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
   const createMutation = useCreateInternalMcpCatalogItem();
-  const submitButtonRef = useRef<HTMLButtonElement>(null);
   const { data: catalogItems } = useInternalMcpCatalog();
+  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   const handleClose = () => {
     setActiveTab("archestra-catalog");
@@ -45,25 +54,39 @@ export function CreateCatalogDialog({
     const apiData = transformFormToApiData(values);
     await createMutation.mutateAsync(apiData);
     handleClose();
+    onSuccess?.();
   };
+
+  const footer = (
+    <DialogFooter className="flex-shrink-0">
+      <Button variant="outline" onClick={handleClose} type="button">
+        Cancel
+      </Button>
+      <Button type="submit" disabled={createMutation.isPending}>
+        {createMutation.isPending ? "Adding..." : "Add Server"}
+      </Button>
+    </DialogFooter>
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add MCP Server</DialogTitle>
+          <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
           <DialogDescription>
-            Add a new MCP server to your private registry from the Archestra
-            Catalog or configure a custom server.
+            Once you add an MCP server here, it will be available for
+            installation.
           </DialogDescription>
         </DialogHeader>
 
         <div className="border-b border-border">
           <div className="flex gap-4">
             {[
-              { value: "archestra-catalog", label: "Archestra Catalog" },
-              { value: "remote", label: "Remote" },
-              { value: "local", label: "Local" },
+              { value: "archestra-catalog", label: "Online Catalog" },
+              {
+                value: "remote",
+                label: "Remote (orchestrated not by Archestra)",
+              },
             ].map((tab) => (
               <button
                 type="button"
@@ -82,6 +105,36 @@ export function CreateCatalogDialog({
                 )}
               </button>
             ))}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() =>
+                    isLocalMcpEnabled && setActiveTab("local" as TabType)
+                  }
+                  disabled={!isLocalMcpEnabled}
+                  className={cn(
+                    "relative pb-3 text-sm font-medium transition-colors",
+                    !isLocalMcpEnabled
+                      ? "text-muted-foreground/50 cursor-not-allowed"
+                      : "hover:text-foreground",
+                    activeTab === "local"
+                      ? "text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  Self-hosted (orchestrated by Archestra in K8S)
+                  {activeTab === "local" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              {!isLocalMcpEnabled && (
+                <TooltipContent>
+                  <p className="max-w-xs">{LOCAL_MCP_DISABLED_MESSAGE}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
           </div>
         </div>
 
@@ -90,6 +143,7 @@ export function CreateCatalogDialog({
             <ArchestraCatalogTab
               catalogItems={catalogItems}
               onClose={handleClose}
+              onSuccess={onSuccess}
             />
           )}
 
@@ -97,8 +151,8 @@ export function CreateCatalogDialog({
             <McpCatalogForm
               mode="create"
               onSubmit={onSubmit}
-              submitButtonRef={submitButtonRef}
               serverType="remote"
+              footer={footer}
             />
           )}
 
@@ -106,25 +160,11 @@ export function CreateCatalogDialog({
             <McpCatalogForm
               mode="create"
               onSubmit={onSubmit}
-              submitButtonRef={submitButtonRef}
               serverType="local"
+              footer={footer}
             />
           )}
         </div>
-
-        {activeTab !== "archestra-catalog" && (
-          <DialogFooter className="flex-shrink-0">
-            <Button variant="outline" onClick={handleClose} type="button">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => submitButtonRef.current?.click()}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? "Adding..." : "Add Server"}
-            </Button>
-          </DialogFooter>
-        )}
       </DialogContent>
     </Dialog>
   );

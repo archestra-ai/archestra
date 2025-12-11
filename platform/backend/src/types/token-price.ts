@@ -1,16 +1,19 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod";
+import type { z } from "zod";
 import { schema } from "@/database";
+import { SupportedProvidersSchema } from "./llm-providers";
 
 /**
  * Base database schema derived from Drizzle
  */
 export const SelectTokenPriceSchema = createSelectSchema(
-  schema.tokenPriceTable,
+  schema.tokenPricesTable,
 );
 export const InsertTokenPriceSchema = createInsertSchema(
-  schema.tokenPriceTable,
-);
+  schema.tokenPricesTable,
+).extend({
+  provider: SupportedProvidersSchema,
+});
 
 /**
  * Refined types for better type safety and validation
@@ -31,9 +34,7 @@ export const CreateTokenPriceSchema = InsertTokenPriceSchema.omit({
   },
 );
 
-export const UpdateTokenPriceSchema = CreateTokenPriceSchema.partial().extend({
-  id: z.string().uuid(),
-});
+export const UpdateTokenPriceSchema = CreateTokenPriceSchema.partial();
 
 /**
  * Exported types

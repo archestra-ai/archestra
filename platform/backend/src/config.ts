@@ -19,6 +19,14 @@ import packageJson from "../../package.json";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
+const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
+const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const isProduction = ["production", "prod"].includes(environment);
+const isDevelopment = !isProduction;
+
+const frontendBaseUrl =
+  process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
+
 /**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
@@ -71,11 +79,6 @@ export const getDatabaseUrl = (): string => {
   }
   return databaseUrl;
 };
-
-const isProduction = ["production", "prod"].includes(
-  process.env.NODE_ENV?.toLowerCase() ?? "",
-);
-const isDevelopment = !isProduction;
 
 /**
  * Parse port from ARCHESTRA_API_BASE_URL if provided
@@ -130,7 +133,7 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
  */
-const getTrustedOrigins = (): string[] | undefined => {
+export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
 
   // Default: allow localhost wildcards for development
@@ -143,11 +146,34 @@ const getTrustedOrigins = (): string[] | undefined => {
     ];
   }
 
+  // Production: use configured origins
   return origins;
 };
 
+/**
+ * Parse additional trusted SSO provider IDs from environment variable.
+ * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
+ *
+ * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
+ * Whitespace around each provider ID is trimmed.
+ *
+ * @returns Array of additional trusted SSO provider IDs
+ */
+export const getAdditionalTrustedSsoProviderIds = (): string[] => {
+  const envValue = process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  return envValue
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+};
+
 export default {
-  baseURL: process.env.ARCHESTRA_FRONTEND_URL,
+  frontendBaseUrl,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),
@@ -155,6 +181,9 @@ export default {
     version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
+  },
+  websocket: {
+    path: "/ws",
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
@@ -168,6 +197,9 @@ export default {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    disableInvitations:
+      process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    additionalTrustedSsoProviderIds: getAdditionalTrustedSsoProviderIds(),
   },
   database: {
     url: getDatabaseUrl(),
@@ -215,6 +247,8 @@ export default {
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
   },
+  enterpriseLicenseActivated:
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -242,9 +276,16 @@ export default {
       port: 9050,
       secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
+    sentry: {
+      enabled: sentryDsn !== "",
+      dsn: sentryDsn,
+      environment:
+        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+    },
   },
   debug: isDevelopment,
   production: isProduction,
+  environment,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },

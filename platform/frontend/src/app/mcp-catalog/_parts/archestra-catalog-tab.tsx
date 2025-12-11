@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  type archestraCatalogTypes,
-  GITHUB_MCP_SERVER_NAME,
-} from "@shared";
+import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -21,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRole } from "@/lib/auth.hook";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
@@ -31,8 +27,8 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
-import { ConfigureEnvironmentDialog } from "./configure-environment-dialog";
 import { DetailsDialog } from "./details-dialog";
+import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
 
@@ -41,16 +37,16 @@ type ServerType = "all" | "remote" | "local";
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
   onClose,
+  onSuccess,
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onClose: () => void;
+  onSuccess?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
-    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
-  const [configureEnvServer, setConfigureEnvServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
@@ -60,8 +56,6 @@ export function ArchestraCatalogTab({
     category: "all",
   });
 
-  const userRole = useRole();
-
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
@@ -69,6 +63,10 @@ export function ArchestraCatalogTab({
 
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();
+
+  const { data: userIsMcpServerAdmin = false } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
 
   // Use server-side search and category filtering
   const {
@@ -86,9 +84,99 @@ export function ArchestraCatalogTab({
   const handleAddToCatalog = async (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => {
-    // For local servers, open the environment configuration dialog
+    const getValue = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
+    ) => {
+      if (config.type === "boolean") {
+        return typeof config.default === "boolean"
+          ? String(config.default)
+          : "false";
+      }
+      if (config.type === "number" && typeof config.default === "number") {
+        return String(config.default);
+      }
+      return undefined;
+    };
+
+    // For local servers, construct environment from server.env and user_config
     if (server.server.type === "local") {
-      setConfigureEnvServer(server);
+      // Track which user_config keys are referenced in server.env
+      const referencedUserConfigKeys = new Set<string>();
+
+      const getEnvVarType = (
+        userConfigEntry: NonNullable<
+          archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+        >[string],
+      ) => {
+        if (userConfigEntry.sensitive) return "secret" as const;
+        if (userConfigEntry.type === "boolean") return "boolean" as const;
+        if (userConfigEntry.type === "number") return "number" as const;
+        return "plain_text" as const;
+      };
+
+      // First pass: Parse server.env entries
+      const envFromServerEnv = server.server.env
+        ? Object.entries(server.server.env).map(([envKey, envValue]) => {
+            // Check if value is ${user_config.xxx} placeholder
+            const match = envValue.match(/^\$\{user_config\.(.+)\}$/);
+
+            if (match && server.user_config) {
+              const userConfigKey = match[1];
+              const userConfigEntry = server.user_config[userConfigKey];
+              referencedUserConfigKeys.add(userConfigKey);
+
+              if (userConfigEntry) {
+                return {
+                  key: envKey, // Use env var name (e.g., CONFLUENCE_URL)
+                  type: getEnvVarType(userConfigEntry),
+                  value: "", // Empty - will be prompted
+                  promptOnInstallation: true,
+                  required: userConfigEntry.required ?? false,
+                  description: [
+                    userConfigEntry.title,
+                    userConfigEntry.description,
+                  ]
+                    .filter(Boolean)
+                    .join(": "),
+                };
+              }
+            }
+
+            // Static env var (no user_config reference)
+            return {
+              key: envKey,
+              type: "plain_text" as const,
+              value: envValue,
+              promptOnInstallation: false,
+              required: false,
+              description: "",
+            };
+          })
+        : [];
+
+      // Second pass: Add user_config entries NOT referenced in server.env
+      const envFromUnreferencedUserConfig = server.user_config
+        ? Object.entries(server.user_config)
+            .filter(([key]) => !referencedUserConfigKeys.has(key))
+            .map(([key, config]) => ({
+              key,
+              type: getEnvVarType(config),
+              value: getValue(config),
+              promptOnInstallation: true,
+              required: config.required ?? false,
+              description: [config.title, config.description]
+                .filter(Boolean)
+                .join(": "),
+            }))
+        : [];
+
+      const environment = [
+        ...envFromServerEnv,
+        ...envFromUnreferencedUserConfig,
+      ];
+      await addServerToCatalog(server, environment);
       return;
     }
 
@@ -100,22 +188,11 @@ export function ArchestraCatalogTab({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
     environment?: Array<{
       key: string;
-      type: "plain_text" | "secret";
+      type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
     }>,
   ) => {
-    if (server.name === GITHUB_MCP_SERVER_NAME) {
-      server.user_config = {
-        access_token: {
-          sensitive: true,
-          type: "string",
-          title: "Access Token",
-          description: "The access token for the GitHub MCP server",
-          required: true,
-        },
-      };
-    }
     // Rewrite redirect URIs to prefer platform callback (port 3000)
     const rewrittenOauth =
       server.oauth_config && !server.oauth_config.requires_proxy
@@ -129,28 +206,53 @@ export function ArchestraCatalogTab({
           }
         : undefined;
 
-    // For local servers, extract local_config from manifest
-    const localConfig =
-      server.server.type === "local"
-        ? {
-            command: server.server.command,
-            arguments: server.server.args,
-            environment:
-              environment ||
-              (server.server.env
-                ? Object.entries(server.server.env).map(([key, value]) => ({
-                    key,
-                    type: "plain_text" as const,
-                    value,
-                    promptOnInstallation: false,
-                  }))
-                : undefined),
-          }
-        : undefined;
+    let localConfig:
+      | archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["localConfig"]
+      | undefined;
+    if (server.server.type === "local") {
+      const dockerConfig = parseDockerArgsToLocalConfig(
+        server.server.command,
+        server.server.args,
+        server.server.docker_image,
+      );
+      if (dockerConfig) {
+        localConfig = {
+          command: dockerConfig.command,
+          arguments: dockerConfig.arguments,
+          dockerImage: dockerConfig.dockerImage,
+          environment:
+            environment ||
+            (server.server.env
+              ? Object.entries(server.server.env).map(([key, value]) => ({
+                  key,
+                  type: "plain_text" as const,
+                  value,
+                  promptOnInstallation: false,
+                }))
+              : undefined),
+        };
+      } else {
+        localConfig = {
+          command: server.server.command,
+          arguments: server.server.args,
+          environment:
+            environment ||
+            (server.server.env
+              ? Object.entries(server.server.env).map(([key, value]) => ({
+                  key,
+                  type: "plain_text" as const,
+                  value,
+                  promptOnInstallation: false,
+                }))
+              : undefined),
+        };
+      }
+    }
 
     await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
+      instructions: server.instructions,
       serverType: server.server.type,
       serverUrl:
         server.server.type === "remote" ? server.server.url : undefined,
@@ -165,6 +267,7 @@ export function ArchestraCatalogTab({
 
     // Close the dialog after adding
     onClose();
+    onSuccess?.();
   };
 
   const handleRequestInstallation = async (
@@ -319,7 +422,7 @@ export function ArchestraCatalogTab({
                     isAdding={createMutation.isPending}
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
-                    userRole={userRole}
+                    userIsMcpServerAdmin={userIsMcpServerAdmin}
                   />
                 ))}
               </div>
@@ -357,31 +460,6 @@ export function ArchestraCatalogTab({
         server={requestServer}
         onClose={() => setRequestServer(null)}
       />
-
-      <ConfigureEnvironmentDialog
-        isOpen={!!configureEnvServer}
-        onClose={() => setConfigureEnvServer(null)}
-        onConfirm={(environment) => {
-          if (configureEnvServer) {
-            addServerToCatalog(configureEnvServer, environment);
-            setConfigureEnvServer(null);
-          }
-        }}
-        serverName={configureEnvServer?.name || ""}
-        defaultEnvironment={
-          configureEnvServer?.server.type === "local" &&
-          configureEnvServer.server.env
-            ? Object.entries(configureEnvServer.server.env).map(
-                ([key, value]) => ({
-                  key,
-                  type: "plain_text" as const,
-                  value,
-                  promptOnInstallation: false,
-                }),
-              )
-            : []
-        }
-      />
     </div>
   );
 }
@@ -394,7 +472,7 @@ function ServerCard({
   isAdding,
   onOpenReadme,
   isInCatalog,
-  userRole,
+  userIsMcpServerAdmin,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onAddToCatalog: (
@@ -408,9 +486,8 @@ function ServerCard({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
-  userRole: "admin" | "member";
+  userIsMcpServerAdmin: boolean;
 }) {
-  const isAdmin = userRole === "admin";
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -498,7 +575,9 @@ function ServerCard({
           </div>
           <Button
             onClick={() =>
-              isAdmin ? onAddToCatalog(server) : onRequestInstallation(server)
+              userIsMcpServerAdmin
+                ? onAddToCatalog(server)
+                : onRequestInstallation(server)
             }
             disabled={isAdding || isInCatalog}
             size="sm"
@@ -506,7 +585,7 @@ function ServerCard({
           >
             {isInCatalog
               ? "Added"
-              : isAdmin
+              : userIsMcpServerAdmin
                 ? "Add to Your Registry"
                 : "Request to add to internal registry"}
           </Button>

@@ -12,19 +12,23 @@ const {
   getAgents,
   getAllAgents,
   getDefaultAgent,
+  getAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
 } = archestraApiSdk;
 
 // For backward compatibility - returns all agents as an array
-export function useAgents(params?: {
-  initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
-}) {
+export function useProfiles(
+  params: {
+    initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
+    filters?: archestraApiTypes.GetAllAgentsData["query"];
+  } = {},
+) {
   return useSuspenseQuery({
-    queryKey: ["agents", "all"],
+    queryKey: ["agents", "all", params?.filters],
     queryFn: async () => {
-      const response = await getAllAgents();
+      const response = await getAllAgents({ query: params?.filters });
       return response.data ?? [];
     },
     initialData: params?.initialData,
@@ -32,7 +36,7 @@ export function useAgents(params?: {
 }
 
 // New paginated hook for the agents page
-export function useAgentsPaginated(params?: {
+export function useProfilesPaginated(params?: {
   limit?: number;
   offset?: number;
   sortBy?: "name" | "createdAt" | "toolsCount" | "team";
@@ -58,7 +62,7 @@ export function useAgentsPaginated(params?: {
   });
 }
 
-export function useDefaultAgent(params?: {
+export function useDefaultProfile(params?: {
   initialData?: archestraApiTypes.GetDefaultAgentResponses["200"];
 }) {
   return useQuery({
@@ -68,20 +72,40 @@ export function useDefaultAgent(params?: {
   });
 }
 
-export function useCreateAgent() {
+export function useProfile(id: string | undefined) {
+  return useQuery({
+    queryKey: ["agents", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getAgent({ path: { id } });
+      return response.data ?? null;
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useCreateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
       const response = await createAgent({ body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens for the new profile
+      if (data?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["profileTokens", data.id],
+        });
+      }
     },
   });
 }
 
-export function useUpdateAgent() {
+export function useUpdateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -94,13 +118,17 @@ export function useUpdateAgent() {
       const response = await updateAgent({ path: { id }, body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
+      queryClient.invalidateQueries({
+        queryKey: ["profileTokens", variables.id],
+      });
     },
   });
 }
 
-export function useDeleteAgent() {
+export function useDeleteProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {

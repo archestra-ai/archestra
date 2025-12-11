@@ -23,7 +23,7 @@ export function useToolInvocationPolicies() {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byProfileToolId = all.reduce(
         (acc, policy) => {
           acc[policy.agentToolId] = [
             ...(acc[policy.agentToolId] || []),
@@ -38,7 +38,7 @@ export function useToolInvocationPolicies() {
       );
       return {
         all,
-        byAgentToolId,
+        byProfileToolId,
       };
     },
   });
@@ -106,7 +106,7 @@ export function useToolResultPolicies() {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byProfileToolId = all.reduce(
         (acc, policy) => {
           acc[policy.agentToolId] = [
             ...(acc[policy.agentToolId] || []),
@@ -121,7 +121,7 @@ export function useToolResultPolicies() {
       );
       return {
         all,
-        byAgentToolId,
+        byProfileToolId,
       };
     },
   });
@@ -190,7 +190,7 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byProfileToolId = all.reduce(
         (acc, policy) => {
           acc[policy.agentToolId] = [
             ...(acc[policy.agentToolId] || []),
@@ -205,7 +205,7 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
       );
       return {
         all,
-        byAgentToolId,
+        byProfileToolId,
       };
     },
   });
@@ -216,7 +216,7 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byProfileToolId = all.reduce(
         (acc, policy) => {
           acc[policy.agentToolId] = [
             ...(acc[policy.agentToolId] || []),
@@ -231,7 +231,7 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
       );
       return {
         all,
-        byAgentToolId,
+        byProfileToolId,
       };
     },
   });

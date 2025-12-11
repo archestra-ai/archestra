@@ -1,60 +1,19 @@
+import { RouteId, StatisticsTimeFrameSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import StatisticsModel, { type TimeFrame } from "@/models/statistics";
-import { ErrorResponseSchema, RouteId } from "@/types";
-import { getUserFromRequest } from "@/utils";
-
-const TimeFrameSchema = z.enum(["1h", "24h", "7d", "30d", "90d", "12m", "all"]);
-
-const TimeSeriesPointSchema = z.object({
-  timestamp: z.string(),
-  value: z.number(),
-});
-
-const TeamStatisticsSchema = z.object({
-  teamId: z.string(),
-  teamName: z.string(),
-  members: z.number(),
-  agents: z.number(),
-  requests: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
-  timeSeries: z.array(TimeSeriesPointSchema),
-});
-
-const AgentStatisticsSchema = z.object({
-  agentId: z.string(),
-  agentName: z.string(),
-  teamName: z.string(),
-  requests: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
-  timeSeries: z.array(TimeSeriesPointSchema),
-});
-
-const ModelStatisticsSchema = z.object({
-  model: z.string(),
-  requests: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
-  percentage: z.number(),
-  timeSeries: z.array(TimeSeriesPointSchema),
-});
-
-const OverviewStatisticsSchema = z.object({
-  totalRequests: z.number(),
-  totalTokens: z.number(),
-  totalCost: z.number(),
-  topTeam: z.string(),
-  topAgent: z.string(),
-  topModel: z.string(),
-});
+import { hasPermission } from "@/auth";
+import { StatisticsModel } from "@/models";
+import {
+  AgentStatisticsSchema,
+  CostSavingsStatisticsSchema,
+  constructResponseSchema,
+  ModelStatisticsSchema,
+  OverviewStatisticsSchema,
+  TeamStatisticsSchema,
+} from "@/types";
 
 const StatisticsQuerySchema = z.object({
-  timeframe: TimeFrameSchema.optional().default("24h"),
+  timeframe: StatisticsTimeFrameSchema.optional().default("24h"),
 });
 
 const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -66,32 +25,21 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get team statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: z.array(TeamStatisticsSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(TeamStatisticsSchema)),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getTeamStatistics(
-        timeframe as TimeFrame,
-        user.id,
-        user.isAdmin,
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
       );
-
-      return reply.send(statistics);
+      return reply.send(
+        await StatisticsModel.getTeamStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 
@@ -103,32 +51,22 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get agent statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: z.array(AgentStatisticsSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(AgentStatisticsSchema)),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getAgentStatistics(
-        timeframe as TimeFrame,
-        user.id,
-        user.isAdmin,
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
       );
 
-      return reply.send(statistics);
+      return reply.send(
+        await StatisticsModel.getAgentStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 
@@ -140,32 +78,22 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get model statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: z.array(ModelStatisticsSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(ModelStatisticsSchema)),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getModelStatistics(
-        timeframe as TimeFrame,
-        user.id,
-        user.isAdmin,
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
       );
 
-      return reply.send(statistics);
+      return reply.send(
+        await StatisticsModel.getModelStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 
@@ -177,32 +105,49 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get overview statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: OverviewStatisticsSchema,
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(OverviewStatisticsSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getOverviewStatistics(
-        timeframe as TimeFrame,
-        user.id,
-        user.isAdmin,
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
       );
 
-      return reply.send(statistics);
+      return reply.send(
+        await StatisticsModel.getOverviewStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/cost-savings",
+    {
+      schema: {
+        operationId: RouteId.GetCostSavingsStatistics,
+        description: "Get cost savings statistics",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(CostSavingsStatisticsSchema),
+      },
+    },
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      return reply.send(
+        await StatisticsModel.getCostSavingsStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 };

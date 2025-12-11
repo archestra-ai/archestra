@@ -1,69 +1,35 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
-import { AgentModel, InteractionModel } from "@/models";
-import LimitValidationService from "@/services/limit-validation";
+import getDefaultPricing from "@/default-model-prices";
+import {
+  getObservableFetch,
+  reportBlockedTools,
+  reportLLMCost,
+  reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
+} from "@/llm-metrics";
+import logger from "@/logging";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  TokenPriceModel,
+} from "@/models";
 import {
   type Agent,
-  ErrorResponseSchema,
+  constructResponseSchema,
   OpenAi,
-  RouteId,
   UuidIdSchema,
 } from "@/types";
-import { PROXY_API_PREFIX } from "./common";
+import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
-
-/**
- * Inject assigned MCP tools into OpenAI tools array
- * Assigned tools take priority and override tools with the same name from the request
- */
-export const injectTools = async (
-  requestTools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
-  agentId: string,
-): Promise<z.infer<typeof OpenAi.Tools.ToolSchema>[]> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to OpenAI format
-  const assignedOpenAITools: z.infer<typeof OpenAi.Tools.ToolSchema>[] =
-    assignedTools.map((tool) => ({
-      type: "function" as const,
-      function: {
-        name: tool.name,
-        description: tool.description || undefined,
-        parameters: tool.parameters,
-      },
-    }));
-
-  // Create a map of request tools by name for easy lookup
-  const requestToolMap = new Map<
-    string,
-    z.infer<typeof OpenAi.Tools.ToolSchema>
-  >();
-  for (const tool of requestTools || []) {
-    const toolName =
-      tool.type === "function" ? tool.function.name : tool.custom.name;
-    requestToolMap.set(toolName, tool);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  const mergedToolMap = new Map<
-    string,
-    z.infer<typeof OpenAi.Tools.ToolSchema>
-  >(requestToolMap);
-  for (const assignedTool of assignedOpenAITools) {
-    // All assigned tools are function type since we create them that way above
-    if (assignedTool.type === "function") {
-      mergedToolMap.set(assignedTool.function.name, assignedTool);
-    }
-  }
-
-  return Array.from(mergedToolMap.values());
-};
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -142,11 +108,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: OpenAi.Types.ChatCompletionsRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,
     reply: FastifyReply,
+    _organizationId: string,
     agentId?: string,
+    externalAgentId?: string,
   ) => {
     const { messages, tools, stream } = body;
 
-    fastify.log.info(
+    logger.debug(
       {
         agentId,
         model: body.model,
@@ -154,15 +122,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         messagesCount: messages.length,
         toolsCount: tools?.length || 0,
         maxTokens: body.max_tokens,
+        hasResponseFormat: !!(body as Record<string, unknown>).response_format,
       },
-      "OpenAI chat completion request received",
+      "[OpenAIProxy] handleChatCompletion: request received",
     );
 
     let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
+      logger.debug({ agentId }, "[OpenAIProxy] Resolving explicit agent by ID");
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
+        logger.debug({ agentId }, "[OpenAIProxy] Agent not found");
         return reply.status(404).send({
           error: {
             message: `Agent with ID ${agentId} not found`,
@@ -173,6 +144,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
+      logger.debug(
+        { userAgent: headers["user-agent"] },
+        "[OpenAIProxy] Resolving default agent by user-agent",
+      );
       resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
@@ -181,7 +156,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const resolvedAgentId = resolvedAgent.id;
 
     fastify.log.info(
-      { resolvedAgentId, wasExplicit: !!agentId },
+      {
+        resolvedAgentId,
+        agentName: resolvedAgent.name,
+        wasExplicit: !!agentId,
+      },
       "Agent resolved",
     );
 
@@ -191,11 +170,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch("openai", resolvedAgent),
+          fetch: getObservableFetch("openai", resolvedAgent, externalAgentId),
         });
 
     try {
       // Check if current usage limits are already exceeded
+      logger.debug({ resolvedAgentId }, "[OpenAIProxy] Checking usage limits");
       const limitViolation =
         await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
 
@@ -206,6 +186,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           {
             resolvedAgentId,
             reason: "token_cost_limit_exceeded",
+            contentMessage,
           },
           "OpenAI request blocked due to token cost limit",
         );
@@ -219,7 +200,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
+      logger.debug({ resolvedAgentId }, "[OpenAIProxy] Limit check passed");
 
+      // Persist non-MCP tools declared by client for tracking
+      logger.debug(
+        { toolCount: tools?.length || 0 },
+        "[OpenAIProxy] Processing tools from request",
+      );
       await utils.tools.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {
@@ -239,29 +226,74 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resolvedAgentId,
       );
 
-      // Inject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await injectTools(tools, resolvedAgentId);
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
 
-      fastify.log.info(
-        {
-          resolvedAgentId,
-          requestToolsCount: tools?.length || 0,
-          mergedToolsCount: mergedTools.length,
-          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
-          mergedTools: JSON.stringify(mergedTools),
-        },
-        "MCP tools injected",
+      const baselineModel = body.model;
+      let model = baselineModel;
+      // Optimize model selection for cost using dynamic rules
+      const hasTools = (tools?.length ?? 0) > 0;
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        messages,
+        "openai",
+        hasTools,
       );
 
-      // Convert to common format and evaluate trusted data policies
-      const commonMessages = utils.adapters.openai.toCommonFormat(messages);
+      if (optimizedModel) {
+        model = optimizedModel;
+        fastify.log.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        fastify.log.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
+      }
 
+      // Ensure TokenPrice records exist for both baseline and optimized models
+      const baselinePricing = getDefaultPricing(baselineModel);
+      await TokenPriceModel.createIfNotExists(baselineModel, {
+        provider: "openai",
+        ...baselinePricing,
+      });
+
+      if (model !== baselineModel) {
+        const optimizedPricing = getDefaultPricing(model);
+        await TokenPriceModel.createIfNotExists(model, {
+          provider: "openai",
+          ...optimizedPricing,
+        });
+      }
+
+      // Convert to common format and evaluate trusted data policies
+      logger.debug(
+        { messageCount: messages.length },
+        "[OpenAIProxy] Converting messages to common format",
+      );
+      const commonMessages = utils.adapters.openai.toCommonFormat(messages);
+      logger.debug(
+        { commonMessageCount: commonMessages.length },
+        "[OpenAIProxy] Messages converted to common format",
+      );
+
+      logger.debug(
+        {
+          resolvedAgentId,
+          considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        },
+        "[OpenAIProxy] Evaluating trusted data policies",
+      );
       const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
           commonMessages,
           resolvedAgentId,
           openAiApiKey,
           "openai",
+          resolvedAgent.considerContextUntrusted,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -269,7 +301,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   id: "chatcmpl-sanitizing",
                   object: "chat.completion.chunk" as const,
                   created: Date.now() / 1000,
-                  model: body.model,
+                  model: model,
                   choices: [
                     {
                       index: 0,
@@ -295,7 +327,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   id: "chatcmpl-sanitizing",
                   object: "chat.completion.chunk" as const,
                   created: Date.now() / 1000,
-                  model: body.model,
+                  model: model,
                   choices: [
                     {
                       index: 0,
@@ -313,9 +345,45 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       // Apply updates back to OpenAI messages
-      const filteredMessages = utils.adapters.openai.applyUpdates(
+      logger.debug(
+        {
+          updateCount: Object.keys(toolResultUpdates).length,
+          contextIsTrusted,
+        },
+        "[OpenAIProxy] Applying tool result updates",
+      );
+      let filteredMessages = utils.adapters.openai.applyUpdates(
         messages,
         toolResultUpdates,
+      );
+
+      // Determine if TOON compression should be applied
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+      let toonCostSavings: number | null = null;
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
+
+      if (shouldApplyToonCompression) {
+        const { messages: convertedMessages, stats } =
+          await utils.adapters.openai.convertToolResultsToToon(
+            filteredMessages,
+            model,
+          );
+        filteredMessages = convertedMessages;
+        toonTokensBefore = stats.toonTokensBefore;
+        toonTokensAfter = stats.toonTokensAfter;
+        toonCostSavings = stats.toonCostSavings;
+      }
+
+      fastify.log.info(
+        {
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
+        },
+        "openai proxy routes: handle chat completions: tool results compression completed",
       );
 
       fastify.log.info(
@@ -323,17 +391,26 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resolvedAgentId,
           originalMessagesCount: messages.length,
           filteredMessagesCount: filteredMessages.length,
-          toolResultUpdatesCount: toolResultUpdates.length,
+          toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
+          contextIsTrusted,
         },
         "Messages filtered after trusted data evaluation",
       );
 
       if (stream) {
+        logger.debug(
+          { model, mergedToolsCount: mergedTools.length },
+          "[OpenAIProxy] Starting streaming request",
+        );
+        // Track timing for TTFT and tokens/sec metrics
+        const streamStartTime = Date.now();
+        let firstChunkTime: number | undefined;
+
         // Handle streaming response with span to measure LLM call duration
         const streamingResponse = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
           "openai",
-          body.model,
+          model,
           true,
           resolvedAgent,
           async (llmSpan) => {
@@ -362,73 +439,91 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
           [];
-        let usageTokens: { input?: number; output?: number } | undefined;
+        let tokenUsage: { input?: number; output?: number } | undefined;
 
-        for await (const chunk of streamingResponse) {
-          chunks.push(chunk);
+        // Variables for interaction recording (accessible in finally block)
+        let assistantMessage:
+          | OpenAIProvider.Chat.Completions.ChatCompletionMessage
+          | undefined;
 
-          // Capture usage information if present
-          if (chunk.usage) {
-            usageTokens = utils.adapters.openai.getUsageTokens(chunk.usage);
-          }
-          const delta = chunk.choices[0]?.delta;
-          const finishReason = chunk.choices[0]?.finish_reason;
-
-          // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
-          // But DON'T stream chunks with tool_calls - we'll send those later after policy evaluation
-          if (
-            !delta?.tool_calls &&
-            (delta?.content !== undefined ||
-              delta?.refusal !== undefined ||
-              delta?.role ||
-              finishReason)
-          ) {
-            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-
-            // Also accumulate for persistence
-            if (delta?.content) {
-              accumulatedContent += delta.content;
+        try {
+          for await (const chunk of streamingResponse) {
+            // Capture time to first token on first chunk
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+              reportTimeToFirstToken(
+                "openai",
+                resolvedAgent,
+                model,
+                ttftSeconds,
+                externalAgentId,
+              );
             }
-            if (delta?.refusal) {
-              accumulatedRefusal += delta.refusal;
+
+            chunks.push(chunk);
+
+            // Capture usage information if present
+            if (chunk.usage) {
+              tokenUsage = utils.adapters.openai.getUsageTokens(chunk.usage);
             }
-          }
+            const delta = chunk.choices[0]?.delta;
+            const finishReason = chunk.choices[0]?.finish_reason;
 
-          // Accumulate tool calls (don't stream yet - need to evaluate policies first)
-          if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              const index = toolCallDelta.index;
+            // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
+            // But DON'T stream chunks with tool_calls - we'll send those later after policy evaluation
+            if (
+              !delta?.tool_calls &&
+              (delta?.content !== undefined ||
+                delta?.refusal !== undefined ||
+                delta?.role ||
+                finishReason)
+            ) {
+              reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
 
-              // Initialize tool call if it doesn't exist
-              if (!accumulatedToolCalls[index]) {
-                accumulatedToolCalls[index] = {
-                  id: toolCallDelta.id || "",
-                  type: "function",
-                  function: {
-                    name: "",
-                    arguments: "",
-                  },
-                };
+              // Also accumulate for persistence
+              if (delta?.content) {
+                accumulatedContent += delta.content;
               }
-
-              // Accumulate tool call fields
-              if (toolCallDelta.id) {
-                accumulatedToolCalls[index].id = toolCallDelta.id;
-              }
-              if (toolCallDelta.function?.name) {
-                accumulatedToolCalls[index].function.name =
-                  toolCallDelta.function.name;
-              }
-              if (toolCallDelta.function?.arguments) {
-                accumulatedToolCalls[index].function.arguments +=
-                  toolCallDelta.function.arguments;
+              if (delta?.refusal) {
+                accumulatedRefusal += delta.refusal;
               }
             }
-          }
-        }
 
-        let assistantMessage: OpenAIProvider.Chat.Completions.ChatCompletionMessage =
-          {
+            // Accumulate tool calls (don't stream yet - need to evaluate policies first)
+            if (delta?.tool_calls) {
+              for (const toolCallDelta of delta.tool_calls) {
+                const index = toolCallDelta.index;
+
+                // Initialize tool call if it doesn't exist
+                if (!accumulatedToolCalls[index]) {
+                  accumulatedToolCalls[index] = {
+                    id: toolCallDelta.id || "",
+                    type: "function",
+                    function: {
+                      name: "",
+                      arguments: "",
+                    },
+                  };
+                }
+
+                // Accumulate tool call fields
+                if (toolCallDelta.id) {
+                  accumulatedToolCalls[index].id = toolCallDelta.id;
+                }
+                if (toolCallDelta.function?.name) {
+                  accumulatedToolCalls[index].function.name =
+                    toolCallDelta.function.name;
+                }
+                if (toolCallDelta.function?.arguments) {
+                  accumulatedToolCalls[index].function.arguments +=
+                    toolCallDelta.function.arguments;
+                }
+              }
+            }
+          }
+
+          assistantMessage = {
             role: "assistant",
             content: accumulatedContent || null,
             refusal: accumulatedRefusal || null,
@@ -438,273 +533,313 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 : undefined,
           };
 
-        // Evaluate tool invocation policies dynamically
-        const toolInvocationRefusal =
-          await utils.toolInvocation.evaluatePolicies(
-            (assistantMessage.tool_calls || []).map((toolCall) => {
-              if (toolCall.type === "function") {
-                return {
-                  toolCallName: toolCall.function.name,
-                  toolCallArgs: toolCall.function.arguments,
-                };
-              } else {
-                return {
-                  toolCallName: toolCall.custom.name,
-                  toolCallArgs: toolCall.custom.input,
-                };
-              }
-            }),
-            resolvedAgentId,
-            contextIsTrusted,
+          logger.debug(
+            {
+              toolCallCount: accumulatedToolCalls.length,
+              hasContent: !!accumulatedContent,
+              hasRefusal: !!accumulatedRefusal,
+            },
+            "[OpenAIProxy] Stream completed, evaluating tool invocation policies",
           );
 
-        // If there are tool calls, evaluate policies and stream the result
-        if (accumulatedToolCalls.length > 0) {
-          if (toolInvocationRefusal) {
-            const [refusalMessage, contentMessage] = toolInvocationRefusal;
-            /**
-             * Tool invocation was blocked
-             *
-             * Overwrite the assistant message that will be persisted
-             * and stream the refusal message
-             */
+          // Evaluate tool invocation policies dynamically
+          const toolInvocationRefusal =
+            await utils.toolInvocation.evaluatePolicies(
+              (assistantMessage.tool_calls || []).map((toolCall) => {
+                if (toolCall.type === "function") {
+                  return {
+                    toolCallName: toolCall.function.name,
+                    toolCallArgs: toolCall.function.arguments,
+                  };
+                } else {
+                  return {
+                    toolCallName: toolCall.custom.name,
+                    toolCallArgs: toolCall.custom.input,
+                  };
+                }
+              }),
+              resolvedAgentId,
+              contextIsTrusted,
+            );
+
+          // If there are tool calls, evaluate policies and stream the result
+          if (accumulatedToolCalls.length > 0) {
+            logger.debug(
+              { toolInvocationRefused: !!toolInvocationRefusal },
+              "[OpenAIProxy] Tool invocation policy result",
+            );
+            if (toolInvocationRefusal) {
+              const [refusalMessage, contentMessage] = toolInvocationRefusal;
+              /**
+               * Tool invocation was blocked
+               *
+               * Overwrite the assistant message that will be persisted
+               * and stream the refusal message
+               */
+              assistantMessage = {
+                role: "assistant",
+                /**
+                 * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
+                 * is that most clients expect to see the content field, and don't conditionally render the refusal field
+                 *
+                 * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
+                 * message, but also show some special UI to indicate that the tool call was blocked.
+                 */
+                refusal: refusalMessage,
+                content: contentMessage,
+              };
+
+              // Stream the refusal as a single chunk
+              const refusalChunk = {
+                id: "chatcmpl-blocked",
+                object: "chat.completion.chunk" as const,
+                created: Date.now() / 1000,
+                model: model,
+                choices: [
+                  {
+                    index: 0,
+                    delta:
+                      assistantMessage as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+                    finish_reason: "stop" as const,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+              reportBlockedTools(
+                "openai",
+                resolvedAgent,
+                accumulatedToolCalls.length,
+                model,
+                externalAgentId,
+              );
+            } else {
+              // Tool calls are allowed
+              // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
+              for (const [index, toolCall] of accumulatedToolCalls.entries()) {
+                const baseChunk = {
+                  id: chunks[0]?.id || "chatcmpl-unknown",
+                  object: "chat.completion.chunk" as const,
+                  created: chunks[0]?.created || Date.now() / 1000,
+                  model: model,
+                };
+
+                // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
+                const idChunk = {
+                  ...baseChunk,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            index,
+                            id: toolCall.id,
+                            type: "function" as const,
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
+
+                // Chunk 2: Send function name (with id so clients can use assignment)
+                const nameChunk = {
+                  ...baseChunk,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            index,
+                            id: toolCall.id,
+                            function: { name: toolCall.function.name },
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
+
+                // Chunk 3: Send function arguments (with id so clients can use assignment)
+                const argsChunk = {
+                  ...baseChunk,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            index,
+                            id: toolCall.id,
+                            function: {
+                              arguments: toolCall.function.arguments,
+                            },
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
+              }
+              // Tool calls have been streamed to client
+              // Client is responsible for executing tools via MCP Gateway and sending results back
+            }
+          }
+
+          reply.raw.write("data: [DONE]\n\n");
+          reply.raw.end();
+          return reply;
+        } finally {
+          // Always record interaction (whether stream completed or was aborted)
+          // If assistantMessage wasn't built (stream aborted), build it from accumulated data
+          if (!assistantMessage) {
+            fastify.log.info(
+              "Stream was aborted before completion, building partial response",
+            );
+
+            // Parse accumulated tool call arguments
+            for (const toolCall of accumulatedToolCalls) {
+              try {
+                toolCall.function.arguments = JSON.parse(
+                  toolCall.function.arguments,
+                );
+              } catch {
+                // If parsing fails, leave as string
+              }
+            }
+
+            // Build assistant message from what we have so far
             assistantMessage = {
               role: "assistant",
-              /**
-               * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-               * is that most clients expect to see the content field, and don't conditionally render the refusal field
-               *
-               * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-               * message, but also show some special UI to indicate that the tool call was blocked.
-               */
-              refusal: refusalMessage,
-              content: contentMessage,
+              content: accumulatedContent || null,
+              refusal: accumulatedRefusal || null,
+              tool_calls:
+                accumulatedToolCalls.length > 0
+                  ? accumulatedToolCalls
+                  : undefined,
             };
+          }
 
-            // Stream the refusal as a single chunk
-            const refusalChunk = {
-              id: "chatcmpl-blocked",
-              object: "chat.completion.chunk" as const,
-              created: Date.now() / 1000,
-              model: body.model,
+          // Report token usage metrics for streaming (only if available)
+          if (tokenUsage) {
+            reportLLMTokens(
+              "openai",
+              resolvedAgent,
+              tokenUsage,
+              model,
+              externalAgentId,
+            );
+
+            // Report tokens per second if we have output tokens and timing
+            if (tokenUsage.output && firstChunkTime) {
+              const totalDurationSeconds =
+                (Date.now() - streamStartTime) / 1000;
+              reportTokensPerSecond(
+                "openai",
+                resolvedAgent,
+                model,
+                tokenUsage.output,
+                totalDurationSeconds,
+                externalAgentId,
+              );
+            }
+          }
+
+          // Calculate costs (only if we have token usage)
+          let baselineCost: number | null = null;
+          let costAfterOptimization: number | null = null;
+
+          if (tokenUsage) {
+            baselineCost =
+              (await utils.costOptimization.calculateCost(
+                body.model,
+                tokenUsage.input || 0,
+                tokenUsage.output || 0,
+              )) ?? null;
+            costAfterOptimization =
+              (await utils.costOptimization.calculateCost(
+                model,
+                tokenUsage.input || 0,
+                tokenUsage.output || 0,
+              )) ?? null;
+
+            fastify.log.info(
+              {
+                baselineCost,
+                costAfterModelOptimization: costAfterOptimization,
+                inputTokens: tokenUsage.input,
+                outputTokens: tokenUsage.output,
+              },
+              "openai proxy routes: handle chat completions: costs",
+            );
+          } else {
+            fastify.log.warn(
+              "No token usage available for streaming request - recording interaction without usage data",
+            );
+          }
+          reportLLMCost(
+            "openai",
+            resolvedAgent,
+            model,
+            costAfterOptimization,
+            externalAgentId,
+          );
+
+          // Always record the interaction
+          await InteractionModel.create({
+            profileId: resolvedAgentId,
+            externalAgentId,
+            type: "openai:chatCompletions",
+            request: body,
+            processedRequest: {
+              ...body,
+              messages: filteredMessages,
+            },
+            response: {
+              id: chunks[0]?.id || "chatcmpl-unknown",
+              object: "chat.completion",
+              created: chunks[0]?.created || Date.now() / 1000,
+              model: model,
               choices: [
                 {
                   index: 0,
-                  delta:
-                    assistantMessage as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-                  finish_reason: "stop" as const,
+                  message: assistantMessage,
+                  finish_reason: "stop",
                   logprobs: null,
                 },
               ],
-            };
-            reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-          } else {
-            // Tool calls are allowed
-            // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
-            for (const [index, toolCall] of accumulatedToolCalls.entries()) {
-              const baseChunk = {
-                id: chunks[0]?.id || "chatcmpl-unknown",
-                object: "chat.completion.chunk" as const,
-                created: chunks[0]?.created || Date.now() / 1000,
-                model: body.model,
-              };
-
-              // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
-              const idChunk = {
-                ...baseChunk,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      tool_calls: [
-                        {
-                          index,
-                          id: toolCall.id,
-                          type: "function" as const,
-                        },
-                      ],
-                    },
-                    finish_reason: null,
-                    logprobs: null,
-                  },
-                ],
-              };
-              reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
-
-              // Chunk 2: Send function name (with id so clients can use assignment)
-              const nameChunk = {
-                ...baseChunk,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      tool_calls: [
-                        {
-                          index,
-                          id: toolCall.id,
-                          function: { name: toolCall.function.name },
-                        },
-                      ],
-                    },
-                    finish_reason: null,
-                    logprobs: null,
-                  },
-                ],
-              };
-              reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
-
-              // Chunk 3: Send function arguments (with id so clients can use assignment)
-              const argsChunk = {
-                ...baseChunk,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      tool_calls: [
-                        {
-                          index,
-                          id: toolCall.id,
-                          function: { arguments: toolCall.function.arguments },
-                        },
-                      ],
-                    },
-                    finish_reason: null,
-                    logprobs: null,
-                  },
-                ],
-              };
-              reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
-            }
-
-            // Execute MCP tools and continue streaming conversation
-            if (accumulatedToolCalls.length > 0) {
-              const commonToolCalls =
-                utils.adapters.openai.toolCallsToCommon(accumulatedToolCalls);
-
-              fastify.log.info(
-                {
-                  resolvedAgentId,
-                  toolCalls: commonToolCalls.map((tc) => ({
-                    id: tc.id,
-                    name: tc.name,
-                    argumentKeys: Object.keys(tc.arguments),
-                  })),
-                },
-                "Executing MCP tool calls (streaming)",
-              );
-
-              const mcpResults = await utils.tools.executeMcpToolCalls(
-                commonToolCalls,
-                resolvedAgentId,
-              );
-
-              fastify.log.info(
-                {
-                  resolvedAgentId,
-                  results: mcpResults.map((r) => ({
-                    id: r.id,
-                    isError: r.isError,
-                    contentLength:
-                      typeof r.content === "string"
-                        ? r.content.length
-                        : JSON.stringify(r.content).length,
-                  })),
-                },
-                "MCP tool calls completed (streaming)",
-              );
-
-              if (mcpResults.length > 0) {
-                // Convert MCP results to OpenAI tool messages
-                const toolMessages =
-                  utils.adapters.openai.toolResultsToMessages(mcpResults);
-
-                // Update conversation with tool results
-                const updatedMessages = [
-                  ...filteredMessages,
-                  assistantMessage,
-                  ...toolMessages,
-                ];
-
-                /**
-                 * Make another streaming call with the tool results (without tools to prevent loops)
-                 *
-                 * We also need to remove tool_choice otherwise openai complains about:
-                 * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
-                 */
-                const continuationStream =
-                  await utils.tracing.startActiveLlmSpan(
-                    "openai.chat.completions.continuation",
-                    "openai",
-                    body.model,
-                    true,
-                    resolvedAgent,
-                    async (continuationSpan) => {
-                      continuationSpan.setAttribute("llm.continuation", true);
-                      const response =
-                        await openAiClient.chat.completions.create({
-                          ...body,
-                          messages: updatedMessages,
-                          tools: undefined,
-                          tool_choice: undefined,
-                          stream: true,
-                        });
-                      continuationSpan.end();
-                      return response;
-                    },
-                  );
-
-                // Stream the continuation response
-                for await (const chunk of continuationStream) {
-                  reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-                }
-              }
-            }
-          }
+            },
+            model: model,
+            inputTokens: tokenUsage?.input || null,
+            outputTokens: tokenUsage?.output || null,
+            cost: costAfterOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
+          });
         }
-
-        // Report token usage metrics for streaming
-        if (usageTokens) {
-          reportLLMTokens(
-            "openai",
-            resolvedAgent,
-            usageTokens.input,
-            usageTokens.output,
-          );
-        }
-
-        // Store the complete interaction
-        await InteractionModel.create({
-          agentId: resolvedAgentId,
-          type: "openai:chatCompletions",
-          request: body,
-          response: {
-            id: chunks[0]?.id || "chatcmpl-unknown",
-            object: "chat.completion",
-            created: chunks[0]?.created || Date.now() / 1000,
-            model: body.model,
-            choices: [
-              {
-                index: 0,
-                message: assistantMessage,
-                finish_reason: "stop",
-                logprobs: null,
-              },
-            ],
-          },
-          model: body.model,
-          inputTokens: usageTokens?.input || null,
-          outputTokens: usageTokens?.output || null,
-        });
-
-        reply.raw.write("data: [DONE]\n\n");
-        reply.raw.end();
-        return reply;
       } else {
+        logger.debug(
+          { model, mergedToolsCount: mergedTools.length },
+          "[OpenAIProxy] Starting non-streaming request",
+        );
         // Non-streaming response with span to measure LLM call duration
-        let response = await utils.tracing.startActiveLlmSpan(
+        const response = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
           "openai",
-          body.model,
+          model,
           false,
           resolvedAgent,
           async (llmSpan) => {
@@ -720,6 +855,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         let assistantMessage = response.choices[0].message;
+
+        logger.debug(
+          {
+            toolCallCount: assistantMessage.tool_calls?.length || 0,
+            hasContent: !!assistantMessage.content,
+          },
+          "[OpenAIProxy] Non-streaming response received, checking tool invocation policies",
+        );
 
         // Evaluate tool invocation policies dynamically
         const toolInvocationRefusal =
@@ -743,6 +886,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (toolInvocationRefusal) {
           const [refusalMessage, contentMessage] = toolInvocationRefusal;
+          logger.debug(
+            { toolCallCount: assistantMessage.tool_calls?.length || 0 },
+            "[OpenAIProxy] Tool invocation blocked by policy",
+          );
+
+          // Count blocked tool calls before overwriting message
+          const blockedCount = assistantMessage.tool_calls?.length || 0;
+
           assistantMessage = {
             role: "assistant",
             refusal: refusalMessage,
@@ -756,105 +907,64 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               logprobs: null,
             },
           ];
-        } else if (
-          assistantMessage.tool_calls &&
-          assistantMessage.tool_calls.length > 0
-        ) {
-          // Tool calls are allowed - execute MCP tools
-          const commonToolCalls = utils.adapters.openai.toolCallsToCommon(
-            assistantMessage.tool_calls,
+
+          reportBlockedTools(
+            "openai",
+            resolvedAgent,
+            blockedCount,
+            model,
+            externalAgentId,
           );
-
-          fastify.log.info(
-            {
-              resolvedAgentId,
-              toolCalls: commonToolCalls.map((tc) => ({
-                id: tc.id,
-                name: tc.name,
-                argumentKeys: Object.keys(tc.arguments),
-              })),
-            },
-            "Executing MCP tool calls (non-streaming)",
-          );
-
-          const mcpResults = await utils.tools.executeMcpToolCalls(
-            commonToolCalls,
-            resolvedAgentId,
-          );
-
-          fastify.log.info(
-            {
-              resolvedAgentId,
-              results: mcpResults.map((r) => ({
-                id: r.id,
-                isError: r.isError,
-                contentLength:
-                  typeof r.content === "string"
-                    ? r.content.length
-                    : JSON.stringify(r.content).length,
-              })),
-            },
-            "MCP tool calls completed (non-streaming)",
-          );
-
-          if (mcpResults.length > 0) {
-            // Convert MCP results to OpenAI tool messages and append to response
-            const toolMessages =
-              utils.adapters.openai.toolResultsToMessages(mcpResults);
-
-            // For non-streaming, we need to make another LLM call with the tool results
-            const updatedMessages = [
-              ...filteredMessages,
-              assistantMessage,
-              ...toolMessages,
-            ];
-
-            /**
-             * Make another call with the tool results (without tools to prevent loops)
-             *
-             * We also need to remove tool_choice otherwise openai complains about:
-             * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
-             */
-            const finalResponse = await utils.tracing.startActiveLlmSpan(
-              "openai.chat.completions.continuation",
-              "openai",
-              body.model,
-              false,
-              resolvedAgent,
-              async (continuationSpan) => {
-                continuationSpan.setAttribute("llm.continuation", true);
-                const response = await openAiClient.chat.completions.create({
-                  ...body,
-                  messages: updatedMessages,
-                  tools: undefined,
-                  tool_choice: undefined,
-                  stream: false,
-                });
-                continuationSpan.end();
-                return response;
-              },
-            );
-
-            // Update the response with the final LLM response
-            response = finalResponse;
-            assistantMessage = finalResponse.choices[0].message;
-          }
         }
+        // Tool calls are allowed - return response with tool_calls to client
+        // Client is responsible for executing tools via MCP Gateway and sending results back
 
         // Extract token usage from response
         const tokenUsage = response.usage
           ? utils.adapters.openai.getUsageTokens(response.usage)
           : { input: null, output: null };
 
+        // Always calculate baseline cost (original requested model)
+        const baselineCost = await utils.costOptimization.calculateCost(
+          body.model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
+
+        // Calculate actual cost (potentially optimized model)
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+        reportLLMCost(
+          "openai",
+          resolvedAgent,
+          model,
+          costAfterOptimization,
+          externalAgentId,
+        );
+
         // Store the complete interaction
         await InteractionModel.create({
-          agentId: resolvedAgentId,
+          profileId: resolvedAgentId,
+          externalAgentId,
           type: "openai:chatCompletions",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response,
-          model: body.model,
+          model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost: costAfterOptimization?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
         });
 
         return reply.send(response);
@@ -884,6 +994,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${API_PREFIX}/${CHAT_COMPLETIONS_SUFFIX}`,
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.OpenAiChatCompletionsWithDefaultAgent,
         description:
@@ -891,17 +1002,23 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
-    async ({ body, headers }, reply) => {
-      return handleChatCompletion(body, headers, reply);
+    async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
+      return handleChatCompletion(
+        request.body,
+        request.headers,
+        reply,
+        request.organizationId,
+        undefined,
+        externalAgentId,
+      );
     },
   );
 
@@ -911,6 +1028,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${API_PREFIX}/:agentId/${CHAT_COMPLETIONS_SUFFIX}`,
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.OpenAiChatCompletionsWithAgent,
         description:
@@ -921,17 +1039,23 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
-    async ({ body, headers, params }, reply) => {
-      return handleChatCompletion(body, headers, reply, params.agentId);
+    async (request, reply) => {
+      const externalAgentId = utils.externalAgentId.getExternalAgentId(
+        request.headers,
+      );
+      return handleChatCompletion(
+        request.body,
+        request.headers,
+        reply,
+        request.organizationId,
+        request.params.agentId,
+        externalAgentId,
+      );
     },
   );
 };

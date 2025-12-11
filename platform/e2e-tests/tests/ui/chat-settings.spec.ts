@@ -205,7 +205,7 @@ test.describe("Chat Settings UI", () => {
 
       // The row should now show the Default badge
       const keyRow = page.getByRole("row").filter({ hasText: keyName });
-      await expect(keyRow.getByText("Default")).toBeVisible();
+      await expect(keyRow.getByText("Default", { exact: true })).toBeVisible();
 
       // Cleanup
       await keyRow.getByRole("button").last().click();

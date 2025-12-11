@@ -24,7 +24,6 @@ import {
   useChatApiKeysOptional,
   useChatSettingsOptional,
   useCreateChatApiKey,
-  useUpdateChatSettings,
 } from "@/lib/chat-settings.query";
 import {
   useOrganizationOnboardingStatus,
@@ -54,7 +53,6 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
   // Chat settings state - use both old and new APIs for backward compatibility
   const { data: chatSettings } = useChatSettingsOptional();
   const { data: chatApiKeys = [] } = useChatApiKeysOptional();
-  const updateChatSettings = useUpdateChatSettings();
   const createChatApiKey = useCreateChatApiKey();
   const { data: canUpdateChatSettings } = useHasPermissions({
     chatSettings: ["update"],
@@ -214,8 +212,8 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                           }
                         />
                         {hasAnthropicApiKey && !hasApiKeyChanged && (
-                            <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
-                          )}
+                          <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Get your API key from{" "}

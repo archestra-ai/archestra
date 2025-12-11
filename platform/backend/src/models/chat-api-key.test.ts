@@ -170,7 +170,9 @@ describe("ChatApiKeyModel", () => {
       expect(found?.isOrganizationDefault).toBe(true);
     });
 
-    test("returns null when no default exists", async ({ makeOrganization }) => {
+    test("returns null when no default exists", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
 
       await ChatApiKeyModel.create({

@@ -56,7 +56,7 @@ class ChatApiKeyModel {
   static async findByOrganizationIdWithProfiles(
     organizationId: string,
   ): Promise<ChatApiKeyWithProfiles[]> {
-    const apiKeys = await this.findByOrganizationId(organizationId);
+    const apiKeys = await ChatApiKeyModel.findByOrganizationId(organizationId);
 
     if (apiKeys.length === 0) {
       return [];
@@ -151,8 +151,10 @@ class ChatApiKeyModel {
    * Set an API key as the organization default for its provider.
    * This will unset any existing default for the same org/provider.
    */
-  static async setAsOrganizationDefault(id: string): Promise<ChatApiKey | null> {
-    const apiKey = await this.findById(id);
+  static async setAsOrganizationDefault(
+    id: string,
+  ): Promise<ChatApiKey | null> {
+    const apiKey = await ChatApiKeyModel.findById(id);
     if (!apiKey) {
       return null;
     }
@@ -182,7 +184,9 @@ class ChatApiKeyModel {
   /**
    * Unset the organization default status for an API key
    */
-  static async unsetOrganizationDefault(id: string): Promise<ChatApiKey | null> {
+  static async unsetOrganizationDefault(
+    id: string,
+  ): Promise<ChatApiKey | null> {
     const [updated] = await db
       .update(schema.chatApiKeysTable)
       .set({ isOrganizationDefault: false })
@@ -296,7 +300,7 @@ class ChatApiKeyModel {
     }
 
     // Fall back to organization default
-    return this.findOrganizationDefault(organizationId, provider);
+    return ChatApiKeyModel.findOrganizationDefault(organizationId, provider);
   }
 
   /**

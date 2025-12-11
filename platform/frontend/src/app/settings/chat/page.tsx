@@ -179,9 +179,7 @@ function ChatSettingsContent() {
         toast.success("Set as organization default");
       } catch (error) {
         const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to set as default";
+          error instanceof Error ? error.message : "Failed to set as default";
         toast.error(message);
       }
     },
@@ -288,10 +286,14 @@ function ChatSettingsContent() {
             {row.original.secretId ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <span className="text-sm text-muted-foreground">Configured</span>
+                <span className="text-sm text-muted-foreground">
+                  Configured
+                </span>
               </>
             ) : (
-              <span className="text-sm text-muted-foreground">Not configured</span>
+              <span className="text-sm text-muted-foreground">
+                Not configured
+              </span>
             )}
           </div>
         ),
@@ -354,7 +356,9 @@ function ChatSettingsContent() {
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openProfilesDialog(row.original)}>
+              <DropdownMenuItem
+                onClick={() => openProfilesDialog(row.original)}
+              >
                 <Users className="h-4 w-4 mr-2" />
                 Manage Profiles
               </DropdownMenuItem>
@@ -489,7 +493,8 @@ function ChatSettingsContent() {
                 }
               />
               <Label htmlFor="isDefault" className="text-sm font-normal">
-                Set as organization default for {PROVIDER_CONFIG[newKeyProvider].name}
+                Set as organization default for{" "}
+                {PROVIDER_CONFIG[newKeyProvider].name}
               </Label>
             </div>
           </div>
@@ -578,8 +583,8 @@ function ChatSettingsContent() {
           <DialogHeader>
             <DialogTitle>Delete API Key</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &quot;{selectedApiKey?.name}&quot;? This
-              action cannot be undone.
+              Are you sure you want to delete &quot;{selectedApiKey?.name}
+              &quot;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -638,7 +643,9 @@ function ChatSettingsContent() {
                           ]);
                         } else {
                           setSelectedProfileIds(
-                            selectedProfileIds.filter((id) => id !== profile.id),
+                            selectedProfileIds.filter(
+                              (id) => id !== profile.id,
+                            ),
                           );
                         }
                       }}

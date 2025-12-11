@@ -35,6 +35,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useRoles } from "@/lib/role.query";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
@@ -69,6 +70,8 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
   const [ruleIds, setRuleIds] = useState<string[]>(() =>
     rules.map((_, i) => `${baseId}-rule-${i}`),
   );
+  // Fetch all roles (predefined + custom)
+  const { data: roles = [] } = useRoles();
 
   // Scroll the accordion content into view when expanded
   const handleAccordionChange = useCallback((value: string) => {
@@ -211,8 +214,11 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                  <SelectItem value="member">Member</SelectItem>
+                                  {roles.map((role) => (
+                                    <SelectItem key={role.id} value={role.role}>
+                                      {role.name}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -253,8 +259,11 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="member">Member</SelectItem>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.role}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormDescription>

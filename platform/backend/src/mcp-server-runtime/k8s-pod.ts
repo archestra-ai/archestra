@@ -305,7 +305,7 @@ export default class K8sPod {
         // to use a dedicated service account with appropriate permissions
         // Other MCP servers will use the default service account (no K8s permissions)
         // Automatically constructs full service account name: {releaseName}-mcp-k8s-{role}
-        // Example: if role is "reader" and release is "archestra-platform", result is "archestra-platform-mcp-k8s-reader"
+        // Example: if role is "operator" and release is "archestra-platform", result is "archestra-platform-mcp-k8s-operator"
         ...(localConfig.serviceAccount
           ? {
               serviceAccountName: config.orchestrator.kubernetes

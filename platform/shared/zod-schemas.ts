@@ -45,8 +45,8 @@ export const LocalConfigSchema = z
     httpPath: z.string().optional(),
     // Kubernetes service account role for MCP server pods that need K8s API access
     // If not specified, uses the default service account (no K8s permissions)
-    // Specify just the role (e.g., "reader") - the platform automatically constructs the full name:
-    // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-reader")
+    // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:
+    // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-operator")
     serviceAccount: z.string().optional(),
   })
   .refine(

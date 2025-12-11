@@ -1841,7 +1841,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "docker",
       arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
-      serviceAccount: "reader",
+      serviceAccount: "operator",
     };
 
     const podSpec = k8sPod.generatePodSpec(
@@ -1852,7 +1852,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     );
 
     // When release name is empty, use role as-is
-    expect(podSpec.spec?.serviceAccountName).toBe("reader");
+    expect(podSpec.spec?.serviceAccountName).toBe("operator");
 
     // Restore original config value
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
@@ -1955,7 +1955,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "docker",
       arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
-      serviceAccount: "reader",
+      serviceAccount: "operator",
     };
 
     const podSpec = k8sPod.generatePodSpec(
@@ -1967,7 +1967,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
 
     // Should construct full name: {releaseName}-mcp-k8s-{role}
     expect(podSpec.spec?.serviceAccountName).toBe(
-      "archestra-platform-mcp-k8s-reader",
+      "archestra-platform-mcp-k8s-operator",
     );
 
     // Restore original config value

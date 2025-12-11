@@ -26632,6 +26632,9 @@
                       },
                       "httpPath": {
                         "type": "string"
+                      },
+                      "serviceAccount": {
+                        "type": "string"
                       }
                     }
                   },
@@ -28127,6 +28130,9 @@
                         "type": "number"
                       },
                       "httpPath": {
+                        "type": "string"
+                      },
+                      "serviceAccount": {
                         "type": "string"
                       }
                     }
@@ -31221,6 +31227,9 @@
                                   },
                                   "httpPath": {
                                     "type": "string"
+                                  },
+                                  "serviceAccount": {
+                                    "type": "string"
                                   }
                                 },
                                 "additionalProperties": false
@@ -31757,6 +31766,9 @@
                               },
                               "httpPath": {
                                 "type": "string"
+                              },
+                              "serviceAccount": {
+                                "type": "string"
                               }
                             }
                           }
@@ -32023,6 +32035,9 @@
                                   "type": "number"
                                 },
                                 "httpPath": {
+                                  "type": "string"
+                                },
+                                "serviceAccount": {
                                   "type": "string"
                                 }
                               },
@@ -32589,6 +32604,9 @@
                                 },
                                 "httpPath": {
                                   "type": "string"
+                                },
+                                "serviceAccount": {
+                                  "type": "string"
                                 }
                               },
                               "additionalProperties": false
@@ -33128,6 +33146,9 @@
                               },
                               "httpPath": {
                                 "type": "string"
+                              },
+                              "serviceAccount": {
+                                "type": "string"
                               }
                             }
                           }
@@ -33444,6 +33465,9 @@
                                   "type": "number"
                                 },
                                 "httpPath": {
+                                  "type": "string"
+                                },
+                                "serviceAccount": {
                                   "type": "string"
                                 }
                               },
@@ -34274,6 +34298,9 @@
                                 },
                                 "httpPath": {
                                   "type": "string"
+                                },
+                                "serviceAccount": {
+                                  "type": "string"
                                 }
                               },
                               "additionalProperties": false
@@ -34852,6 +34879,9 @@
                                   "type": "number"
                                 },
                                 "httpPath": {
+                                  "type": "string"
+                                },
+                                "serviceAccount": {
                                   "type": "string"
                                 }
                               },
@@ -35436,6 +35466,9 @@
                                   "type": "number"
                                 },
                                 "httpPath": {
+                                  "type": "string"
+                                },
+                                "serviceAccount": {
                                   "type": "string"
                                 }
                               },

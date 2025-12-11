@@ -300,6 +300,23 @@ export default class K8sPod {
         }),
       },
       spec: {
+        // Use specified service account if provided in localConfig
+        // This allows MCP servers that need Kubernetes API access (like the K8s MCP server)
+        // to use a dedicated service account with appropriate permissions
+        // Other MCP servers will use the default service account (no K8s permissions)
+        ...(localConfig.serviceAccount &&
+        // Only set serviceAccountName if the replacement value is non-empty
+        (localConfig.serviceAccount.indexOf("{{HELM_RELEASE_NAME}}") === -1 ||
+          (config.orchestrator.kubernetes.mcpK8sServiceAccountName &&
+            config.orchestrator.kubernetes.mcpK8sServiceAccountName.trim() !==
+              ""))
+          ? {
+              serviceAccountName: localConfig.serviceAccount.replace(
+                /\{\{HELM_RELEASE_NAME\}\}/g,
+                config.orchestrator.kubernetes.mcpK8sServiceAccountName,
+              ),
+            }
+          : {}),
         containers: [
           {
             name: "mcp-server",

@@ -7937,6 +7937,7 @@ export type CreateInternalMcpCatalogItemData = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            serviceAccount?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -8394,6 +8395,7 @@ export type UpdateInternalMcpCatalogItemData = {
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            serviceAccount?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -9262,6 +9264,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9339,6 +9342,7 @@ export type CreateMcpServerInstallationRequestData = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
     };
@@ -9470,6 +9474,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9700,6 +9705,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9777,6 +9783,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse?: string | null;
@@ -9920,6 +9927,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -10073,6 +10081,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -10226,6 +10235,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -10379,6 +10389,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;

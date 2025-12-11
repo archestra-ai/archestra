@@ -193,8 +193,8 @@ export function LocalServerInstallDialog({
         <DialogHeader>
           <DialogTitle>Install - {catalogItem?.name}</DialogTitle>
           <DialogDescription>
-            Provide the required configuration values to install this MCP
-            server.
+            {catalogItem?.instructions ||
+              "Provide the required configuration values to install this MCP server."}
           </DialogDescription>
         </DialogHeader>
 

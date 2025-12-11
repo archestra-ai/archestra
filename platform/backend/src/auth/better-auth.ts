@@ -709,6 +709,17 @@ async function syncSsoRole(userId: string, userEmail: string): Promise<void> {
     "Role mapping evaluation result for role sync",
   );
 
+  // Handle strict mode: Deny login if no rules matched and strict mode is enabled
+  if (result.error) {
+    logger.warn(
+      { providerId, userEmail, error: result.error },
+      "SSO login denied for existing user due to strict mode - no role mapping rules matched",
+    );
+    throw new APIError("FORBIDDEN", {
+      message: result.error,
+    });
+  }
+
   if (!result.role) {
     logger.debug(
       { providerId, userEmail },

@@ -70,6 +70,8 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
+  --set archestra.image="archestra/platform:0.6.27" \
+  --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
 ```
@@ -389,6 +391,39 @@ Then visit:
 
 For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
 
+**Provider Configuration**:
+
+```terraform
+terraform {
+  required_providers {
+    archestra = {
+      source = "archestra-ai/archestra"
+    }
+  }
+}
+
+provider "archestra" {
+  base_url = "http://localhost:9000" # Your Archestra API URL
+  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+}
+```
+
+**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
+
+**Configuring `base_url`**:
+
+The `base_url` should match your `ARCHESTRA_API_BASE_URL` environment variable — this is where your Archestra Platform API is accessible:
+
+- **Local development**: `http://localhost:9000` (default)
+- **Production**: Your externally-accessible API URL (e.g., `https://api.archestra.example.com`)
+
+You can also set these values via environment variables instead of hardcoding them:
+
+```bash
+export ARCHESTRA_API_KEY="your-api-key-here"
+export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+```
+
 For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
 
 ## Environment Variables
@@ -505,13 +540,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Options: `DB` or `Vault`
   - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
 
-- **`HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
+- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
-- **`HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing

@@ -452,8 +452,8 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
   });
 });
 
-const TEST_SERVER_NAME = "internal-dev-test-server";
-const TEST_TOOL_NAME = `${TEST_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
+const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
+const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
 
 test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)", () => {
   let profileId: string;
@@ -469,10 +469,10 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)",
     profileId = defaultProfile.id;
 
     // Find the catalog item for internal-dev-test-server
-    const catalogItem = await findCatalogItem(request, TEST_SERVER_NAME);
+    const catalogItem = await findCatalogItem(request, TEST_CATALOG_ITEM_NAME);
     if (!catalogItem) {
       throw new Error(
-        `Catalog item '${TEST_SERVER_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+        `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
       );
     }
 
@@ -631,10 +631,10 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
     archestraToken = await getOrgTokenForProfile(request);
 
     // Find the catalog item for internal-dev-test-server
-    const catalogItem = await findCatalogItem(request, TEST_SERVER_NAME);
+    const catalogItem = await findCatalogItem(request, TEST_CATALOG_ITEM_NAME);
     if (!catalogItem) {
       throw new Error(
-        `Catalog item '${TEST_SERVER_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+        `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
       );
     }
 

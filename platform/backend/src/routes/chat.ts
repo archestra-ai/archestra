@@ -106,6 +106,9 @@ async function getSmartDefaultModel(
   if (config.chat.anthropic.apiKey) {
     return "claude-opus-4-1-20250805";
   }
+  if (config.chat.openai.apiKey) {
+    return "gpt-4o";
+  }
 
   // Ultimate fallback - use configured default
   return config.chat.defaultModel;
@@ -253,10 +256,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fall back to environment variable
       if (!providerApiKey) {
-        if (provider === "anthropic") {
+        if (provider === "anthropic" && config.chat.anthropic.apiKey) {
           providerApiKey = config.chat.anthropic.apiKey;
+          apiKeySource = "environment";
+        } else if (provider === "openai" && config.chat.openai.apiKey) {
+          providerApiKey = config.chat.openai.apiKey;
+          apiKeySource = "environment";
         }
-        apiKeySource = "environment";
       }
 
       logger.info({ apiKeySource, provider }, "Using LLM provider API key");
@@ -296,10 +302,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           headers: clientHeaders,
         });
       } else if (provider === "openai") {
-        // URL format: /v1/openai/:agentId/v1
+        // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
         llmClient = createOpenAI({
           apiKey: providerApiKey,
-          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}/v1`,
+          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
           headers: clientHeaders,
         });
       } else {

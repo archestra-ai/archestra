@@ -7740,15 +7740,15 @@ export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponse
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         /**
@@ -7830,15 +7830,15 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1Gemin
 
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         /**
@@ -7911,15 +7911,15 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1Ge
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         agentId: string;
@@ -8002,15 +8002,15 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = Po
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         agentId: string;

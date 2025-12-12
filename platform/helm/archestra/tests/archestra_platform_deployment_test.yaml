@@ -1089,6 +1089,41 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3
 
+  # Resource requests and limits tests
+  - it: should have default memory resources configured
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "2Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "3Gi"
+
+  - it: should allow overriding resource requests and limits
+    documentIndex: 1
+    set:
+      archestra.resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "4Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "500m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "1Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "4Gi"
+
   # Pod annotations tests
   - it: should not have pod annotations when archestra.podAnnotations is empty
     documentIndex: 1

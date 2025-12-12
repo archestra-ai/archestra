@@ -19,8 +19,6 @@ import { ToolsClient } from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-
-
 export type ToolsInitialData = {
   agentTools: archestraApiTypes.GetAllAgentToolsResponses["200"];
   agents: archestraApiTypes.GetAllAgentsResponses["200"];
@@ -71,7 +69,7 @@ export default async function ToolsPage() {
         (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
       toolInvocationPolicies: transformToolInvocationPolicies(
         (await archestraApiSdk.getToolInvocationPolicies({ headers })).data ||
-        [],
+          [],
       ),
       toolResultPolicies: transformToolResultPolicies(
         (await archestraApiSdk.getTrustedDataPolicies({ headers })).data || [],

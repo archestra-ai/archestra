@@ -22,6 +22,7 @@ import {
   PromptModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
+import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { secretManager } from "@/secretsmanager";
 import type { SupportedChatProvider } from "@/types";
 import {
@@ -271,9 +272,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      logger.info({ apiKeySource, provider }, "Using LLM provider API key");
+      // For Gemini with Vertex AI enabled, API key is not required
+      // The LLM Proxy handles authentication via ADC
+      const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
 
-      if (!providerApiKey) {
+      logger.info(
+        { apiKeySource, provider, isGeminiWithVertexAi },
+        "Using LLM provider API key",
+      );
+
+      if (!providerApiKey && !isGeminiWithVertexAi) {
         throw new ApiError(
           400,
           "LLM Provider API key not configured. Please configure it in Chat Settings.",
@@ -302,8 +310,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } else if (provider === "gemini") {
         // URL format: /v1/gemini/:agentId/v1beta/models
+        // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
         llmClient = createGoogleGenerativeAI({
-          apiKey: providerApiKey,
+          apiKey: providerApiKey || "vertex-ai-mode",
           baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
           headers: clientHeaders,
         });

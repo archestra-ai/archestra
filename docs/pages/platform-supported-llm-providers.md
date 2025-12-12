@@ -79,13 +79,48 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 
 #### GKE with Workload Identity (Recommended)
 
-For GKE deployments, we recommend using [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity) which provides secure, keyless authentication:
+For GKE deployments, we recommend using [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity) which provides secure, keyless authentication. This eliminates the need for service account JSON key files.
 
-1. Create a GCP service account with Vertex AI permissions (`roles/aiplatform.user`)
-2. Bind it to the Kubernetes service account via Workload Identity
-3. Set `ARCHESTRA_GEMINI_VERTEX_AI_ENABLED=true`, `ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`, and `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`
+**Setup steps:**
 
-No credentials file is needed - ADC automatically uses the bound service account.
+1. **Create a GCP service account** with Vertex AI permissions:
+
+```bash
+gcloud iam service-accounts create archestra-vertex-ai \
+  --display-name="Archestra Vertex AI"
+
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/aiplatform.user"
+```
+
+2. **Bind the GCP service account to the Kubernetes service account**:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
+```
+
+Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
+
+3. **Configure Helm values** to annotate the service account:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com
+  env:
+    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
+    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "PROJECT_ID"
+    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+```
+
+With this configuration, Application Default Credentials (ADC) will automatically use the bound GCP service account—no credentials file needed.
 
 #### Other Environments
 

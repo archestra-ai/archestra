@@ -1,5 +1,4 @@
 import { RouteId } from "@shared";
-import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -33,32 +32,6 @@ function assertByosEnabled(): BYOSVaultSecretManager {
 
   // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
   return secretManager as BYOSVaultSecretManager;
-}
-
-/**
- * Helper to check team vault folder access.
- * - Team admins can access all teams' vault folders
- * - Non-admins must be a member of the team
- *
- * @param userId - The user ID to check access for
- * @param teamId - The team ID to check access to
- * @param isTeamAdmin - Whether the user has team:admin permission (checked at route level)
- */
-async function checkTeamVaultAccess(
-  userId: string,
-  teamId: string,
-  isTeamAdmin: boolean,
-): Promise<void> {
-  // Admin has full access to all teams
-  if (isTeamAdmin) {
-    return;
-  }
-
-  // Non-admins must be a member of the team
-  const isMember = await TeamModel.isUserInTeam(teamId, userId);
-  if (!isMember) {
-    throw new ApiError(403, "Not authorized to access this team's vault");
-  }
 }
 
 // Response schemas
@@ -117,7 +90,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
+      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
 
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);
       return reply.send(folder);
@@ -163,7 +136,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
+      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
 
       // Validate the Vault path format (basic validation)
       if (
@@ -219,7 +192,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
+      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
 
       const success = await TeamVaultFolderModel.delete(teamId);
 
@@ -276,7 +249,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
+      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
 
       // Use provided vaultPath or fall back to saved folder
       let pathToTest = body?.vaultPath?.trim();
@@ -348,7 +321,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
+      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
 
       // Get the team's Vault folder
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);
@@ -408,7 +381,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      await checkTeamVaultAccess(user.id, teamId, isTeamAdmin);
+      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
 
       // Get the team's Vault folder
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);

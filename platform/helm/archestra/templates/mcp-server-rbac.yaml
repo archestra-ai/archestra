@@ -25,9 +25,9 @@ metadata:
 rules:
 # Core API group resources - read-only access
 - apiGroups: [""]
-  resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets"]
+  resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps"]
   verbs: ["get", "list", "watch"]
-# Core API group resources - write access (excluding secrets, nodes, namespaces)
+# Core API group resources - write access
 - apiGroups: [""]
   resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps"]
   verbs: ["create", "update", "patch", "delete"]

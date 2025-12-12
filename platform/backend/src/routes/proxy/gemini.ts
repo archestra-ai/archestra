@@ -8,15 +8,22 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableGenAI,
   reportBlockedTools,
+  reportLLMCost,
   reportLLMTokens,
   reportTimeToFirstToken,
   reportTokensPerSecond,
 } from "@/llm-metrics";
 import logger from "@/logging";
-import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  TokenPriceModel,
+} from "@/models";
 
 import {
   type Agent,
@@ -204,6 +211,46 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      const baselineModel = modelName;
+      let optimizedModelName = baselineModel;
+
+      // Optimize model selection for cost using dynamic rules
+      const hasTools = mergedTools.length > 0;
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        body.contents || [],
+        "gemini",
+        hasTools,
+      );
+
+      if (optimizedModel) {
+        optimizedModelName = optimizedModel;
+        fastify.log.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        fastify.log.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
+      }
+
+      // Ensure TokenPrice records exist for both baseline and optimized models
+      const baselinePricing = getDefaultPricing(baselineModel);
+      await TokenPriceModel.createIfNotExists(baselineModel, {
+        provider: "gemini",
+        ...baselinePricing,
+      });
+
+      if (optimizedModelName !== baselineModel) {
+        const optimizedPricing = getDefaultPricing(optimizedModelName);
+        await TokenPriceModel.createIfNotExists(optimizedModelName, {
+          provider: "gemini",
+          ...optimizedPricing,
+        });
+      }
+
       // Convert to common format and evaluate trusted data policies
       logger.debug(
         { contentsCount: body.contents?.length || 0 },
@@ -218,7 +265,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       logger.debug(
-        { resolvedAgentId },
+        {
+          resolvedAgentId,
+          considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        },
         "[GeminiProxy] Evaluating trusted data policies",
       );
       const { toolResultUpdates, contextIsTrusted } =
@@ -227,6 +277,52 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resolvedAgentId,
           geminiApiKey,
           "gemini",
+          resolvedAgent.considerContextUntrusted,
+          stream
+            ? () => {
+                // Send initial indicator when dual LLM starts (streaming only)
+                const startChunk: Gemini.Types.GenerateContentResponse = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [{ text: "Analyzing with Dual LLM:\n\n" }],
+                        role: "model",
+                      },
+                      finishReason: undefined,
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: optimizedModelName,
+                };
+                reply.raw.write(`data: ${JSON.stringify(startChunk)}\n\n`);
+              }
+            : undefined,
+          stream
+            ? (progress) => {
+                // Stream Q&A progress with options
+                const optionsText = progress.options
+                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .join("\n");
+                const progressChunk: Gemini.Types.GenerateContentResponse = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [
+                          {
+                            text: `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+                          },
+                        ],
+                        role: "model",
+                      },
+                      finishReason: undefined,
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: optimizedModelName,
+                };
+                reply.raw.write(`data: ${JSON.stringify(progressChunk)}\n\n`);
+              }
+            : undefined,
         );
 
       // Apply updates back to Gemini contents
@@ -234,27 +330,62 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { updateCount: Object.keys(toolResultUpdates).length },
         "[GeminiProxy] Applying tool result updates",
       );
-      const filteredContents = utils.adapters.gemini.applyUpdates(
+      let filteredContents = utils.adapters.gemini.applyUpdates(
         body.contents || [],
         toolResultUpdates,
+      );
+
+      // Determine if TOON compression should be applied
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+      let toonCostSavings: number | null = null;
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
+
+      if (shouldApplyToonCompression) {
+        const { contents: convertedContents, stats } =
+          await utils.adapters.gemini.convertToolResultsToToon(
+            filteredContents,
+            optimizedModelName,
+          );
+        filteredContents = convertedContents;
+        toonTokensBefore = stats.toonTokensBefore;
+        toonTokensAfter = stats.toonTokensAfter;
+        toonCostSavings = stats.toonCostSavings;
+      }
+
+      fastify.log.info(
+        {
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
+        },
+        "gemini proxy routes: handle generate content: tool results compression completed",
       );
 
       // Use filtered contents in request — convert REST body to SDK parameters
       const processedBody =
         utils.adapters.gemini.restToSdkGenerateContentParams(
           { ...body, contents: filteredContents },
-          modelName,
+          optimizedModelName,
           mergedTools.length > 0 ? mergedTools : undefined,
         );
 
-      logger.debug(
-        { filteredContentsCount: filteredContents.length },
-        "[GeminiProxy] Contents filtered after trusted data evaluation",
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalContentsCount: body.contents?.length || 0,
+          filteredContentsCount: filteredContents.length,
+          toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
+          contextIsTrusted,
+        },
+        "Contents filtered after trusted data evaluation",
       );
 
       if (stream) {
         logger.debug(
-          { modelName, mergedToolsCount: mergedTools.length },
+          { optimizedModelName, mergedToolsCount: mergedTools.length },
           "[GeminiProxy] Starting streaming request",
         );
 
@@ -266,7 +397,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const streamingResponse = await utils.tracing.startActiveLlmSpan(
           "gemini.generateContentStream",
           "gemini",
-          modelName,
+          optimizedModelName,
           true,
           resolvedAgent,
           async (llmSpan) => {
@@ -294,6 +425,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const chunks: GenerateContentResponse[] = [];
         let tokenUsage: { input?: number; output?: number } = {};
 
+        // Variables for interaction recording (accessible in finally block)
+        let toolInvocationRefusal: [string, string] | null = null;
+        let completeResponse: Gemini.Types.GenerateContentResponse | undefined;
+
         try {
           for await (const chunk of streamingResponse) {
             // Capture time to first token on first chunk
@@ -303,7 +438,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               reportTimeToFirstToken(
                 "gemini",
                 resolvedAgent,
-                modelName,
+                optimizedModelName,
                 ttftSeconds,
                 externalAgentId,
               );
@@ -343,7 +478,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ) {
               const restChunk = utils.adapters.gemini.sdkResponseToRestResponse(
                 chunk,
-                modelName,
+                optimizedModelName,
               );
               reply.raw.write(`data: ${JSON.stringify(restChunk)}\n\n`);
             }
@@ -358,7 +493,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           // Evaluate tool invocation policies
-          let toolInvocationRefusal: [string, string] | null = null;
           if (accumulatedFunctionCalls.length > 0) {
             const validToolCalls = accumulatedFunctionCalls
               .filter((tc) => tc.name)
@@ -396,7 +530,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     index: 0,
                   },
                 ],
-                modelVersion: modelName,
+                modelVersion: optimizedModelName,
               };
               reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
 
@@ -404,7 +538,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "gemini",
                 resolvedAgent,
                 accumulatedFunctionCalls.length,
-                modelName,
+                optimizedModelName,
                 externalAgentId,
               );
             } else {
@@ -428,7 +562,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       index: 0,
                     },
                   ],
-                  modelVersion: modelName,
+                  modelVersion: optimizedModelName,
                 };
                 reply.raw.write(`data: ${JSON.stringify(toolCallChunk)}\n\n`);
               }
@@ -438,34 +572,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Send done marker
           reply.raw.write("data: [DONE]\n\n");
 
-          // Calculate tokens per second if we have timing info
-          if (firstChunkTime && tokenUsage.output && tokenUsage.output > 0) {
-            const totalStreamTime = (Date.now() - firstChunkTime) / 1000;
-            if (totalStreamTime > 0) {
-              reportTokensPerSecond(
-                "gemini",
-                resolvedAgent,
-                modelName,
-                tokenUsage.output,
-                totalStreamTime,
-                externalAgentId,
-              );
-            }
-          }
-
-          // Report token usage
-          if (tokenUsage.input || tokenUsage.output) {
-            reportLLMTokens(
-              "gemini",
-              resolvedAgent,
-              tokenUsage,
-              modelName,
-              externalAgentId,
-            );
-          }
-
           // Build the complete response for persistence
-          const completeResponse: Gemini.Types.GenerateContentResponse = {
+          completeResponse = {
             candidates: [
               {
                 content: {
@@ -481,7 +589,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 index: 0,
               },
             ],
-            modelVersion: modelName,
+            modelVersion: optimizedModelName,
             usageMetadata: tokenUsage.input
               ? {
                   promptTokenCount: tokenUsage.input,
@@ -491,6 +599,99 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               : undefined,
           };
+        } finally {
+          // Always record interaction (whether stream completed or was aborted)
+          // If completeResponse wasn't built (stream aborted), build it from accumulated data
+          if (!completeResponse) {
+            fastify.log.info(
+              "Stream was aborted before completion, building partial response",
+            );
+            completeResponse = {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      ...(accumulatedText ? [{ text: accumulatedText }] : []),
+                      ...accumulatedFunctionCalls.map((fc) => ({
+                        functionCall: { name: fc.name, args: fc.args },
+                      })),
+                    ],
+                    role: "model",
+                  },
+                  finishReason: "STOP",
+                  index: 0,
+                },
+              ],
+              modelVersion: optimizedModelName,
+              usageMetadata: tokenUsage.input
+                ? {
+                    promptTokenCount: tokenUsage.input,
+                    candidatesTokenCount: tokenUsage.output || 0,
+                    totalTokenCount:
+                      (tokenUsage.input || 0) + (tokenUsage.output || 0),
+                  }
+                : undefined,
+            };
+          }
+
+          // Calculate tokens per second if we have timing info
+          if (firstChunkTime && tokenUsage.output && tokenUsage.output > 0) {
+            const totalStreamTime = (Date.now() - firstChunkTime) / 1000;
+            if (totalStreamTime > 0) {
+              reportTokensPerSecond(
+                "gemini",
+                resolvedAgent,
+                optimizedModelName,
+                tokenUsage.output,
+                totalStreamTime,
+                externalAgentId,
+              );
+            }
+          }
+
+          // Report token usage metrics
+          if (tokenUsage.input || tokenUsage.output) {
+            reportLLMTokens(
+              "gemini",
+              resolvedAgent,
+              tokenUsage,
+              optimizedModelName,
+              externalAgentId,
+            );
+          }
+
+          // Calculate costs
+          const baselineCost = await utils.costOptimization.calculateCost(
+            baselineModel,
+            tokenUsage.input || 0,
+            tokenUsage.output || 0,
+          );
+          const costAfterModelOptimization =
+            await utils.costOptimization.calculateCost(
+              optimizedModelName,
+              tokenUsage.input || 0,
+              tokenUsage.output || 0,
+            );
+
+          fastify.log.info(
+            {
+              model: optimizedModelName,
+              baselineModel,
+              baselineCost,
+              costAfterModelOptimization,
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
+            },
+            "gemini proxy routes: handle generate content: costs",
+          );
+
+          reportLLMCost(
+            "gemini",
+            resolvedAgent,
+            optimizedModelName,
+            costAfterModelOptimization,
+            externalAgentId,
+          );
 
           // Store the interaction
           await InteractionModel.create({
@@ -498,6 +699,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             externalAgentId,
             type: "gemini:generateContent",
             request: body,
+            processedRequest: {
+              ...body,
+              contents: filteredContents,
+            },
             response: toolInvocationRefusal
               ? {
                   candidates: [
@@ -510,28 +715,33 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       index: 0,
                     },
                   ],
-                  modelVersion: modelName,
+                  modelVersion: optimizedModelName,
                 }
               : completeResponse,
-            model: modelName,
+            model: optimizedModelName,
             inputTokens: tokenUsage.input,
             outputTokens: tokenUsage.output,
+            cost: costAfterModelOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
           });
-        } finally {
+
           reply.raw.end();
         }
 
         return;
       } else {
         logger.debug(
-          { modelName },
+          { optimizedModelName },
           "[GeminiProxy] Starting non-streaming request",
         );
         // Non-streaming response with span to measure LLM call duration
         const response = await utils.tracing.startActiveLlmSpan(
           "gemini.generateContent",
           "gemini",
-          modelName,
+          optimizedModelName,
           false,
           resolvedAgent,
           async (llmSpan) => {
@@ -552,6 +762,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .map((p) => p.functionCall) || []),
           );
         }
+
+        logger.debug(
+          { toolCallCount: toolCalls.length },
+          "[GeminiProxy] Non-streaming response received, checking tool invocation policies",
+        );
 
         // Evaluate tool invocation policies
         let toolInvocationRefusal: [string, string] | null = null;
@@ -575,8 +790,53 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // Extract token usage
+        const tokenUsage = response.usageMetadata
+          ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
+          : { input: null, output: null };
+
+        // Always calculate baseline cost (original requested model)
+        const baselineCost = await utils.costOptimization.calculateCost(
+          baselineModel,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
+
+        // Calculate actual cost (potentially optimized model)
+        const costAfterModelOptimization =
+          await utils.costOptimization.calculateCost(
+            optimizedModelName,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+
+        fastify.log.info(
+          {
+            model: optimizedModelName,
+            baselineModel,
+            baselineCost,
+            costAfterModelOptimization,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+          },
+          "gemini proxy routes: handle generate content: costs",
+        );
+
+        reportLLMCost(
+          "gemini",
+          resolvedAgent,
+          optimizedModelName,
+          costAfterModelOptimization,
+          externalAgentId,
+        );
+
         if (toolInvocationRefusal) {
           const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
+          logger.debug(
+            { toolCallCount: toolCalls.length },
+            "[GeminiProxy] Tool invocation blocked by policy",
+          );
 
           // Create refusal response in Gemini format
           const refusalResponse: Gemini.Types.GenerateContentResponse = {
@@ -594,13 +854,17 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 index: 0,
               },
             ],
-            modelVersion: response.modelVersion || modelName,
+            modelVersion: response.modelVersion || optimizedModelName,
             responseId: "blocked",
           };
 
-          const tokenUsage = response.usageMetadata
-            ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
-            : { input: null, output: null };
+          reportBlockedTools(
+            "gemini",
+            resolvedAgent,
+            toolCalls.length,
+            optimizedModelName,
+            externalAgentId,
+          );
 
           // Store the interaction with refusal
           await InteractionModel.create({
@@ -608,25 +872,31 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             externalAgentId,
             type: "gemini:generateContent",
             request: body,
+            processedRequest: {
+              ...body,
+              contents: filteredContents,
+            },
             response: refusalResponse,
-            model: model,
+            model: optimizedModelName,
             inputTokens: tokenUsage.input,
             outputTokens: tokenUsage.output,
+            cost: costAfterModelOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
           });
 
           return reply.send(refusalResponse);
         }
+        // Tool calls are allowed - return response with function calls to client
+        // Client is responsible for executing tools via MCP Gateway and sending results back
 
         // Convert SDK response to REST format and store
         const restResponse = utils.adapters.gemini.sdkResponseToRestResponse(
           response,
-          modelName,
+          optimizedModelName,
         );
-
-        // Extract token usage and store the complete interaction
-        const tokenUsage = response.usageMetadata
-          ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
-          : { input: null, output: null };
 
         logger.debug(
           {
@@ -642,10 +912,19 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           externalAgentId,
           type: "gemini:generateContent",
           request: body,
+          processedRequest: {
+            ...body,
+            contents: filteredContents,
+          },
           response: restResponse,
-          model: model,
+          model: optimizedModelName,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost: costAfterModelOptimization?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
         });
 
         return reply.send(restResponse);

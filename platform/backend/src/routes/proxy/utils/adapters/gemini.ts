@@ -11,9 +11,13 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
+import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
+import { TokenPriceModel } from "@/models";
+import { getTokenizer } from "@/tokenizers";
 import type { CommonToolCall, CommonToolResult, Gemini } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "@/types/llm-proxy";
+import type { CompressionStats } from "../toon-conversion";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
 
@@ -498,4 +502,151 @@ export function toolResultsToMessages(
         : (result.content as Record<string, unknown>),
     is_error: result.isError,
   }));
+}
+
+/**
+ * Convert tool results (functionResponse parts) to TOON format for token efficiency.
+ * Processes Gemini contents and compresses JSON-like functionResponse data.
+ */
+export async function convertToolResultsToToon(
+  contents: GeminiContents,
+  model: string,
+): Promise<{
+  contents: GeminiContents;
+  stats: CompressionStats;
+}> {
+  const tokenizer = getTokenizer("gemini");
+  let toolResultCount = 0;
+  let totalTokensBefore = 0;
+  let totalTokensAfter = 0;
+
+  const result = contents.map((content) => {
+    // Only process user messages with parts containing functionResponse
+    if (content.role === "user" && content.parts) {
+      const updatedParts = content.parts.map((part) => {
+        // Check if this part has a functionResponse
+        if (
+          "functionResponse" in part &&
+          part.functionResponse &&
+          typeof part.functionResponse === "object" &&
+          "response" in part.functionResponse
+        ) {
+          const { functionResponse } = part;
+          toolResultCount++;
+
+          logger.info(
+            {
+              functionName:
+                "name" in functionResponse ? functionResponse.name : "unknown",
+              responseType: typeof functionResponse.response,
+            },
+            "Processing functionResponse for TOON conversion",
+          );
+
+          // Handle response object - try to compress it
+          const response = functionResponse.response;
+          if (response && typeof response === "object") {
+            try {
+              const noncompressed = JSON.stringify(response);
+              const compressed = toonEncode(response);
+
+              // Count tokens for before and after
+              const tokensBefore = tokenizer.countTokens([
+                { role: "user", content: noncompressed },
+              ]);
+              const tokensAfter = tokenizer.countTokens([
+                { role: "user", content: compressed },
+              ]);
+              totalTokensBefore += tokensBefore;
+              totalTokensAfter += tokensAfter;
+
+              logger.info(
+                {
+                  functionName:
+                    "name" in functionResponse
+                      ? functionResponse.name
+                      : "unknown",
+                  beforeLength: noncompressed.length,
+                  afterLength: compressed.length,
+                  tokensBefore,
+                  tokensAfter,
+                  toonPreview: compressed.substring(0, 150),
+                  provider: "gemini",
+                },
+                "convertToolResultsToToon: compressed",
+              );
+              logger.debug(
+                {
+                  functionName:
+                    "name" in functionResponse
+                      ? functionResponse.name
+                      : "unknown",
+                  before: noncompressed,
+                  after: compressed,
+                  provider: "gemini",
+                },
+                "convertToolResultsToToon: before/after",
+              );
+
+              // Return updated part with compressed response as a text-like object
+              // Gemini expects response as Record<string, unknown>, so we wrap the TOON string
+              return {
+                functionResponse: {
+                  ...functionResponse,
+                  response: { toon: compressed } as Record<string, unknown>,
+                },
+              };
+            } catch {
+              logger.info(
+                {
+                  functionName:
+                    "name" in functionResponse
+                      ? functionResponse.name
+                      : "unknown",
+                },
+                "convertToolResultsToToon: skipping - response cannot be compressed",
+              );
+              return part;
+            }
+          }
+        }
+        return part;
+      });
+
+      return {
+        ...content,
+        parts: updatedParts,
+      };
+    }
+
+    return content;
+  });
+
+  logger.info(
+    { contentsCount: contents.length, toolResultCount },
+    "convertToolResultsToToon completed",
+  );
+
+  // Calculate cost savings
+  let toonCostSavings: number | null = null;
+  if (toolResultCount > 0) {
+    const tokensSaved = totalTokensBefore - totalTokensAfter;
+    if (tokensSaved > 0) {
+      const tokenPrice = await TokenPriceModel.findByModel(model);
+      if (tokenPrice) {
+        const inputPricePerToken =
+          Number(tokenPrice.pricePerMillionInput) / 1000000;
+        toonCostSavings = tokensSaved * inputPricePerToken;
+      }
+    }
+  }
+
+  return {
+    contents: result,
+    stats: {
+      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
+      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
+      toonCostSavings,
+    },
+  };
 }

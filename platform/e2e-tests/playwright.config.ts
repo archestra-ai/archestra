@@ -69,7 +69,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["api"],
     },
     {
       name: "firefox",
@@ -80,7 +80,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["api"],
       grep: /@firefox/,
     },
     {
@@ -92,7 +92,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["api"],
       grep: /@webkit/,
     },
   ],

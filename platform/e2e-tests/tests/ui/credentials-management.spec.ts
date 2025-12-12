@@ -189,7 +189,7 @@ test.describe("Credentials Management", () => {
         }
 
         // Check TokenSelect shows correct credentials
-        await goToMcpRegitryAndOpenManageToolsAndOpenTokenSelect({
+        await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
           page,
           catalogItemName,
         });
@@ -225,7 +225,7 @@ test.describe("Credentials Management", () => {
       installTestServer(editorPage, "Editor"),
     ]);
 
-    await goToMcpRegitryAndOpenManageToolsAndOpenTokenSelect({
+    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: TEST_CATALOG_ITEM_NAME,
     });
@@ -243,7 +243,7 @@ test.describe("Credentials Management", () => {
       cookieHeaders,
     });
 
-    await goToMcpRegitryAndOpenManageToolsAndOpenTokenSelect({
+    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: TEST_CATALOG_ITEM_NAME,
     });
@@ -362,7 +362,7 @@ async function addCatalogItem({
   await page.waitForLoadState("networkidle");
 }
 
-async function goToMcpRegitryAndOpenManageToolsAndOpenTokenSelect({
+async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   page,
   catalogItemName,
 }: {

@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -15,7 +16,6 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
-import { E2eTestId } from "../../../../../shared";
 
 const CredentialType = {
   Personal: "personal",

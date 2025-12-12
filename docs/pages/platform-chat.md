@@ -4,7 +4,7 @@ category: Archestra Platform
 subcategory: Features
 order: 8
 description: Managing LLM provider API keys for the built-in Chat feature
-lastUpdated: 2025-12-11
+lastUpdated: 2025-12-12
 ---
 
 <!--
@@ -32,11 +32,13 @@ When a chat request is made, the system determines which API key to use in this 
 
 ## Supported Providers
 
-| Provider  | Status      |
-| --------- | ----------- |
-| Anthropic | Supported   |
-| OpenAI    | Coming Soon |
-| Gemini    | Coming Soon |
+| Provider  | Status    |
+| --------- | --------- |
+| Anthropic | Supported |
+| OpenAI    | Supported |
+| Gemini    | Supported |
+
+The system automatically detects which provider to use based on the model name selected for a conversation.
 
 ## Setting Up API Keys
 
@@ -44,7 +46,7 @@ Navigate to **Settings → Chat** to manage API keys:
 
 1. Click **Add API Key**
 2. Enter a descriptive name
-3. Select the provider (Anthropic currently supported)
+3. Select the provider
 4. Paste your API key
 5. Optionally check "Set as organization default"
 

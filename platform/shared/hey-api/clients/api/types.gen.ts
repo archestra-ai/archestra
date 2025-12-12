@@ -5705,7 +5705,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -5722,7 +5722,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         apiKey: string;
         isOrganizationDefault?: boolean;
     };
@@ -5798,7 +5798,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -5963,7 +5963,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6056,7 +6056,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6142,7 +6142,7 @@ export type SetChatApiKeyDefaultResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6228,7 +6228,7 @@ export type UnsetChatApiKeyDefaultResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6316,7 +6316,7 @@ export type UpdateChatApiKeyProfilesResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -7733,6 +7733,7 @@ export type GetFeaturesResponses = {
         'orchestrator-k8s-runtime': boolean;
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
+        geminiVertexAiEnabled: boolean;
     };
 };
 
@@ -7740,15 +7741,15 @@ export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponse
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         /**
@@ -7830,15 +7831,15 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1Gemin
 
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         /**
@@ -7911,15 +7912,15 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1Ge
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         agentId: string;
@@ -8002,15 +8003,15 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = Po
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         agentId: string;

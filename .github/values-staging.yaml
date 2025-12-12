@@ -1,6 +1,24 @@
 archestra:
   replicaCount: 4
 
+  # Vertex AI Gemini configuration
+  # Uses Application Default Credentials (ADC) via GKE Workload Identity
+  # instead of API keys for authentication
+  env:
+    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
+    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
+    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+
+  # Orchestrator configuration with Workload Identity for Vertex AI
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        # GKE Workload Identity binding to allow Vertex AI access via ADC
+        # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)
+        # is created and bound in the archestra-ai/infra repo (gke/main.tf)
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+
   service:
     annotations:
       # GKE BackendConfig for custom health checks

@@ -617,7 +617,7 @@ test.describe("LLM Proxy - Gemini", () => {
     const initialResponse = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: `/v1/gemini/${agentId}/v1beta/models/gemini-2.0-flash-exp:generateContent`,
+      urlSuffix: `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
       headers: {
         "x-goog-api-key": GEMINI_TEST_CASE_1_HEADER,
         "Content-Type": "application/json",
@@ -702,7 +702,7 @@ test.describe("LLM Proxy - Gemini", () => {
     const response = await makeApiRequest({
       request,
       method: "post",
-      urlSuffix: `/v1/gemini/${agentId}/v1beta/models/gemini-2.0-flash-exp:generateContent`,
+      urlSuffix: `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
       headers: {
         "x-goog-api-key": GEMINI_TEST_CASE_1_HEADER,
         "Content-Type": "application/json",

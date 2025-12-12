@@ -22,18 +22,18 @@ metadata:
     {{- include "archestra-platform.labels" . | nindent 4 }}
     app.kubernetes.io/component: mcp-server-rbac
 rules:
-# Core API group resources - full CRUD permissions
+# Core API group resources - read-only access
 - apiGroups: [""]
-  resources: ["pods", "services", "nodes", "namespaces", "events", "configmaps", "secrets", "persistentvolumeclaims", "serviceaccounts"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets", "namespaces", "nodes"]
+  verbs: ["get", "list", "watch"]
+# Core API group resources - write access (excluding secrets, nodes, namespaces)
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps"]
+  verbs: ["create", "update", "patch", "delete"]
 # Pod-specific operations (exec, logs, port-forward)
 - apiGroups: [""]
-  resources: ["pods/log", "pods/exec", "pods/portforward", "pods/status"]
+  resources: ["pods/log", "pods/exec", "pods/portforward"]
   verbs: ["get", "create"]
-# Node-specific operations (cordon, drain, uncordon)
-- apiGroups: [""]
-  resources: ["nodes/status"]
-  verbs: ["get", "patch", "update"]
 # Apps API group resources - full CRUD permissions
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
@@ -46,22 +46,25 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs", "cronjobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# RBAC resources - read access for listing roles and bindings
+# RBAC resources - read-only access
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
-# Networking resources
+# Networking resources - full CRUD permissions
 - apiGroups: ["networking.k8s.io"]
   resources: ["ingresses", "networkpolicies"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# Storage resources
-- apiGroups: ["storage.k8s.io"]
-  resources: ["storageclasses", "volumeattachments"]
+# Monitoring & Metrics - read-only access
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+# Custom Resources & Events - read-only access
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
   verbs: ["get", "list", "watch"]
-# API discovery
 - apiGroups: [""]
-  resources: ["*"]
-  verbs: ["list"]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
 ---
 # ClusterRoleBinding that grants the ClusterRole to the mcp-k8s-operator service account
 # This is the critical security boundary - only pods that explicitly use this service account get K8s API access

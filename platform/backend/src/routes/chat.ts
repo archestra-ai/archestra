@@ -95,7 +95,7 @@ async function getSmartDefaultModel(
           case "anthropic":
             return "claude-opus-4-1-20250805";
           case "gemini":
-            return "gemini-pro-2.5";
+            return "gemini-2.5-pro";
           case "openai":
             return "gpt-4o";
         }
@@ -111,7 +111,7 @@ async function getSmartDefaultModel(
     return "gpt-4o";
   }
   if (config.chat.gemini.apiKey) {
-    return "gemini-pro-2.5";
+    return "gemini-2.5-pro";
   }
 
   // Ultimate fallback - use configured default

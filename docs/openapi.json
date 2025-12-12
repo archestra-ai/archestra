@@ -1239,36 +1239,52 @@
               "type": "object",
               "properties": {
                 "role": {
-                  "type": "string",
-                  "enum": [
-                    "user",
-                    "model",
-                    "function"
-                  ]
+                  "description": "The role of the author of this content.",
+                  "type": "string"
                 },
                 "parts": {
                   "type": "array",
                   "items": {
                     "description": "https://ai.google.dev/api/caching#Part",
-                    "type": "object",
-                    "properties": {
-                      "thought": {
-                        "description": "Indicates if the part is thought from the model",
-                        "type": "boolean"
-                      },
-                      "thoughtSignature": {
-                        "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
-                        "type": "string"
-                      },
-                      "data": {
-                        "description": "https://ai.google.dev/api/caching#Part",
+                    "anyOf": [
+                      {
                         "anyOf": [
                           {
-                            "description": "Inline text",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "text": {
                                 "type": "string"
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -1276,24 +1292,51 @@
                             ]
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#Blob",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "inlineData": {
                                 "type": "object",
                                 "properties": {
                                   "mimeType": {
-                                    "description": "The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned",
                                     "type": "string"
                                   },
                                   "data": {
-                                    "description": "Raw bytes for media formats. Base64 encoded",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "mimeType",
                                   "data"
+                                ]
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
                                 ]
                               }
                             },
@@ -1302,27 +1345,55 @@
                             ]
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#FunctionCall",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "functionCall": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.",
                                     "type": "string"
                                   },
                                   "name": {
                                     "type": "string"
                                   },
                                   "args": {
-                                    "description": "The function parameters and values in JSON object format.",
                                     "type": "object",
                                     "additionalProperties": {}
                                   }
                                 },
                                 "required": [
                                   "name"
+                                ]
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
                                 ]
                               }
                             },
@@ -1331,31 +1402,33 @@
                             ]
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#FunctionResponse",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "functionResponse": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "The id of the function call this response is for. Populated by the client to match the corresponding function call id",
                                     "type": "string"
                                   },
                                   "name": {
-                                    "description": "The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
                                     "type": "string"
                                   },
                                   "response": {
-                                    "description": "The function response in JSON object format.",
                                     "type": "object",
                                     "additionalProperties": {}
                                   },
                                   "willContinue": {
-                                    "description": "Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT",
                                     "type": "boolean"
                                   },
                                   "scheduling": {
-                                    "description": "\n          Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.\n\n          https://ai.google.dev/api/caching#Scheduling\n        ",
                                     "type": "string",
                                     "enum": [
                                       "SCHEDULING_UNSPECIFIED",
@@ -1369,6 +1442,29 @@
                                   "name",
                                   "response"
                                 ]
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -1376,23 +1472,51 @@
                             ]
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#FileData",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "fileData": {
                                 "type": "object",
                                 "properties": {
                                   "mimeType": {
-                                    "description": "The IANA standard MIME type of the source data",
                                     "type": "string"
                                   },
                                   "fileUri": {
-                                    "description": "URI",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "fileUri"
+                                ]
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
                                 ]
                               }
                             },
@@ -1401,11 +1525,17 @@
                             ]
                           },
                           {
-                            "description": "\nCode generated by the model that is meant to be executed, and the result returned to the model.\n\nOnly generated when using the CodeExecution tool, in which the code will be automatically executed, and a corresponding CodeExecutionResult will also be generated\n\nhttps://ai.google.dev/api/caching#ExecutableCode\n",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "language": {
-                                "description": "\n      Programming language of the code\n\n      https://ai.google.dev/api/caching#Language\n    ",
                                 "type": "string",
                                 "enum": [
                                   "LANGUAGE_UNSPECIFIED",
@@ -1416,12 +1546,34 @@
                                 "type": "object",
                                 "properties": {
                                   "code": {
-                                    "description": "The code to be executed",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "code"
+                                ]
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
                                 ]
                               }
                             },
@@ -1431,14 +1583,21 @@
                             ]
                           },
                           {
-                            "description": "\nResult of executing the ExecutableCode.\n\nOnly generated when using the CodeExecution, and always follows a part containing the ExecutableCode.\n\nhttps://ai.google.dev/api/caching#CodeExecutionResult\n",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "codeExecutionResult": {
                                 "type": "object",
                                 "properties": {
                                   "outcome": {
-                                    "description": "\n          Outcome of the code execution.\n\n          https://ai.google.dev/api/caching#Outcome\n        ",
+                                    "description": "Outcome of the code execution.",
                                     "type": "string",
                                     "enum": [
                                       "OUTCOME_UNSPECIFIED",
@@ -1448,12 +1607,34 @@
                                     ]
                                   },
                                   "output": {
-                                    "description": "Contains stdout when code execution is successful, stderr or other description otherwise",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "outcome"
+                                ]
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    }
+                                  }
                                 ]
                               }
                             },
@@ -1462,33 +1643,7 @@
                             ]
                           }
                         ]
-                      },
-                      "metadata": {
-                        "anyOf": [
-                          {
-                            "description": "https://ai.google.dev/api/caching#VideoMetadata",
-                            "type": "object",
-                            "properties": {
-                              "startOffset": {
-                                "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                "type": "string"
-                              },
-                              "endOffset": {
-                                "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                "type": "string"
-                              },
-                              "fps": {
-                                "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
-                                "type": "number"
-                              }
-                            }
-                          }
-                        ]
                       }
-                    },
-                    "required": [
-                      "data",
-                      "metadata"
                     ]
                   }
                 }
@@ -1501,84 +1656,165 @@
           },
           "tools": {
             "description": "A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.",
-            "type": "array",
-            "items": {
-              "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
-              "type": "object",
-              "properties": {
-                "functionDeclarations": {
-                  "type": "array",
-                  "items": {
-                    "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
-                        "type": "string"
-                      },
-                      "description": {
-                        "description": "A brief description of the function.",
-                        "type": "string"
-                      },
-                      "behavior": {
-                        "description": "https://ai.google.dev/api/caching#Behavior",
-                        "type": "string",
-                        "enum": [
-                          "UNSPECIFIED",
-                          "BLOCKING",
-                          "NON_BLOCKING"
-                        ]
-                      },
-                      "parameters": {
-                        "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
-                      "parametersJsonSchema": {},
-                      "response": {},
-                      "responseJsonSchema": {}
-                    },
-                    "required": [
-                      "name",
-                      "description"
-                    ]
-                  }
-                },
-                "googleSearchRetrieval": {
-                  "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
                   "type": "object",
                   "properties": {
-                    "dynamicRetrievalConfig": {
-                      "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                    "functionDeclarations": {
+                      "type": "array",
+                      "items": {
+                        "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                            "type": "string"
+                          },
+                          "description": {
+                            "description": "A brief description of the function.",
+                            "type": "string"
+                          },
+                          "behavior": {
+                            "description": "https://ai.google.dev/api/caching#Behavior",
+                            "type": "string",
+                            "enum": [
+                              "UNSPECIFIED",
+                              "BLOCKING",
+                              "NON_BLOCKING"
+                            ]
+                          },
+                          "parameters": {
+                            "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "parametersJsonSchema": {},
+                          "response": {},
+                          "responseJsonSchema": {}
+                        },
+                        "required": [
+                          "name",
+                          "description"
+                        ]
+                      }
+                    },
+                    "googleSearchRetrieval": {
+                      "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
                       "type": "object",
                       "properties": {
-                        "mode": {
-                          "description": "https://ai.google.dev/api/caching#Mode",
-                          "type": "string",
-                          "enum": [
-                            "MODE_UNSPECIFIED",
-                            "MODE_DYNAMIC"
+                        "dynamicRetrievalConfig": {
+                          "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "description": "https://ai.google.dev/api/caching#Mode",
+                              "type": "string",
+                              "enum": [
+                                "MODE_UNSPECIFIED",
+                                "MODE_DYNAMIC"
+                              ]
+                            },
+                            "dynamicThreshold": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "dynamicThreshold"
                           ]
-                        },
-                        "dynamicThreshold": {
-                          "type": "number"
                         }
                       },
                       "required": [
-                        "mode",
-                        "dynamicThreshold"
+                        "dynamicRetrievalConfig"
+                      ]
+                    },
+                    "codeExecution": {},
+                    "googleSearch": {},
+                    "urlContext": {}
+                  }
+                }
+              },
+              {
+                "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
+                "type": "object",
+                "properties": {
+                  "functionDeclarations": {
+                    "type": "array",
+                    "items": {
+                      "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                          "type": "string"
+                        },
+                        "description": {
+                          "description": "A brief description of the function.",
+                          "type": "string"
+                        },
+                        "behavior": {
+                          "description": "https://ai.google.dev/api/caching#Behavior",
+                          "type": "string",
+                          "enum": [
+                            "UNSPECIFIED",
+                            "BLOCKING",
+                            "NON_BLOCKING"
+                          ]
+                        },
+                        "parameters": {
+                          "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "parametersJsonSchema": {},
+                        "response": {},
+                        "responseJsonSchema": {}
+                      },
+                      "required": [
+                        "name",
+                        "description"
                       ]
                     }
                   },
-                  "required": [
-                    "dynamicRetrievalConfig"
-                  ]
-                },
-                "codeExecution": {},
-                "googleSearch": {},
-                "urlContext": {}
+                  "googleSearchRetrieval": {
+                    "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+                    "type": "object",
+                    "properties": {
+                      "dynamicRetrievalConfig": {
+                        "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "description": "https://ai.google.dev/api/caching#Mode",
+                            "type": "string",
+                            "enum": [
+                              "MODE_UNSPECIFIED",
+                              "MODE_DYNAMIC"
+                            ]
+                          },
+                          "dynamicThreshold": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "dynamicThreshold"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "dynamicRetrievalConfig"
+                    ]
+                  },
+                  "codeExecution": {},
+                  "googleSearch": {},
+                  "urlContext": {}
+                }
               }
-            }
+            ]
           },
           "toolConfig": {
             "description": "Tool configuration for any Tool specified in the request.",
@@ -1758,6 +1994,203 @@
           "cachedContent": {
             "description": "The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}",
             "type": "string"
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
+                      "type": "object",
+                      "properties": {
+                        "functionDeclarations": {
+                          "type": "array",
+                          "items": {
+                            "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                                "type": "string"
+                              },
+                              "description": {
+                                "description": "A brief description of the function.",
+                                "type": "string"
+                              },
+                              "behavior": {
+                                "description": "https://ai.google.dev/api/caching#Behavior",
+                                "type": "string",
+                                "enum": [
+                                  "UNSPECIFIED",
+                                  "BLOCKING",
+                                  "NON_BLOCKING"
+                                ]
+                              },
+                              "parameters": {
+                                "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              "parametersJsonSchema": {},
+                              "response": {},
+                              "responseJsonSchema": {}
+                            },
+                            "required": [
+                              "name",
+                              "description"
+                            ]
+                          }
+                        },
+                        "googleSearchRetrieval": {
+                          "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+                          "type": "object",
+                          "properties": {
+                            "dynamicRetrievalConfig": {
+                              "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                              "type": "object",
+                              "properties": {
+                                "mode": {
+                                  "description": "https://ai.google.dev/api/caching#Mode",
+                                  "type": "string",
+                                  "enum": [
+                                    "MODE_UNSPECIFIED",
+                                    "MODE_DYNAMIC"
+                                  ]
+                                },
+                                "dynamicThreshold": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "dynamicThreshold"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "dynamicRetrievalConfig"
+                          ]
+                        },
+                        "codeExecution": {},
+                        "googleSearch": {},
+                        "urlContext": {}
+                      }
+                    }
+                  },
+                  {
+                    "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
+                    "type": "object",
+                    "properties": {
+                      "functionDeclarations": {
+                        "type": "array",
+                        "items": {
+                          "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                              "type": "string"
+                            },
+                            "description": {
+                              "description": "A brief description of the function.",
+                              "type": "string"
+                            },
+                            "behavior": {
+                              "description": "https://ai.google.dev/api/caching#Behavior",
+                              "type": "string",
+                              "enum": [
+                                "UNSPECIFIED",
+                                "BLOCKING",
+                                "NON_BLOCKING"
+                              ]
+                            },
+                            "parameters": {
+                              "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "parametersJsonSchema": {},
+                            "response": {},
+                            "responseJsonSchema": {}
+                          },
+                          "required": [
+                            "name",
+                            "description"
+                          ]
+                        }
+                      },
+                      "googleSearchRetrieval": {
+                        "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+                        "type": "object",
+                        "properties": {
+                          "dynamicRetrievalConfig": {
+                            "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "description": "https://ai.google.dev/api/caching#Mode",
+                                "type": "string",
+                                "enum": [
+                                  "MODE_UNSPECIFIED",
+                                  "MODE_DYNAMIC"
+                                ]
+                              },
+                              "dynamicThreshold": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "mode",
+                              "dynamicThreshold"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "dynamicRetrievalConfig"
+                        ]
+                      },
+                      "codeExecution": {},
+                      "googleSearch": {},
+                      "urlContext": {}
+                    }
+                  }
+                ]
+              },
+              "toolConfig": {
+                "description": "Tool configuration for any Tool specified in the request.",
+                "type": "object",
+                "properties": {
+                  "functionCallingConfig": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "AUTO",
+                          "ANY",
+                          "NONE"
+                        ]
+                      },
+                      "allowedFunctionNames": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCallingConfig"
+                ]
+              }
+            }
           }
         },
         "required": [
@@ -1779,36 +2212,52 @@
                   "type": "object",
                   "properties": {
                     "role": {
-                      "type": "string",
-                      "enum": [
-                        "user",
-                        "model",
-                        "function"
-                      ]
+                      "description": "The role of the author of this content.",
+                      "type": "string"
                     },
                     "parts": {
                       "type": "array",
                       "items": {
                         "description": "https://ai.google.dev/api/caching#Part",
-                        "type": "object",
-                        "properties": {
-                          "thought": {
-                            "description": "Indicates if the part is thought from the model",
-                            "type": "boolean"
-                          },
-                          "thoughtSignature": {
-                            "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
-                            "type": "string"
-                          },
-                          "data": {
-                            "description": "https://ai.google.dev/api/caching#Part",
+                        "anyOf": [
+                          {
                             "anyOf": [
                               {
-                                "description": "Inline text",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "text": {
                                     "type": "string"
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -1816,24 +2265,51 @@
                                 ]
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#Blob",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "inlineData": {
                                     "type": "object",
                                     "properties": {
                                       "mimeType": {
-                                        "description": "The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned",
                                         "type": "string"
                                       },
                                       "data": {
-                                        "description": "Raw bytes for media formats. Base64 encoded",
                                         "type": "string"
                                       }
                                     },
                                     "required": [
-                                      "mimeType",
                                       "data"
+                                    ]
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
                                     ]
                                   }
                                 },
@@ -1842,27 +2318,55 @@
                                 ]
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#FunctionCall",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "functionCall": {
                                     "type": "object",
                                     "properties": {
                                       "id": {
-                                        "description": "Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.",
                                         "type": "string"
                                       },
                                       "name": {
                                         "type": "string"
                                       },
                                       "args": {
-                                        "description": "The function parameters and values in JSON object format.",
                                         "type": "object",
                                         "additionalProperties": {}
                                       }
                                     },
                                     "required": [
                                       "name"
+                                    ]
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
                                     ]
                                   }
                                 },
@@ -1871,31 +2375,33 @@
                                 ]
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#FunctionResponse",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "functionResponse": {
                                     "type": "object",
                                     "properties": {
                                       "id": {
-                                        "description": "The id of the function call this response is for. Populated by the client to match the corresponding function call id",
                                         "type": "string"
                                       },
                                       "name": {
-                                        "description": "The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
                                         "type": "string"
                                       },
                                       "response": {
-                                        "description": "The function response in JSON object format.",
                                         "type": "object",
                                         "additionalProperties": {}
                                       },
                                       "willContinue": {
-                                        "description": "Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT",
                                         "type": "boolean"
                                       },
                                       "scheduling": {
-                                        "description": "\n          Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.\n\n          https://ai.google.dev/api/caching#Scheduling\n        ",
                                         "type": "string",
                                         "enum": [
                                           "SCHEDULING_UNSPECIFIED",
@@ -1909,6 +2415,29 @@
                                       "name",
                                       "response"
                                     ]
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -1916,23 +2445,51 @@
                                 ]
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#FileData",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "fileData": {
                                     "type": "object",
                                     "properties": {
                                       "mimeType": {
-                                        "description": "The IANA standard MIME type of the source data",
                                         "type": "string"
                                       },
                                       "fileUri": {
-                                        "description": "URI",
                                         "type": "string"
                                       }
                                     },
                                     "required": [
                                       "fileUri"
+                                    ]
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
                                     ]
                                   }
                                 },
@@ -1941,11 +2498,17 @@
                                 ]
                               },
                               {
-                                "description": "\nCode generated by the model that is meant to be executed, and the result returned to the model.\n\nOnly generated when using the CodeExecution tool, in which the code will be automatically executed, and a corresponding CodeExecutionResult will also be generated\n\nhttps://ai.google.dev/api/caching#ExecutableCode\n",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "language": {
-                                    "description": "\n      Programming language of the code\n\n      https://ai.google.dev/api/caching#Language\n    ",
                                     "type": "string",
                                     "enum": [
                                       "LANGUAGE_UNSPECIFIED",
@@ -1956,12 +2519,34 @@
                                     "type": "object",
                                     "properties": {
                                       "code": {
-                                        "description": "The code to be executed",
                                         "type": "string"
                                       }
                                     },
                                     "required": [
                                       "code"
+                                    ]
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
                                     ]
                                   }
                                 },
@@ -1971,14 +2556,21 @@
                                 ]
                               },
                               {
-                                "description": "\nResult of executing the ExecutableCode.\n\nOnly generated when using the CodeExecution, and always follows a part containing the ExecutableCode.\n\nhttps://ai.google.dev/api/caching#CodeExecutionResult\n",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "codeExecutionResult": {
                                     "type": "object",
                                     "properties": {
                                       "outcome": {
-                                        "description": "\n          Outcome of the code execution.\n\n          https://ai.google.dev/api/caching#Outcome\n        ",
+                                        "description": "Outcome of the code execution.",
                                         "type": "string",
                                         "enum": [
                                           "OUTCOME_UNSPECIFIED",
@@ -1988,12 +2580,34 @@
                                         ]
                                       },
                                       "output": {
-                                        "description": "Contains stdout when code execution is successful, stderr or other description otherwise",
                                         "type": "string"
                                       }
                                     },
                                     "required": [
                                       "outcome"
+                                    ]
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
                                     ]
                                   }
                                 },
@@ -2002,33 +2616,7 @@
                                 ]
                               }
                             ]
-                          },
-                          "metadata": {
-                            "anyOf": [
-                              {
-                                "description": "https://ai.google.dev/api/caching#VideoMetadata",
-                                "type": "object",
-                                "properties": {
-                                  "startOffset": {
-                                    "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                    "type": "string"
-                                  },
-                                  "endOffset": {
-                                    "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                    "type": "string"
-                                  },
-                                  "fps": {
-                                    "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
-                                    "type": "number"
-                                  }
-                                }
-                              }
-                            ]
                           }
-                        },
-                        "required": [
-                          "data",
-                          "metadata"
                         ]
                       }
                     }
@@ -2104,8 +2692,7 @@
                     },
                     "required": [
                       "category",
-                      "probability",
-                      "blocked"
+                      "probability"
                     ]
                   }
                 },
@@ -2163,14 +2750,6 @@
               },
               "required": [
                 "content",
-                "safetyRatings",
-                "citationMetadata",
-                "tokenCount",
-                "groundingAttributions",
-                "groundingMetadata",
-                "avgLogprobs",
-                "logprobsResult",
-                "urlContextMetadata",
                 "index"
               ]
             }
@@ -2233,8 +2812,7 @@
                   },
                   "required": [
                     "category",
-                    "probability",
-                    "blocked"
+                    "probability"
                   ]
                 }
               }
@@ -2373,28 +2951,19 @@
                   ]
                 }
               }
-            },
-            "required": [
-              "cachedContentTokenCount",
-              "toolUsePromptTokenCount",
-              "thoughtsTokenCount",
-              "totalTokenCount",
-              "promptTokensDetails",
-              "cacheTokensDetails",
-              "candidatesTokensDetails",
-              "toolUsePromptTokensDetails"
-            ]
+            }
           },
           "modelVersion": {
             "description": "The model version used to generate the response.",
             "type": "string"
+          },
+          "responseId": {
+            "description": "The unique response ID.",
+            "type": "string"
           }
         },
         "required": [
-          "candidates",
-          "promptFeedback",
-          "usageMetadata",
-          "modelVersion"
+          "candidates"
         ]
       },
       "AnthropicMessagesRequestInput": {
@@ -4495,36 +5064,53 @@
               "type": "object",
               "properties": {
                 "role": {
-                  "type": "string",
-                  "enum": [
-                    "user",
-                    "model",
-                    "function"
-                  ]
+                  "description": "The role of the author of this content.",
+                  "type": "string"
                 },
                 "parts": {
                   "type": "array",
                   "items": {
                     "description": "https://ai.google.dev/api/caching#Part",
-                    "type": "object",
-                    "properties": {
-                      "thought": {
-                        "description": "Indicates if the part is thought from the model",
-                        "type": "boolean"
-                      },
-                      "thoughtSignature": {
-                        "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
-                        "type": "string"
-                      },
-                      "data": {
-                        "description": "https://ai.google.dev/api/caching#Part",
+                    "anyOf": [
+                      {
                         "anyOf": [
                           {
-                            "description": "Inline text",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "text": {
                                 "type": "string"
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4533,26 +5119,54 @@
                             "additionalProperties": false
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#Blob",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "inlineData": {
                                 "type": "object",
                                 "properties": {
                                   "mimeType": {
-                                    "description": "The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned",
                                     "type": "string"
                                   },
                                   "data": {
-                                    "description": "Raw bytes for media formats. Base64 encoded",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "mimeType",
                                   "data"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4561,21 +5175,26 @@
                             "additionalProperties": false
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#FunctionCall",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "functionCall": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.",
                                     "type": "string"
                                   },
                                   "name": {
                                     "type": "string"
                                   },
                                   "args": {
-                                    "description": "The function parameters and values in JSON object format.",
                                     "type": "object",
                                     "additionalProperties": {}
                                   }
@@ -4584,6 +5203,30 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4592,31 +5235,33 @@
                             "additionalProperties": false
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#FunctionResponse",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "functionResponse": {
                                 "type": "object",
                                 "properties": {
                                   "id": {
-                                    "description": "The id of the function call this response is for. Populated by the client to match the corresponding function call id",
                                     "type": "string"
                                   },
                                   "name": {
-                                    "description": "The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
                                     "type": "string"
                                   },
                                   "response": {
-                                    "description": "The function response in JSON object format.",
                                     "type": "object",
                                     "additionalProperties": {}
                                   },
                                   "willContinue": {
-                                    "description": "Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT",
                                     "type": "boolean"
                                   },
                                   "scheduling": {
-                                    "description": "\n          Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.\n\n          https://ai.google.dev/api/caching#Scheduling\n        ",
                                     "type": "string",
                                     "enum": [
                                       "SCHEDULING_UNSPECIFIED",
@@ -4631,6 +5276,30 @@
                                   "response"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4639,18 +5308,23 @@
                             "additionalProperties": false
                           },
                           {
-                            "description": "https://ai.google.dev/api/caching#FileData",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "fileData": {
                                 "type": "object",
                                 "properties": {
                                   "mimeType": {
-                                    "description": "The IANA standard MIME type of the source data",
                                     "type": "string"
                                   },
                                   "fileUri": {
-                                    "description": "URI",
                                     "type": "string"
                                   }
                                 },
@@ -4658,6 +5332,30 @@
                                   "fileUri"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4666,11 +5364,17 @@
                             "additionalProperties": false
                           },
                           {
-                            "description": "\nCode generated by the model that is meant to be executed, and the result returned to the model.\n\nOnly generated when using the CodeExecution tool, in which the code will be automatically executed, and a corresponding CodeExecutionResult will also be generated\n\nhttps://ai.google.dev/api/caching#ExecutableCode\n",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "language": {
-                                "description": "\n      Programming language of the code\n\n      https://ai.google.dev/api/caching#Language\n    ",
                                 "type": "string",
                                 "enum": [
                                   "LANGUAGE_UNSPECIFIED",
@@ -4681,7 +5385,6 @@
                                 "type": "object",
                                 "properties": {
                                   "code": {
-                                    "description": "The code to be executed",
                                     "type": "string"
                                   }
                                 },
@@ -4689,6 +5392,30 @@
                                   "code"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4698,14 +5425,21 @@
                             "additionalProperties": false
                           },
                           {
-                            "description": "\nResult of executing the ExecutableCode.\n\nOnly generated when using the CodeExecution, and always follows a part containing the ExecutableCode.\n\nhttps://ai.google.dev/api/caching#CodeExecutionResult\n",
                             "type": "object",
                             "properties": {
+                              "thought": {
+                                "description": "Indicates if the part is thought from the model",
+                                "type": "boolean"
+                              },
+                              "thoughtSignature": {
+                                "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                "type": "string"
+                              },
                               "codeExecutionResult": {
                                 "type": "object",
                                 "properties": {
                                   "outcome": {
-                                    "description": "\n          Outcome of the code execution.\n\n          https://ai.google.dev/api/caching#Outcome\n        ",
+                                    "description": "Outcome of the code execution.",
                                     "type": "string",
                                     "enum": [
                                       "OUTCOME_UNSPECIFIED",
@@ -4715,7 +5449,6 @@
                                     ]
                                   },
                                   "output": {
-                                    "description": "Contains stdout when code execution is successful, stderr or other description otherwise",
                                     "type": "string"
                                   }
                                 },
@@ -4723,6 +5456,30 @@
                                   "outcome"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "metadata": {
+                                "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                "anyOf": [
+                                  {
+                                    "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                    "type": "object",
+                                    "properties": {
+                                      "startOffset": {
+                                        "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "endOffset": {
+                                        "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                        "type": "string"
+                                      },
+                                      "fps": {
+                                        "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -4731,36 +5488,8 @@
                             "additionalProperties": false
                           }
                         ]
-                      },
-                      "metadata": {
-                        "anyOf": [
-                          {
-                            "description": "https://ai.google.dev/api/caching#VideoMetadata",
-                            "type": "object",
-                            "properties": {
-                              "startOffset": {
-                                "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                "type": "string"
-                              },
-                              "endOffset": {
-                                "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                "type": "string"
-                              },
-                              "fps": {
-                                "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
-                                "type": "number"
-                              }
-                            },
-                            "additionalProperties": false
-                          }
-                        ]
                       }
-                    },
-                    "required": [
-                      "data",
-                      "metadata"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 }
               },
@@ -4773,88 +5502,173 @@
           },
           "tools": {
             "description": "A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.",
-            "type": "array",
-            "items": {
-              "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
-              "type": "object",
-              "properties": {
-                "functionDeclarations": {
-                  "type": "array",
-                  "items": {
-                    "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
-                        "type": "string"
-                      },
-                      "description": {
-                        "description": "A brief description of the function.",
-                        "type": "string"
-                      },
-                      "behavior": {
-                        "description": "https://ai.google.dev/api/caching#Behavior",
-                        "type": "string",
-                        "enum": [
-                          "UNSPECIFIED",
-                          "BLOCKING",
-                          "NON_BLOCKING"
-                        ]
-                      },
-                      "parameters": {
-                        "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
-                      "parametersJsonSchema": {},
-                      "response": {},
-                      "responseJsonSchema": {}
-                    },
-                    "required": [
-                      "name",
-                      "description"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "googleSearchRetrieval": {
-                  "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
                   "type": "object",
                   "properties": {
-                    "dynamicRetrievalConfig": {
-                      "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                    "functionDeclarations": {
+                      "type": "array",
+                      "items": {
+                        "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                            "type": "string"
+                          },
+                          "description": {
+                            "description": "A brief description of the function.",
+                            "type": "string"
+                          },
+                          "behavior": {
+                            "description": "https://ai.google.dev/api/caching#Behavior",
+                            "type": "string",
+                            "enum": [
+                              "UNSPECIFIED",
+                              "BLOCKING",
+                              "NON_BLOCKING"
+                            ]
+                          },
+                          "parameters": {
+                            "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "parametersJsonSchema": {},
+                          "response": {},
+                          "responseJsonSchema": {}
+                        },
+                        "required": [
+                          "name",
+                          "description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "googleSearchRetrieval": {
+                      "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
                       "type": "object",
                       "properties": {
-                        "mode": {
-                          "description": "https://ai.google.dev/api/caching#Mode",
-                          "type": "string",
-                          "enum": [
-                            "MODE_UNSPECIFIED",
-                            "MODE_DYNAMIC"
-                          ]
-                        },
-                        "dynamicThreshold": {
-                          "type": "number"
+                        "dynamicRetrievalConfig": {
+                          "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "description": "https://ai.google.dev/api/caching#Mode",
+                              "type": "string",
+                              "enum": [
+                                "MODE_UNSPECIFIED",
+                                "MODE_DYNAMIC"
+                              ]
+                            },
+                            "dynamicThreshold": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "dynamicThreshold"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "mode",
-                        "dynamicThreshold"
+                        "dynamicRetrievalConfig"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "codeExecution": {},
+                    "googleSearch": {},
+                    "urlContext": {}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              {
+                "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
+                "type": "object",
+                "properties": {
+                  "functionDeclarations": {
+                    "type": "array",
+                    "items": {
+                      "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                          "type": "string"
+                        },
+                        "description": {
+                          "description": "A brief description of the function.",
+                          "type": "string"
+                        },
+                        "behavior": {
+                          "description": "https://ai.google.dev/api/caching#Behavior",
+                          "type": "string",
+                          "enum": [
+                            "UNSPECIFIED",
+                            "BLOCKING",
+                            "NON_BLOCKING"
+                          ]
+                        },
+                        "parameters": {
+                          "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "parametersJsonSchema": {},
+                        "response": {},
+                        "responseJsonSchema": {}
+                      },
+                      "required": [
+                        "name",
+                        "description"
                       ],
                       "additionalProperties": false
                     }
                   },
-                  "required": [
-                    "dynamicRetrievalConfig"
-                  ],
-                  "additionalProperties": false
+                  "googleSearchRetrieval": {
+                    "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+                    "type": "object",
+                    "properties": {
+                      "dynamicRetrievalConfig": {
+                        "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "description": "https://ai.google.dev/api/caching#Mode",
+                            "type": "string",
+                            "enum": [
+                              "MODE_UNSPECIFIED",
+                              "MODE_DYNAMIC"
+                            ]
+                          },
+                          "dynamicThreshold": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "dynamicThreshold"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "dynamicRetrievalConfig"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "codeExecution": {},
+                  "googleSearch": {},
+                  "urlContext": {}
                 },
-                "codeExecution": {},
-                "googleSearch": {},
-                "urlContext": {}
-              },
-              "additionalProperties": false
-            }
+                "additionalProperties": false
+              }
+            ]
           },
           "toolConfig": {
             "description": "Tool configuration for any Tool specified in the request.",
@@ -5040,6 +5854,214 @@
           "cachedContent": {
             "description": "The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}",
             "type": "string"
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
+                      "type": "object",
+                      "properties": {
+                        "functionDeclarations": {
+                          "type": "array",
+                          "items": {
+                            "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                                "type": "string"
+                              },
+                              "description": {
+                                "description": "A brief description of the function.",
+                                "type": "string"
+                              },
+                              "behavior": {
+                                "description": "https://ai.google.dev/api/caching#Behavior",
+                                "type": "string",
+                                "enum": [
+                                  "UNSPECIFIED",
+                                  "BLOCKING",
+                                  "NON_BLOCKING"
+                                ]
+                              },
+                              "parameters": {
+                                "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              "parametersJsonSchema": {},
+                              "response": {},
+                              "responseJsonSchema": {}
+                            },
+                            "required": [
+                              "name",
+                              "description"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "googleSearchRetrieval": {
+                          "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+                          "type": "object",
+                          "properties": {
+                            "dynamicRetrievalConfig": {
+                              "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                              "type": "object",
+                              "properties": {
+                                "mode": {
+                                  "description": "https://ai.google.dev/api/caching#Mode",
+                                  "type": "string",
+                                  "enum": [
+                                    "MODE_UNSPECIFIED",
+                                    "MODE_DYNAMIC"
+                                  ]
+                                },
+                                "dynamicThreshold": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "dynamicThreshold"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "dynamicRetrievalConfig"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "codeExecution": {},
+                        "googleSearch": {},
+                        "urlContext": {}
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  {
+                    "description": "\nTool details that the model may use to generate response.\n\nA Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.\n\nhttps://ai.google.dev/api/caching#Tool\n",
+                    "type": "object",
+                    "properties": {
+                      "functionDeclarations": {
+                        "type": "array",
+                        "items": {
+                          "description": "https://ai.google.dev/api/caching#FunctionDeclaration",
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "description": "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+                              "type": "string"
+                            },
+                            "description": {
+                              "description": "A brief description of the function.",
+                              "type": "string"
+                            },
+                            "behavior": {
+                              "description": "https://ai.google.dev/api/caching#Behavior",
+                              "type": "string",
+                              "enum": [
+                                "UNSPECIFIED",
+                                "BLOCKING",
+                                "NON_BLOCKING"
+                              ]
+                            },
+                            "parameters": {
+                              "description": "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "parametersJsonSchema": {},
+                            "response": {},
+                            "responseJsonSchema": {}
+                          },
+                          "required": [
+                            "name",
+                            "description"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "googleSearchRetrieval": {
+                        "description": "https://ai.google.dev/api/caching#GoogleSearchRetrieval",
+                        "type": "object",
+                        "properties": {
+                          "dynamicRetrievalConfig": {
+                            "description": "\n        Specifies the dynamic retrieval configuration for the given source.\n\n        https://ai.google.dev/api/caching#DynamicRetrievalConfig\n      ",
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "description": "https://ai.google.dev/api/caching#Mode",
+                                "type": "string",
+                                "enum": [
+                                  "MODE_UNSPECIFIED",
+                                  "MODE_DYNAMIC"
+                                ]
+                              },
+                              "dynamicThreshold": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "mode",
+                              "dynamicThreshold"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "dynamicRetrievalConfig"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "codeExecution": {},
+                      "googleSearch": {},
+                      "urlContext": {}
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "toolConfig": {
+                "description": "Tool configuration for any Tool specified in the request.",
+                "type": "object",
+                "properties": {
+                  "functionCallingConfig": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "AUTO",
+                          "ANY",
+                          "NONE"
+                        ]
+                      },
+                      "allowedFunctionNames": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "functionCallingConfig"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": [
@@ -5062,36 +6084,53 @@
                   "type": "object",
                   "properties": {
                     "role": {
-                      "type": "string",
-                      "enum": [
-                        "user",
-                        "model",
-                        "function"
-                      ]
+                      "description": "The role of the author of this content.",
+                      "type": "string"
                     },
                     "parts": {
                       "type": "array",
                       "items": {
                         "description": "https://ai.google.dev/api/caching#Part",
-                        "type": "object",
-                        "properties": {
-                          "thought": {
-                            "description": "Indicates if the part is thought from the model",
-                            "type": "boolean"
-                          },
-                          "thoughtSignature": {
-                            "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
-                            "type": "string"
-                          },
-                          "data": {
-                            "description": "https://ai.google.dev/api/caching#Part",
+                        "anyOf": [
+                          {
                             "anyOf": [
                               {
-                                "description": "Inline text",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "text": {
                                     "type": "string"
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5100,26 +6139,54 @@
                                 "additionalProperties": false
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#Blob",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "inlineData": {
                                     "type": "object",
                                     "properties": {
                                       "mimeType": {
-                                        "description": "The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned",
                                         "type": "string"
                                       },
                                       "data": {
-                                        "description": "Raw bytes for media formats. Base64 encoded",
                                         "type": "string"
                                       }
                                     },
                                     "required": [
-                                      "mimeType",
                                       "data"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5128,21 +6195,26 @@
                                 "additionalProperties": false
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#FunctionCall",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "functionCall": {
                                     "type": "object",
                                     "properties": {
                                       "id": {
-                                        "description": "Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.",
                                         "type": "string"
                                       },
                                       "name": {
                                         "type": "string"
                                       },
                                       "args": {
-                                        "description": "The function parameters and values in JSON object format.",
                                         "type": "object",
                                         "additionalProperties": {}
                                       }
@@ -5151,6 +6223,30 @@
                                       "name"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5159,31 +6255,33 @@
                                 "additionalProperties": false
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#FunctionResponse",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "functionResponse": {
                                     "type": "object",
                                     "properties": {
                                       "id": {
-                                        "description": "The id of the function call this response is for. Populated by the client to match the corresponding function call id",
                                         "type": "string"
                                       },
                                       "name": {
-                                        "description": "The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
                                         "type": "string"
                                       },
                                       "response": {
-                                        "description": "The function response in JSON object format.",
                                         "type": "object",
                                         "additionalProperties": {}
                                       },
                                       "willContinue": {
-                                        "description": "Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT",
                                         "type": "boolean"
                                       },
                                       "scheduling": {
-                                        "description": "\n          Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.\n\n          https://ai.google.dev/api/caching#Scheduling\n        ",
                                         "type": "string",
                                         "enum": [
                                           "SCHEDULING_UNSPECIFIED",
@@ -5198,6 +6296,30 @@
                                       "response"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5206,18 +6328,23 @@
                                 "additionalProperties": false
                               },
                               {
-                                "description": "https://ai.google.dev/api/caching#FileData",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "fileData": {
                                     "type": "object",
                                     "properties": {
                                       "mimeType": {
-                                        "description": "The IANA standard MIME type of the source data",
                                         "type": "string"
                                       },
                                       "fileUri": {
-                                        "description": "URI",
                                         "type": "string"
                                       }
                                     },
@@ -5225,6 +6352,30 @@
                                       "fileUri"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5233,11 +6384,17 @@
                                 "additionalProperties": false
                               },
                               {
-                                "description": "\nCode generated by the model that is meant to be executed, and the result returned to the model.\n\nOnly generated when using the CodeExecution tool, in which the code will be automatically executed, and a corresponding CodeExecutionResult will also be generated\n\nhttps://ai.google.dev/api/caching#ExecutableCode\n",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "language": {
-                                    "description": "\n      Programming language of the code\n\n      https://ai.google.dev/api/caching#Language\n    ",
                                     "type": "string",
                                     "enum": [
                                       "LANGUAGE_UNSPECIFIED",
@@ -5248,7 +6405,6 @@
                                     "type": "object",
                                     "properties": {
                                       "code": {
-                                        "description": "The code to be executed",
                                         "type": "string"
                                       }
                                     },
@@ -5256,6 +6412,30 @@
                                       "code"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5265,14 +6445,21 @@
                                 "additionalProperties": false
                               },
                               {
-                                "description": "\nResult of executing the ExecutableCode.\n\nOnly generated when using the CodeExecution, and always follows a part containing the ExecutableCode.\n\nhttps://ai.google.dev/api/caching#CodeExecutionResult\n",
                                 "type": "object",
                                 "properties": {
+                                  "thought": {
+                                    "description": "Indicates if the part is thought from the model",
+                                    "type": "boolean"
+                                  },
+                                  "thoughtSignature": {
+                                    "description": "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+                                    "type": "string"
+                                  },
                                   "codeExecutionResult": {
                                     "type": "object",
                                     "properties": {
                                       "outcome": {
-                                        "description": "\n          Outcome of the code execution.\n\n          https://ai.google.dev/api/caching#Outcome\n        ",
+                                        "description": "Outcome of the code execution.",
                                         "type": "string",
                                         "enum": [
                                           "OUTCOME_UNSPECIFIED",
@@ -5282,7 +6469,6 @@
                                         ]
                                       },
                                       "output": {
-                                        "description": "Contains stdout when code execution is successful, stderr or other description otherwise",
                                         "type": "string"
                                       }
                                     },
@@ -5290,6 +6476,30 @@
                                       "outcome"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  "metadata": {
+                                    "description": "https://ai.google.dev/api/caching#PartMetadata",
+                                    "anyOf": [
+                                      {
+                                        "description": "https://ai.google.dev/api/caching#VideoMetadata",
+                                        "type": "object",
+                                        "properties": {
+                                          "startOffset": {
+                                            "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "endOffset": {
+                                            "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
+                                            "type": "string"
+                                          },
+                                          "fps": {
+                                            "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5298,36 +6508,8 @@
                                 "additionalProperties": false
                               }
                             ]
-                          },
-                          "metadata": {
-                            "anyOf": [
-                              {
-                                "description": "https://ai.google.dev/api/caching#VideoMetadata",
-                                "type": "object",
-                                "properties": {
-                                  "startOffset": {
-                                    "description": "The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                    "type": "string"
-                                  },
-                                  "endOffset": {
-                                    "description": "The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'",
-                                    "type": "string"
-                                  },
-                                  "fps": {
-                                    "description": "The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]",
-                                    "type": "number"
-                                  }
-                                },
-                                "additionalProperties": false
-                              }
-                            ]
                           }
-                        },
-                        "required": [
-                          "data",
-                          "metadata"
-                        ],
-                        "additionalProperties": false
+                        ]
                       }
                     }
                   },
@@ -5403,8 +6585,7 @@
                     },
                     "required": [
                       "category",
-                      "probability",
-                      "blocked"
+                      "probability"
                     ],
                     "additionalProperties": false
                   }
@@ -5465,14 +6646,6 @@
               },
               "required": [
                 "content",
-                "safetyRatings",
-                "citationMetadata",
-                "tokenCount",
-                "groundingAttributions",
-                "groundingMetadata",
-                "avgLogprobs",
-                "logprobsResult",
-                "urlContextMetadata",
                 "index"
               ],
               "additionalProperties": false
@@ -5536,8 +6709,7 @@
                   },
                   "required": [
                     "category",
-                    "probability",
-                    "blocked"
+                    "probability"
                   ],
                   "additionalProperties": false
                 }
@@ -5683,28 +6855,19 @@
                 }
               }
             },
-            "required": [
-              "cachedContentTokenCount",
-              "toolUsePromptTokenCount",
-              "thoughtsTokenCount",
-              "totalTokenCount",
-              "promptTokensDetails",
-              "cacheTokensDetails",
-              "candidatesTokensDetails",
-              "toolUsePromptTokensDetails"
-            ],
             "additionalProperties": false
           },
           "modelVersion": {
             "description": "The model version used to generate the response.",
             "type": "string"
+          },
+          "responseId": {
+            "description": "The unique response ID.",
+            "type": "string"
           }
         },
         "required": [
-          "candidates",
-          "promptFeedback",
-          "usageMetadata",
-          "modelVersion"
+          "candidates"
         ],
         "additionalProperties": false
       },
@@ -23372,7 +24535,7 @@
         }
       }
     },
-    "/v1/gemini/models/{model}:generateContent": {
+    "/v1/gemini/v1beta/models/{model}:generateContent": {
       "post": {
         "summary": "Generate content using Gemini",
         "tags": [
@@ -23641,7 +24804,7 @@
         }
       }
     },
-    "/v1/gemini/models/{model}:streamGenerateContent": {
+    "/v1/gemini/v1beta/models/{model}:streamGenerateContent": {
       "post": {
         "summary": "Stream generated content using Gemini",
         "tags": [
@@ -23900,7 +25063,7 @@
         }
       }
     },
-    "/v1/gemini/{agentId}/models/{model}:generateContent": {
+    "/v1/gemini/{agentId}/v1beta/models/{model}:generateContent": {
       "post": {
         "summary": "Generate content using Gemini (specific agent)",
         "tags": [
@@ -24179,7 +25342,7 @@
         }
       }
     },
-    "/v1/gemini/{agentId}/models/{model}:streamGenerateContent": {
+    "/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent": {
       "post": {
         "summary": "Stream generated content using Gemini (specific agent)",
         "tags": [

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.1](https://github.com/archestra-ai/archestra/compare/platform-v1.0.0...platform-v1.0.1) (2025-12-12)
+
+
+### Features
+
+* support both Google AI Studio and Vertex AI implementations of Gemini API ([#1557](https://github.com/archestra-ai/archestra/issues/1557)) ([8230262](https://github.com/archestra-ai/archestra/commit/8230262268b819119f7b5424056f577ed2f7c468))
+* support gemini and openai in the chat ([#1548](https://github.com/archestra-ai/archestra/issues/1548)) ([d3d9734](https://github.com/archestra-ai/archestra/commit/d3d97344718a20a86d0ef525ebfeab36bafb7a25))
+
+
+### Bug Fixes
+
+* MCP docker args after image ([#1556](https://github.com/archestra-ai/archestra/issues/1556)) ([26e6111](https://github.com/archestra-ai/archestra/commit/26e6111d826025df8f2856a88b7e094a14655e2f))
+
 ## [1.0.0](https://github.com/archestra-ai/archestra/compare/platform-v0.6.31...platform-v1.0.0) (2025-12-12)
 
 

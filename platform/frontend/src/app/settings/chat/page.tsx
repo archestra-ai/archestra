@@ -15,6 +15,10 @@ import {
 import Image from "next/image";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  PROVIDER_CONFIG,
+  type SupportedChatProvider,
+} from "@/components/chat/create-chat-api-key-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -56,37 +60,6 @@ import {
 } from "@/lib/chat-settings.query";
 
 type ChatApiKey = archestraApiTypes.GetChatApiKeysResponses["200"][number];
-type SupportedChatProvider =
-  archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
-
-const PROVIDER_CONFIG: Record<
-  SupportedChatProvider,
-  {
-    name: string;
-    icon: string;
-    placeholder: string;
-    enabled: boolean;
-  }
-> = {
-  anthropic: {
-    name: "Anthropic",
-    icon: "/icons/anthropic.png",
-    placeholder: "sk-ant-...",
-    enabled: true,
-  },
-  openai: {
-    name: "OpenAI",
-    icon: "/icons/openai.png",
-    placeholder: "sk-...",
-    enabled: true,
-  },
-  gemini: {
-    name: "Gemini",
-    icon: "/icons/gemini.png",
-    placeholder: "AIza...",
-    enabled: true,
-  },
-} as const;
 
 function ChatSettingsContent() {
   const { data: apiKeys = [] } = useChatApiKeys();

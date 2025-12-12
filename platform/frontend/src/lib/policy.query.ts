@@ -18,29 +18,21 @@ const {
   updateTrustedDataPolicy,
 } = archestraApiSdk;
 
-export function useToolInvocationPolicies() {
+import {
+  transformToolInvocationPolicies,
+  transformToolResultPolicies,
+} from "./policy.utils";
+
+export function useToolInvocationPolicies(
+  initialData?: ReturnType<typeof transformToolInvocationPolicies>,
+) {
   return useSuspenseQuery({
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byProfileToolId,
-      };
+      return transformToolInvocationPolicies(all);
     },
+    initialData,
   });
 }
 
@@ -101,29 +93,16 @@ export function useToolInvocationPolicyUpdateMutation() {
   });
 }
 
-export function useToolResultPolicies() {
+export function useToolResultPolicies(
+  initialData?: ReturnType<typeof transformToolResultPolicies>,
+) {
   return useSuspenseQuery({
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byProfileToolId,
-      };
+      return transformToolResultPolicies(all);
     },
+    initialData,
   });
 }
 

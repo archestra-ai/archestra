@@ -237,6 +237,8 @@ tests:
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
+            - name: ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME
+              value: RELEASE-NAME-archestra-platform
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1

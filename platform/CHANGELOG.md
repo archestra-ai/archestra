@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.31](https://github.com/archestra-ai/archestra/compare/platform-v0.6.30...platform-v0.6.31) (2025-12-11)
+
+
+### Features
+
+* support for multiple LLM provider API keys for chat ([#1532](https://github.com/archestra-ai/archestra/issues/1532)) ([83f08c0](https://github.com/archestra-ai/archestra/commit/83f08c0e20fe73b2bdd370dd1c45e7364917de43))
+
+
+### Bug Fixes
+
+* allow users with team-read to read vault secrets from team's vault folder ([#1541](https://github.com/archestra-ai/archestra/issues/1541)) ([20116ad](https://github.com/archestra-ai/archestra/commit/20116ad395229aa24e377fa930413c24e4ee8130))
+* fix set secret on edit ([#1534](https://github.com/archestra-ai/archestra/issues/1534)) ([21746cf](https://github.com/archestra-ai/archestra/commit/21746cfc88323924891958ea62139ad03ffcb313))
+* in SSO role mapping rules, don't hardcode available roles ([#1540](https://github.com/archestra-ai/archestra/issues/1540)) ([31ceffb](https://github.com/archestra-ai/archestra/commit/31ceffba6634aefb6b808b4841eda554cbbfafa2))
+* rewrite localhost urls in MCP pods ([#1533](https://github.com/archestra-ai/archestra/issues/1533)) ([f00eda9](https://github.com/archestra-ai/archestra/commit/f00eda984af3216dcda3b37b312c06955b3936fb))
+
+
+### Miscellaneous Chores
+
+* credentials token improvements ([#1536](https://github.com/archestra-ai/archestra/issues/1536)) ([72d3a35](https://github.com/archestra-ai/archestra/commit/72d3a352a7c0c821002d23566eef587ebef7db69))
+
 ## [0.6.30](https://github.com/archestra-ai/archestra/compare/platform-v0.6.29...platform-v0.6.30) (2025-12-11)
 
 

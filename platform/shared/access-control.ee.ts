@@ -48,7 +48,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
   tokenPrice: ["create", "read", "update", "delete"],
-  chatSettings: ["read", "update"],
+  chatSettings: ["create", "read", "update", "delete"],
   prompt: ["create", "read", "update", "delete"],
   /**
    * Better-auth access control resource - needed for organization role management
@@ -76,7 +76,7 @@ export const editorPermissions: Permissions = {
   conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
   tokenPrice: ["create", "read", "update", "delete"],
-  chatSettings: ["read", "update"],
+  chatSettings: ["create", "read", "update", "delete"],
   prompt: ["create", "read", "update", "delete"],
 };
 
@@ -425,10 +425,28 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
   },
-  [RouteId.GetChatSettings]: {
+  [RouteId.GetChatApiKeys]: {
     chatSettings: ["read"],
   },
-  [RouteId.UpdateChatSettings]: {
+  [RouteId.CreateChatApiKey]: {
+    chatSettings: ["create"],
+  },
+  [RouteId.GetChatApiKey]: {
+    chatSettings: ["read"],
+  },
+  [RouteId.UpdateChatApiKey]: {
+    chatSettings: ["update"],
+  },
+  [RouteId.DeleteChatApiKey]: {
+    chatSettings: ["delete"],
+  },
+  [RouteId.SetChatApiKeyDefault]: {
+    chatSettings: ["update"],
+  },
+  [RouteId.UnsetChatApiKeyDefault]: {
+    chatSettings: ["update"],
+  },
+  [RouteId.UpdateChatApiKeyProfiles]: {
     chatSettings: ["update"],
   },
   [RouteId.GetPrompts]: {

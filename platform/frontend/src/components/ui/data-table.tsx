@@ -43,6 +43,8 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData, event: React.MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
+  /** Hide the "X of Y row(s) selected" text when row selection is not used */
+  hideSelectedCount?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -57,6 +59,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
+  hideSelectedCount = false,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -197,7 +200,10 @@ export function DataTable<TData, TValue>({
         </Table>
       </div>
       {(pagination || !manualPagination) && (
-        <DataTablePagination table={table} totalRows={pagination?.total} />
+        <DataTablePagination
+          table={table}
+          totalRows={hideSelectedCount ? data.length : pagination?.total}
+        />
       )}
     </div>
   );

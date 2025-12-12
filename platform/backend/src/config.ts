@@ -213,6 +213,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
+    gemini: {
+      baseUrl:
+        process.env.ARCHESTRA_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
+    },
   },
   chat: {
     openai: {
@@ -255,6 +260,8 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      mcpK8sServiceAccountName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME || "",
     },
   },
   observability: {

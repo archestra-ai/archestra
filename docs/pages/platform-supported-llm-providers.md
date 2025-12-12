@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Archestra Platform
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2025-12-08
+lastUpdated: 2025-12-11
 ---
 
 <!-- 
@@ -44,4 +44,21 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 - **Base URL**: `http://localhost:9000/v1/anthropic/{agent-id}`
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
+
+## Google Gemini
+
+### Supported Gemini APIs
+
+- **Generate Content API** (`:generateContent`) - ✅ Fully supported
+- **Stream Generate Content API** (`:streamGenerateContent`) - ✅ Fully supported
+
+### Gemini Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/gemini/{agent-id}/v1beta`
+- **Authentication**: Pass your Gemini API key in the `x-goog-api-key` header
+
+### Important Notes
+
+- **API Version**: Archestra uses the `v1beta` Gemini API version for feature parity with the latest Gemini capabilities.
+- **Tool Support**: Function calling (tool use) is fully supported, including tool invocation policies and trusted data policies.
 

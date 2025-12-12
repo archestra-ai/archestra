@@ -216,10 +216,19 @@ export function ArchestraCatalogTab({
         server.server.docker_image,
       );
       if (dockerConfig) {
+        const serviceAccount = (
+          server.server as typeof server.server & { service_account?: string }
+        ).service_account;
         localConfig = {
           command: dockerConfig.command,
           arguments: dockerConfig.arguments,
           dockerImage: dockerConfig.dockerImage,
+          serviceAccount: serviceAccount
+            ? serviceAccount.replace(
+                /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
+                "{{HELM_RELEASE_NAME}}",
+              )
+            : undefined,
           environment:
             environment ||
             (server.server.env
@@ -232,9 +241,18 @@ export function ArchestraCatalogTab({
               : undefined),
         };
       } else {
+        const serviceAccount = (
+          server.server as typeof server.server & { service_account?: string }
+        ).service_account;
         localConfig = {
           command: server.server.command,
           arguments: server.server.args,
+          serviceAccount: serviceAccount
+            ? serviceAccount.replace(
+                /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
+                "{{HELM_RELEASE_NAME}}",
+              )
+            : undefined,
           environment:
             environment ||
             (server.server.env

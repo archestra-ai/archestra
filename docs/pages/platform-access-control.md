@@ -3,7 +3,7 @@ title: "Platform Access Control"
 category: Archestra Platform
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 4
-lastUpdated: 2025-12-11
+lastUpdated: 2025-12-12
 ---
 
 <!--
@@ -51,8 +51,10 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:read` | View and list RBAC roles |
 | `ac:update` | Modify existing RBAC roles |
 | `ac:delete` | Remove existing RBAC roles |
+| `chatSettings:create` | Create new chat feature configuration and settings |
 | `chatSettings:read` | View and list chat feature configuration and settings |
 | `chatSettings:update` | Modify existing chat feature configuration and settings |
+| `chatSettings:delete` | Remove existing chat feature configuration and settings |
 | `conversation:create` | Create new chat conversations with automation experts |
 | `conversation:read` | View and list chat conversations with automation experts |
 | `conversation:update` | Modify existing chat conversations with automation experts |

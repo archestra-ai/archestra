@@ -94,6 +94,10 @@ spec:
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.archestra.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           # Startup probe - gives the application time to start up
           # Checks every 10 seconds for up to 5 minutes (30 failures * 10s)
           startupProbe:

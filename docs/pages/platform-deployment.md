@@ -482,6 +482,21 @@ The following environment variables can be used to configure Archestra Platform:
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
+- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
+
+  - Default: `https://api.openai.com/v1`
+  - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_ANTHROPIC_BASE_URL`** - Override the Anthropic API base URL.
+
+  - Default: `https://api.anthropic.com`
+  - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
+
+  - Default: `https://generativelanguage.googleapis.com`
+  - Use this to point to your own proxy, Vertex AI API, or other custom endpoints
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
   - Default: `default`

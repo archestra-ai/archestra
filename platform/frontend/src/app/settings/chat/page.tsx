@@ -482,7 +482,7 @@ function ChatSettingsContent() {
               <Select
                 value={newKeyProvider}
                 onValueChange={(v) =>
-                  setNewKeyProvider(v as "anthropic" | "openai" | "gemini")
+                  setNewKeyProvider(v as SupportedChatProvider)
                 }
               >
                 <SelectTrigger>

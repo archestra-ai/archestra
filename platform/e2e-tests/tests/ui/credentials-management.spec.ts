@@ -220,6 +220,18 @@ test.describe("Credentials Management", () => {
     extractCookieHeaders,
   }) => {
     const cookieHeaders = await extractCookieHeaders(adminPage);
+
+    // CLEANUP: Delete existingcreated MCP servers / installations
+    await goToPage(adminPage, "/mcp-catalog/registry");
+    await openManageCredentialsDialog(adminPage, TEST_CATALOG_ITEM_NAME);
+    const count = await adminPage
+      .getByRole("button", { name: "Revoke" })
+      .count();
+    for (let i = 0; i < count; i++) {
+      await adminPage.getByRole("button", { name: "Revoke" }).first().click();
+    }
+
+    // Install test servers
     await Promise.all([
       installTestServer(adminPage, "Admin"),
       installTestServer(editorPage, "Editor"),
@@ -260,16 +272,6 @@ test.describe("Credentials Management", () => {
       toolName: TEST_TOOL_NAME,
       cookieHeaders,
     });
-
-    // CLEANUP: Delete created MCP servers / installations
-    await goToPage(adminPage, "/mcp-catalog/registry");
-    await openManageCredentialsDialog(adminPage, TEST_CATALOG_ITEM_NAME);
-    const count = await adminPage
-      .getByRole("button", { name: "Revoke" })
-      .count();
-    for (let i = 0; i < count; i++) {
-      await adminPage.getByRole("button", { name: "Revoke" }).first().click();
-    }
   });
 });
 

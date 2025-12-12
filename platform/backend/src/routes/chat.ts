@@ -1,5 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
 import {
   convertToModelMessages,
@@ -84,7 +85,8 @@ async function getSmartDefaultModel(
       const secretValue =
         secret?.secret?.apiKey ??
         secret?.secret?.anthropicApiKey ??
-        secret?.secret?.geminiApiKey;
+        secret?.secret?.geminiApiKey ??
+        secret?.secret?.openaiApiKey;
 
       if (secretValue) {
         // Found a valid API key for this provider - return appropriate default model
@@ -217,7 +219,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const secretValue =
           secret?.secret?.apiKey ??
           secret?.secret?.anthropicApiKey ??
-          secret?.secret?.geminiApiKey;
+          secret?.secret?.geminiApiKey ??
+          secret?.secret?.openaiApiKey;
         if (secretValue) {
           providerApiKey = secretValue as string;
           apiKeySource = profileApiKey.isOrganizationDefault
@@ -239,7 +242,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secretValue =
             secret?.secret?.apiKey ??
             secret?.secret?.anthropicApiKey ??
-            secret?.secret?.geminiApiKey;
+            secret?.secret?.geminiApiKey ??
+            secret?.secret?.openaiApiKey;
           if (secretValue) {
             providerApiKey = secretValue as string;
             apiKeySource = "organization default";
@@ -274,7 +278,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let llmClient:
         | ReturnType<typeof createAnthropic>
-        | ReturnType<typeof createGoogleGenerativeAI>;
+        | ReturnType<typeof createGoogleGenerativeAI>
+        | ReturnType<typeof createOpenAI>;
 
       if (provider === "anthropic") {
         // URL format: /v1/anthropic/:agentId/v1/messages
@@ -288,6 +293,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createGoogleGenerativeAI({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
+          headers: clientHeaders,
+        });
+      } else if (provider === "openai") {
+        // URL format: /v1/openai/:agentId/v1
+        llmClient = createOpenAI({
+          apiKey: providerApiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}/v1`,
           headers: clientHeaders,
         });
       } else {

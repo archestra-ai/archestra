@@ -68,7 +68,7 @@ const PROVIDER_CONFIG = {
     name: "OpenAI",
     icon: "/icons/openai.png",
     placeholder: "sk-...",
-    enabled: false, // Coming soon
+    enabled: true,
   },
   gemini: {
     name: "Gemini",

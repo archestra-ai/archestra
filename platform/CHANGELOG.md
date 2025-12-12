@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/archestra-ai/archestra/compare/platform-v1.0.3...platform-v1.0.4) (2025-12-12)
+
+
+### Bug Fixes
+
+* default model gemini-2.5-pro ([#1565](https://github.com/archestra-ai/archestra/issues/1565)) ([b85da57](https://github.com/archestra-ai/archestra/commit/b85da57d2e354059b1ed35b1b757f504c454de99))
+
 ## [1.0.3](https://github.com/archestra-ai/archestra/compare/platform-v1.0.2...platform-v1.0.3) (2025-12-12)
 
 

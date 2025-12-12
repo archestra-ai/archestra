@@ -15,6 +15,10 @@ import {
 import Image from "next/image";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  PROVIDER_CONFIG,
+  type SupportedChatProvider,
+} from "@/components/chat/create-chat-api-key-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -57,27 +61,6 @@ import {
 
 type ChatApiKey = archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
-const PROVIDER_CONFIG = {
-  anthropic: {
-    name: "Anthropic",
-    icon: "/icons/anthropic.png",
-    placeholder: "sk-ant-...",
-    enabled: true,
-  },
-  openai: {
-    name: "OpenAI",
-    icon: "/icons/openai.png",
-    placeholder: "sk-...",
-    enabled: false, // Coming soon
-  },
-  gemini: {
-    name: "Gemini",
-    icon: "/icons/gemini.png",
-    placeholder: "AIza...",
-    enabled: false, // Coming soon
-  },
-} as const;
-
 function ChatSettingsContent() {
   const { data: apiKeys = [] } = useChatApiKeys();
   const { data: allProfiles = [] } = useProfiles();
@@ -97,9 +80,8 @@ function ChatSettingsContent() {
 
   // Form states
   const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyProvider, setNewKeyProvider] = useState<"anthropic" | "openai">(
-    "anthropic",
-  );
+  const [newKeyProvider, setNewKeyProvider] =
+    useState<SupportedChatProvider>("anthropic");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [newKeyIsDefault, setNewKeyIsDefault] = useState(false);
   const [editKeyName, setEditKeyName] = useState("");
@@ -267,10 +249,7 @@ function ChatSettingsContent() {
         accessorKey: "provider",
         header: "Provider",
         cell: ({ row }) => {
-          const config =
-            PROVIDER_CONFIG[
-              row.original.provider as keyof typeof PROVIDER_CONFIG
-            ];
+          const config = PROVIDER_CONFIG[row.original.provider];
           return (
             <div className="flex items-center gap-2">
               <Image
@@ -476,7 +455,7 @@ function ChatSettingsContent() {
               <Select
                 value={newKeyProvider}
                 onValueChange={(v) =>
-                  setNewKeyProvider(v as "anthropic" | "openai")
+                  setNewKeyProvider(v as SupportedChatProvider)
                 }
               >
                 <SelectTrigger>

@@ -293,5 +293,10 @@ https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse
 
 export const GenerateContentHeadersSchema = z.object({
   "user-agent": z.string().optional().describe("The user agent of the client"),
-  "x-goog-api-key": z.string().describe("API key for Google Gemini"),
+  "x-goog-api-key": z
+    .string()
+    .optional()
+    .describe(
+      "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).",
+    ),
 });

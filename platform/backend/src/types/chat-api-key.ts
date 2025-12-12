@@ -7,7 +7,11 @@ import { z } from "zod";
 import { schema } from "@/database";
 
 // Supported chat providers
-export const SupportedChatProviderSchema = z.enum(["anthropic", "openai"]);
+export const SupportedChatProviderSchema = z.enum([
+  "anthropic",
+  "openai",
+  "gemini",
+]);
 export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;
 
 // Chat API Key schemas

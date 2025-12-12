@@ -2,10 +2,9 @@
 
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Info, Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useMemo, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
+import { CreateChatApiKeyForm } from "@/components/chat/create-chat-api-key-form";
 import { ConnectionOptions } from "@/components/connection-options";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,14 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useDefaultProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import {
-  useChatApiKeysOptional,
-  useCreateChatApiKey,
-} from "@/lib/chat-settings.query";
+import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
 import {
   useOrganizationOnboardingStatus,
   useUpdateOrganization,
@@ -34,8 +28,6 @@ import Divider from "./divider";
 interface OnboardingDialogProps {
   open: boolean;
 }
-
-const PLACEHOLDER_KEY = "••••••••••••••••";
 
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -51,58 +43,14 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 
   // Chat settings state
   const { data: chatApiKeys = [] } = useChatApiKeysOptional();
-  const createChatApiKey = useCreateChatApiKey();
   const { data: canUpdateChatSettings } = useHasPermissions({
     chatSettings: ["update"],
   });
-  const [apiKey, setApiKey] = useState("");
-  const [hasApiKeyChanged, setHasApiKeyChanged] = useState(false);
 
-  // Check if any Anthropic API key is configured
-  const hasAnthropicApiKey = useMemo(() => {
-    return chatApiKeys.some((k) => k.provider === "anthropic" && k.secretId);
+  // Check if any API key is configured (for any provider)
+  const hasAnyApiKey = useMemo(() => {
+    return chatApiKeys.some((k) => k.secretId);
   }, [chatApiKeys]);
-
-  // Set placeholder dots when API key is configured
-  useEffect(() => {
-    if (hasAnthropicApiKey) {
-      setApiKey(PLACEHOLDER_KEY);
-      setHasApiKeyChanged(false);
-    }
-  }, [hasAnthropicApiKey]);
-
-  const handleApiKeyChange = useCallback(
-    (value: string) => {
-      setApiKey(value);
-      if (hasAnthropicApiKey) {
-        setHasApiKeyChanged(value !== PLACEHOLDER_KEY);
-      } else {
-        setHasApiKeyChanged(value !== "");
-      }
-    },
-    [hasAnthropicApiKey],
-  );
-
-  const handleSaveApiKey = useCallback(async () => {
-    try {
-      const keyToSend = hasApiKeyChanged ? apiKey : undefined;
-      if (!keyToSend) return;
-
-      // Use new API to create a chat API key
-      await createChatApiKey.mutateAsync({
-        name: "Default Anthropic Key",
-        provider: "anthropic",
-        apiKey: keyToSend,
-        isOrganizationDefault: true,
-      });
-
-      toast.success("API key saved successfully");
-      setApiKey(PLACEHOLDER_KEY);
-      setHasApiKeyChanged(false);
-    } catch (_error) {
-      toast.error("Failed to save API key");
-    }
-  }, [hasApiKeyChanged, apiKey, createChatApiKey]);
 
   const handleFinishOnboarding = useCallback(() => {
     completeOnboarding({
@@ -179,7 +127,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
               <div>
                 <h3 className="font-semibold">Chat Setup</h3>
                 <p className="text-sm text-muted-foreground">
-                  To use the built-in Chat feature, an Anthropic API key is
+                  To use the built-in Chat feature, an LLM provider API key is
                   required.
                 </p>
               </div>
@@ -187,57 +135,12 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
               {/* Chat Setup section */}
               <div className="rounded-lg border p-4 space-y-4">
                 {canUpdateChatSettings ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="onboarding-api-key">
-                        Anthropic API Key
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="onboarding-api-key"
-                          type="password"
-                          placeholder="sk-ant-..."
-                          value={apiKey}
-                          onChange={(e) => handleApiKeyChange(e.target.value)}
-                          className={
-                            hasAnthropicApiKey && !hasApiKeyChanged
-                              ? "border-green-500 pr-10"
-                              : ""
-                          }
-                        />
-                        {hasAnthropicApiKey && !hasApiKeyChanged && (
-                          <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Get your API key from{" "}
-                        <Link
-                          href="https://console.anthropic.com/settings/keys"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:text-foreground"
-                        >
-                          Anthropic Console
-                        </Link>
-                      </p>
-                    </div>
-
-                    <Button
-                      onClick={handleSaveApiKey}
-                      disabled={createChatApiKey.isPending || !apiKey}
-                      size="sm"
-                    >
-                      {createChatApiKey.isPending && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      {hasAnthropicApiKey ? "Update API Key" : "Save API Key"}
-                    </Button>
-                  </div>
+                  <CreateChatApiKeyForm variant="compact" showConsoleLink />
                 ) : (
                   <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
-                      {hasAnthropicApiKey ? (
+                      {hasAnyApiKey ? (
                         <span className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                           API key is configured. Chat is ready to use.

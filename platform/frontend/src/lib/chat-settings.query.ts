@@ -1,10 +1,13 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
   useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+
+type SupportedChatProvider =
+  archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
 
 const {
   getChatApiKeys,
@@ -15,6 +18,7 @@ const {
   unsetChatApiKeyDefault,
   updateChatApiKeyProfiles,
 } = archestraApiSdk;
+
 export function useChatApiKeys() {
   return useSuspenseQuery({
     queryKey: ["chat-api-keys"],
@@ -54,7 +58,7 @@ export function useCreateChatApiKey() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
-      provider: "anthropic" | "openai";
+      provider: SupportedChatProvider;
       apiKey: string;
       isOrganizationDefault?: boolean;
     }) => {

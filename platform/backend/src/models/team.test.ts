@@ -555,6 +555,103 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("checkTeamAccess", () => {
+    test("should allow access for team admin regardless of membership", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Admin user who is NOT a member of the team
+      const adminUser = await makeUser({ email: "admin@test.com" });
+
+      // Should not throw - admin has full access
+      await expect(
+        TeamModel.checkTeamAccess({
+          userId: adminUser.id,
+          teamId: team.id,
+          isTeamAdmin: true,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("should allow access for non-admin who is a team member", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Add a member to the team
+      const memberUser = await makeUser({ email: "member@test.com" });
+      await TeamModel.addMember(team.id, memberUser.id);
+
+      // Should not throw - user is a member
+      await expect(
+        TeamModel.checkTeamAccess({
+          userId: memberUser.id,
+          teamId: team.id,
+          isTeamAdmin: false,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("should deny access for non-admin who is not a team member", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Non-member, non-admin user
+      const outsiderUser = await makeUser({ email: "outsider@test.com" });
+
+      // Should throw 403 error
+      await expect(
+        TeamModel.checkTeamAccess({
+          userId: outsiderUser.id,
+          teamId: team.id,
+          isTeamAdmin: false,
+        }),
+      ).rejects.toThrow("Not authorized to access this team");
+    });
+
+    test("should throw ApiError with 403 status for unauthorized access", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      const outsiderUser = await makeUser({ email: "outsider@test.com" });
+
+      try {
+        await TeamModel.checkTeamAccess({
+          userId: outsiderUser.id,
+          teamId: team.id,
+          isTeamAdmin: false,
+        });
+        // Should not reach here
+        expect.fail("Expected checkTeamAccess to throw an error");
+      } catch (error) {
+        expect(error).toHaveProperty("statusCode", 403);
+        expect(error).toHaveProperty(
+          "message",
+          "Not authorized to access this team",
+        );
+      }
+    });
+  });
+
   describe("syncUserTeams", () => {
     test("should add user to teams based on their SSO groups", async ({
       makeUser,

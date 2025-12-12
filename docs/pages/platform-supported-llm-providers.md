@@ -50,7 +50,7 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 ### Supported Gemini APIs
 
 - **Generate Content API** (`:generateContent`) - ✅ Fully supported
-- **Stream Generate Content API** (`:streamGenerateContent`) - ⚠️ Coming soon
+- **Stream Generate Content API** (`:streamGenerateContent`) - ✅ Fully supported
 
 ### Gemini Connection Details
 

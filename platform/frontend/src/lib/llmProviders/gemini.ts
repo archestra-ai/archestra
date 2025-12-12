@@ -47,13 +47,6 @@ type GeminiFileDataPart = {
   };
 };
 
-type GeminiPart =
-  | GeminiTextPart
-  | GeminiFunctionCallPart
-  | GeminiFunctionResponsePart
-  | GeminiInlineDataPart
-  | GeminiFileDataPart;
-
 // Type guards for discriminating union types
 function hasFunctionResponse(
   part: unknown,

@@ -1,3 +1,4 @@
+import React from "react";
 import * as Sentry from "@sentry/nextjs";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";

@@ -1,16 +1,25 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { type GenerateContentParameters, GoogleGenAI } from "@google/genai";
+import {
+  type GenerateContentParameters,
+  type GenerateContentResponse,
+  GoogleGenAI,
+} from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableGenAI } from "@/llm-metrics";
+import {
+  getObservableGenAI,
+  reportBlockedTools,
+  reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
+} from "@/llm-metrics";
 import logger from "@/logging";
 import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 
 import {
   type Agent,
-  ApiError,
   constructResponseSchema,
   ErrorResponsesSchema,
   Gemini,
@@ -245,13 +254,274 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (stream) {
         logger.debug(
-          { modelName },
-          "[GeminiProxy] Streaming not supported yet",
+          { modelName, mergedToolsCount: mergedTools.length },
+          "[GeminiProxy] Starting streaming request",
         );
-        throw new ApiError(
-          400,
-          "Streaming is not supported for Gemini. Coming soon!",
+
+        // Track timing for TTFT and tokens/sec metrics
+        const streamStartTime = Date.now();
+        let firstChunkTime: number | undefined;
+
+        // Handle streaming response with span to measure LLM call duration
+        const streamingResponse = await utils.tracing.startActiveLlmSpan(
+          "gemini.generateContentStream",
+          "gemini",
+          modelName,
+          true,
+          resolvedAgent,
+          async (llmSpan) => {
+            const response = await genAI.models.generateContentStream(
+              processedBody as GenerateContentParameters,
+            );
+            llmSpan.end();
+            return response;
+          },
         );
+
+        // Set up SSE response headers
+        reply.raw.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+
+        // Accumulate response for tool call evaluation and persistence
+        let accumulatedText = "";
+        const accumulatedFunctionCalls: Array<{
+          name: string;
+          args?: Record<string, unknown>;
+        }> = [];
+        const chunks: GenerateContentResponse[] = [];
+        let tokenUsage: { input?: number; output?: number } = {};
+
+        try {
+          for await (const chunk of streamingResponse) {
+            // Capture time to first token on first chunk
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+              reportTimeToFirstToken(
+                "gemini",
+                resolvedAgent,
+                modelName,
+                ttftSeconds,
+                externalAgentId,
+              );
+            }
+
+            chunks.push(chunk);
+
+            // Extract usage metadata if present
+            if (chunk.usageMetadata) {
+              tokenUsage = utils.adapters.gemini.getUsageTokens(
+                chunk.usageMetadata,
+              );
+            }
+
+            // Process parts from the chunk
+            const candidate = chunk.candidates?.[0];
+            if (candidate?.content?.parts) {
+              for (const part of candidate.content.parts) {
+                if (part.text) {
+                  accumulatedText += part.text;
+                }
+                if (part.functionCall) {
+                  accumulatedFunctionCalls.push({
+                    name: part.functionCall.name || "",
+                    args: part.functionCall.args as
+                      | Record<string, unknown>
+                      | undefined,
+                  });
+                }
+              }
+            }
+
+            // Stream text content immediately (don't stream tool calls yet - need to evaluate policies)
+            if (
+              candidate?.content?.parts?.some((p) => p.text) &&
+              !candidate?.content?.parts?.some((p) => p.functionCall)
+            ) {
+              const restChunk = utils.adapters.gemini.sdkResponseToRestResponse(
+                chunk,
+                modelName,
+              );
+              reply.raw.write(`data: ${JSON.stringify(restChunk)}\n\n`);
+            }
+          }
+
+          logger.debug(
+            {
+              toolCallCount: accumulatedFunctionCalls.length,
+              hasText: !!accumulatedText,
+            },
+            "[GeminiProxy] Stream completed, evaluating tool invocation policies",
+          );
+
+          // Evaluate tool invocation policies
+          let toolInvocationRefusal: [string, string] | null = null;
+          if (accumulatedFunctionCalls.length > 0) {
+            const validToolCalls = accumulatedFunctionCalls
+              .filter((tc) => tc.name)
+              .map((toolCall) => ({
+                toolCallName: toolCall.name,
+                toolCallArgs: JSON.stringify(toolCall.args || {}),
+              }));
+
+            if (validToolCalls.length > 0) {
+              toolInvocationRefusal =
+                await utils.toolInvocation.evaluatePolicies(
+                  validToolCalls,
+                  resolvedAgentId,
+                  contextIsTrusted,
+                );
+            }
+
+            logger.debug(
+              { toolInvocationRefused: !!toolInvocationRefusal },
+              "[GeminiProxy] Tool invocation policy result",
+            );
+
+            if (toolInvocationRefusal) {
+              const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
+              // Stream the refusal as a single chunk
+              const refusalChunk: Gemini.Types.GenerateContentResponse = {
+                candidates: [
+                  {
+                    content: {
+                      parts: [{ text: contentMessage }],
+                      role: "model",
+                    },
+                    finishReason: "STOP",
+                    index: 0,
+                  },
+                ],
+                modelVersion: modelName,
+              };
+              reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+
+              reportBlockedTools(
+                "gemini",
+                resolvedAgent,
+                accumulatedFunctionCalls.length,
+                modelName,
+                externalAgentId,
+              );
+            } else {
+              // Tool calls are allowed - stream the function calls
+              for (const functionCall of accumulatedFunctionCalls) {
+                const toolCallChunk: Gemini.Types.GenerateContentResponse = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [
+                          {
+                            functionCall: {
+                              name: functionCall.name,
+                              args: functionCall.args,
+                            },
+                          },
+                        ],
+                        role: "model",
+                      },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: modelName,
+                };
+                reply.raw.write(`data: ${JSON.stringify(toolCallChunk)}\n\n`);
+              }
+            }
+          }
+
+          // Send done marker
+          reply.raw.write("data: [DONE]\n\n");
+
+          // Calculate tokens per second if we have timing info
+          if (firstChunkTime && tokenUsage.output && tokenUsage.output > 0) {
+            const totalStreamTime = (Date.now() - firstChunkTime) / 1000;
+            if (totalStreamTime > 0) {
+              reportTokensPerSecond(
+                "gemini",
+                resolvedAgent,
+                modelName,
+                tokenUsage.output,
+                totalStreamTime,
+                externalAgentId,
+              );
+            }
+          }
+
+          // Report token usage
+          if (tokenUsage.input || tokenUsage.output) {
+            reportLLMTokens(
+              "gemini",
+              resolvedAgent,
+              tokenUsage,
+              modelName,
+              externalAgentId,
+            );
+          }
+
+          // Build the complete response for persistence
+          const completeResponse: Gemini.Types.GenerateContentResponse = {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    ...(accumulatedText ? [{ text: accumulatedText }] : []),
+                    ...accumulatedFunctionCalls.map((fc) => ({
+                      functionCall: { name: fc.name, args: fc.args },
+                    })),
+                  ],
+                  role: "model",
+                },
+                finishReason: "STOP",
+                index: 0,
+              },
+            ],
+            modelVersion: modelName,
+            usageMetadata: tokenUsage.input
+              ? {
+                  promptTokenCount: tokenUsage.input,
+                  candidatesTokenCount: tokenUsage.output || 0,
+                  totalTokenCount:
+                    (tokenUsage.input || 0) + (tokenUsage.output || 0),
+                }
+              : undefined,
+          };
+
+          // Store the interaction
+          await InteractionModel.create({
+            profileId: resolvedAgentId,
+            externalAgentId,
+            type: "gemini:generateContent",
+            request: body,
+            response: toolInvocationRefusal
+              ? {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [{ text: toolInvocationRefusal[1] }],
+                        role: "model",
+                      },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: modelName,
+                }
+              : completeResponse,
+            model: modelName,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+          });
+        } finally {
+          reply.raw.end();
+        }
+
+        return;
       } else {
         logger.debug(
           { modelName },

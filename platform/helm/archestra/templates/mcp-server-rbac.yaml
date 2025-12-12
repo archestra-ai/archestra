@@ -1,0 +1,83 @@
+{{- if .Values.archestra.orchestrator.kubernetes.mcpServerRbac.create }}
+---
+# ServiceAccount specifically for MCP servers that need Kubernetes API access
+# This is used ONLY by the Kubernetes MCP server - other MCP servers use the default service account with no permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-mcp-k8s-operator
+  namespace: {{ .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server-rbac
+---
+# ClusterRole with full operator permissions for Kubernetes resources
+# Grants all necessary permissions for the Kubernetes MCP server to function (read, create, update, patch, delete)
+# Only granted to the mcp-k8s-operator service account, not to all MCP server pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-mcp-server-operator
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server-rbac
+rules:
+# Core API group resources - full CRUD permissions
+- apiGroups: [""]
+  resources: ["pods", "services", "nodes", "namespaces", "events", "configmaps", "secrets", "persistentvolumeclaims", "serviceaccounts"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Pod-specific operations (exec, logs, port-forward)
+- apiGroups: [""]
+  resources: ["pods/log", "pods/exec", "pods/portforward", "pods/status"]
+  verbs: ["get", "create"]
+# Node-specific operations (cordon, drain, uncordon)
+- apiGroups: [""]
+  resources: ["nodes/status"]
+  verbs: ["get", "patch", "update"]
+# Apps API group resources - full CRUD permissions
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Deployment-specific operations (scale, rollout)
+- apiGroups: ["apps"]
+  resources: ["deployments/scale", "replicasets/scale", "statefulsets/scale"]
+  verbs: ["get", "update", "patch"]
+# Batch API group resources - full CRUD permissions
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# RBAC resources - read access for listing roles and bindings
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "watch"]
+# Networking resources
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses", "networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Storage resources
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses", "volumeattachments"]
+  verbs: ["get", "list", "watch"]
+# API discovery
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["list"]
+---
+# ClusterRoleBinding that grants the ClusterRole to the mcp-k8s-operator service account
+# This is the critical security boundary - only pods that explicitly use this service account get K8s API access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-mcp-server-operator
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server-rbac
+subjects:
+- kind: ServiceAccount
+  name: {{ include "archestra-platform.fullname" . }}-mcp-k8s-operator
+  namespace: {{ .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "archestra-platform.fullname" . }}-mcp-server-operator
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

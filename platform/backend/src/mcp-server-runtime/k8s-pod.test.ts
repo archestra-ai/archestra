@@ -1754,3 +1754,223 @@ describe("K8sPod.constructK8sSecretName", () => {
     expect(result).toMatch(/^mcp-server-.+-secrets$/);
   });
 });
+
+describe("K8sPod.generatePodSpec - serviceAccountName", () => {
+  test("does not set serviceAccountName when not provided in localConfig", () => {
+    const mockMcpServer = {
+      id: "test-server",
+      name: "Test Server",
+      catalogId: "test-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "test-image:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(podSpec.spec?.serviceAccountName).toBeUndefined();
+  });
+
+  test("uses serviceAccount role as-is when release name prefix is empty", () => {
+    // This test verifies that when a serviceAccount role is specified but the release name is empty,
+    // we use the role name as-is without the prefix and middle part
+
+    // Mock config with empty release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "";
+
+    const mockMcpServer = {
+      id: "k8s-server",
+      name: "Kubernetes MCP",
+      catalogId: "k8s-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "docker",
+      arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
+      serviceAccount: "operator",
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "kubernetes-mcp:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    // When release name is empty, use role as-is
+    expect(podSpec.spec?.serviceAccountName).toBe("operator");
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
+  });
+
+  test("uses custom serviceAccount as-is when prefix is not configured", () => {
+    // Mock config with empty release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "";
+
+    const mockMcpServer = {
+      id: "custom-server",
+      name: "Custom Server",
+      catalogId: "custom-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      serviceAccount: "custom-service-account",
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "test-image:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(podSpec.spec?.serviceAccountName).toBe("custom-service-account");
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
+  });
+
+  test("automatically constructs full service account name from role", () => {
+    // Mock config with release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
+      "archestra-platform";
+
+    const mockMcpServer = {
+      id: "k8s-server",
+      name: "Kubernetes MCP",
+      catalogId: "k8s-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "docker",
+      arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
+      serviceAccount: "operator",
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "kubernetes-mcp:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    // Should construct full name: {releaseName}-mcp-k8s-{role}
+    expect(podSpec.spec?.serviceAccountName).toBe(
+      "archestra-platform-mcp-k8s-operator",
+    );
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
+  });
+});

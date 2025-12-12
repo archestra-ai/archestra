@@ -260,6 +260,8 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      mcpK8sServiceAccountName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME || "",
     },
   },
   observability: {

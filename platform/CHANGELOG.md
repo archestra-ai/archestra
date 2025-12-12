@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/archestra-ai/archestra/compare/platform-v1.0.1...platform-v1.0.2) (2025-12-12)
+
+
+### Bug Fixes
+
+* address POST /api/chat when using vertex ADC auth method ([#1562](https://github.com/archestra-ai/archestra/issues/1562)) ([1f0f2c4](https://github.com/archestra-ai/archestra/commit/1f0f2c4a0a5d6d3cdcaae9573a6e768ce3a53ed4))
+* address width of delete chat api key dialog ([#1560](https://github.com/archestra-ai/archestra/issues/1560)) ([c3a7b37](https://github.com/archestra-ai/archestra/commit/c3a7b37d3137f8c5b9b8116cdfa01106ec70944a))
+
 ## [1.0.1](https://github.com/archestra-ai/archestra/compare/platform-v1.0.0...platform-v1.0.1) (2025-12-12)
 
 

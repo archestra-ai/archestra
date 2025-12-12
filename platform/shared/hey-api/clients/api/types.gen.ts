@@ -5705,7 +5705,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -5722,7 +5722,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         apiKey: string;
         isOrganizationDefault?: boolean;
     };
@@ -5798,7 +5798,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -5963,7 +5963,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6056,7 +6056,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6142,7 +6142,7 @@ export type SetChatApiKeyDefaultResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6228,7 +6228,7 @@ export type UnsetChatApiKeyDefaultResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;
@@ -6316,7 +6316,7 @@ export type UpdateChatApiKeyProfilesResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai';
+        provider: 'anthropic' | 'openai' | 'gemini';
         secretId: string | null;
         isOrganizationDefault: boolean;
         createdAt: string;

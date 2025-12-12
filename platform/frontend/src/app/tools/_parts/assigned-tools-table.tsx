@@ -55,7 +55,6 @@ import { isMcpTool } from "@/lib/tool.utils";
 import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
-  DEFAULT_SORT_DIRECTION,
   DEFAULT_TOOLS_PAGE_SIZE,
 } from "@/lib/utils";
 import type { ToolsInitialData } from "../page";

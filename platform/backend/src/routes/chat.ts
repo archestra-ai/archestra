@@ -1,4 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
 import {
   convertToModelMessages,
@@ -21,6 +23,7 @@ import {
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { secretManager } from "@/secretsmanager";
+import type { SupportedChatProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
@@ -31,6 +34,88 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+
+/**
+ * Detect which provider a model belongs to based on its name
+ */
+function detectProviderFromModel(model: string): SupportedChatProvider {
+  const lowerModel = model.toLowerCase();
+
+  if (lowerModel.includes("claude")) {
+    return "anthropic";
+  }
+
+  if (lowerModel.includes("gemini") || lowerModel.includes("google")) {
+    return "gemini";
+  }
+
+  if (
+    lowerModel.includes("gpt") ||
+    lowerModel.includes("o1") ||
+    lowerModel.includes("o3")
+  ) {
+    return "openai";
+  }
+
+  // Default to anthropic for backwards compatibility
+  return "anthropic";
+}
+
+/**
+ * Get a smart default model based on available API keys for the agent/organization.
+ * Priority: profile-specific key > org default key > env var > fallback
+ */
+async function getSmartDefaultModel(
+  agentId: string,
+  organizationId: string,
+): Promise<string> {
+  // Check what API keys are available (profile-specific or org defaults)
+  const providers: SupportedChatProvider[] = ["anthropic", "gemini", "openai"];
+
+  // Try to find an available API key in order of preference
+  for (const provider of providers) {
+    const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+      agentId,
+      provider,
+      organizationId,
+    );
+
+    if (profileApiKey?.secretId) {
+      const secret = await secretManager.getSecret(profileApiKey.secretId);
+      const secretValue =
+        secret?.secret?.apiKey ??
+        secret?.secret?.anthropicApiKey ??
+        secret?.secret?.geminiApiKey ??
+        secret?.secret?.openaiApiKey;
+
+      if (secretValue) {
+        // Found a valid API key for this provider - return appropriate default model
+        switch (provider) {
+          case "anthropic":
+            return "claude-opus-4-1-20250805";
+          case "gemini":
+            return "gemini-2.0-flash-exp";
+          case "openai":
+            return "gpt-4o";
+        }
+      }
+    }
+  }
+
+  // Check environment variables as fallback
+  if (config.chat.anthropic.apiKey) {
+    return "claude-opus-4-1-20250805";
+  }
+  if (config.chat.openai.apiKey) {
+    return "gpt-4o";
+  }
+  if (config.chat.gemini.apiKey) {
+    return "gemini-2.0-flash-exp";
+  }
+
+  // Ultimate fallback - use configured default
+  return config.chat.defaultModel;
+}
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -102,6 +187,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         systemPrompt = allParts.join("\n\n");
       }
 
+      // Detect provider from model name
+      const provider = detectProviderFromModel(conversation.selectedModel);
+
       logger.info(
         {
           conversationId,
@@ -110,6 +198,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
+          provider,
           promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
@@ -120,13 +209,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Resolve API key: profile-specific -> org default -> env var
-      let anthropicApiKey: string | undefined;
+      let providerApiKey: string | undefined;
       let apiKeySource = "environment";
 
       // Try profile-specific API key first (getProfileApiKey already falls back to org default)
       const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
         conversation.agentId,
-        "anthropic",
+        provider,
         organizationId,
       );
 
@@ -134,9 +223,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const secret = await secretManager.getSecret(profileApiKey.secretId);
         // Support both old format (anthropicApiKey) and new format (apiKey)
         const secretValue =
-          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          secret?.secret?.apiKey ??
+          secret?.secret?.anthropicApiKey ??
+          secret?.secret?.geminiApiKey ??
+          secret?.secret?.openaiApiKey;
         if (secretValue) {
-          anthropicApiKey = secretValue as string;
+          providerApiKey = secretValue as string;
           apiKeySource = profileApiKey.isOrganizationDefault
             ? "organization default"
             : "profile-specific";
@@ -145,55 +237,91 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // If profileApiKey exists but has no secretId, or getProfileApiKey returned null,
       // explicitly try organization default as a fallback
-      if (!anthropicApiKey) {
+      if (!providerApiKey) {
         const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
           organizationId,
-          "anthropic",
+          provider,
         );
         if (orgDefault?.secretId) {
           const secret = await secretManager.getSecret(orgDefault.secretId);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+            secret?.secret?.apiKey ??
+            secret?.secret?.anthropicApiKey ??
+            secret?.secret?.geminiApiKey ??
+            secret?.secret?.openaiApiKey;
           if (secretValue) {
-            anthropicApiKey = secretValue as string;
+            providerApiKey = secretValue as string;
             apiKeySource = "organization default";
           }
         }
       }
 
       // Fall back to environment variable
-      if (!anthropicApiKey) {
-        anthropicApiKey = config.chat.anthropic.apiKey;
-        apiKeySource = "environment";
+      if (!providerApiKey) {
+        if (provider === "anthropic" && config.chat.anthropic.apiKey) {
+          providerApiKey = config.chat.anthropic.apiKey;
+          apiKeySource = "environment";
+        } else if (provider === "openai" && config.chat.openai.apiKey) {
+          providerApiKey = config.chat.openai.apiKey;
+          apiKeySource = "environment";
+        } else if (provider === "gemini" && config.chat.gemini.apiKey) {
+          providerApiKey = config.chat.gemini.apiKey;
+          apiKeySource = "environment";
+        }
       }
 
-      logger.info({ apiKeySource }, "Using Anthropic API key");
+      logger.info({ apiKeySource, provider }, "Using LLM provider API key");
 
-      if (!anthropicApiKey) {
+      if (!providerApiKey) {
         throw new ApiError(
           400,
           "LLM Provider API key not configured. Please configure it in Chat Settings.",
         );
       }
 
-      // Create Anthropic client pointing to LLM Proxy
-      // URL format: /v1/anthropic/:agentId/v1/messages
+      // Create provider client pointing to LLM Proxy
       // Forward external agent ID header if present
-      const anthropic = createAnthropic({
-        apiKey: anthropicApiKey,
-        baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-        headers: externalAgentId
-          ? {
-              [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
-            }
-          : undefined,
-      });
+      const clientHeaders = externalAgentId
+        ? {
+            [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
+          }
+        : undefined;
+
+      let llmClient:
+        | ReturnType<typeof createAnthropic>
+        | ReturnType<typeof createGoogleGenerativeAI>
+        | ReturnType<typeof createOpenAI>;
+
+      if (provider === "anthropic") {
+        // URL format: /v1/anthropic/:agentId/v1/messages
+        llmClient = createAnthropic({
+          apiKey: providerApiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
+          headers: clientHeaders,
+        });
+      } else if (provider === "gemini") {
+        // URL format: /v1/gemini/:agentId/v1beta/models
+        llmClient = createGoogleGenerativeAI({
+          apiKey: providerApiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
+          headers: clientHeaders,
+        });
+      } else if (provider === "openai") {
+        // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
+        llmClient = createOpenAI({
+          apiKey: providerApiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
+          headers: clientHeaders,
+        });
+      } else {
+        throw new ApiError(400, `Unsupported provider: ${provider}`);
+      }
 
       // Stream with AI SDK
       // Build streamText config conditionally
       const streamTextConfig: Parameters<typeof streamText>[0] = {
-        model: anthropic(conversation.selectedModel),
+        model: llmClient(conversation.selectedModel),
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),
@@ -456,6 +584,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Determine smart default model if none specified
+      const modelToUse =
+        selectedModel || (await getSmartDefaultModel(agentId, organizationId));
+
+      logger.info(
+        {
+          agentId,
+          organizationId,
+          selectedModel,
+          modelToUse,
+          wasSmartDefault: !selectedModel,
+        },
+        "Creating conversation with model",
+      );
+
       // Create conversation with agent and optional prompt
       return reply.send(
         await ConversationModel.create({
@@ -464,7 +607,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           promptId,
           title,
-          selectedModel: selectedModel || config.chat.defaultModel,
+          selectedModel: modelToUse,
         }),
       );
     },

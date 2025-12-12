@@ -17410,7 +17410,8 @@
                         "type": "string",
                         "enum": [
                           "anthropic",
-                          "openai"
+                          "openai",
+                          "gemini"
                         ]
                       },
                       "secretId": {
@@ -17701,7 +17702,8 @@
                     "type": "string",
                     "enum": [
                       "anthropic",
-                      "openai"
+                      "openai",
+                      "gemini"
                     ]
                   },
                   "apiKey": {
@@ -17746,7 +17748,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -18037,7 +18040,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -18367,7 +18371,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -18908,7 +18913,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -19199,7 +19205,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -19513,7 +19520,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {

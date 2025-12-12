@@ -97,11 +97,9 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  // Check if API key is configured
+  // Check if API key is configured for any provider
   const { data: chatApiKeys = [] } = useChatApiKeysOptional();
-  const hasAnyApiKey = chatApiKeys.some(
-    (k) => k.provider === "anthropic" && k.secretId,
-  );
+  const hasAnyApiKey = chatApiKeys.some((k) => k.secretId);
 
   // Sync conversation ID with URL
   useEffect(() => {

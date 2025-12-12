@@ -82,7 +82,7 @@ export function parseDockerArgsToLocalConfig(
   // Check if first item is a flag (starts with -) or a command
   const firstItem = commandAndArgs[0];
 
-  if (firstItem.startsWith('-')) {
+  if (firstItem.startsWith("-")) {
     // First item is a flag, not a command - pass all items as args to image's entrypoint
     // Example: ["mcp/grafana", "-t", "stdio"] → command=undefined, arguments=["-t", "stdio"]
     return {

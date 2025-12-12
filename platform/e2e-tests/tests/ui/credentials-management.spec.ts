@@ -252,7 +252,7 @@ test.describe("Credentials Management", () => {
     await adminPage.getByText("Assign to 1 profile").click();
     await adminPage.waitForLoadState("networkidle");
 
-    // Verify tool call result using admin static credential
+    // Verify tool call result using editor static credential
     await verifyToolCallResultViaApi({
       request,
       expectedText: "Editor",

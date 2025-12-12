@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secretsmanager";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -24,6 +25,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             byosEnabled: z.boolean(),
             /** Vault KV version when BYOS is enabled (null if BYOS is disabled) */
             byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+            /** Vertex AI Gemini mode - when enabled, no API key needed for Gemini */
+            geminiVertexAiEnabled: z.boolean(),
           }),
         },
       },
@@ -34,6 +37,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
         byosEnabled: isByosEnabled(),
         byosVaultKvVersion: getByosVaultKvVersion(),
+        geminiVertexAiEnabled: isVertexAiEnabled(),
       }),
   );
 };

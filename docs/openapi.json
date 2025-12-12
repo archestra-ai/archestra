@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "0.6.31"
+    "version": "1.0.4"
   },
   "components": {
     "schemas": {
@@ -17410,7 +17410,8 @@
                         "type": "string",
                         "enum": [
                           "anthropic",
-                          "openai"
+                          "openai",
+                          "gemini"
                         ]
                       },
                       "secretId": {
@@ -17701,7 +17702,8 @@
                     "type": "string",
                     "enum": [
                       "anthropic",
-                      "openai"
+                      "openai",
+                      "gemini"
                     ]
                   },
                   "apiKey": {
@@ -17746,7 +17748,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -18037,7 +18040,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -18367,7 +18371,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -18908,7 +18913,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -19199,7 +19205,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -19513,7 +19520,8 @@
                       "type": "string",
                       "enum": [
                         "anthropic",
-                        "openai"
+                        "openai",
+                        "gemini"
                       ]
                     },
                     "secretId": {
@@ -24520,12 +24528,16 @@
                         "1",
                         "2"
                       ]
+                    },
+                    "geminiVertexAiEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "orchestrator-k8s-runtime",
                     "byosEnabled",
-                    "byosVaultKvVersion"
+                    "byosVaultKvVersion",
+                    "geminiVertexAiEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -24576,8 +24588,8 @@
             },
             "in": "header",
             "name": "x-goog-api-key",
-            "required": true,
-            "description": "API key for Google Gemini"
+            "required": false,
+            "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
           }
         ],
         "responses": {
@@ -24845,8 +24857,8 @@
             },
             "in": "header",
             "name": "x-goog-api-key",
-            "required": true,
-            "description": "API key for Google Gemini"
+            "required": false,
+            "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
           }
         ],
         "responses": {
@@ -25114,8 +25126,8 @@
             },
             "in": "header",
             "name": "x-goog-api-key",
-            "required": true,
-            "description": "API key for Google Gemini"
+            "required": false,
+            "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
           }
         ],
         "responses": {
@@ -25393,8 +25405,8 @@
             },
             "in": "header",
             "name": "x-goog-api-key",
-            "required": true,
-            "description": "API key for Google Gemini"
+            "required": false,
+            "description": "API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC)."
           }
         ],
         "responses": {

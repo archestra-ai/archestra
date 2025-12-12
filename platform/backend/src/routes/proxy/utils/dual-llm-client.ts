@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenAI } from "@google/genai";
+import type { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
 import type { DualLlmMessage, SupportedProvider } from "@/types";
+import { createGoogleGenAIClient } from "./gemini-client";
 
 /**
  * Abstract interface for LLM clients used in dual LLM pattern
@@ -228,20 +229,21 @@ Return only the JSON object, no other text.`;
 
 /**
  * Google Gemini implementation of DualLlmClient
+ * Supports both API key authentication and Vertex AI (ADC) mode
  */
 export class GeminiDualLlmClient implements DualLlmClient {
   private client: GoogleGenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "gemini-2.0-flash") {
-    logger.debug({ model }, "[dualLlmClient] Gemini: initializing client");
-    this.client = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        baseUrl: config.llm.gemini.baseUrl,
-        apiVersion: "v1beta",
-      },
-    });
+  /**
+   * Create a Gemini client for dual LLM.
+   * If Vertex AI is enabled in config, uses ADC; otherwise uses API key.
+   *
+   * @param apiKey - API key (optional when Vertex AI is enabled)
+   * @param model - Model to use
+   */
+  constructor(apiKey: string | undefined, model = "gemini-2.5-pro") {
+    this.client = createGoogleGenAIClient(apiKey, "[dualLlmClient] Gemini:");
     this.model = model;
   }
 
@@ -330,10 +332,13 @@ export class GeminiDualLlmClient implements DualLlmClient {
 
 /**
  * Factory function to create the appropriate LLM client
+ *
+ * @param provider - The LLM provider
+ * @param apiKey - API key (optional for Gemini when Vertex AI is enabled)
  */
 export function createDualLlmClient(
   provider: SupportedProvider,
-  apiKey: string,
+  apiKey: string | undefined,
 ): DualLlmClient {
   logger.debug(
     { provider },
@@ -341,10 +346,17 @@ export function createDualLlmClient(
   );
   switch (provider) {
     case "anthropic":
+      if (!apiKey) {
+        throw new Error("API key required for Anthropic dual LLM");
+      }
       return new AnthropicDualLlmClient(apiKey);
     case "openai":
+      if (!apiKey) {
+        throw new Error("API key required for OpenAI dual LLM");
+      }
       return new OpenAiDualLlmClient(apiKey);
     case "gemini":
+      // Gemini supports Vertex AI mode where apiKey may be undefined
       return new GeminiDualLlmClient(apiKey);
     default:
       logger.debug(

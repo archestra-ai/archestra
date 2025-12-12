@@ -217,6 +217,16 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+      vertexAi: {
+        enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
+        project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
+        location:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
+        // Path to service account JSON key file for authentication (optional)
+        // If not set, uses default ADC (Workload Identity, attached service account, etc.)
+        credentialsFile:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
+      },
     },
   },
   chat: {
@@ -231,6 +241,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
         "https://api.anthropic.com",
+    },
+    gemini: {
+      apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

@@ -129,7 +129,7 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.kubeconfig.secretName` - Name of secret containing kubeconfig file
 - `archestra.orchestrator.kubernetes.kubeconfig.mountPath` - Path where kubeconfig will be mounted
 - `archestra.orchestrator.kubernetes.serviceAccount.create` - Create a service account (default: true)
-- `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations to add to the service account
+- `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations for cloud integrations (e.g., [GKE Workload Identity](/docs/platform-supported-llm-providers#gke-with-workload-identity-recommended), AWS IRSA)
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
@@ -481,6 +481,47 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
+- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
+
+  - Default: `https://api.openai.com/v1`
+  - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_ANTHROPIC_BASE_URL`** - Override the Anthropic API base URL.
+
+  - Default: `https://api.anthropic.com`
+  - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
+
+  - Default: `https://generativelanguage.googleapis.com`
+  - Use this to point to your own proxy or other custom endpoints
+  - Note: This is only used when Vertex AI mode is disabled
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
+
+  - Default: `false`
+  - Set to `true` to use Vertex AI instead of the Google AI Studio API
+  - When enabled, uses Application Default Credentials (ADC) for authentication instead of API keys
+  - Requires `ARCHESTRA_GEMINI_VERTEX_AI_PROJECT` to be set
+  - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`** - Google Cloud project ID for Vertex AI.
+
+  - Required when: `ARCHESTRA_GEMINI_VERTEX_AI_ENABLED=true`
+  - Example: `my-gcp-project-123`
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
+
+  - Default: `us-central1`
+  - Example: `us-central1`, `europe-west1`, `asia-northeast1`
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
+
+  - Optional: Only needed when running outside of GCP or without Workload Identity
+  - Example: `/path/to/service-account-key.json`
+  - When not set, uses [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
+  - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 

@@ -1,5 +1,72 @@
 # Changelog
 
+## [1.0.4](https://github.com/archestra-ai/archestra/compare/platform-v1.0.3...platform-v1.0.4) (2025-12-12)
+
+
+### Bug Fixes
+
+* default model gemini-2.5-pro ([#1565](https://github.com/archestra-ai/archestra/issues/1565)) ([b85da57](https://github.com/archestra-ai/archestra/commit/b85da57d2e354059b1ed35b1b757f504c454de99))
+
+## [1.0.3](https://github.com/archestra-ai/archestra/compare/platform-v1.0.2...platform-v1.0.3) (2025-12-12)
+
+
+### Bug Fixes
+
+* **chat:** use Gemini model when Vertex AI is enabled without API keys ([1aadd4e](https://github.com/archestra-ai/archestra/commit/1aadd4ee0bfc1a6fcb9c58e56174b4a5ff70daa5))
+
+
+### Miscellaneous Chores
+
+* enable Vertex AI with GKE Workload Identity for staging env ([#1563](https://github.com/archestra-ai/archestra/issues/1563)) ([40ab754](https://github.com/archestra-ai/archestra/commit/40ab754f582efa4f226613d092100ff18d29d7d3))
+
+## [1.0.2](https://github.com/archestra-ai/archestra/compare/platform-v1.0.1...platform-v1.0.2) (2025-12-12)
+
+
+### Bug Fixes
+
+* address POST /api/chat when using vertex ADC auth method ([#1562](https://github.com/archestra-ai/archestra/issues/1562)) ([1f0f2c4](https://github.com/archestra-ai/archestra/commit/1f0f2c4a0a5d6d3cdcaae9573a6e768ce3a53ed4))
+* address width of delete chat api key dialog ([#1560](https://github.com/archestra-ai/archestra/issues/1560)) ([c3a7b37](https://github.com/archestra-ai/archestra/commit/c3a7b37d3137f8c5b9b8116cdfa01106ec70944a))
+
+## [1.0.1](https://github.com/archestra-ai/archestra/compare/platform-v1.0.0...platform-v1.0.1) (2025-12-12)
+
+
+### Features
+
+* support both Google AI Studio and Vertex AI implementations of Gemini API ([#1557](https://github.com/archestra-ai/archestra/issues/1557)) ([8230262](https://github.com/archestra-ai/archestra/commit/8230262268b819119f7b5424056f577ed2f7c468))
+* support gemini and openai in the chat ([#1548](https://github.com/archestra-ai/archestra/issues/1548)) ([d3d9734](https://github.com/archestra-ai/archestra/commit/d3d97344718a20a86d0ef525ebfeab36bafb7a25))
+
+
+### Bug Fixes
+
+* MCP docker args after image ([#1556](https://github.com/archestra-ai/archestra/issues/1556)) ([26e6111](https://github.com/archestra-ai/archestra/commit/26e6111d826025df8f2856a88b7e094a14655e2f))
+
+## [1.0.0](https://github.com/archestra-ai/archestra/compare/platform-v0.6.31...platform-v1.0.0) (2025-12-12)
+
+
+### Features
+
+* add Gemini support for LLM proxy ([#1546](https://github.com/archestra-ai/archestra/issues/1546)) ([edb5570](https://github.com/archestra-ai/archestra/commit/edb557088b700474f772720d0903dc3d357608b9))
+* introduce team admin role ([#1538](https://github.com/archestra-ai/archestra/issues/1538)) ([670fa48](https://github.com/archestra-ai/archestra/commit/670fa48c7748cc7ca17a1da0301eea2a0fa2744e))
+* Load /profiles and /tools on server-side like /logs ([#1434](https://github.com/archestra-ai/archestra/issues/1434)) ([45960ce](https://github.com/archestra-ai/archestra/commit/45960cec7857035146d10853075f78ad67e64b7a))
+
+
+### Bug Fixes
+
+* don't create MCP pod operator acc, read-only permissions ([#1551](https://github.com/archestra-ai/archestra/issues/1551)) ([8289a7b](https://github.com/archestra-ai/archestra/commit/8289a7b0a645a5c30c6bf5888d249dbe9d2c5009))
+* next: 16.0.9 -&gt; 16.0.10 ([#1552](https://github.com/archestra-ai/archestra/issues/1552)) ([d91170e](https://github.com/archestra-ai/archestra/commit/d91170e48051dcda2d04f7868cfe522111883b12))
+* serviceAccount for MCP with extended permissions ([#1539](https://github.com/archestra-ai/archestra/issues/1539)) ([6c06bef](https://github.com/archestra-ai/archestra/commit/6c06bef13274b3e04bf8b11744a39d751ec3438b))
+
+
+### Dependencies
+
+* bump next from 16.0.7 to 16.0.9 in /platform ([#1544](https://github.com/archestra-ai/archestra/issues/1544)) ([3aa6e45](https://github.com/archestra-ai/archestra/commit/3aa6e45edfc822443d8e0f04b4e72604963e02a1))
+
+
+### Miscellaneous Chores
+
+* prepare for v1.0.0 release ([a639d3f](https://github.com/archestra-ai/archestra/commit/a639d3f2bd7328c30acd59fa3841a3f256ef7be9))
+* show secret storage for credential ([#1547](https://github.com/archestra-ai/archestra/issues/1547)) ([549e906](https://github.com/archestra-ai/archestra/commit/549e90643ea30bc50424080b48db5e8ba9476667))
+
 ## [0.6.31](https://github.com/archestra-ai/archestra/compare/platform-v0.6.30...platform-v0.6.31) (2025-12-11)
 
 

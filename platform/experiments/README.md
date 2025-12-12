@@ -11,7 +11,7 @@ Options:
 --include-external-email  Include external email in mock Gmail data
 --include-malicious-email Include malicious email in mock Gmail data
 --stream                  Stream the response
---model <model>           The model to use (default: gpt-4o for openai, gemini-2.0-flash-exp for gemini)
+--model <model>           The model to use (default: gpt-4o for openai, gemini-2.5-pro for gemini)
 --provider <provider>     The provider to use (openai or gemini, default: openai)
 --agent-id <uuid>         The agent ID to use (optional, creates agent-specific proxy URL)
 --debug                   Print debug messages
@@ -31,7 +31,7 @@ pnpm cli-chat-with-guardrails --model gpt-4o-mini --stream
 
 ```bash
 pnpm cli-chat-with-guardrails --provider gemini
-pnpm cli-chat-with-guardrails --provider gemini --model gemini-2.0-flash-exp --stream
+pnpm cli-chat-with-guardrails --provider gemini --model gemini-2.5-pro --stream
 ```
 
 **Using with a specific agent:**

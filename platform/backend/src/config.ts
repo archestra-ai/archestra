@@ -220,7 +220,8 @@ export default {
       vertexAi: {
         enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
-        location: process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "global",
+        location:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
         // Path to service account JSON key file for authentication (optional)
         // If not set, uses default ADC (Workload Identity, attached service account, etc.)
         credentialsFile:

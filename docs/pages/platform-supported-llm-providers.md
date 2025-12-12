@@ -74,7 +74,7 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 |----------|----------|-------------|
 | `ARCHESTRA_GEMINI_VERTEX_AI_ENABLED` | Yes | Set to `true` to enable Vertex AI mode |
 | `ARCHESTRA_GEMINI_VERTEX_AI_PROJECT` | Yes | Your GCP project ID |
-| `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION` | No | GCP region (default: `global`) |
+| `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION` | No | GCP region (default: `us-central1`) |
 | `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` | No | Path to service account JSON key file |
 
 #### GKE with Workload Identity (Recommended)

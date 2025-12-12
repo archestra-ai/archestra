@@ -513,7 +513,7 @@ The following environment variables can be used to configure Archestra Platform:
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
 
-  - Default: `global`
+  - Default: `us-central1`
   - Example: `us-central1`, `europe-west1`, `asia-northeast1`
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.

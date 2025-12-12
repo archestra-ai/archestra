@@ -58,6 +58,14 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # Resource requests and limits for the Archestra container
+  # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  resources:
+    requests:
+      memory: "2Gi"
+    limits:
+      memory: "3Gi"
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers

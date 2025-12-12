@@ -56,8 +56,18 @@ import {
 } from "@/lib/chat-settings.query";
 
 type ChatApiKey = archestraApiTypes.GetChatApiKeysResponses["200"][number];
+type SupportedChatProvider =
+  archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
 
-const PROVIDER_CONFIG = {
+const PROVIDER_CONFIG: Record<
+  SupportedChatProvider,
+  {
+    name: string;
+    icon: string;
+    placeholder: string;
+    enabled: boolean;
+  }
+> = {
   anthropic: {
     name: "Anthropic",
     icon: "/icons/anthropic.png",
@@ -97,9 +107,8 @@ function ChatSettingsContent() {
 
   // Form states
   const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyProvider, setNewKeyProvider] = useState<
-    "anthropic" | "openai" | "gemini"
-  >("anthropic");
+  const [newKeyProvider, setNewKeyProvider] =
+    useState<SupportedChatProvider>("anthropic");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [newKeyIsDefault, setNewKeyIsDefault] = useState(false);
   const [editKeyName, setEditKeyName] = useState("");
@@ -267,10 +276,7 @@ function ChatSettingsContent() {
         accessorKey: "provider",
         header: "Provider",
         cell: ({ row }) => {
-          const config =
-            PROVIDER_CONFIG[
-              row.original.provider as keyof typeof PROVIDER_CONFIG
-            ];
+          const config = PROVIDER_CONFIG[row.original.provider];
           return (
             <div className="flex items-center gap-2">
               <Image

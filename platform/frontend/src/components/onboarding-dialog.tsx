@@ -179,7 +179,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
               <div>
                 <h3 className="font-semibold">Chat Setup</h3>
                 <p className="text-sm text-muted-foreground">
-                  To use the built-in Chat feature, an Anthropic API key is
+                  To use the built-in Chat feature, an LLM provider API key is
                   required.
                 </p>
               </div>

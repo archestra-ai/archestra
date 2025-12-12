@@ -644,7 +644,10 @@ describe("TeamModel", () => {
         expect.fail("Expected checkTeamAccess to throw an error");
       } catch (error) {
         expect(error).toHaveProperty("statusCode", 403);
-        expect(error).toHaveProperty("message", "Not authorized to access this team");
+        expect(error).toHaveProperty(
+          "message",
+          "Not authorized to access this team",
+        );
       }
     });
   });

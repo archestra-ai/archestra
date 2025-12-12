@@ -232,6 +232,12 @@ export default {
         process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
         "https://api.anthropic.com",
     },
+    gemini: {
+      apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
+    },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
       remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS

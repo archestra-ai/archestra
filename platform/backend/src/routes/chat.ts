@@ -109,6 +109,9 @@ async function getSmartDefaultModel(
   if (config.chat.openai.apiKey) {
     return "gpt-4o";
   }
+  if (config.chat.gemini.apiKey) {
+    return "gemini-2.0-flash-exp";
+  }
 
   // Ultimate fallback - use configured default
   return config.chat.defaultModel;
@@ -261,6 +264,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKeySource = "environment";
         } else if (provider === "openai" && config.chat.openai.apiKey) {
           providerApiKey = config.chat.openai.apiKey;
+          apiKeySource = "environment";
+        } else if (provider === "gemini" && config.chat.gemini.apiKey) {
+          providerApiKey = config.chat.gemini.apiKey;
           apiKeySource = "environment";
         }
       }

@@ -20,6 +20,7 @@ type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
 interface TestFixtures {
   goToPage: typeof goToPage;
   makeRandomString: typeof makeRandomString;
+  extractCookieHeaders: (page: Page) => Promise<string>;
   /** Page authenticated as admin (same as default `page`) */
   adminPage: Page;
   /** Page authenticated as editor */
@@ -34,7 +35,8 @@ interface TestFixtures {
   goToMemberPage: GoToPageFn;
 }
 
-const goToPage = (page: Page, path = "") => page.goto(`${UI_BASE_URL}${path}`);
+export const goToPage = async (page: Page, path = "") =>
+  page.goto(`${UI_BASE_URL}${path}`);
 
 const makeRandomString = (length = 10, prefix = "") =>
   `${prefix}-${Math.random()
@@ -60,6 +62,14 @@ export const test = base.extend<TestFixtures>({
   },
   makeRandomString: async ({}, use) => {
     await use(makeRandomString);
+  },
+  extractCookieHeaders: async ({}, use) => {
+    await use(async (page: Page) => {
+      const cookies = await page.context().cookies();
+      return cookies
+        .map((cookie) => `${cookie.name}=${cookie.value}`)
+        .join("; ");
+    });
   },
   /**
    * Admin page - same auth as default `page` fixture
@@ -108,4 +118,6 @@ export const test = base.extend<TestFixtures>({
   goToMemberPage: async ({ memberPage }, use) => {
     await use((path = "") => memberPage.goto(`${UI_BASE_URL}${path}`));
   },
+
+  // here
 });

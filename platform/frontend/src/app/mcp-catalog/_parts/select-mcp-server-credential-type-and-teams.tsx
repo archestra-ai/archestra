@@ -15,6 +15,7 @@ import { useFeatureFlag } from "@/lib/features.hook";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
+import { E2eTestId } from "../../../../../shared";
 
 const CredentialType = {
   Personal: "personal",
@@ -151,6 +152,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
               value={CredentialType.Personal}
               id="r1"
               disabled={isPersonalDisabled}
+              data-testid={E2eTestId.SelectCredentialTypePersonal}
             />
             <Label
               htmlFor="r1"
@@ -174,6 +176,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
               value={CredentialType.Team}
               id="r2"
               disabled={isTeamDisabled}
+              data-testid={E2eTestId.SelectCredentialTypeTeam}
             />
             <Label
               htmlFor="r2"
@@ -212,7 +215,9 @@ export function SelectMcpServerCredentialTypeAndTeams({
                 }
               />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent
+              data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
+            >
               {availableTeams?.map((team) => (
                 <SelectItem key={team.id} value={team.id}>
                   {team.name}

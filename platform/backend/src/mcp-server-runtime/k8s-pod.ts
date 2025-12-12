@@ -300,6 +300,8 @@ export default class K8sPod {
         }),
       },
       spec: {
+        // Fast shutdown for stateless MCP servers (default is 30s)
+        terminationGracePeriodSeconds: 5,
         // Use specified service account if provided in localConfig
         // This allows MCP servers that need Kubernetes API access (like the K8s MCP server)
         // to use a dedicated service account with appropriate permissions
@@ -880,7 +882,7 @@ export default class K8sPod {
   }
 
   /**
-   * Stop the pod
+   * Stop the pod (fire-and-forget - K8s handles cleanup in background)
    */
   async stopPod(): Promise<void> {
     try {
@@ -889,37 +891,7 @@ export default class K8sPod {
         name: this.podName,
         namespace: this.namespace,
       });
-
-      // Wait for pod to actually terminate (up to 30 seconds)
-      const maxWaitTime = 30000; // 30 seconds
-      const pollInterval = 1000; // 1 second
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < maxWaitTime) {
-        try {
-          // Try to get the pod - if it doesn't exist, we're done
-          await this.k8sApi.readNamespacedPod({
-            name: this.podName,
-            namespace: this.namespace,
-          });
-          // Pod still exists, wait and retry
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-        } catch (error: unknown) {
-          // Pod not found (404) means it's been deleted
-          if (error instanceof Error && error.message.includes("404")) {
-            logger.info(`Pod ${this.podName} successfully terminated`);
-            this.state = "not_created";
-            return;
-          }
-          // Other errors, rethrow
-          throw error;
-        }
-      }
-
-      // Timeout reached but pod still exists
-      logger.warn(
-        `Pod ${this.podName} deletion timeout after ${maxWaitTime}ms, may still be terminating`,
-      );
+      logger.info(`Pod ${this.podName} deletion initiated`);
       this.state = "not_created";
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("404")) {

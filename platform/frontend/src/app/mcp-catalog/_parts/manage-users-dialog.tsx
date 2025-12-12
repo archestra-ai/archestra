@@ -112,7 +112,7 @@ export function ManageUsersDialog({
                       data-server-id={mcpServer.id}
                     >
                       <TableCell className="font-medium">
-                        <span data-testid={E2eTestId.CredentialOwnerEmail}>
+                        <span data-testid={E2eTestId.CredentialOwner}>
                           {mcpServer.teamId
                             ? mcpServer.teamDetails?.name || "Team"
                             : mcpServer.ownerEmail || "Unknown"}

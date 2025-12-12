@@ -102,6 +102,7 @@ export function TokenSelect({
             key={server.id}
             value={server.id}
             className="cursor-pointer"
+            data-testid={E2eTestId.StaticCredentialToUse}
           >
             <div className="flex flex-col gap-1">
               <div className="flex gap-1 flex-wrap text-xs">

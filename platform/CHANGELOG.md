@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.4](https://github.com/archestra-ai/archestra/compare/platform-v1.0.3...platform-v1.0.4) (2025-12-12)
+
+
+### Bug Fixes
+
+* default model gemini-2.5-pro ([#1565](https://github.com/archestra-ai/archestra/issues/1565)) ([b85da57](https://github.com/archestra-ai/archestra/commit/b85da57d2e354059b1ed35b1b757f504c454de99))
+
+## [1.0.3](https://github.com/archestra-ai/archestra/compare/platform-v1.0.2...platform-v1.0.3) (2025-12-12)
+
+
+### Bug Fixes
+
+* **chat:** use Gemini model when Vertex AI is enabled without API keys ([1aadd4e](https://github.com/archestra-ai/archestra/commit/1aadd4ee0bfc1a6fcb9c58e56174b4a5ff70daa5))
+
+
+### Miscellaneous Chores
+
+* enable Vertex AI with GKE Workload Identity for staging env ([#1563](https://github.com/archestra-ai/archestra/issues/1563)) ([40ab754](https://github.com/archestra-ai/archestra/commit/40ab754f582efa4f226613d092100ff18d29d7d3))
+
+## [1.0.2](https://github.com/archestra-ai/archestra/compare/platform-v1.0.1...platform-v1.0.2) (2025-12-12)
+
+
+### Bug Fixes
+
+* address POST /api/chat when using vertex ADC auth method ([#1562](https://github.com/archestra-ai/archestra/issues/1562)) ([1f0f2c4](https://github.com/archestra-ai/archestra/commit/1f0f2c4a0a5d6d3cdcaae9573a6e768ce3a53ed4))
+* address width of delete chat api key dialog ([#1560](https://github.com/archestra-ai/archestra/issues/1560)) ([c3a7b37](https://github.com/archestra-ai/archestra/commit/c3a7b37d3137f8c5b9b8116cdfa01106ec70944a))
+
 ## [1.0.1](https://github.com/archestra-ai/archestra/compare/platform-v1.0.0...platform-v1.0.1) (2025-12-12)
 
 

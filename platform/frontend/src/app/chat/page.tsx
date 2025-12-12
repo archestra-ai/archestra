@@ -51,6 +51,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
 import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
+import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -99,7 +100,10 @@ export default function ChatPage() {
 
   // Check if API key is configured for any provider
   const { data: chatApiKeys = [] } = useChatApiKeysOptional();
-  const hasAnyApiKey = chatApiKeys.some((k) => k.secretId);
+  const { data: features } = useFeatures();
+  // Vertex AI Gemini mode doesn't require an API key (uses ADC)
+  const hasAnyApiKey =
+    chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
 
   // Sync conversation ID with URL
   useEffect(() => {

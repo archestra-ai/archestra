@@ -109,7 +109,7 @@ Metrics, traces and logs allowing to come to a conclusion about per-org, per-age
 ## 👍 Ready for production
 
 1. ✅ Lightning fast, 45ms at 95p: [Performance & Latency benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
-2. ✅ [Terraform provider](https://github.com/archestra-ai/terraform-provider-archestra)
+2. ✅ [Terraform provider →](https://github.com/archestra-ai/terraform-provider-archestra)
 3. ✅ [Helm Chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
 
 ## 🚀 Quickstart

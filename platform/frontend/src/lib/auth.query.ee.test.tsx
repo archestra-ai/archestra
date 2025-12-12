@@ -1,4 +1,3 @@
-import React from "react";
 import { archestraApiSdk, type Permissions } from "@shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";

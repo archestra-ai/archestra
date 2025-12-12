@@ -36,6 +36,7 @@ When a chat request is made, the system determines which API key to use in this 
 | --------- | ----------- |
 | Anthropic | Supported   |
 | OpenAI    | Coming Soon |
+| Gemini    | Coming Soon |
 
 ## Setting Up API Keys
 

@@ -70,6 +70,12 @@ const PROVIDER_CONFIG = {
     placeholder: "sk-...",
     enabled: false, // Coming soon
   },
+  gemini: {
+    name: "Gemini",
+    icon: "/icons/gemini.png",
+    placeholder: "AIza...",
+    enabled: false, // Coming soon
+  },
 } as const;
 
 function ChatSettingsContent() {

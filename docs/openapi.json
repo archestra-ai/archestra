@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.1"
+    "version": "1.0.2"
   },
   "components": {
     "schemas": {
@@ -24528,12 +24528,16 @@
                         "1",
                         "2"
                       ]
+                    },
+                    "geminiVertexAiEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "orchestrator-k8s-runtime",
                     "byosEnabled",
-                    "byosVaultKvVersion"
+                    "byosVaultKvVersion",
+                    "geminiVertexAiEnabled"
                   ],
                   "additionalProperties": false
                 }

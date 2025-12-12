@@ -7733,6 +7733,7 @@ export type GetFeaturesResponses = {
         'orchestrator-k8s-runtime': boolean;
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
+        geminiVertexAiEnabled: boolean;
     };
 };
 

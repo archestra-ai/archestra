@@ -54,7 +54,7 @@ export function useCreateChatApiKey() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
-      provider: "anthropic" | "openai";
+      provider: "anthropic" | "openai" | "gemini";
       apiKey: string;
       isOrganizationDefault?: boolean;
     }) => {

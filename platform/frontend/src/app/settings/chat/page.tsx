@@ -74,7 +74,7 @@ const PROVIDER_CONFIG = {
     name: "Gemini",
     icon: "/icons/gemini.png",
     placeholder: "AIza...",
-    enabled: false, // Coming soon
+    enabled: true,
   },
 } as const;
 
@@ -97,9 +97,9 @@ function ChatSettingsContent() {
 
   // Form states
   const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyProvider, setNewKeyProvider] = useState<"anthropic" | "openai">(
-    "anthropic",
-  );
+  const [newKeyProvider, setNewKeyProvider] = useState<
+    "anthropic" | "openai" | "gemini"
+  >("anthropic");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [newKeyIsDefault, setNewKeyIsDefault] = useState(false);
   const [editKeyName, setEditKeyName] = useState("");
@@ -476,7 +476,7 @@ function ChatSettingsContent() {
               <Select
                 value={newKeyProvider}
                 onValueChange={(v) =>
-                  setNewKeyProvider(v as "anthropic" | "openai")
+                  setNewKeyProvider(v as "anthropic" | "openai" | "gemini")
                 }
               >
                 <SelectTrigger>

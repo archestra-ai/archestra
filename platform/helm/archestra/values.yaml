@@ -12,6 +12,20 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
+  # Annotations to add to pods created by the Deployment
+  # This is useful for integrations that require pod-level annotations, such as:
+  # - Service mesh sidecars (Istio, Linkerd)
+  # - Prometheus scraping
+  # - Cloud provider features (AWS IAM roles, GKE Workload Identity)
+  # - Secrets injection (Vault agent, External Secrets Operator)
+  # Example:
+  #   podAnnotations:
+  #     prometheus.io/scrape: "true"
+  #     prometheus.io/port: "9050"
+  #     vault.hashicorp.com/agent-inject: "true"
+  #     sidecar.istio.io/inject: "true"
+  podAnnotations: {}
+
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.

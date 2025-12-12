@@ -134,7 +134,11 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
 
-#### Service & Ingress Configuration
+#### Service, Deployment, & Ingress Configuration
+
+**Deployment Settings**:
+
+- `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
 
 **Service Settings**:
 

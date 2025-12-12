@@ -56,6 +56,10 @@ spec:
     metadata:
       labels:
         {{- include "archestra-platform.labels" . | nindent 8 }}
+      {{- with .Values.archestra.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       # Init container to wait for PostgreSQL to be ready before starting the application

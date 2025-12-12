@@ -32,11 +32,11 @@ When a chat request is made, the system determines which API key to use in this 
 
 ## Supported Providers
 
-| Provider  | Status    | Example Models                        |
-| --------- | --------- | ------------------------------------- |
-| Anthropic | Supported | Claude Opus, Claude Sonnet, Claude Haiku |
-| OpenAI    | Supported | GPT-4o, GPT-4 Turbo, o1, o3           |
-| Gemini    | Supported | Gemini 2.0 Flash, Gemini Pro          |
+| Provider  | Status    |
+| --------- | --------- |
+| Anthropic | Supported |
+| OpenAI    | Supported |
+| Gemini    | Supported |
 
 The system automatically detects which provider to use based on the model name selected for a conversation.
 
@@ -46,7 +46,7 @@ Navigate to **Settings → Chat** to manage API keys:
 
 1. Click **Add API Key**
 2. Enter a descriptive name
-3. Select the provider (Anthropic, OpenAI, or Gemini)
+3. Select the provider
 4. Paste your API key
 5. Optionally check "Set as organization default"
 

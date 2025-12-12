@@ -9,6 +9,7 @@ archestra:
   env:
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/v1"
     ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080"
+    ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080"
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"

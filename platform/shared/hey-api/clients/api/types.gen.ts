@@ -11180,6 +11180,7 @@ export type GetMcpServersResponses = {
             name: string;
             createdAt: string;
         } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
 
@@ -11300,6 +11301,7 @@ export type InstallMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
 
@@ -11482,6 +11484,7 @@ export type GetMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
 

@@ -37047,6 +37047,15 @@
                           "createdAt"
                         ],
                         "additionalProperties": false
+                      },
+                      "secretStorageType": {
+                        "type": "string",
+                        "enum": [
+                          "vault",
+                          "external_vault",
+                          "database",
+                          "none"
+                        ]
                       }
                     },
                     "required": [
@@ -37496,6 +37505,15 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
                     }
                   },
                   "required": [
@@ -37875,6 +37893,15 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
                     }
                   },
                   "required": [

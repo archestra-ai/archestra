@@ -15,6 +15,15 @@ export const LocalMcpServerInstallationStatusSchema = z.enum([
   "error",
 ]);
 
+export const SecretStorageTypeSchema = z.enum([
+  "vault",
+  "external_vault",
+  "database",
+  "none",
+]);
+
+export type SecretStorageType = z.infer<typeof SecretStorageTypeSchema>;
+
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
@@ -40,6 +49,7 @@ export const SelectMcpServerSchema = createSelectSchema(
     .nullable()
     .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
+  secretStorageType: SecretStorageTypeSchema.optional(),
 });
 
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)

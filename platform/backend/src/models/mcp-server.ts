@@ -4,11 +4,36 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { secretManager } from "@/secretsmanager";
-import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import type {
+  InsertMcpServer,
+  McpServer,
+  SecretStorageType,
+  UpdateMcpServer,
+} from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
+
+/**
+ * Compute the secret storage type based on secretId and secret flags.
+ */
+function computeSecretStorageType(
+  secretId: string | null,
+  isVault: boolean | null,
+  isByosVault: boolean | null,
+): SecretStorageType {
+  if (!secretId) {
+    return "none";
+  }
+  if (isVault) {
+    return "vault";
+  }
+  if (isByosVault) {
+    return "external_vault";
+  }
+  return "database";
+}
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -100,6 +125,8 @@ class McpServerModel {
         ownerEmail: schema.usersTable.email,
         catalogName: schema.internalMcpCatalogTable.name,
         teamName: schema.teamsTable.name,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -113,6 +140,10 @@ class McpServerModel {
       .leftJoin(
         schema.teamsTable,
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
       )
       .$dynamic();
 
@@ -162,6 +193,13 @@ class McpServerModel {
           }
         : null;
 
+      // Compute secret storage type
+      const secretStorageType = computeSecretStorageType(
+        result.server.secretId,
+        result.secretIsVault,
+        result.secretIsByosVault,
+      );
+
       return {
         ...result.server,
         ownerEmail: result.ownerEmail,
@@ -169,6 +207,7 @@ class McpServerModel {
         users: userDetails.map((u) => u.userId),
         userDetails,
         teamDetails,
+        secretStorageType,
       };
     });
 
@@ -197,6 +236,8 @@ class McpServerModel {
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
         teamName: schema.teamsTable.name,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -206,6 +247,10 @@ class McpServerModel {
       .leftJoin(
         schema.teamsTable,
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
       )
       .where(eq(schema.mcpServersTable.id, id));
 
@@ -224,12 +269,20 @@ class McpServerModel {
         }
       : null;
 
+    // Compute secret storage type
+    const secretStorageType = computeSecretStorageType(
+      result.server.secretId,
+      result.secretIsVault,
+      result.secretIsByosVault,
+    );
+
     return {
       ...result.server,
       ownerEmail: result.ownerEmail,
       users: userDetails.map((u) => u.userId),
       userDetails,
       teamDetails,
+      secretStorageType,
     };
   }
 

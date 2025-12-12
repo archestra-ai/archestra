@@ -122,7 +122,7 @@ archestra:
       # use the default service account with no permissions, maintaining proper isolation
       mcpServerRbac:
         # Specifies whether RBAC resources (ServiceAccount, Role, RoleBinding) should be created
-        create: true
+        create: false
 
   # Service configuration
   service:

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
@@ -226,6 +227,108 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Google Gemini implementation of DualLlmClient
+ */
+export class GeminiDualLlmClient implements DualLlmClient {
+  private client: GoogleGenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "gemini-2.0-flash") {
+    logger.debug({ model }, "[dualLlmClient] Gemini: initializing client");
+    this.client = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        baseUrl: config.llm.gemini.baseUrl,
+        apiVersion: "v1beta",
+      },
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Gemini: starting chat completion",
+    );
+    // Convert DualLlmMessage format to Gemini Content format
+    const contents = messages.map((msg) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }));
+
+    const response = await this.client.models.generateContent({
+      model: this.model,
+      contents,
+      config: {
+        temperature,
+      },
+    });
+
+    // Extract text from the response
+    const firstCandidate = response.candidates?.[0];
+    const textBlock = firstCandidate?.content?.parts?.find(
+      (p) => p.text && p.text !== "",
+    );
+    const content = textBlock?.text?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Gemini: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Gemini: starting chat with schema",
+    );
+    // Convert DualLlmMessage format to Gemini Content format
+    const contents = messages.map((msg) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }));
+
+    // Gemini supports structured output via response schema
+    const response = await this.client.models.generateContent({
+      model: this.model,
+      contents,
+      config: {
+        temperature,
+        responseSchema: schema.schema,
+        responseMimeType: "application/json",
+      },
+    });
+
+    const content =
+      response.candidates?.[0].content?.parts?.find(
+        (p) => p.text && p.text !== "",
+      )?.text || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Gemini: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
  * Factory function to create the appropriate LLM client
  */
 export function createDualLlmClient(
@@ -241,11 +344,13 @@ export function createDualLlmClient(
       return new AnthropicDualLlmClient(apiKey);
     case "openai":
       return new OpenAiDualLlmClient(apiKey);
+    case "gemini":
+      return new GeminiDualLlmClient(apiKey);
     default:
       logger.debug(
         { provider },
         "[dualLlmClient] createDualLlmClient: unsupported provider",
       );
-      throw new Error(`Unsupported provider: ${provider}`);
+      throw new Error(`Unsupported provider for Dual LLM: ${provider}`);
   }
 }

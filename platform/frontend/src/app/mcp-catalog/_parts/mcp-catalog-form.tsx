@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { useGetSecret } from "@/lib/secrets.query";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -53,10 +54,15 @@ export function McpCatalogForm({
   serverType = "remote",
   footer,
 }: McpCatalogFormProps) {
+  // Fetch local config secret if it exists
+  const { data: localConfigSecret } = useGetSecret(
+    initialValues?.localConfigSecretId ?? null,
+  );
+
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialValues
-      ? transformCatalogItemToFormValues(initialValues)
+      ? transformCatalogItemToFormValues(initialValues, undefined)
       : {
           name: "",
           serverType: serverType,
@@ -118,9 +124,13 @@ export function McpCatalogForm({
   }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
 
   // Reset form when initial values change (for edit mode)
+  // Also reset when localConfigSecret loads (if it exists)
   useEffect(() => {
     if (initialValues) {
-      const transformedValues = transformCatalogItemToFormValues(initialValues);
+      const transformedValues = transformCatalogItemToFormValues(
+        initialValues,
+        localConfigSecret ?? undefined,
+      );
       form.reset(transformedValues);
       // Initialize OAuth BYOS state from transformed values (parsed vault references)
       // Note: teamId cannot be derived from path, so we leave it null (user can reselect if needed)
@@ -132,7 +142,7 @@ export function McpCatalogForm({
         transformedValues.oauthClientSecretVaultKey || null,
       );
     }
-  }, [initialValues, form]);
+  }, [initialValues, localConfigSecret, form]);
 
   return (
     <Form {...form}>

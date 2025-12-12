@@ -188,7 +188,15 @@ export function EnvironmentVariablesFormField<
                   render={({ field }) => (
                     <FormItem>
                       <Select
-                        onValueChange={field.onChange}
+                        onValueChange={(newType) => {
+                          field.onChange(newType);
+                          // Clear value when type changes
+                          form.setValue(
+                            `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
+                            // biome-ignore lint/suspicious/noExplicitAny: Generic field types require any for setValue
+                            "" as any,
+                          );
+                        }}
                         value={field.value}
                       >
                         <FormControl>

@@ -53,6 +53,7 @@ const SafetyRatingSchema = z
     probability: HarmProbabilitySchema,
     blocked: z
       .boolean()
+      .optional()
       .describe("Was this content blocked because of this rating?"),
   })
   .describe(`https://ai.google.dev/api/generate-content#v1beta.SafetyRating`);
@@ -117,9 +118,11 @@ const CitationMetadataSchema = z
           uri: z.string().optional(),
           license: z.string().optional(),
         })
+        .optional()
         .describe(`https://ai.google.dev/api/generate-content#CitationSource`),
     ),
   })
+  .optional()
   .describe(`https://ai.google.dev/api/generate-content#citationmetadata`);
 
 export const FinishReasonSchema = z
@@ -156,14 +159,14 @@ export const CandidateSchema = z
   .object({
     content: ContentSchema,
     finishReason: FinishReasonSchema,
-    safetyRatings: z.array(SafetyRatingSchema),
-    citationMetadata: CitationMetadataSchema,
-    tokenCount: z.number(),
-    groundingAttributions: z.array(z.any()),
-    groundingMetadata: z.any(),
-    avgLogprobs: z.number(),
-    logprobsResult: z.any(),
-    urlContextMetadata: z.any(),
+    safetyRatings: z.array(SafetyRatingSchema).optional(),
+    citationMetadata: CitationMetadataSchema.optional(),
+    tokenCount: z.number().optional(),
+    groundingAttributions: z.array(z.any()).optional(),
+    groundingMetadata: z.any().optional(),
+    avgLogprobs: z.number().optional(),
+    logprobsResult: z.any().optional(),
+    urlContextMetadata: z.any().optional(),
     index: z
       .number()
       .describe("Index of the candidate in the list of response candidates."),
@@ -211,15 +214,15 @@ const ModalityTokenCountSchema = z
 export const UsageMetadataSchema = z
   .object({
     promptTokenCount: z.number().optional(),
-    cachedContentTokenCount: z.number(),
+    cachedContentTokenCount: z.number().optional(),
     candidatesTokenCount: z.number().optional(),
-    toolUsePromptTokenCount: z.number(),
-    thoughtsTokenCount: z.number(),
-    totalTokenCount: z.number(),
-    promptTokensDetails: z.array(ModalityTokenCountSchema),
-    cacheTokensDetails: z.array(ModalityTokenCountSchema),
-    candidatesTokensDetails: z.array(ModalityTokenCountSchema),
-    toolUsePromptTokensDetails: z.array(ModalityTokenCountSchema),
+    toolUsePromptTokenCount: z.number().optional(),
+    thoughtsTokenCount: z.number().optional(),
+    totalTokenCount: z.number().optional(),
+    promptTokensDetails: z.array(ModalityTokenCountSchema).optional(),
+    cacheTokensDetails: z.array(ModalityTokenCountSchema).optional(),
+    candidatesTokensDetails: z.array(ModalityTokenCountSchema).optional(),
+    toolUsePromptTokensDetails: z.array(ModalityTokenCountSchema).optional(),
   })
   .describe(`https://ai.google.dev/api/generate-content#UsageMetadata`);
 
@@ -231,7 +234,7 @@ export const GenerateContentRequestSchema = z
         "The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request",
       ),
     tools: z
-      .array(ToolSchema)
+      .union([z.array(ToolSchema), ToolSchema])
       .optional()
       .describe(
         "A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.",
@@ -253,6 +256,15 @@ export const GenerateContentRequestSchema = z
       .describe(
         "The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}",
       ),
+
+    config: z
+      .object({
+        tools: z.union([z.array(ToolSchema), ToolSchema]).optional(),
+        toolConfig: ToolConfigSchema.optional().describe(
+          "Tool configuration for any Tool specified in the request.",
+        ),
+      })
+      .optional(),
   })
   .describe(`https://ai.google.dev/api/generate-content#request-body`);
 
@@ -261,15 +273,17 @@ export const GenerateContentResponseSchema = z
     candidates: z
       .array(CandidateSchema)
       .describe("Candidate responses from the model"),
-    promptFeedback: PromptFeedbackSchema.describe(
+    promptFeedback: PromptFeedbackSchema.optional().describe(
       "Returns the prompt's feedback related to the content filters",
     ),
-    usageMetadata: UsageMetadataSchema.describe(
+    usageMetadata: UsageMetadataSchema.optional().describe(
       "Metadata on the generation requests' token usage",
     ),
     modelVersion: z
       .string()
+      .optional()
       .describe("The model version used to generate the response."),
+    responseId: z.string().optional().describe("The unique response ID."),
   })
   .describe(`
 Response from the model supporting multiple candidate responses.

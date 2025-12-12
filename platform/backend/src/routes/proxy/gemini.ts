@@ -1,15 +1,32 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { GoogleGenAI } from "@google/genai";
+import {
+  type GenerateContentParameters,
+  type GenerateContentResponse,
+  GoogleGenAI,
+} from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getObservableGenAI } from "@/llm-metrics";
+import config from "@/config";
+import getDefaultPricing from "@/default-model-prices";
+import {
+  getObservableGenAI,
+  reportBlockedTools,
+  reportLLMCost,
+  reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
+} from "@/llm-metrics";
 import logger from "@/logging";
-import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  TokenPriceModel,
+} from "@/models";
 
 import {
   type Agent,
-  ApiError,
   constructResponseSchema,
   ErrorResponsesSchema,
   Gemini,
@@ -23,6 +40,7 @@ import * as utils from "./utils";
  * the route
  */
 const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // WEIRD FIX : put v1beta at end fix n8n authentication
   const API_PREFIX = `${PROXY_API_PREFIX}/gemini`;
 
   /**
@@ -31,8 +49,29 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://generativelanguage.googleapis.com",
-    prefix: API_PREFIX,
-    rewritePrefix: "/v1beta",
+    prefix: `${API_PREFIX}/v1beta`,
+    rewritePrefix: "/v1",
+    /**
+     * Exclude generateContent and streamGenerateContent routes since we handle them below
+     */
+    preHandler: (request, _reply, next) => {
+      if (
+        request.method === "POST" &&
+        (request.url.includes(":generateContent") ||
+          request.url.includes(":streamGenerateContent"))
+      ) {
+        // Skip proxy for these routes - we handle them below
+        next(new Error("skip"));
+      } else {
+        next();
+      }
+    },
+  });
+
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://generativelanguage.googleapis.com",
+    prefix: `${API_PREFIX}/:agentId/v1beta`,
+    rewritePrefix: "/v1",
     /**
      * Exclude generateContent and streamGenerateContent routes since we handle them below
      */
@@ -71,6 +110,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     );
 
     let resolvedAgent: Agent;
+    if (body.tools && !Array.isArray(body.tools)) {
+      body.tools = [body.tools];
+    }
+    const tools = Array.isArray(body.tools) ? body.tools : [];
     if (agentId) {
       // If agentId provided via URL, validate it exists
       logger.debug({ agentId }, "[GeminiProxy] Resolving explicit agent by ID");
@@ -107,7 +150,13 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     );
     const { "x-goog-api-key": geminiApiKey } = headers;
     const genAI = getObservableGenAI(
-      new GoogleGenAI({ apiKey: geminiApiKey }),
+      new GoogleGenAI({
+        apiKey: geminiApiKey,
+        httpOptions: {
+          baseUrl: config.llm.gemini.baseUrl,
+          apiVersion: "v1beta",
+        },
+      }),
       resolvedAgent,
       externalAgentId,
     );
@@ -144,14 +193,63 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[GeminiProxy] Limit check passed");
 
-      // TODO: Persist tools if present
-      // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
+      // Persist tools if present (for tracking - clients handle tool execution via MCP Gateway)
+      await utils.tools.persistTools(
+        (tools || [])
+          .filter((tool) => tool.functionDeclarations !== undefined)
+          .flatMap((tool) =>
+            (tool.functionDeclarations || []).map((fd) => ({
+              toolName: fd.name ?? "unnamed_tool",
+              toolParameters: fd.parameters || {},
+              toolDescription: fd.description || "",
+            })),
+          ),
+        resolvedAgentId,
+      );
 
-      // TODO: Inject assigned MCP tools (assigned tools take priority)
-      // const _mergedTools = await injectTools(
-      //   body.tools,
-      //   resolvedAgentId,
-      // );
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
+
+      const baselineModel = modelName;
+      let optimizedModelName = baselineModel;
+
+      // Optimize model selection for cost using dynamic rules
+      const hasTools = mergedTools.length > 0;
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        body.contents || [],
+        "gemini",
+        hasTools,
+      );
+
+      if (optimizedModel) {
+        optimizedModelName = optimizedModel;
+        fastify.log.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        fastify.log.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
+      }
+
+      // Ensure TokenPrice records exist for both baseline and optimized models
+      const baselinePricing = getDefaultPricing(baselineModel);
+      await TokenPriceModel.createIfNotExists(baselineModel, {
+        provider: "gemini",
+        ...baselinePricing,
+      });
+
+      if (optimizedModelName !== baselineModel) {
+        const optimizedPricing = getDefaultPricing(optimizedModelName);
+        await TokenPriceModel.createIfNotExists(optimizedModelName, {
+          provider: "gemini",
+          ...optimizedPricing,
+        });
+      }
 
       // Convert to common format and evaluate trusted data policies
       logger.debug(
@@ -167,18 +265,64 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       logger.debug(
-        { resolvedAgentId },
+        {
+          resolvedAgentId,
+          considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        },
         "[GeminiProxy] Evaluating trusted data policies",
       );
-      const { toolResultUpdates, contextIsTrusted: _contextIsTrusted } =
+      const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
           commonMessages,
           resolvedAgentId,
           geminiApiKey,
-          /**
-           * TODO: gemini isn't properly supported yet...
-           */
-          "openai",
+          "gemini",
+          resolvedAgent.considerContextUntrusted,
+          stream
+            ? () => {
+                // Send initial indicator when dual LLM starts (streaming only)
+                const startChunk: Gemini.Types.GenerateContentResponse = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [{ text: "Analyzing with Dual LLM:\n\n" }],
+                        role: "model",
+                      },
+                      finishReason: undefined,
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: optimizedModelName,
+                };
+                reply.raw.write(`data: ${JSON.stringify(startChunk)}\n\n`);
+              }
+            : undefined,
+          stream
+            ? (progress) => {
+                // Stream Q&A progress with options
+                const optionsText = progress.options
+                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .join("\n");
+                const progressChunk: Gemini.Types.GenerateContentResponse = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [
+                          {
+                            text: `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+                          },
+                        ],
+                        role: "model",
+                      },
+                      finishReason: undefined,
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: optimizedModelName,
+                };
+                reply.raw.write(`data: ${JSON.stringify(progressChunk)}\n\n`);
+              }
+            : undefined,
         );
 
       // Apply updates back to Gemini contents
@@ -186,199 +330,573 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { updateCount: Object.keys(toolResultUpdates).length },
         "[GeminiProxy] Applying tool result updates",
       );
-      const filteredContents = utils.adapters.gemini.applyUpdates(
+      let filteredContents = utils.adapters.gemini.applyUpdates(
         body.contents || [],
         toolResultUpdates,
       );
 
-      // Use filtered contents in request
-      const processedBody = {
-        ...body,
-        contents: filteredContents,
-      };
+      // Determine if TOON compression should be applied
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+      let toonCostSavings: number | null = null;
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
 
-      logger.debug(
-        { filteredContentsCount: filteredContents.length },
-        "[GeminiProxy] Contents filtered after trusted data evaluation",
+      if (shouldApplyToonCompression) {
+        const { contents: convertedContents, stats } =
+          await utils.adapters.gemini.convertToolResultsToToon(
+            filteredContents,
+            optimizedModelName,
+          );
+        filteredContents = convertedContents;
+        toonTokensBefore = stats.toonTokensBefore;
+        toonTokensAfter = stats.toonTokensAfter;
+        toonCostSavings = stats.toonCostSavings;
+      }
+
+      fastify.log.info(
+        {
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
+        },
+        "gemini proxy routes: handle generate content: tool results compression completed",
+      );
+
+      // Use filtered contents in request — convert REST body to SDK parameters
+      const processedBody =
+        utils.adapters.gemini.restToSdkGenerateContentParams(
+          { ...body, contents: filteredContents },
+          optimizedModelName,
+          mergedTools.length > 0 ? mergedTools : undefined,
+        );
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalContentsCount: body.contents?.length || 0,
+          filteredContentsCount: filteredContents.length,
+          toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
+          contextIsTrusted,
+        },
+        "Contents filtered after trusted data evaluation",
       );
 
       if (stream) {
         logger.debug(
-          { modelName },
-          "[GeminiProxy] Streaming not supported yet",
+          { optimizedModelName, mergedToolsCount: mergedTools.length },
+          "[GeminiProxy] Starting streaming request",
         );
-        // reply.header("Content-Type", "text/event-stream");
-        // reply.header("Cache-Control", "no-cache");
-        // reply.header("Connection", "keep-alive");
 
-        // // Handle streaming response
-        // const result = await genAI.models.generateContentStream({
-        //   model: modelName,
-        //   ...geminiRequest,
-        // });
+        // Track timing for TTFT and tokens/sec metrics
+        const streamStartTime = Date.now();
+        let firstChunkTime: number | undefined;
 
-        // const chunks: Gemini.Types.GenerateContentResponse[] = [];
-        // let accumulatedResponse:
-        //   | Gemini.Types.GenerateContentResponse
-        //   | undefined;
-
-        // for await (const chunk of result) {
-        //   chunks.push({
-        //     candidates: chunk.candidates as any,
-        //     modelVersion: modelName,
-        //   });
-
-        //   // Accumulate response for persistence
-        //   if (!accumulatedResponse) {
-        //     accumulatedResponse = {
-        //       candidates: chunk.candidates as any,
-        //       usageMetadata: chunk.usageMetadata as any,
-        //       modelVersion: modelName,
-        //     };
-        //   } else if (chunk.candidates) {
-        //     // Accumulate content from chunks
-        //     for (let i = 0; i < chunk.candidates.length; i++) {
-        //       const candidate = chunk.candidates[i];
-        //       const accCandidate = accumulatedResponse.candidates![i];
-        //       if (candidate.content && accCandidate?.content) {
-        //         // Append parts
-        //         accCandidate.content.parts = [
-        //           ...(accCandidate.content.parts || []),
-        //           ...(candidate.content.parts || []),
-        //         ];
-        //       }
-        //     }
-        //   }
-
-        //   // Convert to common format for SSE
-        //   const commonChunk = transformer.chunkToOpenAI
-        //     ? transformer.chunkToOpenAI(chunk as any)
-        //     : chunk;
-
-        //   reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
-        //   await new Promise((resolve) =>
-        //     setTimeout(resolve, Math.random() * 10),
-        //   );
-        // }
-
-        // // Evaluate tool invocation policies on the accumulated response
-        // if (accumulatedResponse) {
-        //   const commonResponse =
-        //     transformer.responseToOpenAI(accumulatedResponse);
-
-        //   // Check if tool invocation is blocked
-        //   const assistantMessage = commonResponse.choices[0]?.message;
-        //   if (assistantMessage) {
-        //     const toolInvocationRefusal =
-        //       await utils.toolInvocation.evaluatePolicies(
-        //         assistantMessage,
-        //         resolvedAgentId,
-        //         contextIsTrusted,
-        //       );
-
-        //     if (toolInvocationRefusal) {
-        //       // Send refusal as final chunk
-        //       const refusalChunk = {
-        //         id: "chatcmpl-blocked",
-        //         object: "chat.completion.chunk" as const,
-        //         created: Date.now() / 1000,
-        //         model: modelName,
-        //         choices: [
-        //           {
-        //             index: 0,
-        //             delta: toolInvocationRefusal.message,
-        //             finish_reason: "stop",
-        //             logprobs: null,
-        //           },
-        //         ],
-        //       };
-
-        //       reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-
-        //       // Update response for persistence
-        //       commonResponse.choices = [toolInvocationRefusal];
-        //       accumulatedResponse = transformer.responseFromOpenAI(
-        //         commonResponse,
-        //       );
-        //     }
-        //   }
-
-        //   // Store the complete interaction
-        //   await InteractionModel.create({
-        //     profileId: resolvedAgentId,
-        //     type: "gemini:generateContent",
-        //     request: body,
-        //     response: accumulatedResponse,
-        //   });
-        // }
-
-        // reply.raw.write("data: [DONE]\n\n");
-        // reply.raw.end();
-        // return reply;
-
-        throw new ApiError(
-          400,
-          "Streaming is not supported for Gemini. Coming soon!",
+        // Handle streaming response with span to measure LLM call duration
+        const streamingResponse = await utils.tracing.startActiveLlmSpan(
+          "gemini.generateContentStream",
+          "gemini",
+          optimizedModelName,
+          true,
+          resolvedAgent,
+          async (llmSpan) => {
+            const response = await genAI.models.generateContentStream(
+              processedBody as GenerateContentParameters,
+            );
+            llmSpan.end();
+            return response;
+          },
         );
+
+        // Set up SSE response headers
+        reply.raw.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+
+        // Accumulate response for tool call evaluation and persistence
+        let accumulatedText = "";
+        const accumulatedFunctionCalls: Array<{
+          name: string;
+          args?: Record<string, unknown>;
+        }> = [];
+        const chunks: GenerateContentResponse[] = [];
+        let tokenUsage: { input?: number; output?: number } = {};
+
+        // Variables for interaction recording (accessible in finally block)
+        let toolInvocationRefusal: [string, string] | null = null;
+        let completeResponse: Gemini.Types.GenerateContentResponse | undefined;
+
+        try {
+          for await (const chunk of streamingResponse) {
+            // Capture time to first token on first chunk
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+              reportTimeToFirstToken(
+                "gemini",
+                resolvedAgent,
+                optimizedModelName,
+                ttftSeconds,
+                externalAgentId,
+              );
+            }
+
+            chunks.push(chunk);
+
+            // Extract usage metadata if present
+            if (chunk.usageMetadata) {
+              tokenUsage = utils.adapters.gemini.getUsageTokens(
+                chunk.usageMetadata,
+              );
+            }
+
+            // Process parts from the chunk
+            const candidate = chunk.candidates?.[0];
+            if (candidate?.content?.parts) {
+              for (const part of candidate.content.parts) {
+                if (part.text) {
+                  accumulatedText += part.text;
+                }
+                if (part.functionCall) {
+                  accumulatedFunctionCalls.push({
+                    name: part.functionCall.name || "",
+                    args: part.functionCall.args as
+                      | Record<string, unknown>
+                      | undefined,
+                  });
+                }
+              }
+            }
+
+            // Stream text content immediately (don't stream tool calls yet - need to evaluate policies)
+            if (
+              candidate?.content?.parts?.some((p) => p.text) &&
+              !candidate?.content?.parts?.some((p) => p.functionCall)
+            ) {
+              const restChunk = utils.adapters.gemini.sdkResponseToRestResponse(
+                chunk,
+                optimizedModelName,
+              );
+              reply.raw.write(`data: ${JSON.stringify(restChunk)}\n\n`);
+            }
+          }
+
+          logger.debug(
+            {
+              toolCallCount: accumulatedFunctionCalls.length,
+              hasText: !!accumulatedText,
+            },
+            "[GeminiProxy] Stream completed, evaluating tool invocation policies",
+          );
+
+          // Evaluate tool invocation policies
+          if (accumulatedFunctionCalls.length > 0) {
+            const validToolCalls = accumulatedFunctionCalls
+              .filter((tc) => tc.name)
+              .map((toolCall) => ({
+                toolCallName: toolCall.name,
+                toolCallArgs: JSON.stringify(toolCall.args || {}),
+              }));
+
+            if (validToolCalls.length > 0) {
+              toolInvocationRefusal =
+                await utils.toolInvocation.evaluatePolicies(
+                  validToolCalls,
+                  resolvedAgentId,
+                  contextIsTrusted,
+                );
+            }
+
+            logger.debug(
+              { toolInvocationRefused: !!toolInvocationRefusal },
+              "[GeminiProxy] Tool invocation policy result",
+            );
+
+            if (toolInvocationRefusal) {
+              const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
+              // Stream the refusal as a single chunk
+              const refusalChunk: Gemini.Types.GenerateContentResponse = {
+                candidates: [
+                  {
+                    content: {
+                      parts: [{ text: contentMessage }],
+                      role: "model",
+                    },
+                    finishReason: "STOP",
+                    index: 0,
+                  },
+                ],
+                modelVersion: optimizedModelName,
+              };
+              reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+
+              reportBlockedTools(
+                "gemini",
+                resolvedAgent,
+                accumulatedFunctionCalls.length,
+                optimizedModelName,
+                externalAgentId,
+              );
+            } else {
+              // Tool calls are allowed - stream the function calls
+              for (const functionCall of accumulatedFunctionCalls) {
+                const toolCallChunk: Gemini.Types.GenerateContentResponse = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [
+                          {
+                            functionCall: {
+                              name: functionCall.name,
+                              args: functionCall.args,
+                            },
+                          },
+                        ],
+                        role: "model",
+                      },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: optimizedModelName,
+                };
+                reply.raw.write(`data: ${JSON.stringify(toolCallChunk)}\n\n`);
+              }
+            }
+          }
+
+          // Send done marker
+          reply.raw.write("data: [DONE]\n\n");
+
+          // Build the complete response for persistence
+          completeResponse = {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    ...(accumulatedText ? [{ text: accumulatedText }] : []),
+                    ...accumulatedFunctionCalls.map((fc) => ({
+                      functionCall: { name: fc.name, args: fc.args },
+                    })),
+                  ],
+                  role: "model",
+                },
+                finishReason: "STOP",
+                index: 0,
+              },
+            ],
+            modelVersion: optimizedModelName,
+            usageMetadata: tokenUsage.input
+              ? {
+                  promptTokenCount: tokenUsage.input,
+                  candidatesTokenCount: tokenUsage.output || 0,
+                  totalTokenCount:
+                    (tokenUsage.input || 0) + (tokenUsage.output || 0),
+                }
+              : undefined,
+          };
+        } finally {
+          // Always record interaction (whether stream completed or was aborted)
+          // If completeResponse wasn't built (stream aborted), build it from accumulated data
+          if (!completeResponse) {
+            fastify.log.info(
+              "Stream was aborted before completion, building partial response",
+            );
+            completeResponse = {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      ...(accumulatedText ? [{ text: accumulatedText }] : []),
+                      ...accumulatedFunctionCalls.map((fc) => ({
+                        functionCall: { name: fc.name, args: fc.args },
+                      })),
+                    ],
+                    role: "model",
+                  },
+                  finishReason: "STOP",
+                  index: 0,
+                },
+              ],
+              modelVersion: optimizedModelName,
+              usageMetadata: tokenUsage.input
+                ? {
+                    promptTokenCount: tokenUsage.input,
+                    candidatesTokenCount: tokenUsage.output || 0,
+                    totalTokenCount:
+                      (tokenUsage.input || 0) + (tokenUsage.output || 0),
+                  }
+                : undefined,
+            };
+          }
+
+          // Calculate tokens per second if we have timing info
+          if (firstChunkTime && tokenUsage.output && tokenUsage.output > 0) {
+            const totalStreamTime = (Date.now() - firstChunkTime) / 1000;
+            if (totalStreamTime > 0) {
+              reportTokensPerSecond(
+                "gemini",
+                resolvedAgent,
+                optimizedModelName,
+                tokenUsage.output,
+                totalStreamTime,
+                externalAgentId,
+              );
+            }
+          }
+
+          // Report token usage metrics
+          if (tokenUsage.input || tokenUsage.output) {
+            reportLLMTokens(
+              "gemini",
+              resolvedAgent,
+              tokenUsage,
+              optimizedModelName,
+              externalAgentId,
+            );
+          }
+
+          // Calculate costs
+          const baselineCost = await utils.costOptimization.calculateCost(
+            baselineModel,
+            tokenUsage.input || 0,
+            tokenUsage.output || 0,
+          );
+          const costAfterModelOptimization =
+            await utils.costOptimization.calculateCost(
+              optimizedModelName,
+              tokenUsage.input || 0,
+              tokenUsage.output || 0,
+            );
+
+          fastify.log.info(
+            {
+              model: optimizedModelName,
+              baselineModel,
+              baselineCost,
+              costAfterModelOptimization,
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
+            },
+            "gemini proxy routes: handle generate content: costs",
+          );
+
+          reportLLMCost(
+            "gemini",
+            resolvedAgent,
+            optimizedModelName,
+            costAfterModelOptimization,
+            externalAgentId,
+          );
+
+          // Store the interaction
+          await InteractionModel.create({
+            profileId: resolvedAgentId,
+            externalAgentId,
+            type: "gemini:generateContent",
+            request: body,
+            processedRequest: {
+              ...body,
+              contents: filteredContents,
+            },
+            response: toolInvocationRefusal
+              ? {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [{ text: toolInvocationRefusal[1] }],
+                        role: "model",
+                      },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  modelVersion: optimizedModelName,
+                }
+              : completeResponse,
+            model: optimizedModelName,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+            cost: costAfterModelOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
+          });
+
+          reply.raw.end();
+        }
+
+        return;
       } else {
         logger.debug(
-          { modelName },
+          { optimizedModelName },
           "[GeminiProxy] Starting non-streaming request",
         );
         // Non-streaming response with span to measure LLM call duration
         const response = await utils.tracing.startActiveLlmSpan(
           "gemini.generateContent",
           "gemini",
-          modelName,
+          optimizedModelName,
           false,
           resolvedAgent,
           async (llmSpan) => {
-            const response = await genAI.models.generateContent({
-              model: modelName,
-              ...processedBody,
-              // tools: mergedTools,
-            });
+            const response = await genAI.models.generateContent(
+              processedBody as GenerateContentParameters,
+            );
             llmSpan.end();
             return response;
           },
         );
 
-        // Convert to common format for policy evaluation
-        // const commonResponse = transformer.responseToOpenAI(geminiResponse);
+        // Extract tool calls from response
+        const toolCalls = [];
+        if (response.candidates) {
+          toolCalls.push(
+            ...(response.candidates[0]?.content?.parts
+              ?.filter((p) => p.functionCall)
+              .map((p) => p.functionCall) || []),
+          );
+        }
 
-        // TODO:
+        logger.debug(
+          { toolCallCount: toolCalls.length },
+          "[GeminiProxy] Non-streaming response received, checking tool invocation policies",
+        );
+
         // Evaluate tool invocation policies
-        // const assistantMessage = commonResponse.choices[0]?.message;
-        // if (assistantMessage) {
-        //   const toolInvocationRefusal =
-        //     await utils.toolInvocation.evaluatePolicies(
-        //       assistantMessage,
-        //       resolvedAgentId,
-        //       contextIsTrusted,
-        //     );
+        let toolInvocationRefusal: [string, string] | null = null;
+        if (toolCalls.length > 0) {
+          const validToolCalls = toolCalls
+            .filter(
+              (tc): tc is { name: string; args?: Record<string, unknown> } =>
+                Boolean(tc?.name),
+            )
+            .map((toolCall) => ({
+              toolCallName: toolCall.name,
+              toolCallArgs: JSON.stringify(toolCall.args || {}),
+            }));
 
-        //   if (toolInvocationRefusal) {
-        //     commonResponse.choices = [toolInvocationRefusal];
-        //     // Convert back to Gemini format
-        //     const refusalResponse =
-        //       transformer.responseFromOpenAI(commonResponse);
+          if (validToolCalls.length > 0) {
+            toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+              validToolCalls,
+              resolvedAgentId,
+              contextIsTrusted,
+            );
+          }
+        }
 
-        //     // Store the interaction with refusal
-        //     await InteractionModel.create({
-        //       profileId: resolvedAgentId,
-        //       type: "gemini:generateContent",
-        //       request: body,
-        //       response: refusalResponse,
-        //     });
-
-        //     return reply.send(refusalResponse);
-        //   }
-        // }
-
-        // Extract token usage and store the complete interaction
+        // Extract token usage
         const tokenUsage = response.usageMetadata
           ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
           : { input: null, output: null };
+
+        // Always calculate baseline cost (original requested model)
+        const baselineCost = await utils.costOptimization.calculateCost(
+          baselineModel,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
+
+        // Calculate actual cost (potentially optimized model)
+        const costAfterModelOptimization =
+          await utils.costOptimization.calculateCost(
+            optimizedModelName,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+
+        fastify.log.info(
+          {
+            model: optimizedModelName,
+            baselineModel,
+            baselineCost,
+            costAfterModelOptimization,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+          },
+          "gemini proxy routes: handle generate content: costs",
+        );
+
+        reportLLMCost(
+          "gemini",
+          resolvedAgent,
+          optimizedModelName,
+          costAfterModelOptimization,
+          externalAgentId,
+        );
+
+        if (toolInvocationRefusal) {
+          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
+          logger.debug(
+            { toolCallCount: toolCalls.length },
+            "[GeminiProxy] Tool invocation blocked by policy",
+          );
+
+          // Create refusal response in Gemini format
+          const refusalResponse: Gemini.Types.GenerateContentResponse = {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: contentMessage,
+                    },
+                  ],
+                  role: "model",
+                },
+                finishReason: "STOP" as const,
+                index: 0,
+              },
+            ],
+            modelVersion: response.modelVersion || optimizedModelName,
+            responseId: "blocked",
+          };
+
+          reportBlockedTools(
+            "gemini",
+            resolvedAgent,
+            toolCalls.length,
+            optimizedModelName,
+            externalAgentId,
+          );
+
+          // Store the interaction with refusal
+          await InteractionModel.create({
+            profileId: resolvedAgentId,
+            externalAgentId,
+            type: "gemini:generateContent",
+            request: body,
+            processedRequest: {
+              ...body,
+              contents: filteredContents,
+            },
+            response: refusalResponse,
+            model: optimizedModelName,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+            cost: costAfterModelOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
+          });
+
+          return reply.send(refusalResponse);
+        }
+        // Tool calls are allowed - return response with function calls to client
+        // Client is responsible for executing tools via MCP Gateway and sending results back
+
+        // Convert SDK response to REST format and store
+        const restResponse = utils.adapters.gemini.sdkResponseToRestResponse(
+          response,
+          optimizedModelName,
+        );
 
         logger.debug(
           {
@@ -394,14 +912,22 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           externalAgentId,
           type: "gemini:generateContent",
           request: body,
-          // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-          response: response as any,
-          model: model,
+          processedRequest: {
+            ...body,
+            contents: filteredContents,
+          },
+          response: restResponse,
+          model: optimizedModelName,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost: costAfterModelOptimization?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
         });
 
-        return reply.send(response);
+        return reply.send(restResponse);
       }
     } catch (error) {
       fastify.log.error(error);
@@ -438,7 +964,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     verb: "generateContent" | "streamGenerateContent",
     includeAgentId = false,
   ) =>
-    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
+    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}v1beta/models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
 
   /**
    * Default agent endpoint for Gemini generateContent

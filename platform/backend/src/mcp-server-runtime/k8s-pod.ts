@@ -351,6 +351,42 @@ export default class K8sPod {
   }
 
   /**
+   * Rewrite localhost URLs to host.docker.internal for Docker Desktop Kubernetes.
+   * This allows pods to access services running on the host machine.
+   *
+   * Note: This assumes Docker Desktop. Other local K8s environments may need different
+   * hostnames (e.g., host.minikube.internal for Minikube, or host-gateway for kind).
+   */
+  private rewriteLocalhostUrl(value: string): string {
+    try {
+      const url = new URL(value);
+      const isHttp = url.protocol === "http:" || url.protocol === "https:";
+      if (!isHttp) {
+        return value;
+      }
+      if (
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1" ||
+        url.hostname === "::1"
+      ) {
+        url.hostname = "host.docker.internal";
+        logger.info(
+          {
+            mcpServerId: this.mcpServer.id,
+            originalUrl: value,
+            rewrittenUrl: url.toString(),
+          },
+          "Rewrote localhost URL to host.docker.internal for K8s pod",
+        );
+        return url.toString();
+      }
+    } catch {
+      // Not a valid URL, return as-is
+    }
+    return value;
+  }
+
+  /**
    * Create environment variables for the pod
    *
    * This method processes environment variables from the local config and ensures
@@ -364,6 +400,9 @@ export default class K8sPod {
    * For environment variables marked as "secret" type in the catalog, this method
    * will use valueFrom.secretKeyRef to reference the Kubernetes Secret instead of
    * including the value directly in the pod spec.
+   *
+   * For Docker Desktop Kubernetes environments, localhost URLs are automatically
+   * rewritten to host.docker.internal to allow pods to access services on the host.
    */
   createPodEnvFromConfig(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
@@ -457,6 +496,13 @@ export default class K8sPod {
             (processedValue.startsWith('"') && processedValue.endsWith('"')))
         ) {
           processedValue = processedValue.slice(1, -1);
+        }
+
+        // Rewrite localhost URLs to host.docker.internal for Docker Desktop K8s
+        // Only when backend is running on host machine (connecting to K8s from outside)
+        // When backend runs inside cluster, pods shouldn't access host services
+        if (!config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+          processedValue = this.rewriteLocalhostUrl(processedValue);
         }
 
         env.push({

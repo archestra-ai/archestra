@@ -213,6 +213,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
+    gemini: {
+      baseUrl:
+        process.env.ARCHESTRA_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
+    },
   },
   chat: {
     openai: {

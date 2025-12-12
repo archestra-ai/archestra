@@ -319,7 +319,7 @@ function SsoProvidersSettingsContent() {
     return (
       <div>
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">SSO Providers</h1>
+          <h2 className="text-lg font-semibold">SSO Providers</h2>
           <EnterpriseLicenseRequired featureName="SSO (Single Sign-On)" />
         </div>
       </div>
@@ -331,8 +331,8 @@ function SsoProvidersSettingsContent() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold">SSO Providers</h1>
-        <p className="text-muted-foreground mt-2">
+        <h2 className="text-lg font-semibold">SSO Providers</h2>
+        <p className="text-sm text-muted-foreground">
           Manage Single Sign-On (SSO) providers for your organization. Configure
           OIDC providers to enable seamless authentication.
         </p>

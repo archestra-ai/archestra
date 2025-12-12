@@ -116,12 +116,13 @@ archestra:
         create: true
 
       # RBAC configuration for MCP server pods that need Kubernetes API access
-      # Creates a dedicated service account with full operator permissions for K8s resources
+      # Creates a dedicated service account with namespace-scoped permissions for K8s resources
+      # Permissions: manage pods, services, deployments, jobs (read-only for secrets removed)
       # IMPORTANT: Only the Kubernetes MCP server uses this service account - all other MCP servers
       # use the default service account with no permissions, maintaining proper isolation
       mcpServerRbac:
-        # Specifies whether RBAC resources (ServiceAccount, ClusterRole, ClusterRoleBinding) should be created
-        create: true
+        # Specifies whether RBAC resources (ServiceAccount, Role, RoleBinding) should be created
+        create: false
 
   # Service configuration
   service:

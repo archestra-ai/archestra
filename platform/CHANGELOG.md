@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.3](https://github.com/archestra-ai/archestra/compare/platform-v1.0.2...platform-v1.0.3) (2025-12-12)
+
+
+### Bug Fixes
+
+* **chat:** use Gemini model when Vertex AI is enabled without API keys ([1aadd4e](https://github.com/archestra-ai/archestra/commit/1aadd4ee0bfc1a6fcb9c58e56174b4a5ff70daa5))
+
+
+### Miscellaneous Chores
+
+* enable Vertex AI with GKE Workload Identity for staging env ([#1563](https://github.com/archestra-ai/archestra/issues/1563)) ([40ab754](https://github.com/archestra-ai/archestra/commit/40ab754f582efa4f226613d092100ff18d29d7d3))
+
 ## [1.0.2](https://github.com/archestra-ai/archestra/compare/platform-v1.0.1...platform-v1.0.2) (2025-12-12)
 
 

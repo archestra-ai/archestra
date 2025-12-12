@@ -12,8 +12,8 @@ k8s_resource(
   labels=['dev'],
   objects=[
     'archestra-archestra-platform-mcp-k8s-operator:serviceaccount:default',
-    'archestra-archestra-platform-mcp-server-operator:clusterrole',
-    'archestra-archestra-platform-mcp-server-operator:clusterrolebinding'
+    'archestra-archestra-platform-mcp-server-operator:role:default',
+    'archestra-archestra-platform-mcp-server-operator:rolebinding:default'
   ]
 )
 

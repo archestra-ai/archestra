@@ -11,20 +11,21 @@ metadata:
     {{- include "archestra-platform.labels" . | nindent 4 }}
     app.kubernetes.io/component: mcp-server-rbac
 ---
-# ClusterRole with full operator permissions for Kubernetes resources
-# Grants all necessary permissions for the Kubernetes MCP server to function (read, create, update, patch, delete)
+# Role with namespace-scoped permissions for Kubernetes resources
+# Grants all necessary permissions for the Kubernetes MCP server to function within its namespace
 # Only granted to the mcp-k8s-operator service account, not to all MCP server pods
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: {{ include "archestra-platform.fullname" . }}-mcp-server-operator
+  namespace: {{ .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
     app.kubernetes.io/component: mcp-server-rbac
 rules:
 # Core API group resources - read-only access
 - apiGroups: [""]
-  resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets", "namespaces", "nodes"]
+  resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets"]
   verbs: ["get", "list", "watch"]
 # Core API group resources - write access (excluding secrets, nodes, namespaces)
 - apiGroups: [""]
@@ -46,32 +47,31 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs", "cronjobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# RBAC resources - read-only access
+# RBAC resources - read-only access (namespace-scoped only)
 - apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch"]
 # Networking resources - full CRUD permissions
 - apiGroups: ["networking.k8s.io"]
   resources: ["ingresses", "networkpolicies"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# Monitoring & Metrics - read-only access
+# Monitoring & Metrics - read-only access (namespace-scoped)
 - apiGroups: ["metrics.k8s.io"]
-  resources: ["pods", "nodes"]
+  resources: ["pods"]
   verbs: ["get", "list"]
-# Custom Resources & Events - read-only access
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["get", "list", "watch"]
+# Events - read-only access
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["get", "list", "watch"]
 ---
-# ClusterRoleBinding that grants the ClusterRole to the mcp-k8s-operator service account
+# RoleBinding that grants the Role to the mcp-k8s-operator service account
 # This is the critical security boundary - only pods that explicitly use this service account get K8s API access
+# Permissions are restricted to the namespace only
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: {{ include "archestra-platform.fullname" . }}-mcp-server-operator
+  namespace: {{ .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
     app.kubernetes.io/component: mcp-server-rbac
@@ -80,7 +80,7 @@ subjects:
   name: {{ include "archestra-platform.fullname" . }}-mcp-k8s-operator
   namespace: {{ .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
 roleRef:
-  kind: ClusterRole
+  kind: Role
   name: {{ include "archestra-platform.fullname" . }}-mcp-server-operator
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

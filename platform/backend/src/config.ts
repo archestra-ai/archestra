@@ -217,6 +217,15 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+      vertexAi: {
+        enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
+        project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
+        location: process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "global",
+        // Path to service account JSON key file for authentication (optional)
+        // If not set, uses default ADC (Workload Identity, attached service account, etc.)
+        credentialsFile:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
+      },
     },
   },
   chat: {

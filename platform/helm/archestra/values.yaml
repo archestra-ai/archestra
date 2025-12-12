@@ -99,6 +99,15 @@ archestra:
         # Specifies whether a service account should be created
         create: true
         # Annotations to add to the service account
+        # Use this for cloud provider integrations like GKE Workload Identity or AWS IRSA
+        #
+        # GKE Workload Identity example (for Vertex AI authentication):
+        #   annotations:
+        #     iam.gke.io/gcp-service-account: my-gsa@my-project.iam.gserviceaccount.com
+        #
+        # AWS IRSA example:
+        #   annotations:
+        #     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/my-role
         annotations: {}
         # The name of the service account to use.
         # If not set and create is true, a name is generated using the fullname template

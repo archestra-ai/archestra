@@ -44,7 +44,7 @@ export class DualLlmSubagent {
   static async create(
     params: CommonDualLlmParams,
     agentId: string,
-    apiKey: string,
+    apiKey: string | undefined,
     provider: SupportedProvider,
   ): Promise<DualLlmSubagent> {
     logger.debug(

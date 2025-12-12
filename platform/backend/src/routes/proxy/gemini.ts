@@ -1,13 +1,12 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import {
-  type GenerateContentParameters,
-  type GenerateContentResponse,
+import type {
+  GenerateContentParameters,
+  GenerateContentResponse,
   GoogleGenAI,
 } from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableGenAI,
@@ -34,6 +33,7 @@ import {
 } from "@/types";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import * as utils from "./utils";
+import { createGoogleGenAIClient } from "./utils/gemini-client";
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -148,15 +148,31 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       "[GeminiProxy] Agent resolved",
     );
+
+    // Create GoogleGenAI client - supports both Vertex AI (ADC) and API key modes
     const { "x-goog-api-key": geminiApiKey } = headers;
-    const genAI = getObservableGenAI(
-      new GoogleGenAI({
-        apiKey: geminiApiKey,
-        httpOptions: {
-          baseUrl: config.llm.gemini.baseUrl,
-          apiVersion: "v1beta",
+    let genAIClient: GoogleGenAI;
+    try {
+      genAIClient = createGoogleGenAIClient(geminiApiKey, "[GeminiProxy]");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to initialize Gemini client";
+      logger.error(
+        { error },
+        "[GeminiProxy] Failed to create GoogleGenAI client",
+      );
+      return reply.status(400).send({
+        error: {
+          message,
+          type: "invalid_request_error",
         },
-      }),
+      });
+    }
+
+    const genAI = getObservableGenAI(
+      genAIClient,
       resolvedAgent,
       externalAgentId,
     );

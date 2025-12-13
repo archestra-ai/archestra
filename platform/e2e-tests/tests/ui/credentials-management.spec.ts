@@ -81,15 +81,11 @@ test.describe("Credentials Management", () => {
       // Create catalog item as Admin
       // Editor and Member cannot add items to MCP Registry
       let newCatalogItem: { id: string; name: string } | undefined;
-      newCatalogItem = await addCatalogItem({
+      newCatalogItem = await addCustomSelfHostedCatalogItem({
         page: adminPage,
-        params: { vault, promptOnInstallation, mcpServerType, user },
         cookieHeaders,
         catalogItemName,
       });
-      if (!newCatalogItem) {
-        throw new Error("Failed to create catalog item");
-      }
 
       // Go to MCP Registry page
       await goToPage(page, "/mcp-catalog/registry");
@@ -217,29 +213,37 @@ test.describe("Credentials Management", () => {
     request,
     adminPage,
     editorPage,
+    makeRandomString,
     extractCookieHeaders,
   }) => {
+    const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
     const cookieHeaders = await extractCookieHeaders(adminPage);
-
-    // CLEANUP: Delete existingcreated MCP servers / installations
-    await goToPage(adminPage, "/mcp-catalog/registry");
-    await openManageCredentialsDialog(adminPage, TEST_CATALOG_ITEM_NAME);
-    const count = await adminPage
-      .getByRole("button", { name: "Revoke" })
-      .count();
-    for (let i = 0; i < count; i++) {
-      await adminPage.getByRole("button", { name: "Revoke" }).first().click();
+    // Create catalog item as Admin
+    // Editor and Member cannot add items to MCP Registry
+    const newCatalogItem = await addCustomSelfHostedCatalogItem({
+      page: adminPage,
+      cookieHeaders,
+      catalogItemName: CATALOG_ITEM_NAME,
+      envVars: {
+        key: "ARCHESTRA_TEST",
+        promptOnInstallation: true,
+      },
+    });
+    if (!newCatalogItem) {
+      throw new Error("Failed to create catalog item");
     }
-
-    // Install test servers
-    await Promise.all([
-      installTestServer(adminPage, "Admin"),
-      installTestServer(editorPage, "Editor"),
-    ]);
+    await adminPage
+      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
+      .click();
+    await adminPage
+      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
+      .fill("Admin");
+    await adminPage.getByRole("button", { name: "Install" }).click();
+    await adminPage.waitForLoadState("networkidle");
 
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
-      catalogItemName: TEST_CATALOG_ITEM_NAME,
+      catalogItemName: CATALOG_ITEM_NAME,
     });
     // Select admin static credential
     await adminPage.getByRole("option", { name: "admin@example.com" }).click();
@@ -251,13 +255,24 @@ test.describe("Credentials Management", () => {
       request,
       expectedText: "Admin",
       tokenToUse: "org-token",
-      toolName: `${TEST_CATALOG_ITEM_NAME}__print_archestra_test`,
+      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
       cookieHeaders,
     });
 
+    // Install test server for editor
+    await goToPage(editorPage, "/mcp-catalog/registry");
+    await editorPage
+      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
+      .click();
+    await editorPage
+      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
+      .fill("Editor");
+    await editorPage.getByRole("button", { name: "Install" }).click();
+    await editorPage.waitForLoadState("networkidle");
+
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
-      catalogItemName: TEST_CATALOG_ITEM_NAME,
+      catalogItemName: CATALOG_ITEM_NAME,
     });
     // Select editor static credential
     await adminPage.getByRole("option", { name: "editor@example.com" }).click();
@@ -269,9 +284,19 @@ test.describe("Credentials Management", () => {
       request,
       expectedText: "Editor",
       tokenToUse: "org-token",
-      toolName: TEST_TOOL_NAME,
+      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
       cookieHeaders,
     });
+
+    // CLEANUP: Delete existingcreated MCP servers / installations
+    await goToPage(adminPage, "/mcp-catalog/registry");
+    await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
+    const count = await adminPage
+      .getByRole("button", { name: "Revoke" })
+      .count();
+    for (let i = 0; i < count; i++) {
+      await adminPage.getByRole("button", { name: "Revoke" }).first().click();
+    }
   });
 });
 
@@ -318,50 +343,59 @@ async function assignEngineeringTeamToDefaultProfileViaApi({
   });
 }
 
-async function addCatalogItem({
+async function addCustomSelfHostedCatalogItem({
   page,
-  params,
   cookieHeaders,
   catalogItemName,
+  envVars,
 }: {
   page: Page;
-  params: MatrixTestParams;
   cookieHeaders: string;
   catalogItemName: string;
+  envVars?: {
+    key: string;
+    promptOnInstallation: boolean;
+  };
 }) {
   // Go to Add MCP Server page
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Add MCP Server" }).click();
 
-  if (params.mcpServerType === "custom-self-hosted") {
-    await page
-      .getByRole("button", { name: "Self-hosted (orchestrated by" })
-      .click();
-    await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
-    await page.getByRole("textbox", { name: "Command *" }).fill("sh");
-    const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
-    await page
-      .getByRole("textbox", { name: "Arguments (one per line)" })
-      .fill(`-c\n${singleLineCommand}`);
-    await page.getByRole("button", { name: "Add Server" }).click();
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1_000);
-    const catalogItems = await apiSdk.getInternalMcpCatalog({
-      headers: { Cookie: cookieHeaders },
-    });
-    if (!catalogItems.data) {
-      throw new Error("No catalog items found");
+  await page
+    .getByRole("button", { name: "Self-hosted (orchestrated by" })
+    .click();
+  await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
+  await page.getByRole("textbox", { name: "Command *" }).fill("sh");
+  const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
+  await page
+    .getByRole("textbox", { name: "Arguments (one per line)" })
+    .fill(`-c\n${singleLineCommand}`);
+  if (envVars) {
+    await page.getByRole("button", { name: "Add Variable" }).click();
+    await page.getByRole("textbox", { name: "API_KEY" }).fill(envVars.key);
+    if (envVars.promptOnInstallation) {
+      await page
+        .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
+        .click({ force: true });
     }
-    const newCatalogItem = catalogItems.data?.find(
-      (item) => item.name === catalogItemName,
-    );
-    if (!newCatalogItem) {
-      throw new Error("Failed to find new catalog item");
-    }
-    return { id: newCatalogItem.id, name: newCatalogItem.name };
   }
+  await page.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(1_000);
+  const catalogItems = await apiSdk.getInternalMcpCatalog({
+    headers: { Cookie: cookieHeaders },
+  });
+  if (!catalogItems.data) {
+    throw new Error("No catalog items found");
+  }
+  const newCatalogItem = catalogItems.data?.find(
+    (item) => item.name === catalogItemName,
+  );
+  if (!newCatalogItem) {
+    throw new Error("Failed to find new catalog item");
+  }
+  return { id: newCatalogItem.id, name: newCatalogItem.name };
 }
 
 async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({

@@ -168,8 +168,7 @@ describe("validateKubeconfig", () => {
   });
 });
 
-// --- McpServerRuntimeManager suite (old, restored for full coverage) ---
-// This suite is restored at reviewer request: covers isEnabled and status transitions for McpServerRuntimeManager.
+// --- McpServerRuntimeManager suite
 describe("McpServerRuntimeManager", () => {
   describe("isEnabled", () => {
     beforeEach(() => {

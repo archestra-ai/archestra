@@ -71,7 +71,7 @@ export function validateKubeconfig(path?: string) {
     throw new Error(`❌ Invalid kubeconfig: users section missing`);
   }
 
-  logger.info("✅ Custom kubeconfig validated successfully.");
+  logger.info("✓ Custom kubeconfig validated successfully.");
 }
 
 

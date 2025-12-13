@@ -2,21 +2,20 @@ import { vi } from "vitest";
 import * as fs from "node:fs";
 import type * as originalConfigModule from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
+import * as k8s from "@kubernetes/client-node";
 
 // Mock fs module first
 vi.mock("node:fs");
 
-// Mock @kubernetes/client-node
+// Mock @kubernetes/client-node for validateKubeconfig tests
 vi.mock("@kubernetes/client-node", () => {
   class MockKubeConfig {
     clusters: any[] = [];
     contexts: any[] = [];
     users: any[] = [];
-    
     loadFromString(content: string) {
       try {
         const parsed = JSON.parse(content);
-        // Simulate the real KubeConfig behavior: populate arrays from parsed content
         this.clusters = parsed.clusters || [];
         this.contexts = parsed.contexts || [];
         this.users = parsed.users || [];
@@ -24,13 +23,11 @@ vi.mock("@kubernetes/client-node", () => {
         throw new Error("Failed to parse kubeconfig");
       }
     }
-    
     loadFromCluster() {}
     loadFromFile() {}
     loadFromDefault() {}
     makeApiClient() {}
   }
-
   return {
     KubeConfig: MockKubeConfig,
     CoreV1Api: vi.fn(),
@@ -80,7 +77,6 @@ describe("validateKubeconfig", () => {
 
   test("should throw error when kubeconfig file does not exist", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/nonexistent/path")).toThrow(
       /❌ Kubeconfig file not found/
@@ -90,7 +86,6 @@ describe("validateKubeconfig", () => {
   test("should throw error when kubeconfig file cannot be parsed", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue("invalid yaml content");
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Malformed kubeconfig: could not parse YAML/
@@ -103,7 +98,6 @@ describe("validateKubeconfig", () => {
       contexts: [],
       users: []
     }));
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: clusters section missing/
@@ -117,7 +111,6 @@ describe("validateKubeconfig", () => {
       contexts: [],
       users: []
     }));
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: clusters section missing/
@@ -131,7 +124,6 @@ describe("validateKubeconfig", () => {
       contexts: [{ name: "test" }],
       users: [{ name: "test" }]
     }));
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: cluster entry is missing required fields/
@@ -145,7 +137,6 @@ describe("validateKubeconfig", () => {
       contexts: [],
       users: [{ name: "test" }]
     }));
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: contexts section missing/
@@ -159,7 +150,6 @@ describe("validateKubeconfig", () => {
       contexts: [{ name: "test" }],
       users: []
     }));
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).toThrow(
       /❌ Invalid kubeconfig: users section missing/
@@ -173,27 +163,131 @@ describe("validateKubeconfig", () => {
       contexts: [{ name: "test" }],
       users: [{ name: "test" }]
     }));
-
     const { validateKubeconfig } = await import("./manager");
     expect(() => validateKubeconfig("/path")).not.toThrow();
   });
 });
 
+// --- McpServerRuntimeManager suite (old, restored for full coverage) ---
+// This suite is restored at reviewer request: covers isEnabled and status transitions for McpServerRuntimeManager.
 describe("McpServerRuntimeManager", () => {
-  test("should export McpServerRuntimeManager class", async () => {
-    const { McpServerRuntimeManager } = await import("./manager");
-    expect(McpServerRuntimeManager).toBeDefined();
-    expect(typeof McpServerRuntimeManager).toBe("function");
+  describe("isEnabled", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    test("should return false when k8s config fails to load", async () => {
+      // Mock KubeConfig to throw an error when loading
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {
+          throw new Error("Failed to load kubeconfig");
+        });
+
+      // Dynamically import to get a fresh instance
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // isEnabled should be false when config fails to load
+      expect(manager.isEnabled).toBe(false);
+
+      mockLoadFromDefault.mockRestore();
+    });
+
+    test("should return true when k8s config loads successfully", async () => {
+      // Mock successful loading
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {
+          // Do nothing - successful load
+        });
+
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      // Dynamically import to get a fresh instance
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // isEnabled should be true when config loads successfully
+      expect(manager.isEnabled).toBe(true);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("should return false after shutdown", async () => {
+      // Mock successful loading
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {
+          // Do nothing - successful load
+        });
+
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      // Dynamically import to get a fresh instance
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Should be enabled initially
+      expect(manager.isEnabled).toBe(true);
+
+      // Shutdown the runtime
+      await manager.shutdown();
+
+      // Should be disabled after shutdown
+      expect(manager.isEnabled).toBe(false);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
   });
 
-  test("should have isEnabled property on prototype", async () => {
-    const { McpServerRuntimeManager } = await import("./manager");
-    expect(McpServerRuntimeManager.prototype.isEnabled).toBeDefined();
-  });
+  describe("status transitions", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
 
-  test("should export default instance", async () => {
-    const manager = await import("./manager");
-    expect(manager.default).toBeDefined();
+    test("should start with not_initialized status when config loads", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Status should be not_initialized (not error), so isEnabled should be true
+      expect(manager.isEnabled).toBe(true);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("should have error status when config fails", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {
+          throw new Error("Config load failed");
+        });
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Status should be error, so isEnabled should be false
+      expect(manager.isEnabled).toBe(false);
+
+      mockLoadFromDefault.mockRestore();
+    });
   });
 });
 

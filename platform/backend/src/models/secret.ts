@@ -24,7 +24,7 @@ class SecretModel {
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.id, id));
 
-    return secret;
+    return secret ?? null;
   }
 
   /**

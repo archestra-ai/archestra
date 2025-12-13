@@ -99,26 +99,26 @@ export default function CompressionPage() {
   };
 
   const handleSave = async () => {
-    try {
-      // Update organization based on selected mode
-      if (compressionMode === "disabled") {
-        await updateOrganizationMutation.mutateAsync({
-          compressionScope: "organization",
-          convertToolResultsToToon: false,
-        });
-      } else if (compressionMode === "organization") {
-        await updateOrganizationMutation.mutateAsync({
-          compressionScope: "organization",
-          convertToolResultsToToon: true,
-        });
-      } else {
-        // Team mode
-        await updateOrganizationMutation.mutateAsync({
-          compressionScope: "team",
-          convertToolResultsToToon: false, // Not used in team mode
-        });
+    // Update organization based on selected mode
+    if (compressionMode === "disabled") {
+      await updateOrganizationMutation.mutateAsync({
+        compressionScope: "organization",
+        convertToolResultsToToon: false,
+      });
+    } else if (compressionMode === "organization") {
+      await updateOrganizationMutation.mutateAsync({
+        compressionScope: "organization",
+        convertToolResultsToToon: true,
+      });
+    } else {
+      // Team mode
+      await updateOrganizationMutation.mutateAsync({
+        compressionScope: "team",
+        convertToolResultsToToon: false, // Not used in team mode
+      });
 
-        // Update team compression settings
+      // Update team compression settings
+      try {
         await Promise.all(
           teams.map((team) =>
             archestraApiSdk.updateTeam({
@@ -133,13 +133,13 @@ export default function CompressionPage() {
         );
         // Invalidate teams query to refresh data
         queryClient.invalidateQueries({ queryKey: ["teams"] });
+      } catch (error) {
+        toast.error("Failed to update team compression settings");
+        throw error; // Re-throw to prevent setHasChanges(false) from running
       }
-
-      setHasChanges(false);
-      toast.success("Tool results compression settings updated");
-    } catch (_error) {
-      toast.error("Failed to update tool results compression settings");
     }
+
+    setHasChanges(false);
   };
 
   const handleCancel = () => {

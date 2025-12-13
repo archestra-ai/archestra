@@ -14,22 +14,35 @@ export const E2eTestId = {
   InvitationLinkCopyButton: "invitation-link-copy-button",
   InvitationErrorMessage: "invitation-error-message",
   SidebarUserProfile: "sidebar-user-profile",
-  LocalInstallationsDialog: "local-installations-dialog",
-  LocalInstallationsTable: "local-installations-table",
+  ManageCredentialsDialog: "manage-credentials-dialog",
+  ManageCredentialsDialogTable: "manage-credentials-dialog-table",
   CredentialRow: "credential-row",
   CredentialOwnerEmail: "credential-owner-email",
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ManageToolsButton: "manage-tools-button",
   ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
+  SsoRoleMappingDefaultRole: "sso-role-mapping-default-role",
+  SsoRoleMappingRuleRole: "sso-role-mapping-rule-role",
+  SsoRoleMappingRuleTemplate: "sso-role-mapping-rule-template",
+  SsoRoleMappingAddRule: "sso-role-mapping-add-rule",
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
-  InstallationSelect: "installation-select",
+  TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
   ProfileTeamBadge: "profile-team-badge",
   EditAgentButton: "edit-agent-button",
   RemoveTeamBadge: "remove-team-badge",
+  // Chat Settings
+  ChatApiKeysTable: "chat-api-keys-table",
+  AddChatApiKeyButton: "add-chat-api-key-button",
+  ChatApiKeyRow: "chat-api-key-row",
+  EditChatApiKeyButton: "edit-chat-api-key-button",
+  DeleteChatApiKeyButton: "delete-chat-api-key-button",
+  SetDefaultChatApiKeyButton: "set-default-chat-api-key-button",
+  ManageProfilesChatApiKeyButton: "manage-profiles-chat-api-key-button",
+  ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
@@ -57,7 +70,15 @@ export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
  */
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
 
-export const MCP_CATALOG_API_BASE_URL = "https://archestra.ai/mcp-catalog/api";
+export const MCP_CATALOG_API_BASE_URL =
+  process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
+  "https://archestra.ai/mcp-catalog/api";
+
+/**
+ * Header name for external agent ID.
+ * Clients can pass this header to associate interactions with their own agent identifiers.
+ */
+export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 
 /**
  * SSO Provider IDs - these are the canonical provider identifiers used for:

@@ -6,7 +6,7 @@ is_prod = os.getenv('PROD') == 'true'
 
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
-  local('cp .env.example .env')
+  local('cp .env.example .env', command_bat='copy .env.example .env')
   print("📝 Created .env from .env.example, be sure to fill in any necessary unique values (ex. API keys)")
 else:
   print("📝 .env already exists, skipping copy from .env.example")

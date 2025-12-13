@@ -138,7 +138,7 @@ export function ResponseModifierEditor({
         <Accordion type="single" collapsible className="mt-6">
           <AccordionItem
             value="cheat-sheet"
-            className="border border-border rounded-lg bg-card"
+            className="border border-border rounded-lg bg-card !border-b"
           >
             <AccordionTrigger className="px-4 hover:no-underline">
               <span className="text-sm font-medium">

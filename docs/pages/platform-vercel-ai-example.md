@@ -14,7 +14,7 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 [**AI SDK**](https://ai-sdk.dev) \- an open-source toolkit from Vercel that simplifies building AI-driven applications: unified provider support (OpenAI, Claude, Hugging-Face, etc.), streaming, tools execution, error handling, and more. While it offers great developer ergonomics and abstractions, out of the box it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. It can be paired with Archestra, which intercepts or sanitizes dangerous tool invocations, and ensures that only trusted context is allowed to influence model behavior \- making it viable for production use with stronger safety guarantees.
 
-In this guide we will use an exemplary Express ([Node.js](http://Node.js)) application to show how seamlessly agents written with AI SDK can be reconfigured to use Archestra as a security layer.
+In this guide we will use an exemplary Express ([Node.js](https://nodejs.org/)) application to show how seamlessly agents written with AI SDK can be reconfigured to use Archestra as a security layer.
 
 The full example can be found on: [https://github.com/archestra-ai/archestra/tree/main/platform/examples/ai-sdk-express](https://github.com/archestra-ai/archestra/tree/main/platform/examples/ai-sdk-express)
 
@@ -117,7 +117,7 @@ const customOpenAI = createOpenAI({
 
 You can create and manage profiles in the Archestra Platform UI at [http://localhost:3000/profiles](http://localhost:3000/profiles).
 
-Feel free to use our official [Node.js](http://Node.js) (Express) CLI chat example:
+Feel free to use our official [Node.js](https://nodejs.org/) (Express) CLI chat example:
 
 ```shell
 git clone git@github.com:archestra-ai/archestra.git

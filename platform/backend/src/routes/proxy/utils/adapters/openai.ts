@@ -18,6 +18,10 @@ type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
  * Convert OpenAI messages to common format for trusted data evaluation
  */
 export function toCommonFormat(messages: OpenAiMessages): CommonMessage[] {
+  logger.debug(
+    { messageCount: messages.length },
+    "[adapters/openai] toCommonFormat: starting conversion",
+  );
   const commonMessages: CommonMessage[] = [];
 
   for (const message of messages) {
@@ -40,6 +44,10 @@ export function toCommonFormat(messages: OpenAiMessages): CommonMessage[] {
       );
 
       if (toolName) {
+        logger.debug(
+          { toolCallId: message.tool_call_id, toolName },
+          "[adapters/openai] toCommonFormat: found tool message",
+        );
         // Parse the tool result
         let toolResult: unknown;
         if (typeof message.content === "string") {
@@ -67,6 +75,10 @@ export function toCommonFormat(messages: OpenAiMessages): CommonMessage[] {
     commonMessages.push(commonMessage);
   }
 
+  logger.debug(
+    { inputCount: messages.length, outputCount: commonMessages.length },
+    "[adapters/openai] toCommonFormat: conversion complete",
+  );
   return commonMessages;
 }
 
@@ -77,12 +89,25 @@ export function applyUpdates(
   messages: OpenAiMessages,
   updates: ToolResultUpdates,
 ): OpenAiMessages {
-  if (Object.keys(updates).length === 0) {
+  const updateCount = Object.keys(updates).length;
+  logger.debug(
+    { messageCount: messages.length, updateCount },
+    "[adapters/openai] applyUpdates: starting",
+  );
+
+  if (updateCount === 0) {
+    logger.debug("[adapters/openai] applyUpdates: no updates to apply");
     return messages;
   }
 
-  return messages.map((message) => {
+  let appliedCount = 0;
+  const result = messages.map((message) => {
     if (message.role === "tool" && updates[message.tool_call_id]) {
+      appliedCount++;
+      logger.debug(
+        { toolCallId: message.tool_call_id },
+        "[adapters/openai] applyUpdates: applying update to tool message",
+      );
       return {
         ...message,
         content: updates[message.tool_call_id],
@@ -90,6 +115,12 @@ export function applyUpdates(
     }
     return message;
   });
+
+  logger.debug(
+    { updateCount, appliedCount },
+    "[adapters/openai] applyUpdates: complete",
+  );
+  return result;
 }
 
 /**

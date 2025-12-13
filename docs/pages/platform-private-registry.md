@@ -12,6 +12,10 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
+<iframe width="100%" height="400" src="https://www.youtube.com/embed/L_p7CPzFEW0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<br />
+
 ![MCP Registry](/docs/automated_screenshots/platform_mcp_registry.png)
 
 The Private MCP Registry is Archestra's centralized repository for managing MCP servers within your organization. It provides **governance and control over AI tool access**, allowing administrators to curate, configure, and control which MCP servers are available to teams, ensuring security, compliance, and standardization across your AI infrastructure.

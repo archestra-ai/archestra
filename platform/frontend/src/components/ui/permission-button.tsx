@@ -1,18 +1,42 @@
 import type { Permissions } from "@shared";
-import type React from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
-import { permissionsToStrings } from "@/lib/auth.utils";
+import config from "@/lib/config";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
   tooltip?: string;
 };
+
+const { PermissionButton: PermissionButtonEE } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permission component
+      await import("./permission-button.ee")
+    : {
+        PermissionButton: ({
+          permissions: _permissions,
+          tooltip,
+          children,
+          ...props
+        }: PermissionButtonProps) => {
+          // Free version: no permission checks, render button with optional tooltip
+          if (tooltip) {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button {...props}>{children}</Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
+              </Tooltip>
+            );
+          }
+          return <Button {...props}>{children}</Button>;
+        },
+      };
 
 /**
  * A Button component with built-in permission checking and tooltip.
@@ -35,49 +59,6 @@ type PermissionButtonProps = ButtonProps & {
  * doesn't play well with the radix.ui tooltip trigger in cases like:
  * <TooltipTrigger><WithPermission><Button /></WithPermission></TooltipTrigger>.
  */
-export function PermissionButton({
-  permissions,
-  tooltip,
-  children,
-  ...props
-}: PermissionButtonProps) {
-  const { data: hasPermission } = useHasPermissions(permissions);
-
-  if (hasPermission && tooltip) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button {...props}>{children}</Button>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
-      </Tooltip>
-    );
-  } else if (hasPermission) {
-    return <Button {...props}>{children}</Button>;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="cursor-not-allowed">
-          <Button
-            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-              // Prevent action when disabled
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            {...props}
-            disabled
-          >
-            {children}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-60">
-        <p>
-          Missing permissions: {permissionsToStrings(permissions).join(", ")}.
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
+export function PermissionButton(props: PermissionButtonProps) {
+  return <PermissionButtonEE {...props} />;
 }

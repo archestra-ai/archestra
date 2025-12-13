@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { jsonSchema, type Tool } from "ai";
+import {
+  executeArchestraTool,
+  isArchestraMcpServerTool,
+} from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
@@ -343,11 +347,17 @@ function normalizeJsonSchema(schema: any): any {
  * @param userIsProfileAdmin - Whether the user is a profile admin
  * @returns Record of tool name to AI SDK Tool object
  */
-export async function getChatMcpTools(
-  agentId: string,
-  userId: string,
-  userIsProfileAdmin: boolean,
-): Promise<Record<string, Tool>> {
+export async function getChatMcpTools({
+  agentName,
+  agentId,
+  userId,
+  userIsProfileAdmin,
+}: {
+  agentName: string;
+  agentId: string;
+  userId: string;
+  userIsProfileAdmin: boolean;
+}): Promise<Record<string, Tool>> {
   const cacheKey = getCacheKey(agentId, userId);
 
   const cachedTools = toolCache.get(cacheKey);
@@ -434,7 +444,59 @@ export async function getChatMcpTools(
             );
 
             try {
-              // Execute tool directly via mcpClient to avoid the need to pass the token in the HTTP header
+              // Check if this is an Archestra tool - handle directly without DB lookup
+              if (isArchestraMcpServerTool(mcpTool.name)) {
+                logger.info(
+                  { agentId, userId, toolName: mcpTool.name },
+                  "Executing Archestra tool from chat",
+                );
+
+                const archestraResponse = await executeArchestraTool(
+                  mcpTool.name,
+                  args,
+                  { profile: { id: agentId, name: agentName } },
+                );
+
+                // Check for errors
+                if (archestraResponse.isError) {
+                  const errorText = (
+                    archestraResponse.content as Array<{
+                      type: string;
+                      text?: string;
+                    }>
+                  )
+                    .map((item) =>
+                      item.type === "text" && item.text
+                        ? item.text
+                        : JSON.stringify(item),
+                    )
+                    .join("\n");
+                  throw new Error(errorText);
+                }
+
+                // Convert MCP content to string for AI SDK
+                const content = (
+                  archestraResponse.content as Array<{
+                    type: string;
+                    text?: string;
+                  }>
+                )
+                  .map((item) =>
+                    item.type === "text" && item.text
+                      ? item.text
+                      : JSON.stringify(item),
+                  )
+                  .join("\n");
+
+                logger.info(
+                  { agentId, userId, toolName: mcpTool.name },
+                  "Archestra tool execution completed",
+                );
+
+                return content;
+              }
+
+              // Execute non-Archestra tools via mcpClient
               // This allows passing userId securely without risk of header spoofing
               const toolCall = {
                 id: randomUUID(),

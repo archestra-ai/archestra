@@ -901,20 +901,38 @@ export default class K8sPod {
 
           // Update the Deployment by replacing it
           // Preserve metadata and resourceVersion for proper update
+          // Helper to preserve only Kubernetes-managed keys (e.g., those starting with "kubernetes.io/" or "app.kubernetes.io/")
+          function preserveManagedKeys(
+            existing: Record<string, string> | undefined,
+            desired: Record<string, string> | undefined
+          ): Record<string, string> | undefined {
+            if (!existing && !desired) return undefined;
+            const managedPrefixes = ["kubernetes.io/", "app.kubernetes.io/"];
+            const preserved: Record<string, string> = {};
+            if (existing) {
+              for (const [key, value] of Object.entries(existing)) {
+                if (managedPrefixes.some((prefix) => key.startsWith(prefix))) {
+                  preserved[key] = value;
+                }
+              }
+            }
+            // Desired always takes precedence
+            return { ...preserved, ...(desired || {}) };
+          }
+
           const updatedDeployment: k8s.V1Deployment = {
             ...desiredDeploymentSpec,
             metadata: {
               ...desiredDeploymentSpec.metadata,
               resourceVersion: existingDeployment.metadata?.resourceVersion,
-              // Preserve existing annotations and labels that might have been added
-              annotations: {
-                ...existingDeployment.metadata?.annotations,
-                ...desiredDeploymentSpec.metadata?.annotations,
-              },
-              labels: {
-                ...existingDeployment.metadata?.labels,
-                ...desiredDeploymentSpec.metadata?.labels,
-              },
+              annotations: preserveManagedKeys(
+                existingDeployment.metadata?.annotations,
+                desiredDeploymentSpec.metadata?.annotations
+              ),
+              labels: preserveManagedKeys(
+                existingDeployment.metadata?.labels,
+                desiredDeploymentSpec.metadata?.labels
+              ),
             },
           };
 

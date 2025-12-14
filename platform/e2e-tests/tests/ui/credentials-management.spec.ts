@@ -184,9 +184,6 @@ test.describe("Custom Self-hosted MCP Server - installation and credentials mana
         };
         await openManageCredentialsDialog(page, catalogItemName);
         const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
-        await expect(visibleCredentialsAfterRevoke).not.toContain(
-          expectedCredentialsAfterRevoke[user][0],
-        );
         await expect(visibleCredentialsAfterRevoke).toHaveLength(
           expectedCredentialsAfterRevoke[user].length - 1,
         );

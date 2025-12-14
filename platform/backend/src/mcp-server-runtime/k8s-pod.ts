@@ -1235,17 +1235,31 @@ export default class K8sPod {
         labelSelector: labels,
       });
 
-      // Find the pod managed by our deployment
-      const deploymentPod = pods.items.find(
-        (pod) =>
-          pod.metadata?.ownerReferences?.some(
-            (ref) =>
-              ref.kind === "ReplicaSet" &&
-              ref.name?.startsWith(this.deploymentName),
-          ),
-      );
-
-      return deploymentPod || null;
+      // For each pod, check if its ReplicaSet owner is owned by our Deployment
+      for (const pod of pods.items) {
+        const ownerRef = pod.metadata?.ownerReferences?.find(
+          (ref) => ref.kind === "ReplicaSet" && !!ref.name
+        );
+        if (ownerRef && ownerRef.name) {
+          try {
+            const rsResp = await this.k8sAppsApi.readNamespacedReplicaSet({
+              name: ownerRef.name,
+              namespace: this.namespace,
+            });
+            const rs = rsResp.body;
+            const rsOwner = rs.metadata?.ownerReferences?.find(
+              (ref) => ref.kind === "Deployment" && ref.name === this.deploymentName
+            );
+            if (rsOwner) {
+              return pod;
+            }
+          } catch (err) {
+            // Ignore errors for ReplicaSets that may have been deleted
+            continue;
+          }
+        }
+      }
+      return null;
     } catch (error) {
       logger.error(
         { err: error },

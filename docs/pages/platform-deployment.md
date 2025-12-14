@@ -84,7 +84,7 @@ This command will:
 
 ### Configuration
 
-The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/values.yaml).
+The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/archestra/values.yaml).
 
 #### Core Configuration
 
@@ -134,7 +134,12 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
 
-#### Service & Ingress Configuration
+#### Service, Deployment, & Ingress Configuration
+
+**Deployment Settings**:
+
+- `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
+- `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
 
@@ -473,7 +478,7 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
-  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
+  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/docs/platform-single-sign-on) for SSO configuration.
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
 

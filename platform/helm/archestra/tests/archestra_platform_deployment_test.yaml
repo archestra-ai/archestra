@@ -1088,3 +1088,93 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3
+
+  # Resource requests and limits tests
+  - it: should have default memory resources configured
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "2Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "3Gi"
+
+  - it: should allow overriding resource requests and limits
+    documentIndex: 1
+    set:
+      archestra.resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "4Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "500m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "1Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "4Gi"
+
+  # Pod annotations tests
+  - it: should not have pod annotations when archestra.podAnnotations is empty
+    documentIndex: 1
+    set:
+      archestra.podAnnotations: {}
+    asserts:
+      - isNull:
+          path: spec.template.metadata.annotations
+
+  - it: should apply pod annotations when provided
+    documentIndex: 1
+    set:
+      archestra.podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9050"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9050"
+
+  - it: should apply multiple pod annotations correctly
+    documentIndex: 1
+    set:
+      archestra.podAnnotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "archestra-app"
+        sidecar.istio.io/inject: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["vault.hashicorp.com/agent-inject"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["vault.hashicorp.com/role"]
+          value: "archestra-app"
+      - equal:
+          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
+          value: "true"
+
+  - it: should support pod annotations with complex values
+    documentIndex: 1
+    set:
+      archestra.podAnnotations:
+        kubectl.kubernetes.io/default-container: archestra-platform
+        config.linkerd.io/proxy-cpu-request: "100m"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kubectl.kubernetes.io/default-container"]
+          value: archestra-platform
+      - equal:
+          path: spec.template.metadata.annotations["config.linkerd.io/proxy-cpu-request"]
+          value: "100m"

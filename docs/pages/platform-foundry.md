@@ -109,4 +109,4 @@ The agent can still do its legitimate work, but it can't be tricked into doing u
 
 ---
 
-Want to see how Archestra can secure your Foundry agents? Check out our [documentation](/docs) or [contact us](/contact) for a demo.
+Want to see how Archestra can secure your Foundry agents? Check out our [documentation](/docs) or [contact us](/book-demo) for a demo.

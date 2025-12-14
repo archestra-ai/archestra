@@ -382,9 +382,11 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // Priority 1: Server owned by current user
+    // Priority 1: Personal credential owned by current user (no teamId)
     if (tokenAuth.userId) {
-      const userServer = allServers.find((s) => s.ownerId === tokenAuth.userId);
+      const userServer = allServers.find(
+        (s) => s.ownerId === tokenAuth.userId && !s.teamId,
+      );
       if (userServer) {
         logger.info(
           {

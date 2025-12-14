@@ -41,6 +41,7 @@ export const E2eTestId = {
   EditAgentButton: "edit-agent-button",
   RemoveTeamBadge: "remove-team-badge",
   PromptOnInstallationCheckbox: "prompt-on-installation-checkbox",
+  RevokeCredentialButton: "revoke-credential-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
   AddChatApiKeyButton: "add-chat-api-key-button",

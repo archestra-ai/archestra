@@ -118,6 +118,4 @@ export const test = base.extend<TestFixtures>({
   goToMemberPage: async ({ memberPage }, use) => {
     await use((path = "") => memberPage.goto(`${UI_BASE_URL}${path}`));
   },
-
-  // here
 });

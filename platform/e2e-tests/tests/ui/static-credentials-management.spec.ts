@@ -1,9 +1,7 @@
-import type { APIRequestContext, Page } from "@playwright/test";
-import { testMcpServerCommand } from "@shared";
-import * as apiSdk from "@shared/hey-api/clients/api";
+import type { Page } from "@playwright/test";
+import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
-  DEFAULT_PROFILE_NAME,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   EDITOR_EMAIL,
@@ -12,13 +10,16 @@ import {
 } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
-  callMcpTool,
-  getOrgTokenForProfile,
-  getTeamTokenForProfile,
-  initializeMcpSession,
-} from "../api/mcp-gateway-utils";
+  addCustomSelfHostedCatalogItem,
+  assignEngineeringTeamToDefaultProfileViaApi,
+  getVisibleCredentials,
+  getVisibleStaticCredentials,
+  goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+  openManageCredentialsDialog,
+  verifyToolCallResultViaApi,
+} from "../../utils";
 
-test.describe("Custom Self-hosted MCP Server - installation and credentials management (vault disabled, prompt-on-installation disabled)", () => {
+test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
   const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
     {
@@ -189,9 +190,9 @@ test.describe("Custom Self-hosted MCP Server - installation and credentials mana
         );
       }
 
-      // CLEANUP: Delete created catalog items and mcp servers, non-blocking on purpose
+      // CLEANUP: Delete created catalog items and mcp servers
       if (newCatalogItem) {
-        await apiSdk.deleteInternalMcpCatalogItem({
+        await archestraApiSdk.deleteInternalMcpCatalogItem({
           path: { id: newCatalogItem.id },
           headers: { Cookie: cookieHeaders },
         });
@@ -207,11 +208,12 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   extractCookieHeaders,
   makeRandomString,
 }) => {
+  test.setTimeout(45_000); // 45 seconds
   // Create catalog item as Admin
   // Editor and Member cannot add items to MCP Registry
   const catalogItemName = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  await addCustomSelfHostedCatalogItem({
+  const newCatalogItem = await addCustomSelfHostedCatalogItem({
     page: adminPage,
     cookieHeaders,
     catalogItemName,
@@ -265,6 +267,12 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   await Promise.all(
     MATRIX.map(({ page, user }) => checkCredentialsCount(page, user)),
   );
+
+  // CLEANUP: Delete created catalog items and mcp servers, non-blocking on purpose
+  await archestraApiSdk.deleteInternalMcpCatalogItem({
+    path: { id: newCatalogItem.id },
+    headers: { Cookie: cookieHeaders },
+  });
 });
 
 test("Verify tool calling using different static credentials", async ({
@@ -299,7 +307,7 @@ test("Verify tool calling using different static credentials", async ({
     .click();
   await adminPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-    .fill("Admin");
+    .fill("Admin-personal-credential");
   await adminPage.getByRole("button", { name: "Install" }).click();
   await adminPage.waitForLoadState("networkidle");
 
@@ -310,7 +318,7 @@ test("Verify tool calling using different static credentials", async ({
     .click();
   await editorPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-    .fill("Editor");
+    .fill("Editor-personal-credential");
   await editorPage.getByRole("button", { name: "Install" }).click();
   await editorPage.waitForLoadState("networkidle");
 
@@ -326,7 +334,7 @@ test("Verify tool calling using different static credentials", async ({
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
     request,
-    expectedText: "Admin",
+    expectedResult: "Admin-personal-credential",
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     cookieHeaders,
@@ -344,230 +352,15 @@ test("Verify tool calling using different static credentials", async ({
   // Verify tool call result using editor static credential
   await verifyToolCallResultViaApi({
     request,
-    expectedText: "Editor",
+    expectedResult: "Editor-personal-credential",
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     cookieHeaders,
   });
 
   // CLEANUP: Delete existing created MCP servers / installations
-  await goToPage(adminPage, "/mcp-catalog/registry");
-  await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
-  const count = await adminPage.getByRole("button", { name: "Revoke" }).count();
-  for (let i = 0; i < count; i++) {
-    await adminPage.getByRole("button", { name: "Revoke" }).first().click();
-  }
+  await archestraApiSdk.deleteInternalMcpCatalogItem({
+    path: { id: newCatalogItem.id },
+    headers: { Cookie: cookieHeaders },
+  });
 });
-
-async function assignEngineeringTeamToDefaultProfileViaApi({
-  cookieHeaders,
-}: {
-  cookieHeaders: string;
-}) {
-  // 1. Get all teams and find Default Team and Engineering Team
-  const teamsResponse = await apiSdk.getTeams({
-    headers: { Cookie: cookieHeaders },
-  });
-  const defaultTeam = teamsResponse.data?.find(
-    (team) => team.name === DEFAULT_TEAM_NAME,
-  );
-  if (!defaultTeam) {
-    throw new Error(`Team "${DEFAULT_TEAM_NAME}" not found`);
-  }
-  const engineeringTeam = teamsResponse.data?.find(
-    (team) => team.name === ENGINEERING_TEAM_NAME,
-  );
-  if (!engineeringTeam) {
-    throw new Error(`Team "${ENGINEERING_TEAM_NAME}" not found`);
-  }
-
-  // 2. Get all profiles and find Default Agent
-  const agentsResponse = await apiSdk.getAgents({
-    headers: { Cookie: cookieHeaders },
-  });
-  const defaultProfile = agentsResponse.data?.data?.find(
-    (agent) => agent.name === DEFAULT_PROFILE_NAME,
-  );
-  if (!defaultProfile) {
-    throw new Error(`Profile "${DEFAULT_PROFILE_NAME}" not found`);
-  }
-
-  // 3. Assign BOTH Default Team and Engineering Team to the profile
-  await apiSdk.updateAgent({
-    headers: { Cookie: cookieHeaders },
-    path: { id: defaultProfile.id },
-    body: {
-      teams: [defaultTeam.id, engineeringTeam.id],
-    },
-  });
-}
-
-async function addCustomSelfHostedCatalogItem({
-  page,
-  cookieHeaders,
-  catalogItemName,
-  envVars,
-}: {
-  page: Page;
-  cookieHeaders: string;
-  catalogItemName: string;
-  envVars?: {
-    key: string;
-    promptOnInstallation: boolean;
-  };
-}) {
-  // Go to Add MCP Server page
-  await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Add MCP Server" }).click();
-
-  await page
-    .getByRole("button", { name: "Self-hosted (orchestrated by" })
-    .click();
-  await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
-  await page.getByRole("textbox", { name: "Command *" }).fill("sh");
-  const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
-  await page
-    .getByRole("textbox", { name: "Arguments (one per line)" })
-    .fill(`-c\n${singleLineCommand}`);
-  if (envVars) {
-    await page.getByRole("button", { name: "Add Variable" }).click();
-    await page.getByRole("textbox", { name: "API_KEY" }).fill(envVars.key);
-    if (envVars.promptOnInstallation) {
-      await page
-        .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
-        .click({ force: true });
-    }
-  }
-  await page.getByRole("button", { name: "Add Server" }).click();
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1_000);
-  const catalogItems = await apiSdk.getInternalMcpCatalog({
-    headers: { Cookie: cookieHeaders },
-  });
-  if (!catalogItems.data) {
-    throw new Error("No catalog items found");
-  }
-  const newCatalogItem = catalogItems.data?.find(
-    (item) => item.name === catalogItemName,
-  );
-  if (!newCatalogItem) {
-    throw new Error("Failed to find new catalog item");
-  }
-  return { id: newCatalogItem.id, name: newCatalogItem.name };
-}
-
-async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-  page,
-  catalogItemName,
-}: {
-  page: Page;
-  catalogItemName: string;
-}) {
-  await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
-  const manageToolsButton = page.getByTestId(
-    `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
-  );
-  await manageToolsButton.click();
-  await page
-    .getByRole("button", { name: "Assign Tool to Profiles" })
-    .first()
-    .click();
-  await page.getByRole("checkbox").first().click();
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("combobox").click();
-  await page.waitForLoadState("networkidle");
-}
-
-async function verifyToolCallResultViaApi({
-  request,
-  expectedText,
-  tokenToUse,
-  toolName,
-  cookieHeaders,
-}: {
-  request: APIRequestContext;
-  expectedText: "Admin" | "Editor" | "AnySuccessText";
-  tokenToUse: "default-team" | "engineering-team" | "org-token";
-  toolName: string;
-  cookieHeaders: string;
-}) {
-  const { data: defaultProfile } = await apiSdk.getDefaultAgent({
-    headers: { Cookie: cookieHeaders },
-  });
-  if (!defaultProfile) {
-    throw new Error("Default profile not found");
-  }
-
-  let token: string;
-  if (tokenToUse === "default-team") {
-    token = await getTeamTokenForProfile(request, DEFAULT_TEAM_NAME);
-  } else if (tokenToUse === "engineering-team") {
-    token = await getTeamTokenForProfile(request, ENGINEERING_TEAM_NAME);
-  } else {
-    token = await getOrgTokenForProfile(request);
-  }
-
-  const sessionId = await initializeMcpSession(request, {
-    profileId: defaultProfile.id,
-    token,
-  });
-
-  const toolResult = await callMcpTool(request, {
-    profileId: defaultProfile.id,
-    token,
-    sessionId,
-    toolName,
-  });
-
-  const textContent = toolResult.content.find((c) => c.type === "text");
-  if (expectedText === "AnySuccessText") {
-    return;
-  }
-
-  if (!textContent?.text?.includes(expectedText)) {
-    throw new Error(
-      `Expected tool result to contain "${expectedText}" but got "${textContent?.text}"`,
-    );
-  }
-}
-
-/**
- * Open the Local Installations dialog for the test server
- */
-async function openManageCredentialsDialog(
-  page: Page,
-  catalogItemName: string,
-): Promise<void> {
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(2_000);
-  // Find and click the Manage button for credentials
-  const manageButton = page.getByTestId(
-    `${E2eTestId.ManageCredentialsButton}-${catalogItemName}`,
-  );
-  await expect(manageButton).toBeVisible();
-  await manageButton.click();
-
-  // Wait for dialog to appear
-  await expect(
-    page.getByTestId(E2eTestId.ManageCredentialsDialog),
-  ).toBeVisible();
-  await page.waitForLoadState("networkidle");
-}
-
-/**
- * Get visible credential emails from the Local Installations dialog
- */
-async function getVisibleCredentials(page: Page): Promise<string[]> {
-  return await page.getByTestId(E2eTestId.CredentialOwner).allTextContents();
-}
-
-/**
- * Get visible static credentials from the TokenSelect
- */
-async function getVisibleStaticCredentials(page: Page): Promise<string[]> {
-  return await page
-    .getByTestId(E2eTestId.StaticCredentialToUse)
-    .allTextContents();
-}

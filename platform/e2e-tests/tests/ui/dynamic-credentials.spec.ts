@@ -80,7 +80,6 @@ test("Verify tool calling using dynamic static credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  // Select admin static credential
   await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
   await adminPage.getByText("Assign to 1 profile").click();
   await adminPage.waitForLoadState("networkidle");

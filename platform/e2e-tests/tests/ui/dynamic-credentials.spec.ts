@@ -1,12 +1,5 @@
 import { archestraApiSdk } from "@shared";
-import {
-  ADMIN_EMAIL,
-  DEFAULT_TEAM_NAME,
-  E2eTestId,
-  EDITOR_EMAIL,
-  ENGINEERING_TEAM_NAME,
-  MARKETING_TEAM_NAME,
-} from "../../consts";
+import { ADMIN_EMAIL, E2eTestId, EDITOR_EMAIL } from "../../consts";
 import { goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,

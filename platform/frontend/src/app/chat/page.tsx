@@ -404,7 +404,7 @@ export default function ChatPage() {
   // Only show after loading completes to avoid flash of incorrect content
   if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
     return (
-      <div className="flex h-screen items-center justify-center p-8">
+      <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>LLM Provider API Key Required</CardTitle>

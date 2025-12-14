@@ -18,8 +18,6 @@ import {
   initializeMcpSession,
 } from "../api/mcp-gateway-utils";
 
-const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
-
 type MatrixTestParams = {
   vault: boolean;
   promptOnInstallation: boolean;

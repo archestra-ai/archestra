@@ -1986,3 +1986,509 @@ describe("K8sPod.generatePodTemplateSpec - serviceAccountName", () => {
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 });
+
+describe("K8sPod - arraysEqual (private method)", () => {
+  test("returns true for equal arrays", () => {
+    const pod = createK8sPodInstance();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual([1, 2, 3], [1, 2, 3])).toBe(true);
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual(["a", "b"], ["a", "b"])).toBe(true);
+  });
+
+  test("returns false for different arrays", () => {
+    const pod = createK8sPodInstance();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual([1, 2, 3], [1, 2, 4])).toBe(false);
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual(["a", "b"], ["a", "c"])).toBe(false);
+  });
+
+  test("returns false for arrays with different lengths", () => {
+    const pod = createK8sPodInstance();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual([1, 2], [1, 2, 3])).toBe(false);
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual([1, 2, 3], [1, 2])).toBe(false);
+  });
+
+  test("returns true when both are undefined", () => {
+    const pod = createK8sPodInstance();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual(undefined, undefined)).toBe(true);
+  });
+
+  test("returns false when one is undefined and other is not", () => {
+    const pod = createK8sPodInstance();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual(undefined, [1, 2])).toBe(false);
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual([1, 2], undefined)).toBe(false);
+  });
+
+  test("returns true for empty arrays", () => {
+    const pod = createK8sPodInstance();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.arraysEqual([], [])).toBe(true);
+  });
+});
+
+describe("K8sPod - envVarsDiffer (private method)", () => {
+  test("returns false when environment variables are identical", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      { name: "PORT", value: "3000" },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      { name: "PORT", value: "3000" },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(false);
+  });
+
+  test("returns true when environment variable values differ", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret456" },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("returns true when environment variable is missing in existing", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [{ name: "API_KEY", value: "secret123" }];
+    const desired: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      { name: "PORT", value: "3000" },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("returns true when environment variable is missing in desired", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      { name: "PORT", value: "3000" },
+    ];
+    const desired: k8s.V1EnvVar[] = [{ name: "API_KEY", value: "secret123" }];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("returns true when one uses value and other uses valueFrom", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "API_KEY",
+          },
+        },
+      },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("returns false when both use valueFrom with same secret reference", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "API_KEY",
+          },
+        },
+      },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "API_KEY",
+          },
+        },
+      },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(false);
+  });
+
+  test("returns true when valueFrom secret references differ", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "API_KEY",
+          },
+        },
+      },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets-v2",
+            key: "API_KEY",
+          },
+        },
+      },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("returns true when valueFrom secret key differs", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "API_KEY",
+          },
+        },
+      },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      {
+        name: "API_KEY",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "API_KEY_V2",
+          },
+        },
+      },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("returns true when existing is undefined", () => {
+    const pod = createK8sPodInstance();
+    const desired: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(undefined, desired)).toBe(true);
+  });
+
+  test("returns true when arrays have different lengths", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [{ name: "API_KEY", value: "secret123" }];
+    const desired: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      { name: "PORT", value: "3000" },
+      { name: "DEBUG", value: "true" },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(true);
+  });
+
+  test("handles mixed value and valueFrom in same arrays", () => {
+    const pod = createK8sPodInstance();
+    const existing: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      {
+        name: "DATABASE_URL",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "DATABASE_URL",
+          },
+        },
+      },
+    ];
+    const desired: k8s.V1EnvVar[] = [
+      { name: "API_KEY", value: "secret123" },
+      {
+        name: "DATABASE_URL",
+        valueFrom: {
+          secretKeyRef: {
+            name: "mcp-server-secrets",
+            key: "DATABASE_URL",
+          },
+        },
+      },
+    ];
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.envVarsDiffer(existing, desired)).toBe(false);
+  });
+});
+
+describe("K8sPod - deploymentNeedsUpdate (private method)", () => {
+  function createMockDeployment(
+    containerOverrides: Partial<k8s.V1Container> = {},
+    specOverrides: Partial<k8s.V1DeploymentSpec> = {},
+  ): k8s.V1Deployment {
+    return {
+      metadata: {
+        name: "mcp-test-server",
+      },
+      spec: {
+        replicas: 1,
+        selector: {
+          matchLabels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+          },
+        },
+        template: {
+          spec: {
+            containers: [
+              {
+                name: "mcp-server",
+                image: "test-image:latest",
+                command: ["node"],
+                args: ["server.js"],
+                env: [{ name: "PORT", value: "3000" }],
+                ports: [{ containerPort: 8080, protocol: "TCP" }],
+                ...containerOverrides,
+              },
+            ],
+          },
+        },
+        ...specOverrides,
+      },
+    } as k8s.V1Deployment;
+  }
+
+  test("returns false when deployments are identical", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(false);
+  });
+
+  test("returns true when Docker image differs", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment({ image: "test-image:v2" });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when command differs", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment({ command: ["python"] });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when arguments differ", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment({ args: ["app.js"] });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when environment variables differ", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment({
+      env: [{ name: "PORT", value: "8080" }],
+    });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when ports differ", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment({
+      ports: [{ containerPort: 9000, protocol: "TCP" }],
+    });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when port count differs", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment({
+      ports: [
+        { containerPort: 8080, protocol: "TCP" },
+        { containerPort: 9000, protocol: "TCP" },
+      ],
+    });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when service account name differs", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment(
+      {},
+      {
+        template: {
+          spec: {
+            serviceAccountName: "default",
+            containers: [
+              {
+                name: "mcp-server",
+                image: "test-image:latest",
+              },
+            ],
+          },
+        },
+      },
+    );
+    const desired = createMockDeployment(
+      {},
+      {
+        template: {
+          spec: {
+            serviceAccountName: "custom-sa",
+            containers: [
+              {
+                name: "mcp-server",
+                image: "test-image:latest",
+              },
+            ],
+          },
+        },
+      },
+    );
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when replica count differs", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment({}, { replicas: 1 });
+    const desired = createMockDeployment({}, { replicas: 2 });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when container is missing in existing", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment(
+      {},
+      {
+        template: {
+          spec: {
+            containers: [],
+          },
+        },
+      },
+    );
+    const desired = createMockDeployment();
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
+  test("returns true when container is missing in desired", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment();
+    const desired = createMockDeployment(
+      {},
+      {
+        template: {
+          spec: {
+            containers: [],
+          },
+        },
+      },
+    );
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+});
+
+describe("K8sPod - generateDeploymentSpec", () => {
+  test("generates deployment spec with correct metadata", () => {
+    const k8sPod = createK8sPodInstance();
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = (k8sPod as any).generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(deploymentSpec.metadata?.name).toBe("mcp-test-server");
+    expect(deploymentSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+      "mcp-server-name": "test-server",
+    });
+    expect(deploymentSpec.spec?.replicas).toBe(1);
+  });
+
+  test("generates deployment spec with correct selector", () => {
+    const k8sPod = createK8sPodInstance();
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+    };
+
+    const deploymentSpec = (k8sPod as any).generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(deploymentSpec.spec?.selector.matchLabels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+    });
+  });
+
+  test("generates deployment spec with pod template", () => {
+    const k8sPod = createK8sPodInstance();
+
+    const dockerImage = "test-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = (k8sPod as any).generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.containers).toHaveLength(1);
+    const container = deploymentSpec.spec?.template.spec?.containers?.[0];
+    expect(container?.name).toBe("mcp-server");
+    expect(container?.image).toBe("test-image:latest");
+    expect(container?.command).toEqual(["node"]);
+    expect(container?.args).toEqual(["server.js"]);
+  });
+});

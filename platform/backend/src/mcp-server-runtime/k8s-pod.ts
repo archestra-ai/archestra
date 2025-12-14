@@ -24,7 +24,28 @@ export default class K8sPod {
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
   private namespace: string;
+  /**
+   * The pod name used for backward compatibility, service naming, and status reporting.
+   * This name is derived from the MCP server name and is used for:
+   * - Service resource naming (e.g., `${podName}-service`)
+   * - Backward compatibility when migrating from raw Pods to Deployments
+   * - Fallback log retrieval when the deployment pod cannot be found
+   * - Status summary reporting
+   *
+   * Note: This has the same value as `deploymentName` but serves different semantic purposes.
+   */
   private podName: string;
+  /**
+   * The Deployment resource name used for all Kubernetes Deployment operations.
+   * This name is used for:
+   * - Creating, reading, updating, and deleting Deployment resources
+   * - All Deployment-specific API calls
+   * - Logging and error messages related to Deployments
+   *
+   * Note: This has the same value as `podName` but serves different semantic purposes.
+   * The Deployment is the primary resource being managed, while podName is maintained
+   * for backward compatibility and service naming conventions.
+   */
   private deploymentName: string;
   private state: K8sPodState = "not_created";
   private errorMessage: string | null = null;
@@ -58,7 +79,9 @@ export default class K8sPod {
     this.userConfigValues = userConfigValues;
     this.environmentValues = environmentValues;
     this.podName = K8sPod.constructPodName(mcpServer);
-    this.deploymentName = this.podName; // Deployment name same as pod name for consistency
+    // Deployment name uses the same value as podName for consistency, but they serve
+    // different semantic purposes (see property documentation above)
+    this.deploymentName = this.podName;
   }
 
   /**
@@ -128,6 +151,20 @@ export default class K8sPod {
     }
 
     return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
+  }
+
+  /**
+   * Check if an error is a 404 Not Found error from Kubernetes API
+   * Kubernetes client errors can have either statusCode or code property set to 404
+   */
+  private isNotFoundError(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+      return false;
+    }
+    return (
+      ("statusCode" in error && error.statusCode === 404) ||
+      ("code" in error && error.code === 404)
+    );
   }
 
   /**
@@ -251,13 +288,7 @@ export default class K8sPod {
       );
     } catch (error: unknown) {
       // If secret doesn't exist (404), that's okay - it may have been deleted already or never created
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-
-      if (is404) {
+      if (this.isNotFoundError(error)) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -614,13 +645,29 @@ export default class K8sPod {
         return true; // Missing env var
       }
 
-      // Compare value vs valueFrom
-      if (desiredEnv.value !== existingEnv.value) {
+      // Compare environment variable values
+      // An env var can use either `value` (direct) or `valueFrom` (secret reference)
+      // They are different if one uses value and the other uses valueFrom
+
+      const desiredUsesValue = desiredEnv.value !== undefined;
+      const existingUsesValue = existingEnv.value !== undefined;
+      const desiredUsesValueFrom = desiredEnv.valueFrom !== undefined;
+      const existingUsesValueFrom = existingEnv.valueFrom !== undefined;
+
+      // If one uses value and the other uses valueFrom, they're different
+      if (desiredUsesValue !== existingUsesValue || desiredUsesValueFrom !== existingUsesValueFrom) {
         return true;
       }
 
-      // Compare valueFrom (for secrets)
-      if (desiredEnv.valueFrom || existingEnv.valueFrom) {
+      // Both use value - compare the values
+      if (desiredUsesValue && existingUsesValue) {
+        if (desiredEnv.value !== existingEnv.value) {
+          return true;
+        }
+      }
+
+      // Both use valueFrom - compare the secret references
+      if (desiredUsesValueFrom && existingUsesValueFrom) {
         const desiredRef = desiredEnv.valueFrom?.secretKeyRef;
         const existingRef = existingEnv.valueFrom?.secretKeyRef;
         if (
@@ -643,7 +690,18 @@ export default class K8sPod {
   }
 
   /**
-   * Compare arrays for equality
+   * Compare arrays for equality using shallow comparison.
+   *
+   * This function uses strict equality (===) to compare array elements, which works
+   * correctly for primitive types (strings, numbers, booleans) but will NOT work
+   * correctly for objects or nested arrays.
+   *
+   * This function is specifically designed for comparing Kubernetes container
+   * command and args arrays, which contain only string primitives.
+   *
+   * @param a - First array to compare (or undefined)
+   * @param b - Second array to compare (or undefined)
+   * @returns true if arrays are equal (both undefined, or same length with equal primitive values)
    */
   private arraysEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
     if (!a && !b) return true;
@@ -751,6 +809,12 @@ export default class K8sPod {
    * Migrate an existing Pod to a Deployment
    * This handles the migration case where a deployment that already has raw Pods
    * gets upgraded to having Deployments
+   *
+   * To avoid race conditions and port conflicts (especially for HTTP servers),
+   * we delete the old pod BEFORE creating the deployment. This ensures:
+   * - No overlap between old and new pods
+   * - No port conflicts during migration
+   * - Minimal downtime (deployment is created immediately after pod deletion)
    */
   private async migratePodToDeployment(): Promise<void> {
     try {
@@ -790,7 +854,30 @@ export default class K8sPod {
         })),
       };
 
-      // Create the Deployment
+      // Delete the old pod FIRST to avoid race conditions and port conflicts
+      // This ensures the old pod is gone before the deployment creates its new pod
+      logger.info(
+        `Deleting old pod ${this.podName} before creating Deployment to avoid conflicts`,
+      );
+      try {
+        await this.k8sApi.deleteNamespacedPod({
+          name: this.podName,
+          namespace: this.namespace,
+        });
+        logger.info(`Deleted old pod ${this.podName} before migration`);
+      } catch (error: unknown) {
+        // Pod might have been deleted already
+        if (!this.isNotFoundError(error)) {
+          logger.warn(
+            { err: error },
+            `Failed to delete old pod ${this.podName} before migration (non-fatal, continuing)`,
+          );
+        } else {
+          logger.info(`Old pod ${this.podName} already deleted`);
+        }
+      }
+
+      // Create the Deployment (old pod is now deleted, so no conflicts)
       await this.k8sAppsApi.createNamespacedDeployment({
         namespace: this.namespace,
         body: this.generateDeploymentSpec(
@@ -807,35 +894,8 @@ export default class K8sPod {
 
       // Wait for Deployment to be ready
       await this.waitForDeploymentReady();
-
-      // Delete the old pod (Deployment will manage the pod now)
-      try {
-        await this.k8sApi.deleteNamespacedPod({
-          name: this.podName,
-          namespace: this.namespace,
-        });
-        logger.info(`Deleted old pod ${this.podName} after migration`);
-      } catch (error: unknown) {
-        // Pod might have been deleted already, or might be managed by Deployment now
-        const is404 =
-          error &&
-          typeof error === "object" &&
-          (("statusCode" in error && error.statusCode === 404) ||
-            ("code" in error && error.code === 404));
-        if (!is404) {
-          logger.warn(
-            { err: error },
-            `Failed to delete old pod ${this.podName} after migration (non-fatal)`,
-          );
-        }
-      }
     } catch (error: unknown) {
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-      if (!is404) {
+      if (!this.isNotFoundError(error)) {
         logger.error(
           { err: error },
           `Failed to migrate pod ${this.podName} to Deployment:`,
@@ -997,7 +1057,7 @@ export default class K8sPod {
         // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
         // Deployment doesn't exist, check if we need to migrate from a Pod
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!this.isNotFoundError(error)) {
           throw error;
         }
         // 404 means Deployment doesn't exist, check for old Pod to migrate
@@ -1048,7 +1108,7 @@ export default class K8sPod {
         // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
         // Pod doesn't exist, we'll create Deployment below
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!this.isNotFoundError(error)) {
           throw error;
         }
         // 404 means pod doesn't exist, which is fine - we'll create Deployment
@@ -1132,7 +1192,7 @@ export default class K8sPod {
         // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
         // Service doesn't exist, we'll create it below
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!this.isNotFoundError(error)) {
           throw error;
         }
       }
@@ -1210,16 +1270,47 @@ export default class K8sPod {
         }
 
         // Check for failure conditions
-        const failedCondition = deployment.status?.conditions?.find(
+        // 1. Check for ReplicaFailure condition (indicates pod creation/replica issues)
+        const replicaFailure = deployment.status?.conditions?.find(
           (condition) =>
-            (condition.type === "Progressing" || condition.type === "Available") &&
-            condition.status === "False",
+            condition.type === "ReplicaFailure" && condition.status === "True",
         );
-        if (failedCondition) {
+        if (replicaFailure) {
           this.state = "failed";
-          this.errorMessage = failedCondition.message || "Deployment failed";
+          this.errorMessage =
+            replicaFailure.message || "Deployment replica failure";
           throw new Error(
-            `Deployment ${this.deploymentName} failed: ${failedCondition.message}`,
+            `Deployment ${this.deploymentName} failed: ${replicaFailure.message || "Replica failure detected"}`,
+          );
+        }
+
+        // 2. Check for Progressing condition with ProgressDeadlineExceeded (stuck deployment)
+        const progressingCondition = deployment.status?.conditions?.find(
+          (condition) => condition.type === "Progressing",
+        );
+        if (
+          progressingCondition?.status === "False" ||
+          progressingCondition?.reason === "ProgressDeadlineExceeded"
+        ) {
+          this.state = "failed";
+          this.errorMessage =
+            progressingCondition.message ||
+            "Deployment progress deadline exceeded";
+          throw new Error(
+            `Deployment ${this.deploymentName} failed: ${progressingCondition.message || "Progress deadline exceeded"}`,
+          );
+        }
+
+        // 3. Check for Available condition being False (deployment not available)
+        const availableCondition = deployment.status?.conditions?.find(
+          (condition) => condition.type === "Available",
+        );
+        if (availableCondition?.status === "False") {
+          this.state = "failed";
+          this.errorMessage =
+            availableCondition.message || "Deployment not available";
+          throw new Error(
+            `Deployment ${this.deploymentName} failed: ${availableCondition.message || "Deployment not available"}`,
           );
         }
       } catch (error: unknown) {
@@ -1260,13 +1351,13 @@ export default class K8sPod {
         );
         if (ownerRef && ownerRef.name) {
           try {
-            const rsResp = await this.k8sAppsApi.readNamespacedReplicaSet({
+            const rs = await this.k8sAppsApi.readNamespacedReplicaSet({
               name: ownerRef.name,
               namespace: this.namespace,
             });
-            const rs = rsResp.body;
             const rsOwner = rs.metadata?.ownerReferences?.find(
-              (ref) => ref.kind === "Deployment" && ref.name === this.deploymentName
+              (ref: k8s.V1OwnerReference) =>
+                ref.kind === "Deployment" && ref.name === this.deploymentName,
             );
             if (rsOwner) {
               return pod;
@@ -1369,12 +1460,7 @@ export default class K8sPod {
           namespace: this.namespace,
         });
       } catch (error: unknown) {
-        const is404 =
-          error &&
-          typeof error === "object" &&
-          (("statusCode" in error && error.statusCode === 404) ||
-            ("code" in error && error.code === 404));
-        if (is404) {
+        if (this.isNotFoundError(error)) {
           // Deployment doesn't exist, check for old pod
           logger.info(
             `Deployment ${this.deploymentName} doesn't exist, checking for old pod`,
@@ -1385,12 +1471,7 @@ export default class K8sPod {
               namespace: this.namespace,
             });
           } catch (podError: unknown) {
-            const podIs404 =
-              podError &&
-              typeof podError === "object" &&
-              (("statusCode" in podError && podError.statusCode === 404) ||
-                ("code" in podError && podError.code === 404));
-            if (podIs404) {
+            if (this.isNotFoundError(podError)) {
               logger.info(`Pod ${this.podName} already deleted`);
               this.state = "not_created";
               return;
@@ -1419,12 +1500,7 @@ export default class K8sPod {
           await new Promise((resolve) => setTimeout(resolve, pollInterval));
         } catch (error: unknown) {
           // Deployment not found (404) means it's been deleted
-          const is404 =
-            error &&
-            typeof error === "object" &&
-            (("statusCode" in error && error.statusCode === 404) ||
-              ("code" in error && error.code === 404));
-          if (is404) {
+          if (this.isNotFoundError(error)) {
             logger.info(
               `Deployment ${this.deploymentName} successfully terminated`,
             );
@@ -1442,12 +1518,7 @@ export default class K8sPod {
       );
       this.state = "not_created";
     } catch (error: unknown) {
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-      if (is404) {
+      if (this.isNotFoundError(error)) {
         // Deployment already doesn't exist, that's fine
         logger.info(`Deployment ${this.deploymentName} already deleted`);
         this.state = "not_created";
@@ -1478,6 +1549,14 @@ export default class K8sPod {
       const pod = await this.getDeploymentPod();
       if (!pod || !pod.metadata?.name) {
         // Fallback: try to get logs using pod name (for backward compatibility)
+        logger.warn(
+          {
+            mcpServerId: this.mcpServer.id,
+            podName: this.podName,
+            deploymentName: this.deploymentName,
+          },
+          "Using fallback to get logs by pod name directly. This may return logs from an old pod during migrations if the deployment has already created a new pod.",
+        );
         try {
           const logs = await this.k8sApi.readNamespacedPodLog({
             name: this.podName,
@@ -1486,13 +1565,7 @@ export default class K8sPod {
           });
           return logs || "";
         } catch (fallbackError: unknown) {
-          const is404 =
-            fallbackError &&
-            typeof fallbackError === "object" &&
-            (("statusCode" in fallbackError &&
-              fallbackError.statusCode === 404) ||
-              ("code" in fallbackError && fallbackError.code === 404));
-          if (is404) {
+          if (this.isNotFoundError(fallbackError)) {
             return "Pod not found";
           }
           throw fallbackError;
@@ -1511,12 +1584,7 @@ export default class K8sPod {
         { err: error },
         `Failed to get logs for Deployment ${this.deploymentName}:`,
       );
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-      if (is404) {
+      if (this.isNotFoundError(error)) {
         return "Pod not found";
       }
       throw error;

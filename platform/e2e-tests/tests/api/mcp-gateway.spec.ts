@@ -502,7 +502,7 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)",
 
     // Find the test tool (may need to wait for tool discovery)
     let testTool: { id: string; name: string } | undefined;
-    for (let attempt = 0; attempt < 10; attempt++) {
+    for (let attempt = 0; attempt < 14; attempt++) {
       const toolsResponse = await makeApiRequest({
         request,
         method: "get",

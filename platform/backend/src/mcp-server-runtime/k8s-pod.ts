@@ -755,7 +755,7 @@ export default class K8sPod {
   private async migratePodToDeployment(): Promise<void> {
     try {
       // Check if a raw pod exists
-      const existingPod = await this.k8sApi.readNamespacedPod({
+      await this.k8sApi.readNamespacedPod({
         name: this.podName,
         namespace: this.namespace,
       });

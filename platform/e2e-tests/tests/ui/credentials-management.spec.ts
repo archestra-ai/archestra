@@ -9,7 +9,6 @@ import {
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
@@ -20,7 +19,6 @@ import {
 } from "../api/mcp-gateway-utils";
 
 const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
-const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
 
 type MatrixTestParams = {
   vault: boolean;
@@ -218,6 +216,8 @@ test.describe("Credentials Management", () => {
   }) => {
     const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
     const cookieHeaders = await extractCookieHeaders(adminPage);
+    // Assign engineering team to default profile
+    await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
     // Create catalog item as Admin
     // Editor and Member cannot add items to MCP Registry
     const newCatalogItem = await addCustomSelfHostedCatalogItem({
@@ -232,6 +232,8 @@ test.describe("Credentials Management", () => {
     if (!newCatalogItem) {
       throw new Error("Failed to create catalog item");
     }
+
+    // Install test server for admin
     await adminPage
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
       .click();
@@ -240,24 +242,6 @@ test.describe("Credentials Management", () => {
       .fill("Admin");
     await adminPage.getByRole("button", { name: "Install" }).click();
     await adminPage.waitForLoadState("networkidle");
-
-    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-      page: adminPage,
-      catalogItemName: CATALOG_ITEM_NAME,
-    });
-    // Select admin static credential
-    await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-    await adminPage.getByText("Assign to 1 profile").click();
-    await adminPage.waitForLoadState("networkidle");
-
-    // Verify tool call result using admin static credential
-    await verifyToolCallResultViaApi({
-      request,
-      expectedText: "Admin",
-      tokenToUse: "org-token",
-      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-      cookieHeaders,
-    });
 
     // Install test server for editor
     await goToPage(editorPage, "/mcp-catalog/registry");
@@ -270,15 +254,35 @@ test.describe("Credentials Management", () => {
     await editorPage.getByRole("button", { name: "Install" }).click();
     await editorPage.waitForLoadState("networkidle");
 
+    // Assign tool to profiles using admin static credential
     await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
       page: adminPage,
       catalogItemName: CATALOG_ITEM_NAME,
     });
-    // Select editor static credential
-    await adminPage.getByRole("option", { name: "editor@example.com" }).click();
+    // Select admin static credential
+    await adminPage.getByRole("option", { name: "admin@example.com" }).click();
     await adminPage.getByText("Assign to 1 profile").click();
     await adminPage.waitForLoadState("networkidle");
+    // Verify tool call result using admin static credential
+    await verifyToolCallResultViaApi({
+      request,
+      expectedText: "Admin",
+      tokenToUse: "org-token",
+      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
+      cookieHeaders,
+    });
 
+    // Assign tool to profiles using editor static credential
+    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+      page: editorPage,
+      catalogItemName: CATALOG_ITEM_NAME,
+    });
+    // Select editor static credential
+    await editorPage
+      .getByRole("option", { name: "editor@example.com" })
+      .click();
+    await editorPage.getByText("Assign to 1 profile").click();
+    await editorPage.waitForLoadState("networkidle");
     // Verify tool call result using editor static credential
     await verifyToolCallResultViaApi({
       request,
@@ -288,7 +292,7 @@ test.describe("Credentials Management", () => {
       cookieHeaders,
     });
 
-    // CLEANUP: Delete existingcreated MCP servers / installations
+    // CLEANUP: Delete existing created MCP servers / installations
     await goToPage(adminPage, "/mcp-catalog/registry");
     await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
     const count = await adminPage
@@ -466,42 +470,12 @@ async function verifyToolCallResultViaApi({
   if (expectedText === "AnySuccessText") {
     return;
   }
+
   if (!textContent?.text?.includes(expectedText)) {
     throw new Error(
       `Expected tool result to contain "${expectedText}" but got "${textContent?.text}"`,
     );
   }
-}
-
-/**
- * Install the test MCP server for a user with their name as ARCHESTRA_TEST value
- */
-async function installTestServer(page: Page, userName: string): Promise<void> {
-  await goToPage(page, "/mcp-catalog/registry");
-  await page.waitForLoadState("networkidle");
-
-  // Find the test server card using data-slot attribute
-  const serverCard = page.getByTestId(
-    `${E2eTestId.McpServerCard}-${TEST_CATALOG_ITEM_NAME}`,
-  );
-  await expect(serverCard).toBeVisible();
-
-  // Click Connect button within that card
-  await serverCard.getByRole("button", { name: /Connect/i }).click();
-
-  // Wait for the installation dialog to appear
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-
-  // Fill in the ARCHESTRA_TEST environment variable with user name
-  await dialog.getByLabel(/ARCHESTRA_TEST/i).fill(userName);
-
-  // Click Install button
-  await dialog.getByRole("button", { name: /Install/i }).click();
-
-  // Wait for installation to complete (dialog should close)
-  await expect(dialog).toBeHidden({ timeout: 60000 });
-  await page.waitForLoadState("networkidle");
 }
 
 /**

@@ -9,7 +9,7 @@ import {
   verifyToolCallResultViaApi,
 } from "../../utils";
 
-test("Verify tool calling using dynamic static credentials", async ({
+test("Verify tool calling using dynamic credentials", async ({
   request,
   adminPage,
   editorPage,
@@ -86,9 +86,9 @@ test("Verify tool calling using dynamic static credentials", async ({
 
   /**
    * Credentials we have:
-   * Admin personal credential, default team
-   * Editor personal credential, engineering team
-   * Member team credential, marketing team
+   * Admin personal credential, default team credential
+   * Editor personal credential, engineering team credential
+   * Member personal credential, marketing team credential
    *
    * Team membership:
    * Admin: default team

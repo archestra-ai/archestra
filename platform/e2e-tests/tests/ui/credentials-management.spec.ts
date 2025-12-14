@@ -18,46 +18,28 @@ import {
   initializeMcpSession,
 } from "../api/mcp-gateway-utils";
 
-type MatrixTestParams = {
-  vault: boolean;
-  promptOnInstallation: boolean;
-  mcpServerType:
-    | "custom-self-hosted"
-    | "custom-remote"
-    | "catalog-self-hosted"
-    | "catalog-remote";
-  user: "Admin" | "Editor" | "Member";
-};
-
-test.describe("Credentials Management", () => {
+test.describe("Custom Self-hosted MCP Server - installation and credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
-  const MATRIX: MatrixTestParams[] = [
+  const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
     {
       user: "Admin",
-      vault: false,
-      promptOnInstallation: false,
-      mcpServerType: "custom-self-hosted",
     },
     {
       user: "Editor",
-      vault: false,
-      promptOnInstallation: false,
-      mcpServerType: "custom-self-hosted",
     },
     {
       user: "Member",
-      vault: false,
-      promptOnInstallation: false,
-      mcpServerType: "custom-self-hosted",
     },
   ];
-  MATRIX.forEach(({ vault, promptOnInstallation, mcpServerType, user }) => {
-    test(`${user} | ${vault ? "Vault" : "No Vault"} | ${promptOnInstallation ? "Prompt on Installation" : "No Prompt on Installation"} | ${mcpServerType}`, async ({
+  MATRIX.forEach(({ user }) => {
+    test(`${user}`, async ({
       adminPage,
       editorPage,
       memberPage,
       extractCookieHeaders,
+      makeRandomString,
     }) => {
+      test.setTimeout(45_000); // 45 seconds
       const page = (() => {
         switch (user) {
           case "Admin":
@@ -68,8 +50,8 @@ test.describe("Credentials Management", () => {
             return memberPage;
         }
       })();
-      const catalogItemName = `mcp-${mcpServerType}-user-${user}-vault-${vault}-prompt-${promptOnInstallation}`;
       const cookieHeaders = await extractCookieHeaders(adminPage);
+      const catalogItemName = makeRandomString(10, "mcp");
       if (user === "Admin") {
         await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
       }
@@ -94,14 +76,10 @@ test.describe("Credentials Management", () => {
       // Personal credential type should be selected by default if vault is disabled
       // otherwise team credential type should be selected
       await expect(
-        page.getByTestId(
-          E2eTestId[
-            vault ? "SelectCredentialTypeTeam" : "SelectCredentialTypePersonal"
-          ],
-        ),
+        page.getByTestId(E2eTestId.SelectCredentialTypePersonal),
       ).toBeChecked();
 
-      // Each user installs personal credential
+      // Install using personal credential
       await page.getByRole("button", { name: "Install" }).click();
 
       // Credentials count should be 1 for Admin and Editor
@@ -170,7 +148,6 @@ test.describe("Credentials Management", () => {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
         };
-
         await openManageCredentialsDialog(page, catalogItemName);
         const visibleCredentials = await getVisibleCredentials(page);
         for (const credential of expectedCredentials[user]) {
@@ -193,6 +170,26 @@ test.describe("Credentials Management", () => {
             expectedCredentials[user].length,
           );
         }
+
+        // Then we revoke first credential in Manage Credentials dialog, then close dialog
+        await goToPage(page, "/mcp-catalog/registry");
+        await openManageCredentialsDialog(page, catalogItemName);
+        await page.getByRole("button", { name: "Revoke" }).first().click();
+        await page.waitForLoadState("networkidle");
+        await page.getByRole("button", { name: "Close" }).nth(1).click();
+        // And we check that the credential is revoked
+        const expectedCredentialsAfterRevoke = {
+          Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
+          Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
+        };
+        await openManageCredentialsDialog(page, catalogItemName);
+        const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
+        await expect(visibleCredentialsAfterRevoke).not.toContain(
+          expectedCredentialsAfterRevoke[user][0],
+        );
+        await expect(visibleCredentialsAfterRevoke).toHaveLength(
+          expectedCredentialsAfterRevoke[user].length - 1,
+        );
       }
 
       // CLEANUP: Delete created catalog items and mcp servers, non-blocking on purpose
@@ -204,102 +201,165 @@ test.describe("Credentials Management", () => {
       }
     });
   });
+});
 
-  test("Verify tool calling using different static credentials", async ({
-    request,
-    adminPage,
-    editorPage,
-    makeRandomString,
-    extractCookieHeaders,
-  }) => {
-    const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
-    const cookieHeaders = await extractCookieHeaders(adminPage);
-    // Assign engineering team to default profile
-    await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
-    // Create catalog item as Admin
-    // Editor and Member cannot add items to MCP Registry
-    const newCatalogItem = await addCustomSelfHostedCatalogItem({
-      page: adminPage,
-      cookieHeaders,
-      catalogItemName: CATALOG_ITEM_NAME,
-      envVars: {
-        key: "ARCHESTRA_TEST",
-        promptOnInstallation: true,
-      },
-    });
-    if (!newCatalogItem) {
-      throw new Error("Failed to create catalog item");
-    }
-
-    // Install test server for admin
-    await adminPage
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
-      .click();
-    await adminPage
-      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-      .fill("Admin");
-    await adminPage.getByRole("button", { name: "Install" }).click();
-    await adminPage.waitForLoadState("networkidle");
-
-    // Install test server for editor
-    await goToPage(editorPage, "/mcp-catalog/registry");
-    await editorPage
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
-      .click();
-    await editorPage
-      .getByRole("textbox", { name: "ARCHESTRA_TEST" })
-      .fill("Editor");
-    await editorPage.getByRole("button", { name: "Install" }).click();
-    await editorPage.waitForLoadState("networkidle");
-
-    // Assign tool to profiles using admin static credential
-    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-      page: adminPage,
-      catalogItemName: CATALOG_ITEM_NAME,
-    });
-    // Select admin static credential
-    await adminPage.getByRole("option", { name: "admin@example.com" }).click();
-    await adminPage.getByText("Assign to 1 profile").click();
-    await adminPage.waitForLoadState("networkidle");
-    // Verify tool call result using admin static credential
-    await verifyToolCallResultViaApi({
-      request,
-      expectedText: "Admin",
-      tokenToUse: "org-token",
-      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-      cookieHeaders,
-    });
-
-    // Assign tool to profiles using editor static credential
-    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
-      page: editorPage,
-      catalogItemName: CATALOG_ITEM_NAME,
-    });
-    // Select editor static credential
-    await editorPage
-      .getByRole("option", { name: "editor@example.com" })
-      .click();
-    await editorPage.getByText("Assign to 1 profile").click();
-    await editorPage.waitForLoadState("networkidle");
-    // Verify tool call result using editor static credential
-    await verifyToolCallResultViaApi({
-      request,
-      expectedText: "Editor",
-      tokenToUse: "org-token",
-      toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-      cookieHeaders,
-    });
-
-    // CLEANUP: Delete existing created MCP servers / installations
-    await goToPage(adminPage, "/mcp-catalog/registry");
-    await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
-    const count = await adminPage
-      .getByRole("button", { name: "Revoke" })
-      .count();
-    for (let i = 0; i < count; i++) {
-      await adminPage.getByRole("button", { name: "Revoke" }).first().click();
-    }
+test("Verify Manage Credentials dialog shows correct other users credentials", async ({
+  adminPage,
+  editorPage,
+  memberPage,
+  extractCookieHeaders,
+  makeRandomString,
+}) => {
+  // Create catalog item as Admin
+  // Editor and Member cannot add items to MCP Registry
+  const catalogItemName = makeRandomString(10, "mcp");
+  const cookieHeaders = await extractCookieHeaders(adminPage);
+  await addCustomSelfHostedCatalogItem({
+    page: adminPage,
+    cookieHeaders,
+    catalogItemName,
   });
+  const MATRIX = [
+    { user: "Admin", page: adminPage },
+    { user: "Editor", page: editorPage },
+    { user: "Member", page: memberPage },
+  ] as const;
+
+  const install = async (page: Page) => {
+    // Go to MCP Registry page
+    await goToPage(page, "/mcp-catalog/registry");
+    await page.waitForLoadState("networkidle");
+    // Click connect button for the catalog item
+    await page
+      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
+      .click();
+    // Install using personal credential
+    await page.getByRole("button", { name: "Install" }).click();
+    // Then click connect again
+    await page
+      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
+      .click();
+    // And this time team credential type should be selected by default for everyone, install using team credential
+    await page.getByRole("button", { name: "Install" }).click();
+  };
+
+  // Each user adds personal and 1 team credential
+  await Promise.all(MATRIX.map(({ page }) => install(page)));
+
+  // Check Credentials counter
+  const checkCredentialsCount = async (
+    page: Page,
+    user: "Admin" | "Editor" | "Member",
+  ) => {
+    await goToPage(page, "/mcp-catalog/registry");
+    await page.waitForLoadState("networkidle");
+    const expectedCredentialsCount = {
+      Admin: 6, // admin sees all credentials
+      Editor: 3, // editor sees their own credentials + additional Marketing team credential added by member
+    };
+    // Member cannot see credentials count
+    if (user === "Member") {
+      return;
+    }
+    await expect(
+      page.getByTestId(`${E2eTestId.CredentialsCount}-${catalogItemName}`),
+    ).toHaveText(expectedCredentialsCount[user].toString());
+  };
+  await Promise.all(
+    MATRIX.map(({ page, user }) => checkCredentialsCount(page, user)),
+  );
+});
+
+test("Verify tool calling using different static credentials", async ({
+  request,
+  adminPage,
+  editorPage,
+  makeRandomString,
+  extractCookieHeaders,
+}) => {
+  const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
+  const cookieHeaders = await extractCookieHeaders(adminPage);
+  // Assign engineering team to default profile
+  await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
+  // Create catalog item as Admin
+  // Editor and Member cannot add items to MCP Registry
+  const newCatalogItem = await addCustomSelfHostedCatalogItem({
+    page: adminPage,
+    cookieHeaders,
+    catalogItemName: CATALOG_ITEM_NAME,
+    envVars: {
+      key: "ARCHESTRA_TEST",
+      promptOnInstallation: true,
+    },
+  });
+  if (!newCatalogItem) {
+    throw new Error("Failed to create catalog item");
+  }
+
+  // Install test server for admin
+  await adminPage
+    .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
+    .click();
+  await adminPage
+    .getByRole("textbox", { name: "ARCHESTRA_TEST" })
+    .fill("Admin");
+  await adminPage.getByRole("button", { name: "Install" }).click();
+  await adminPage.waitForLoadState("networkidle");
+
+  // Install test server for editor
+  await goToPage(editorPage, "/mcp-catalog/registry");
+  await editorPage
+    .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
+    .click();
+  await editorPage
+    .getByRole("textbox", { name: "ARCHESTRA_TEST" })
+    .fill("Editor");
+  await editorPage.getByRole("button", { name: "Install" }).click();
+  await editorPage.waitForLoadState("networkidle");
+
+  // Assign tool to profiles using admin static credential
+  await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+    page: adminPage,
+    catalogItemName: CATALOG_ITEM_NAME,
+  });
+  // Select admin static credential
+  await adminPage.getByRole("option", { name: "admin@example.com" }).click();
+  await adminPage.getByText("Assign to 1 profile").click();
+  await adminPage.waitForLoadState("networkidle");
+  // Verify tool call result using admin static credential
+  await verifyToolCallResultViaApi({
+    request,
+    expectedText: "Admin",
+    tokenToUse: "org-token",
+    toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
+    cookieHeaders,
+  });
+
+  // Assign tool to profiles using editor static credential
+  await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+    page: editorPage,
+    catalogItemName: CATALOG_ITEM_NAME,
+  });
+  // Select editor static credential
+  await editorPage.getByRole("option", { name: "editor@example.com" }).click();
+  await editorPage.getByText("Assign to 1 profile").click();
+  await editorPage.waitForLoadState("networkidle");
+  // Verify tool call result using editor static credential
+  await verifyToolCallResultViaApi({
+    request,
+    expectedText: "Editor",
+    tokenToUse: "org-token",
+    toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
+    cookieHeaders,
+  });
+
+  // CLEANUP: Delete existing created MCP servers / installations
+  await goToPage(adminPage, "/mcp-catalog/registry");
+  await openManageCredentialsDialog(adminPage, CATALOG_ITEM_NAME);
+  const count = await adminPage.getByRole("button", { name: "Revoke" }).count();
+  for (let i = 0; i < count; i++) {
+    await adminPage.getByRole("button", { name: "Revoke" }).first().click();
+  }
 });
 
 async function assignEngineeringTeamToDefaultProfileViaApi({

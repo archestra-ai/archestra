@@ -29,6 +29,7 @@ function createK8sPodInstance(
 
   // Create mock K8s API objects
   const mockK8sApi = {} as k8s.CoreV1Api;
+  const mockK8sAppsApi = {} as k8s.AppsV1Api;
   const mockK8sAttach = {} as Attach;
   const mockK8sLog = {} as Log;
 
@@ -45,6 +46,7 @@ function createK8sPodInstance(
   return new K8sPod(
     mockMcpServer,
     mockK8sApi,
+    mockK8sAppsApi,
     mockK8sAttach,
     mockK8sLog,
     "default",
@@ -581,7 +583,7 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
   });
 });
 
-describe("K8sPod.generatePodSpec", () => {
+describe("K8sPod.generatePodTemplateSpec", () => {
   // Helper function to create a mock K8sPod instance
   function createMockK8sPod(
     mcpServer: McpServer,
@@ -589,6 +591,7 @@ describe("K8sPod.generatePodSpec", () => {
     environmentValues?: Record<string, string>,
   ): K8sPod {
     const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
     const namespace = "default";
@@ -596,6 +599,7 @@ describe("K8sPod.generatePodSpec", () => {
     return new K8sPod(
       mcpServer,
       mockK8sApi,
+      mockK8sAppsApi,
       mockK8sAttach,
       mockK8sLog,
       namespace,
@@ -623,7 +627,7 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
@@ -631,16 +635,15 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Verify metadata
-    expect(podSpec.metadata?.name).toBe("mcp-test-server");
-    expect(podSpec.metadata?.labels).toEqual({
+    expect(podTemplateSpec.metadata?.labels).toEqual({
       app: "mcp-server",
       "mcp-server-id": "test-server-id",
       "mcp-server-name": "test-server",
     });
 
     // Verify spec
-    expect(podSpec.spec?.containers).toHaveLength(1);
-    const container = podSpec.spec?.containers[0];
+    expect(podTemplateSpec.spec?.containers).toHaveLength(1);
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.name).toBe("mcp-server");
     expect(container?.image).toBe(dockerImage);
     expect(container?.command).toEqual(["node"]);
@@ -648,7 +651,7 @@ describe("K8sPod.generatePodSpec", () => {
     expect(container?.stdin).toBe(true);
     expect(container?.tty).toBe(false);
     expect(container?.ports).toBeUndefined();
-    expect(podSpec.spec?.restartPolicy).toBe("Always");
+    expect(podTemplateSpec.spec?.restartPolicy).toBe("Always");
   });
 
   test("generates podSpec for HTTP-based MCP server with exposed port", () => {
@@ -671,14 +674,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = true;
     const httpPort = 3000;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.ports).toEqual([
       {
         containerPort: 3000,
@@ -705,14 +708,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.command).toBeUndefined();
     expect(container?.args).toEqual(["--verbose"]);
   });
@@ -761,11 +764,13 @@ describe("K8sPod.generatePodSpec", () => {
     };
 
     const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
     const k8sPod = new K8sPod(
       mcpServer,
       mockK8sApi,
+      mockK8sAppsApi,
       mockK8sAttach,
       mockK8sLog,
       "default",
@@ -776,14 +781,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.env).toEqual([
       { name: "API_KEY", value: "secret123" },
       { name: "PORT", value: "3000" },
@@ -808,7 +813,7 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
@@ -816,7 +821,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Verify that labels are RFC 1123 compliant
-    const labels = podSpec.metadata?.labels;
+    const labels = podTemplateSpec.metadata?.labels;
     expect(labels?.app).toBe("mcp-server");
     expect(labels?.["mcp-server-id"]).toBe("special-chars-123");
     expect(labels?.["mcp-server-name"]).toBe("server-with-spaces-special");
@@ -846,14 +851,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.image).toBe("ghcr.io/my-org/custom-mcp-server:v2.1.0");
   });
 
@@ -875,14 +880,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.args).toEqual([]);
   });
 
@@ -918,14 +923,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.args).toEqual([
       "-y",
       "mcp-typescribe@latest",
@@ -960,14 +965,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     // Should keep placeholder as-is when no user config values
     expect(container?.args).toEqual([
       "index.js",
@@ -1006,14 +1011,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.args).toEqual([
       "-y",
       "@modelcontextprotocol/server-filesystem",
@@ -1054,14 +1059,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     // environmentValues should take precedence
     expect(container?.args).toEqual(["/new/path"]);
   });
@@ -1086,14 +1091,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = true;
     const httpPort = 9000;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
     expect(container?.ports).toEqual([
       {
         containerPort: 9000,
@@ -1155,11 +1160,13 @@ describe("K8sPod.generatePodSpec", () => {
     };
 
     const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
     const k8sPod = new K8sPod(
       mcpServer,
       mockK8sApi,
+      mockK8sAppsApi,
       mockK8sAttach,
       mockK8sLog,
       "default",
@@ -1170,14 +1177,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = true;
     const httpPort = 8000;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = podTemplateSpec.spec?.containers[0];
 
     // Verify environment variables (quotes should be stripped by createPodEnvFromConfig)
     expect(container?.env).toEqual([
@@ -1247,14 +1254,14 @@ describe("K8sPod.generatePodSpec", () => {
     // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const podTemplateSpec = pod.generatePodTemplateSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = podTemplateSpec.spec?.containers[0]?.env || [];
 
     // Find the rewritten URLs
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
@@ -1298,14 +1305,14 @@ describe("K8sPod.generatePodSpec", () => {
     // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const podTemplateSpec = pod.generatePodTemplateSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = podTemplateSpec.spec?.containers[0]?.env || [];
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
 
     // Should NOT be rewritten
@@ -1361,14 +1368,14 @@ describe("K8sPod.generatePodSpec", () => {
     // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const podTemplateSpec = pod.generatePodTemplateSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = podTemplateSpec.spec?.containers[0]?.env || [];
 
     const databaseUrl = envVars.find((env) => env.name === "DATABASE_URL");
     const mongodbUrl = envVars.find((env) => env.name === "MONGODB_URL");
@@ -1427,14 +1434,14 @@ describe("K8sPod.generatePodSpec", () => {
     // @ts-expect-error - accessing private property for testing
     pod.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const podTemplateSpec = pod.generatePodTemplateSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = podTemplateSpec.spec?.containers[0]?.env || [];
 
     // Find the URLs
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
@@ -1472,6 +1479,7 @@ describe("K8sPod.createK8sSecret", () => {
     return new K8sPod(
       mockMcpServer,
       mockK8sApi as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as Attach,
       {} as Log,
       "default",
@@ -1755,7 +1763,7 @@ describe("K8sPod.constructK8sSecretName", () => {
   });
 });
 
-describe("K8sPod.generatePodSpec - serviceAccountName", () => {
+describe("K8sPod.generatePodTemplateSpec - serviceAccountName", () => {
   test("does not set serviceAccountName when not provided in localConfig", () => {
     const mockMcpServer = {
       id: "test-server",
@@ -1775,6 +1783,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const k8sPod = new K8sPod(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1788,14 +1797,14 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       arguments: ["server.js"],
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       "test-image:latest",
       localConfig,
       false,
       8080,
     );
 
-    expect(podSpec.spec?.serviceAccountName).toBeUndefined();
+    expect(podTemplateSpec.spec?.serviceAccountName).toBeUndefined();
   });
 
   test("uses serviceAccount role as-is when release name prefix is empty", () => {
@@ -1830,6 +1839,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const k8sPod = new K8sPod(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1844,7 +1854,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       serviceAccount: "operator",
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       "kubernetes-mcp:latest",
       localConfig,
       false,
@@ -1852,7 +1862,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     );
 
     // When release name is empty, use role as-is
-    expect(podSpec.spec?.serviceAccountName).toBe("operator");
+    expect(podTemplateSpec.spec?.serviceAccountName).toBe("operator");
 
     // Restore original config value
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
@@ -1887,6 +1897,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const k8sPod = new K8sPod(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1901,14 +1912,14 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       serviceAccount: "custom-service-account",
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       "test-image:latest",
       localConfig,
       false,
       8080,
     );
 
-    expect(podSpec.spec?.serviceAccountName).toBe("custom-service-account");
+    expect(podTemplateSpec.spec?.serviceAccountName).toBe("custom-service-account");
 
     // Restore original config value
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
@@ -1944,6 +1955,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const k8sPod = new K8sPod(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1958,7 +1970,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       serviceAccount: "operator",
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const podTemplateSpec = k8sPod.generatePodTemplateSpec(
       "kubernetes-mcp:latest",
       localConfig,
       false,
@@ -1966,7 +1978,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     );
 
     // Should construct full name: {releaseName}-mcp-k8s-{role}
-    expect(podSpec.spec?.serviceAccountName).toBe(
+    expect(podTemplateSpec.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
     );
 

@@ -9,6 +9,7 @@ import {
   AgentModel,
   AgentTeamModel,
   AgentToolModel,
+  ChatSettingsModel,
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,

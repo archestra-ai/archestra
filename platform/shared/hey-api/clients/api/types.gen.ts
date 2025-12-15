@@ -5883,6 +5883,7 @@ export type GetChatSettingsResponses = {
         id: string;
         organizationId: string;
         anthropicApiKeySecretId: string | null;
+        autoConfigureNewTools: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -5894,6 +5895,7 @@ export type UpdateChatSettingsData = {
     body?: {
         anthropicApiKey?: string;
         resetApiKey?: boolean;
+        autoConfigureNewTools?: boolean;
     };
     path?: never;
     query?: never;
@@ -5967,6 +5969,7 @@ export type UpdateChatSettingsResponses = {
         id: string;
         organizationId: string;
         anthropicApiKeySecretId: string | null;
+        autoConfigureNewTools: boolean;
         createdAt: string;
         updatedAt: string;
     };

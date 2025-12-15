@@ -15,6 +15,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -49,6 +50,48 @@ class AgentToolModel {
         ...options,
       })
       .returning();
+
+    // Auto-configure policies if enabled (run in background)
+    // Import at top of method to avoid circular dependency
+    const { agentToolAutoPolicyService } = await import(
+      "./agent-tool-auto-policy"
+    );
+    const { default: ChatSettingsModel } = await import("./chat-settings");
+
+    // Get agent's organization via team relationship
+    db.select({ organizationId: schema.teamsTable.organizationId })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+
+        const organizationId = rows[0].organizationId;
+        const chatSettings =
+          await ChatSettingsModel.findByOrganizationId(organizationId);
+
+        if (chatSettings?.autoConfigureNewTools) {
+          return agentToolAutoPolicyService.configurePoliciesForAgentTool(
+            agentTool.id,
+            organizationId,
+          );
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            agentToolId: agentTool.id,
+            agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to auto-configure policies for new agent-tool",
+        );
+      });
+
     return agentTool;
   }
 

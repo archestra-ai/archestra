@@ -49,12 +49,12 @@ export function InstallationSelect({
     (server) => server.serverType === "local",
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
+  // biome-ignore lint/correctness/useExhaustiveDependencies: need value and shouldSetDefaultValue to properly set default
   useEffect(() => {
     if (shouldSetDefaultValue && installations.length > 0 && !value) {
       onValueChange(installations[0].id);
     }
-  }, [installations.length]);
+  }, [installations.length, value, shouldSetDefaultValue]);
 
   if (!installations || installations.length === 0) {
     return (

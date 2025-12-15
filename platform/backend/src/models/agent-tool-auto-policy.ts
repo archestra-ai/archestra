@@ -129,34 +129,32 @@ export class AgentToolAutoPolicyService {
       baseURL: config.chat.anthropic.baseUrl,
     });
 
-    const prompt = `You are a security expert analyzing MCP (Model Context Protocol) tools to determine appropriate security policies.
+    const prompt = `Analyze this MCP tool and determine security policies:
 
-Tool Information:
-- Name: ${tool.name}
-- Description: ${tool.description || "No description provided"}
-- MCP Server: ${mcpServerName || "Unknown"}
-- Parameters: ${JSON.stringify(tool.parameters, null, 2)}
+Tool: ${tool.name}
+Description: ${tool.description || "No description provided"}
+MCP Server: ${mcpServerName || "Unknown"}
+Parameters: ${JSON.stringify(tool.parameters, null, 2)}
 
-Your task is to determine two security settings:
+Determine:
 
-1. "allowUsageWhenUntrustedDataIsPresent" - Should this tool be usable when untrusted data is in the context?
-   - Set TRUE for: Read-only operations, search/query tools, informational tools, tools that don't expose or leak sensitive data
-   - Set FALSE for: Tools that write/modify data, tools that could leak sensitive information, tools that execute code, tools that send data externally
+1. allowUsageWhenUntrustedDataIsPresent (boolean)
+   - TRUE: Read-only, doesn't leak sensitive data
+   - FALSE: Writes data, executes code, sends data externally
 
-2. "toolResultTreatment" - How should this tool's output be treated?
-   - "trusted": Safe, verified data that can be used without restrictions (e.g., internal database queries, system information)
-   - "untrusted": Data from external sources or user-controlled inputs that needs careful handling
-   - "sanitize_with_dual_llm": Data that should be verified through dual LLM pattern before use (e.g., external API responses with mixed content)
+2. toolResultTreatment (enum)
+   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
+   - "untrusted": External/filesystem data where exact values are safe to use directly
+   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
 
-General guidelines:
-- Filesystem read operations: allowUsageWhenUntrustedDataIsPresent=true, toolResultTreatment="untrusted" (file content could be malicious)
-- Filesystem write operations: allowUsageWhenUntrustedDataIsPresent=false, toolResultTreatment="trusted" (operation itself is sensitive)
-- Database queries: allowUsageWhenUntrustedDataIsPresent=true, toolResultTreatment="trusted" (internal trusted data)
-- External API calls: allowUsageWhenUntrustedDataIsPresent=false, toolResultTreatment="untrusted" (external data not verified)
-- Code execution: allowUsageWhenUntrustedDataIsPresent=false, toolResultTreatment="untrusted"
-- Search/informational: allowUsageWhenUntrustedDataIsPresent=true, toolResultTreatment="untrusted"
-
-Analyze the tool and provide your security assessment.`;
+Examples:
+- Internal dev tools: allowUsage=true, treatment="trusted"
+- Database queries: allowUsage=true, treatment="trusted"
+- File reads (code/config): allowUsage=true, treatment="untrusted"
+- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
+- File writes: allowUsage=false, treatment="trusted"
+- External APIs (raw data): allowUsage=false, treatment="untrusted"
+- Code execution: allowUsage=false, treatment="untrusted"`;
 
     try {
       const result = await generateObject({

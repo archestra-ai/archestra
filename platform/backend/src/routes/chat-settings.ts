@@ -36,6 +36,7 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           anthropicApiKey: z.string().optional(),
           resetApiKey: z.boolean().optional(),
+          autoConfigureNewTools: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectChatSettingsSchema),
       },
@@ -70,10 +71,19 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Update settings (only if secretId changed or was created)
-      const updated = await ChatSettingsModel.update(organizationId, {
+      // Update settings
+      const updateData: Parameters<typeof ChatSettingsModel.update>[1] = {
         anthropicApiKeySecretId: secretId,
-      });
+      };
+
+      if (body.autoConfigureNewTools !== undefined) {
+        updateData.autoConfigureNewTools = body.autoConfigureNewTools;
+      }
+
+      const updated = await ChatSettingsModel.update(
+        organizationId,
+        updateData,
+      );
 
       if (!updated) {
         throw new ApiError(404, "Chat settings not found");

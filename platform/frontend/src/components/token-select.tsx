@@ -44,12 +44,12 @@ export function TokenSelect({
   // Get tokens for this catalogId from the grouped response
   const mcpServers = groupedTokens?.[catalogId] ?? [];
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
+  // biome-ignore lint/correctness/useExhaustiveDependencies: need value and shouldSetDefaultValue to properly set default
   useEffect(() => {
     if (shouldSetDefaultValue && mcpServers.length > 0 && !value) {
       onValueChange(mcpServers[0].id);
     }
-  }, [mcpServers.length]);
+  }, [mcpServers.length, value, shouldSetDefaultValue]);
 
   if (!mcpServers || mcpServers.length === 0) {
     return (

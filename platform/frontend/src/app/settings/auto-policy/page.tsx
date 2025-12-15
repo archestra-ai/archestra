@@ -1,7 +1,8 @@
 "use client";
 
-import { CheckCircle2, Loader2, Sparkles, XCircle } from "lucide-react";
-import { Suspense } from "react";
+import { Loader2, Sparkles, XCircle } from "lucide-react";
+import { Suspense, useCallback } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -9,41 +10,63 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useChatSettings } from "@/lib/chat-settings.query";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  useChatSettings,
+  useUpdateChatSettings,
+} from "@/lib/chat-settings.query";
 
 function AutoPolicySettingsContent() {
   const { data: chatSettings, isLoading } = useChatSettings();
+  const updateChatSettings = useUpdateChatSettings();
 
   const isAvailable = !!chatSettings?.anthropicApiKeySecretId;
 
-  const prompt = `You are a security expert analyzing MCP (Model Context Protocol) tools to determine appropriate security policies.
+  const handleToggleAutoConfig = useCallback(
+    async (enabled: boolean) => {
+      try {
+        await updateChatSettings.mutateAsync({
+          autoConfigureNewTools: enabled,
+        });
+        toast.success(
+          enabled
+            ? "Auto-configure enabled for new tool assignments"
+            : "Auto-configure disabled for new tool assignments",
+        );
+      } catch (_error) {
+        toast.error("Failed to update auto-configure setting");
+      }
+    },
+    [updateChatSettings],
+  );
 
-Tool Information:
-- Name: {tool.name}
-- Description: {tool.description}
-- MCP Server: {mcpServerName}
-- Parameters: {tool.parameters}
+  const prompt = `Analyze this MCP tool and determine security policies:
 
-Your task is to determine two security settings:
+Tool: {tool.name}
+Description: {tool.description}
+MCP Server: {mcpServerName}
+Parameters: {tool.parameters}
 
-1. "allowUsageWhenUntrustedDataIsPresent" - Should this tool be usable when untrusted data is in the context?
-   - Set TRUE for: Read-only operations, search/query tools, informational tools, tools that don't expose or leak sensitive data
-   - Set FALSE for: Tools that write/modify data, tools that could leak sensitive information, tools that execute code, tools that send data externally
+Determine:
 
-2. "toolResultTreatment" - How should this tool's output be treated?
-   - "trusted": Safe, verified data that can be used without restrictions (e.g., internal database queries, system information)
-   - "untrusted": Data from external sources or user-controlled inputs that needs careful handling
-   - "sanitize_with_dual_llm": Data that should be verified through dual LLM pattern before use (e.g., external API responses with mixed content)
+1. allowUsageWhenUntrustedDataIsPresent (boolean)
+   - TRUE: Read-only, doesn't leak sensitive data
+   - FALSE: Writes data, executes code, sends data externally
 
-General guidelines:
-- Filesystem read operations: allowUsageWhenUntrustedDataIsPresent=true, toolResultTreatment="untrusted" (file content could be malicious)
-- Filesystem write operations: allowUsageWhenUntrustedDataIsPresent=false, toolResultTreatment="trusted" (operation itself is sensitive)
-- Database queries: allowUsageWhenUntrustedDataIsPresent=true, toolResultTreatment="trusted" (internal trusted data)
-- External API calls: allowUsageWhenUntrustedDataIsPresent=false, toolResultTreatment="untrusted" (external data not verified)
-- Code execution: allowUsageWhenUntrustedDataIsPresent=false, toolResultTreatment="untrusted"
-- Search/informational: allowUsageWhenUntrustedDataIsPresent=true, toolResultTreatment="untrusted"
+2. toolResultTreatment (enum)
+   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
+   - "untrusted": External/filesystem data where exact values are safe to use directly
+   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
 
-Analyze the tool and provide your security assessment.`;
+Examples:
+- Internal dev tools: allowUsage=true, treatment="trusted"
+- Database queries: allowUsage=true, treatment="trusted"
+- File reads (code/config): allowUsage=true, treatment="untrusted"
+- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
+- File writes: allowUsage=false, treatment="trusted"
+- External APIs (raw data): allowUsage=false, treatment="untrusted"
+- Code execution: allowUsage=false, treatment="untrusted"`;
 
   return (
     <div className="space-y-6">
@@ -59,48 +82,65 @@ Analyze the tool and provide your security assessment.`;
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!isAvailable && !isLoading && (
+            <div className="space-y-2 mb-4 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                <XCircle className="h-4 w-4" />
+                <span>Auto-policy feature requires configuration</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Please configure an Anthropic API key in the{" "}
+                <a
+                  href="/settings/chat"
+                  className="text-primary hover:underline"
+                >
+                  Chat settings
+                </a>{" "}
+                to enable this feature.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <h3 className="text-sm font-medium">Feature Status</h3>
-            {isLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Checking availability...</span>
-              </div>
-            ) : isAvailable ? (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle2 className="h-4 w-4" />
-                <span>Auto-policy feature is enabled</span>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-amber-600">
-                  <XCircle className="h-4 w-4" />
-                  <span>Auto-policy feature requires configuration</span>
-                </div>
+            <h3 className="text-sm font-medium">
+              Auto-Configure New Tool Assignments
+            </h3>
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex-1 space-y-1">
+                <Label
+                  htmlFor="auto-configure-toggle"
+                  className="cursor-pointer"
+                >
+                  Automatically configure policies for newly assigned tools
+                </Label>
                 <p className="text-sm text-muted-foreground">
-                  Please configure an Anthropic API key in the{" "}
-                  <a
-                    href="/settings/chat"
-                    className="text-primary hover:underline"
-                  >
-                    Chat settings
-                  </a>{" "}
-                  to enable this feature.
+                  When enabled, security policies will be automatically
+                  configured using AI analysis whenever a tool is assigned to a
+                  profile.
                 </p>
               </div>
-            )}
+              <Switch
+                id="auto-configure-toggle"
+                checked={chatSettings?.autoConfigureNewTools ?? false}
+                disabled={!isAvailable || updateChatSettings.isPending}
+                onCheckedChange={handleToggleAutoConfig}
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
             <h3 className="text-sm font-medium">How It Works</h3>
             <p className="text-sm text-muted-foreground">
-              The auto-configure feature uses AI to analyze each tool and
-              automatically determine appropriate security policies based on the
-              tool's purpose, parameters, and potential risks.
+              <strong>Important:</strong> Before using auto-configure, you must
+              manually review the MCP server and its tools to verify they are
+              legitimate and trustworthy. Check that tool names, descriptions,
+              and parameters contain no prompt injections or malicious content.
             </p>
             <p className="text-sm text-muted-foreground">
-              When you select tools and click "Auto-Configure" in the Tools
-              page, the system analyzes each tool and sets:
+              Once you've verified the server is trusted, the auto-configure
+              feature uses AI to generate static security policies for each
+              tool. The AI analyzes the tool's metadata (name, description,
+              parameters) to determine:
             </p>
             <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
               <li>
@@ -113,7 +153,9 @@ Analyze the tool and provide your security assessment.`;
               </li>
             </ul>
             <p className="text-sm text-muted-foreground mt-2">
-              Auto-configured tools are marked with a{" "}
+              These policies are static and won't change unless you manually
+              adjust them or re-run auto-configure. Auto-configured tools are
+              marked with a{" "}
               <Sparkles className="inline h-3 w-3 text-purple-500" /> icon in
               the Tools table.
             </p>

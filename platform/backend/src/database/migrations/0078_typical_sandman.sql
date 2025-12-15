@@ -1,0 +1,1 @@
+ALTER TABLE "chat_settings" ADD COLUMN "auto_configure_new_tools" boolean DEFAULT false NOT NULL;

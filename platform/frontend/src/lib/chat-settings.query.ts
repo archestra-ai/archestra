@@ -31,6 +31,7 @@ export function useUpdateChatSettings() {
     mutationFn: async (data: {
       anthropicApiKey?: string;
       resetApiKey?: boolean;
+      autoConfigureNewTools?: boolean;
     }) => {
       const response = await updateChatSettings({ body: data });
       return response.data;

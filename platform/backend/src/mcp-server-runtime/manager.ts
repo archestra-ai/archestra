@@ -118,16 +118,16 @@ export class McpServerRuntimeManager {
 
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
       this.k8sAppsApi = this.k8sConfig.makeApiClient(k8s.AppsV1Api);
+
+      this.k8sAttach = new Attach(this.k8sConfig);
+      this.k8sLog = new k8s.Log(this.k8sConfig);
+      this.namespace = namespace;
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
       this.k8sApi = undefined;
       return; // graceful fallback: constructor completes with runtime disabled
     }
-
-    this.k8sAttach = new Attach(this.k8sConfig);
-    this.k8sLog = new k8s.Log(this.k8sConfig);
-    this.namespace = namespace;
   }
 
   /**

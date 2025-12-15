@@ -13,6 +13,8 @@ test.describe("Credentials with Vault", () => {
     adminPage,
     extractCookieHeaders,
   }) => {
+    await goToPage(adminPage, "/mcp-catalog/registry");
+    await adminPage.waitForLoadState("networkidle");
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const { data } = await archestraApiSdk.initializeSecretsManager({
       body: {

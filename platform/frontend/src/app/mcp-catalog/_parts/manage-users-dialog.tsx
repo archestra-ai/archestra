@@ -69,6 +69,13 @@ export function ManageUsersDialog({
     return null;
   }
 
+  const getCredentialOwnerName = (
+    mcpServer: (typeof allServers)[number],
+  ): string =>
+    mcpServer.teamId
+      ? mcpServer.teamDetails?.name || "Team"
+      : mcpServer.ownerEmail || "Unknown";
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
@@ -112,10 +119,8 @@ export function ManageUsersDialog({
                       data-server-id={mcpServer.id}
                     >
                       <TableCell className="font-medium">
-                        <span data-testid={E2eTestId.CredentialOwnerEmail}>
-                          {mcpServer.teamId
-                            ? mcpServer.teamDetails?.name || "Team"
-                            : mcpServer.ownerEmail || "Unknown"}
+                        <span data-testid={E2eTestId.CredentialOwner}>
+                          {getCredentialOwnerName(mcpServer)}
                         </span>
                         {mcpServer.teamId && (
                           <span className="text-muted-foreground text-xs block">
@@ -136,6 +141,7 @@ export function ManageUsersDialog({
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"
+                          data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
                         >
                           <Trash className="mr-1 h-3 w-3" />
                           Revoke

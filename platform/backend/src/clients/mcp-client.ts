@@ -382,9 +382,12 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // Priority 1: Server owned by current user
+    // Priority 1: Personal credential owned by current user (no teamId)
+    // That happens only from chat UI when we know the user ID
     if (tokenAuth.userId) {
-      const userServer = allServers.find((s) => s.ownerId === tokenAuth.userId);
+      const userServer = allServers.find(
+        (s) => s.ownerId === tokenAuth.userId && !s.teamId,
+      );
       if (userServer) {
         logger.info(
           {
@@ -399,7 +402,32 @@ class McpClient {
       }
     }
 
-    // Priority 2: Server whose owner is a member of the token's team
+    // Priority 2: Team token used - we check try to use token without teamId first to prioritize personal credential
+    if (tokenAuth.teamId) {
+      for (const server of allServers) {
+        if (server.ownerId && !server.teamId) {
+          const ownerInTeam = await TeamModel.isUserInTeam(
+            tokenAuth.teamId,
+            server.ownerId,
+          );
+          if (ownerInTeam) {
+            logger.info(
+              {
+                toolName: toolCall.name,
+                catalogId: tool.catalogId,
+                serverId: server.id,
+                ownerId: server.ownerId,
+                teamId: tokenAuth.teamId,
+              },
+              `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
+            );
+            return { targetLocalMcpServerId: server.id };
+          }
+        }
+      }
+    }
+
+    // Priority 3: Team token used - we try to find any token from team
     if (tokenAuth.teamId) {
       for (const server of allServers) {
         if (server.ownerId) {
@@ -424,7 +452,7 @@ class McpClient {
       }
     }
 
-    // Priority 3: Otherwise, if organization-wide token is used, use first available server
+    // Priority 4: Otherwise, if organization-wide token is used, use first available server
     if (tokenAuth.isOrganizationToken && allServers.length > 0) {
       logger.info(
         {

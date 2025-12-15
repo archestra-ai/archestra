@@ -287,7 +287,12 @@ export function McpServerCard({
             in your team
           </WithoutPermissions>
           :{" "}
-          <span className="font-medium text-foreground">{mcpServersCount}</span>
+          <span
+            className="font-medium text-foreground"
+            data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
+          >
+            {mcpServersCount}
+          </span>
         </span>
       </div>
       {mcpServersCount > 0 && (
@@ -307,7 +312,10 @@ export function McpServerCard({
     <>
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
+        <span
+          className="text-muted-foreground"
+          data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
+        >
           Credentials
           <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
             {" "}
@@ -472,6 +480,7 @@ export function McpServerCard({
                   size="sm"
                   variant="outline"
                   className="w-full"
+                  data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                 >
                   <User className="mr-2 h-4 w-4" />
                   Connect

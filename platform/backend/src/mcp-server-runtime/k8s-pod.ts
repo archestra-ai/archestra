@@ -338,6 +338,8 @@ export default class K8sPod {
         labels,
       },
       spec: {
+        // Fast shutdown for stateless MCP servers (default is 30s)
+        terminationGracePeriodSeconds: 5,
         // Use specified service account if provided in localConfig
         // This allows MCP servers that need Kubernetes API access (like the K8s MCP server)
         // to use a dedicated service account with appropriate permissions

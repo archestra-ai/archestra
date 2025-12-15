@@ -74,7 +74,7 @@ export default defineConfig({
     {
       name: "chromium",
       testDir: "./tests/ui",
-      testMatch: /^(?!.*credentials-with-vault\.spec\.ts$).*\.spec\.ts$/,
+      testIgnore: /credentials-with-vault\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
@@ -86,7 +86,7 @@ export default defineConfig({
     {
       name: "firefox",
       testDir: "./tests/ui",
-      testMatch: /^(?!.*credentials-with-vault\.spec\.ts$).*\.spec\.ts$/,
+      testIgnore: /credentials-with-vault\.spec\.ts/,
       use: {
         ...devices["Desktop Firefox"],
         // Use the stored authentication state
@@ -99,7 +99,7 @@ export default defineConfig({
     {
       name: "webkit",
       testDir: "./tests/ui",
-      testMatch: /^(?!.*credentials-with-vault\.spec\.ts$).*\.spec\.ts$/,
+      testIgnore: /credentials-with-vault\.spec\.ts/,
       use: {
         ...devices["Desktop Safari"],
         // Use the stored authentication state

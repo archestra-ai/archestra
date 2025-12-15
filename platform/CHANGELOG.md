@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.5](https://github.com/archestra-ai/archestra/compare/platform-v1.0.4...platform-v1.0.5) (2025-12-15)
+
+
+### Features
+
+* add `archestra.podAnnotations` to `helm` chart ([#1572](https://github.com/archestra-ai/archestra/issues/1572)) ([28b03c2](https://github.com/archestra-ai/archestra/commit/28b03c26f71ef11dd10342bbc2eb26f5e61d6d55))
+
+
+### Bug Fixes
+
+* force non admins assign team to profile ([#1553](https://github.com/archestra-ai/archestra/issues/1553)) ([a46f845](https://github.com/archestra-ai/archestra/commit/a46f84524fde099544c62976291e3527c8fc75b1))
+* new roles shown in "Update role" dropdown without page refresh ([#1554](https://github.com/archestra-ai/archestra/issues/1554)) ([b68b78e](https://github.com/archestra-ai/archestra/commit/b68b78ea833458e6acd08fd0d3c96255b2a2cb7e))
+* running archestra with kubernetes fails in development ([#1459](https://github.com/archestra-ai/archestra/issues/1459)) ([a919bea](https://github.com/archestra-ai/archestra/commit/a919bea0a05871096e8e54c4b535700097c5eb91))
+
+
+### Miscellaneous Chores
+
+* add configurable archestra memory request and limits to helm chart ([#1571](https://github.com/archestra-ai/archestra/issues/1571)) ([edec8c6](https://github.com/archestra-ai/archestra/commit/edec8c69256df57329de9a8ed489b6653e8776f1))
+* add resource requests for mcp server pods ([#1580](https://github.com/archestra-ai/archestra/issues/1580)) ([bd67fad](https://github.com/archestra-ai/archestra/commit/bd67fad6f701140484af911a4bf96d382f3eb752))
+* Do not render non-existing permissions  in Custom Role modal ([#1581](https://github.com/archestra-ai/archestra/issues/1581)) ([96d90e7](https://github.com/archestra-ai/archestra/commit/96d90e7c38104500b48f82d767fcf4806dee533a))
+
 ## [1.0.4](https://github.com/archestra-ai/archestra/compare/platform-v1.0.3...platform-v1.0.4) (2025-12-12)
 
 

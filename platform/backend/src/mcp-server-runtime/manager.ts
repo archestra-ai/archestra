@@ -1,6 +1,6 @@
+import * as fs from "node:fs";
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
-import * as fs from "node:fs";
 import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
@@ -60,7 +60,9 @@ export function validateKubeconfig(path?: string) {
   }
 
   if (!c0.name || !c0.server) {
-    throw new Error(`❌ Invalid kubeconfig: cluster entry is missing required fields`);
+    throw new Error(
+      `❌ Invalid kubeconfig: cluster entry is missing required fields`,
+    );
   }
 
   if (!kc.contexts || kc.contexts.length === 0) {
@@ -73,9 +75,6 @@ export function validateKubeconfig(path?: string) {
 
   logger.info("✓ Custom kubeconfig validated successfully.");
 }
-
-
-
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes pods.
@@ -97,7 +96,10 @@ export class McpServerRuntimeManager {
     this.k8sConfig = new k8s.KubeConfig();
 
     // Normalize kubeconfig input: treat empty string as undefined
-    const kubeconfigPath = kubeconfig && kubeconfig.trim().length > 0 ? kubeconfig.trim() : undefined;
+    const kubeconfigPath =
+      kubeconfig && kubeconfig.trim().length > 0
+        ? kubeconfig.trim()
+        : undefined;
 
     try {
       // Validate and load kubeconfig based on configuration
@@ -127,7 +129,7 @@ export class McpServerRuntimeManager {
       return; // graceful fallback: constructor completes with runtime disabled
     }
   }
-  
+
   /**
    * Check if the orchestrator K8s runtime is enabled
    * Returns true if the K8s config loaded successfully (constructor didn't fail)
@@ -458,7 +460,6 @@ export class McpServerRuntimeManager {
    * Get all available tools from all running MCP servers
    */
   get allAvailableTools(): AvailableTool[] {
-
     return [];
   }
 

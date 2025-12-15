@@ -21,6 +21,13 @@ on:
         required: true
       DOCKER_PASSWORD:
         required: true
+      # Required for release-please PRs to push codegen changes with a token that triggers workflow re-runs
+      # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
+      # see https://stackoverflow.com/a/67551255
+      ARCHESTRA_RELEASER_GITHUB_APP_ID:
+        required: false
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
+        required: false
 
 jobs:
   paths-filter:
@@ -86,6 +93,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Generate a GitHub App token for release-please PRs
+      # This is needed because pushes made with GITHUB_TOKEN do not trigger workflow re-runs,
+      # but pushes made with a GitHub App token DO trigger workflows.
+      # This allows the codegen commit to properly re-trigger CI checks.
+      #
+      # see https://stackoverflow.com/a/67551255
+      - name: Generate token for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        id: generate-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -95,6 +116,10 @@ jobs:
           # For release-please PRs, checkout the actual PR branch (not the merge commit)
           # to avoid detached HEAD state which would cause git push to fail
           ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          # Use the GitHub App token for release-please PRs so that the codegen commit push
+          # triggers a new workflow run (pushes with GITHUB_TOKEN don't trigger workflows)
+          # see https://stackoverflow.com/a/67551255
+          token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

@@ -2340,6 +2340,18 @@ describe("K8sPod - deploymentNeedsUpdate (private method)", () => {
     expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
   });
 
+  test("returns true when port protocol differs", () => {
+    const pod = createK8sPodInstance();
+    const existing = createMockDeployment({
+      ports: [{ containerPort: 8080, protocol: "TCP" }],
+    });
+    const desired = createMockDeployment({
+      ports: [{ containerPort: 8080, protocol: "UDP" }],
+    });
+    // @ts-expect-error - accessing private method for testing
+    expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+
   test("returns true when service account name differs", () => {
     const pod = createK8sPodInstance();
     const existing = createMockDeployment(
@@ -2418,6 +2430,138 @@ describe("K8sPod - deploymentNeedsUpdate (private method)", () => {
     );
     // @ts-expect-error - accessing private method for testing
     expect(pod.deploymentNeedsUpdate(existing, desired)).toBe(true);
+  });
+});
+
+describe("K8sPod - preserveManagedKeys (private static method)", () => {
+  test("returns undefined when both existing and desired are undefined", () => {
+    // @ts-expect-error - accessing private static method for testing
+    expect(K8sPod.preserveManagedKeys(undefined, undefined)).toBeUndefined();
+  });
+
+  test("returns desired when existing is undefined", () => {
+    const desired = { "custom-key": "custom-value" };
+    // @ts-expect-error - accessing private static method for testing
+    expect(K8sPod.preserveManagedKeys(undefined, desired)).toEqual(desired);
+  });
+
+  test("returns preserved managed keys when desired is undefined", () => {
+    const existing = {
+      "kubernetes.io/created-by": "controller",
+      "app.kubernetes.io/name": "test-app",
+      "custom-key": "custom-value",
+    };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, undefined);
+    expect(result).toEqual({
+      "kubernetes.io/created-by": "controller",
+      "app.kubernetes.io/name": "test-app",
+    });
+  });
+
+  test("preserves kubernetes.io/ prefixed keys from existing", () => {
+    const existing = {
+      "kubernetes.io/created-by": "controller",
+      "kubernetes.io/managed-by": "operator",
+      "custom-key": "custom-value",
+    };
+    const desired = { "new-key": "new-value" };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, desired);
+    expect(result).toEqual({
+      "kubernetes.io/created-by": "controller",
+      "kubernetes.io/managed-by": "operator",
+      "new-key": "new-value",
+    });
+  });
+
+  test("preserves app.kubernetes.io/ prefixed keys from existing", () => {
+    const existing = {
+      "app.kubernetes.io/name": "test-app",
+      "app.kubernetes.io/version": "1.0.0",
+      "custom-key": "custom-value",
+    };
+    const desired = { "new-key": "new-value" };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, desired);
+    expect(result).toEqual({
+      "app.kubernetes.io/name": "test-app",
+      "app.kubernetes.io/version": "1.0.0",
+      "new-key": "new-value",
+    });
+  });
+
+  test("preserves both kubernetes.io/ and app.kubernetes.io/ prefixed keys", () => {
+    const existing = {
+      "kubernetes.io/created-by": "controller",
+      "app.kubernetes.io/name": "test-app",
+      "custom-key": "custom-value",
+    };
+    const desired = { "new-key": "new-value" };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, desired);
+    expect(result).toEqual({
+      "kubernetes.io/created-by": "controller",
+      "app.kubernetes.io/name": "test-app",
+      "new-key": "new-value",
+    });
+  });
+
+  test("desired keys take precedence over existing non-managed keys", () => {
+    const existing = {
+      "kubernetes.io/created-by": "controller",
+      "custom-key": "old-value",
+    };
+    const desired = { "custom-key": "new-value" };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, desired);
+    expect(result).toEqual({
+      "kubernetes.io/created-by": "controller",
+      "custom-key": "new-value",
+    });
+  });
+
+  test("desired keys can override existing managed keys", () => {
+    const existing = {
+      "kubernetes.io/created-by": "old-controller",
+      "app.kubernetes.io/name": "old-app",
+    };
+    const desired = {
+      "kubernetes.io/created-by": "new-controller",
+      "app.kubernetes.io/name": "new-app",
+    };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, desired);
+    expect(result).toEqual({
+      "kubernetes.io/created-by": "new-controller",
+      "app.kubernetes.io/name": "new-app",
+    });
+  });
+
+  test("handles empty objects", () => {
+    // @ts-expect-error - accessing private static method for testing
+    expect(K8sPod.preserveManagedKeys({}, {})).toEqual({});
+    // @ts-expect-error - accessing private static method for testing
+    expect(K8sPod.preserveManagedKeys({}, undefined)).toEqual({});
+    // @ts-expect-error - accessing private static method for testing
+    expect(K8sPod.preserveManagedKeys(undefined, {})).toEqual({});
+  });
+
+  test("does not preserve keys that do not match managed prefixes", () => {
+    const existing = {
+      "custom-key": "custom-value",
+      "other-key": "other-value",
+      "kubernetes.io/created-by": "controller",
+    };
+    const desired = { "new-key": "new-value" };
+    // @ts-expect-error - accessing private static method for testing
+    const result = K8sPod.preserveManagedKeys(existing, desired);
+    expect(result).toEqual({
+      "kubernetes.io/created-by": "controller",
+      "new-key": "new-value",
+    });
+    expect(result).not.toHaveProperty("custom-key");
+    expect(result).not.toHaveProperty("other-key");
   });
 });
 

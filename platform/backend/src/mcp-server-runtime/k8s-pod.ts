@@ -25,14 +25,17 @@ export default class K8sPod {
   private k8sLog: k8s.Log;
   private namespace: string;
   /**
-   * The pod name used for backward compatibility, service naming, and status reporting.
-   * This name is derived from the MCP server name and is used for:
-   * - Service resource naming (e.g., `${podName}-service`)
-   * - Backward compatibility when migrating from raw Pods to Deployments
-   * - Fallback log retrieval when the deployment pod cannot be found
+   * The pod name used for service discovery, service naming, status reporting, and backward compatibility.
+   * This name is derived from the MCP server name and is actively used for:
+   * - Service resource naming and discovery (e.g., `${podName}-service`)
+   * - Constructing service URLs for HTTP-based MCP servers (both in-cluster and local dev)
    * - Status summary reporting
+   * - Fallback log retrieval when the deployment pod cannot be found
+   * - Backward compatibility when migrating from raw Pods to Deployments
    *
    * Note: This has the same value as `deploymentName` but serves different semantic purposes.
+   * The podName is the primary identifier for service discovery and naming, while deploymentName
+   * is used for Deployment resource management.
    */
   private podName: string;
   /**
@@ -713,11 +716,43 @@ export default class K8sPod {
    * @param b - Second array to compare (or undefined)
    * @returns true if arrays are equal (both undefined, or same length with equal primitive values)
    */
-  private arraysEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
+  private arraysEqual<
+    T extends string | number | boolean | null | undefined,
+  >(a: T[] | undefined, b: T[] | undefined): boolean {
     if (!a && !b) return true;
     if (!a || !b) return false;
     if (a.length !== b.length) return false;
     return a.every((val, idx) => val === b[idx]);
+  }
+
+  /**
+   * Preserve Kubernetes-managed keys from existing metadata while merging with desired metadata.
+   *
+   * Kubernetes-managed keys (those starting with "kubernetes.io/" or "app.kubernetes.io/")
+   * are preserved from the existing metadata, while all other keys from the desired metadata
+   * take precedence. This ensures that Kubernetes-managed annotations and labels are not lost
+   * during Deployment updates.
+   *
+   * @param existing - Existing metadata (annotations or labels) to preserve managed keys from
+   * @param desired - Desired metadata (annotations or labels) that takes precedence
+   * @returns Merged metadata with Kubernetes-managed keys preserved and desired keys applied
+   */
+  private static preserveManagedKeys(
+    existing: Record<string, string> | undefined,
+    desired: Record<string, string> | undefined,
+  ): Record<string, string> | undefined {
+    if (!existing && !desired) return undefined;
+    const managedPrefixes = ["kubernetes.io/", "app.kubernetes.io/"];
+    const preserved: Record<string, string> = {};
+    if (existing) {
+      for (const [key, value] of Object.entries(existing)) {
+        if (managedPrefixes.some((prefix) => key.startsWith(prefix))) {
+          preserved[key] = value;
+        }
+      }
+    }
+    // Desired always takes precedence
+    return { ...preserved, ...(desired || {}) };
   }
 
   /**
@@ -971,35 +1006,16 @@ export default class K8sPod {
 
           // Update the Deployment by replacing it
           // Preserve metadata and resourceVersion for proper update
-          // Helper to preserve only Kubernetes-managed keys (e.g., those starting with "kubernetes.io/" or "app.kubernetes.io/")
-          function preserveManagedKeys(
-            existing: Record<string, string> | undefined,
-            desired: Record<string, string> | undefined
-          ): Record<string, string> | undefined {
-            if (!existing && !desired) return undefined;
-            const managedPrefixes = ["kubernetes.io/", "app.kubernetes.io/"];
-            const preserved: Record<string, string> = {};
-            if (existing) {
-              for (const [key, value] of Object.entries(existing)) {
-                if (managedPrefixes.some((prefix) => key.startsWith(prefix))) {
-                  preserved[key] = value;
-                }
-              }
-            }
-            // Desired always takes precedence
-            return { ...preserved, ...(desired || {}) };
-          }
-
           const updatedDeployment: k8s.V1Deployment = {
             ...desiredDeploymentSpec,
             metadata: {
               ...desiredDeploymentSpec.metadata,
               resourceVersion: existingDeployment.metadata?.resourceVersion,
-              annotations: preserveManagedKeys(
+              annotations: K8sPod.preserveManagedKeys(
                 existingDeployment.metadata?.annotations,
                 desiredDeploymentSpec.metadata?.annotations
               ),
-              labels: preserveManagedKeys(
+              labels: K8sPod.preserveManagedKeys(
                 existingDeployment.metadata?.labels,
                 desiredDeploymentSpec.metadata?.labels
               ),
@@ -1373,8 +1389,12 @@ export default class K8sPod {
               return pod;
             }
           } catch (err) {
-            // Ignore errors for ReplicaSets that may have been deleted
-            continue;
+            // Ignore 404 errors for ReplicaSets that may have been deleted
+            if (this.isNotFoundError(err)) {
+              continue;
+            }
+            // Re-throw other errors (e.g., network issues) to properly signal failures
+            throw err;
           }
         }
       }

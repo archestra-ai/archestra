@@ -1,6 +1,6 @@
 "use client";
 
-import { type Action, actions, type Permissions, type Resource } from "@shared";
+import type { Action, Permissions, Resource } from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -349,38 +349,25 @@ export function RolePermissionBuilder({
                           <Separator className="my-2" />
 
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {actions.map((action) => {
-                              const isAvailable =
-                                availableActions.includes(action);
+                            {availableActions.map((action) => {
                               const isSelected =
                                 selectedActions.includes(action);
 
                               return (
                                 <div
                                   key={action}
-                                  className={`flex items-center gap-2 ${
-                                    !isAvailable
-                                      ? "opacity-40 cursor-not-allowed"
-                                      : ""
-                                  }`}
+                                  className="flex items-center gap-2"
                                 >
                                   <Checkbox
                                     id={`${resource}-${action}`}
                                     checked={isSelected}
-                                    disabled={!isAvailable}
                                     onCheckedChange={() => {
-                                      if (isAvailable) {
-                                        toggleAction(resource, action);
-                                      }
+                                      toggleAction(resource, action);
                                     }}
                                   />
                                   <Label
                                     htmlFor={`${resource}-${action}`}
-                                    className={`text-sm ${
-                                      !isAvailable
-                                        ? "cursor-not-allowed"
-                                        : "cursor-pointer"
-                                    }`}
+                                    className="text-sm cursor-pointer"
                                   >
                                     {actionLabels[action]}
                                     {isSelected && (

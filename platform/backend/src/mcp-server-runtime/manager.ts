@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
@@ -20,16 +21,70 @@ const {
 } = config;
 
 /**
+ * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ */
+export function validateKubeconfig(path?: string) {
+  /**
+   * CASE 1 — No kubeconfig provided
+   */
+  if (!path) {
+    return;
+  }
+
+  /**
+   * CASE 2 — Developer explicitly provided a custom kubeconfig
+   */
+
+  if (!fs.existsSync(path)) {
+    throw new Error(`❌ Kubeconfig file not found at ${path}`);
+  }
+
+  const content = fs.readFileSync(path, "utf8");
+
+  // Try parsing with the official Kubernetes parser
+  const kc = new k8s.KubeConfig();
+  try {
+    kc.loadFromString(content);
+  } catch {
+    throw new Error(`❌ Malformed kubeconfig: could not parse YAML`);
+  }
+
+  // Structural validation
+  if (!kc.clusters || kc.clusters.length === 0) {
+    throw new Error(`❌ Invalid kubeconfig: clusters section missing`);
+  }
+
+  const c0 = kc.clusters[0];
+  if (!c0) {
+    throw new Error(`❌ Invalid kubeconfig: clusters[0] is missing`);
+  }
+
+  if (!c0.name || !c0.server) {
+    throw new Error(
+      `❌ Invalid kubeconfig: cluster entry is missing required fields`,
+    );
+  }
+
+  if (!kc.contexts || kc.contexts.length === 0) {
+    throw new Error(`❌ Invalid kubeconfig: contexts section missing`);
+  }
+
+  if (!kc.users || kc.users.length === 0) {
+    throw new Error(`❌ Invalid kubeconfig: users section missing`);
+  }
+
+  logger.info("✓ Custom kubeconfig validated successfully.");
+}
+
+/**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes pods.
- * This is analogous to McpServerSandboxManager in the desktop app,
- * but uses Kubernetes instead of Podman.
  */
 export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
-  private k8sAttach: Attach;
-  private k8sLog: k8s.Log;
-  private namespace: string;
+  private k8sAttach?: Attach;
+  private k8sLog?: k8s.Log;
+  private namespace: string = "default";
   private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
@@ -40,34 +95,39 @@ export class McpServerRuntimeManager {
   constructor() {
     this.k8sConfig = new k8s.KubeConfig();
 
-    // Load K8s config from environment or default locations
+    // Normalize kubeconfig input: treat empty string as undefined
+    const kubeconfigPath =
+      kubeconfig && kubeconfig.trim().length > 0
+        ? kubeconfig.trim()
+        : undefined;
+
     try {
+      // Validate and load kubeconfig based on configuration
       if (loadKubeconfigFromCurrentCluster) {
-        /**
-         * Running inside a K8s cluster
-         *
-         * Automatically configure the client to connect to the Kubernetes API
-         * when the application is running inside a Kubernetes cluster
-         */
         this.k8sConfig.loadFromCluster();
-      } else if (kubeconfig) {
-        // Load from KUBECONFIG env var
-        this.k8sConfig.loadFromFile(kubeconfig);
+        logger.info("Loaded kubeconfig from current cluster");
+      } else if (kubeconfigPath) {
+        validateKubeconfig(kubeconfigPath);
+        this.k8sConfig.loadFromFile(kubeconfigPath);
+        logger.info(`Loaded kubeconfig from ${kubeconfigPath}`);
       } else {
-        // Load from default location (~/.kube/config)
         this.k8sConfig.loadFromDefault();
+        logger.info("No kubeconfig provided — using default kubeconfig");
       }
 
-      // Only create API client if K8s config loaded successfully
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
+      this.k8sAttach = new Attach(this.k8sConfig);
+      this.k8sLog = new k8s.Log(this.k8sConfig);
+      this.namespace = namespace || this.namespace;
     } catch (error) {
-      logger.error({ err: error }, "Failed to load Kubernetes config:");
+      logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
+      this.k8sApi = undefined;
+      this.k8sAttach = undefined;
+      this.k8sLog = undefined;
+      this.namespace = "";
+      return; // graceful fallback: constructor completes with runtime disabled
     }
-
-    this.k8sAttach = new Attach(this.k8sConfig);
-    this.k8sLog = new k8s.Log(this.k8sConfig);
-    this.namespace = namespace;
   }
 
   /**
@@ -195,6 +255,10 @@ export class McpServerRuntimeManager {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
+      }
+
+      if (!this.k8sAttach || !this.k8sLog) {
+        throw new Error("Kubernetes clients not initialized");
       }
 
       const k8sPod = new K8sPod(
@@ -394,13 +458,8 @@ export class McpServerRuntimeManager {
 
   /**
    * Get all available tools from all running MCP servers
-   * Note: In the platform, tools are managed via the database and MCP client,
-   * not directly through the runtime manager like in desktop app.
-   * This is a placeholder for compatibility.
    */
   get allAvailableTools(): AvailableTool[] {
-    // Tools are managed by the MCP client and stored in the database
-    // This method is here for compatibility with the desktop app interface
     return [];
   }
 

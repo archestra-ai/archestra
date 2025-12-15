@@ -44,6 +44,9 @@ const agentToolsTable = pgTable(
     useDynamicTeamCredential: boolean("use_dynamic_team_credential")
       .notNull()
       .default(false),
+    policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
+      mode: "date",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

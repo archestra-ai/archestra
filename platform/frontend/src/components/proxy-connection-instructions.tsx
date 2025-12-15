@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { SupportedProvider } from "@shared";
 import { Check, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [copied, setCopied] = useState(false);
   const [selectedProvider, setSelectedProvider] =
-    useState<archestraApiTypes.SupportedProviders>("openai");
+    useState<SupportedProvider>("openai");
 
   const proxyUrl = agentId
     ? `${apiProxyUrl}/${selectedProvider}/${agentId}`
@@ -46,7 +46,7 @@ export function ProxyConnectionInstructions({
         <Select
           value={selectedProvider}
           onValueChange={(value) =>
-            setSelectedProvider(value as archestraApiTypes.SupportedProviders)
+            setSelectedProvider(value as SupportedProvider)
           }
         >
           <SelectTrigger className="w-32">

@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import {
   index,
   numeric,
@@ -7,7 +8,6 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { SupportedProvider } from "@/types";
 
 const tokenPriceTable = pgTable(
   "token_price",

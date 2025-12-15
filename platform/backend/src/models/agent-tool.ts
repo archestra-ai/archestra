@@ -641,6 +641,64 @@ class AgentToolModel {
   }
 
   /**
+   * Batch fetch security configs for multiple tools at once.
+   * Returns a Map of toolName -> security config.
+   */
+  static async getSecurityConfigBatch(
+    agentId: string,
+    toolNames: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >
+  > {
+    if (toolNames.length === 0) {
+      return new Map();
+    }
+
+    const agentTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+
+    const result = new Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >();
+
+    for (const tool of agentTools) {
+      result.set(tool.toolName, {
+        allowUsageWhenUntrustedDataIsPresent:
+          tool.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: tool.toolResultTreatment,
+      });
+    }
+
+    return result;
+  }
+
+  /**
    * Delete all agent-tool assignments that use a specific MCP server as their execution source.
    * Used when a local MCP server is deleted/uninstalled.
    */

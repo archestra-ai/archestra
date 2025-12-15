@@ -128,6 +128,7 @@ test.describe("Test self-hosted MCP server with Vault", () => {
         `${E2eTestId.ConnectCatalogItemButton}-${newCatalogItem.name}`,
       )
       .click();
+    await adminPage.waitForTimeout(2_000);
 
     // Select secret from vault
     await adminPage

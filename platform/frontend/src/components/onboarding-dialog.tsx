@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useDefaultProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
+import { useChatApiKeys } from "@/lib/chat-settings.query";
 import {
   useOrganizationOnboardingStatus,
   useUpdateOrganization,
@@ -42,7 +42,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
     );
 
   // Chat settings state
-  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
+  const { data: chatApiKeys = [] } = useChatApiKeys();
   const { data: canUpdateChatSettings } = useHasPermissions({
     chatSettings: ["update"],
   });

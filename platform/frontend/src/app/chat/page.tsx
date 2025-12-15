@@ -49,7 +49,7 @@ import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
-import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
+import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
@@ -102,7 +102,7 @@ export default function ChatPage() {
 
   // Check if API key is configured for any provider
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useChatApiKeysOptional();
+    useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   const hasAnyApiKey =

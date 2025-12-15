@@ -83,9 +83,9 @@ export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
-  private k8sAttach: Attach;
-  private k8sLog: k8s.Log;
-  private namespace: string;
+  private k8sAttach!: Attach;
+  private k8sLog!: k8s.Log;
+  private namespace!: string;
   private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
@@ -122,11 +122,12 @@ export class McpServerRuntimeManager {
       logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
       this.k8sApi = undefined;
-      this.k8sAttach = undefined;
-      this.k8sLog = undefined;
-      this.namespace = "";
       return; // graceful fallback: constructor completes with runtime disabled
     }
+
+    this.k8sAttach = new Attach(this.k8sConfig);
+    this.k8sLog = new k8s.Log(this.k8sConfig);
+    this.namespace = namespace;
   }
 
   /**

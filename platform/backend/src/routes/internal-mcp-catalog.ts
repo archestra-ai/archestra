@@ -449,24 +449,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `Catalog item with name "${name}" not found`);
       }
 
-      // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
-      const catalogItemWithSecrets = await InternalMcpCatalogModel.findById(
-        catalogItem.id,
-        {
-          expandSecrets: false,
-        },
-      );
-
-      if (catalogItemWithSecrets?.clientSecretId) {
+      if (catalogItem?.clientSecretId) {
         // Delete the associated OAuth secret
-        await secretManager.deleteSecret(catalogItemWithSecrets.clientSecretId);
+        await secretManager.deleteSecret(catalogItem.clientSecretId);
       }
 
-      if (catalogItemWithSecrets?.localConfigSecretId) {
+      if (catalogItem?.localConfigSecretId) {
         // Delete the associated local config secret
-        await secretManager.deleteSecret(
-          catalogItemWithSecrets.localConfigSecretId,
-        );
+        await secretManager.deleteSecret(catalogItem.localConfigSecretId);
       }
 
       return reply.send({

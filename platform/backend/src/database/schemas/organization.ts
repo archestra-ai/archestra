@@ -37,6 +37,9 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
+  autoConfigureNewTools: boolean("auto_configure_new_tools")
+    .notNull()
+    .default(false),
 });
 
 export default organizationsTable;

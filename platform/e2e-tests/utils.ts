@@ -28,6 +28,7 @@ export async function addCustomSelfHostedCatalogItem({
   envVars?: {
     key: string;
     promptOnInstallation: boolean;
+    isSecret?: boolean;
   };
 }) {
   await goToPage(page, "/mcp-catalog/registry");
@@ -46,6 +47,10 @@ export async function addCustomSelfHostedCatalogItem({
   if (envVars) {
     await page.getByRole("button", { name: "Add Variable" }).click();
     await page.getByRole("textbox", { name: "API_KEY" }).fill(envVars.key);
+    if (envVars.isSecret) {
+      await page.getByTestId(E2eTestId.SelectEnvironmentVariableType).click();
+      await page.getByRole("option", { name: "Secret" }).click();
+    }
     if (envVars.promptOnInstallation) {
       await page
         .getByTestId(E2eTestId.PromptOnInstallationCheckbox)

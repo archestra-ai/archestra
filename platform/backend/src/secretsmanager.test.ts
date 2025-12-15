@@ -17,13 +17,13 @@ vi.mock("node-vault", () => {
   };
 });
 
+import { SecretsManagerType } from "@shared";
 import {
   createSecretManager,
   DbSecretsManager,
   getSecretsManagerTypeBasedOnEnvVars,
   getVaultConfigFromEnv,
   SecretsManagerConfigurationError,
-  SecretsManagerType,
   VaultSecretManager,
 } from "./secretsmanager";
 

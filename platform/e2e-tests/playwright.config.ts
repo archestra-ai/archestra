@@ -47,6 +47,20 @@ export default defineConfig({
       // Teams setup needs users to be created first
       dependencies: ["setup-users"],
     },
+    // This runs first and by default we use Vault as secrets manager
+    // At the end of this test we switch to DB as secrets manager because all other tests rely on it
+    {
+      name: "credentials-with-vault",
+      testMatch: /credentials-with-vault\.spec\.ts/,
+      testDir: "./tests/ui",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run all setup projects before tests
+      dependencies: ["setup-teams"],
+    },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
     {
       name: "api",
@@ -57,7 +71,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
     },
     // UI tests run on all browsers
     {
@@ -69,7 +83,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
     },
     {
       name: "firefox",
@@ -80,7 +94,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
       grep: /@firefox/,
     },
     {
@@ -92,7 +106,7 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
       grep: /@webkit/,
     },
   ],

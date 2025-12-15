@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import { SecretsManagerType } from "@shared";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import config from "@/config";
@@ -94,16 +95,6 @@ export class SecretsManagerConfigurationError extends Error {
     super(message);
     this.name = "SecretsManagerConfigurationError";
   }
-}
-
-/**
- * Supported secrets manager types
- */
-export enum SecretsManagerType {
-  DB = "DB",
-  Vault = "Vault",
-  /** BYOS (Bring Your Own Secrets) - Vault with external team folder support */
-  BYOS_VAULT = "BYOS_VAULT",
 }
 
 class SecretManager {

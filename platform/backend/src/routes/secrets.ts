@@ -1,10 +1,9 @@
-import { RouteId } from "@shared";
+import { RouteId, SecretsManagerType } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import SecretModel from "@/models/secret";
 import {
   isByosEnabled,
-  SecretsManagerType,
   secretManager,
   secretManagerCoordinator,
 } from "@/secretsmanager";

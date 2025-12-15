@@ -6,22 +6,6 @@
   },
   "components": {
     "schemas": {
-      "SupportedProvidersInput": {
-        "type": "string",
-        "enum": [
-          "openai",
-          "gemini",
-          "anthropic"
-        ]
-      },
-      "SupportedProvidersDiscriminatorInput": {
-        "type": "string",
-        "enum": [
-          "openai:chatCompletions",
-          "gemini:generateContent",
-          "anthropic:messages"
-        ]
-      },
       "OpenAiChatCompletionRequestInput": {
         "type": "object",
         "properties": {
@@ -3777,22 +3761,6 @@
               "payload"
             ]
           }
-        ]
-      },
-      "SupportedProviders": {
-        "type": "string",
-        "enum": [
-          "openai",
-          "gemini",
-          "anthropic"
-        ]
-      },
-      "SupportedProvidersDiscriminator": {
-        "type": "string",
-        "enum": [
-          "openai:chatCompletions",
-          "gemini:generateContent",
-          "anthropic:messages"
         ]
       },
       "OpenAiChatCompletionRequest": {
@@ -42047,7 +42015,12 @@
                         }
                       },
                       "provider": {
-                        "$ref": "#/components/schemas/SupportedProviders"
+                        "type": "string",
+                        "enum": [
+                          "openai",
+                          "gemini",
+                          "anthropic"
+                        ]
                       },
                       "targetModel": {
                         "type": "string"
@@ -42353,7 +42326,12 @@
                     }
                   },
                   "provider": {
-                    "$ref": "#/components/schemas/SupportedProvidersInput"
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
+                    ]
                   },
                   "targetModel": {
                     "type": "string"
@@ -42434,7 +42412,12 @@
                       }
                     },
                     "provider": {
-                      "$ref": "#/components/schemas/SupportedProviders"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "targetModel": {
                       "type": "string"
@@ -42741,10 +42724,11 @@
                     }
                   },
                   "provider": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/SupportedProvidersInput"
-                      }
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
                     ]
                   },
                   "targetModel": {
@@ -42830,7 +42814,12 @@
                       }
                     },
                     "provider": {
-                      "$ref": "#/components/schemas/SupportedProviders"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "targetModel": {
                       "type": "string"
@@ -57331,7 +57320,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
                       "provider": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "openai",
+                          "gemini",
+                          "anthropic"
+                        ]
                       },
                       "model": {
                         "type": "string",
@@ -57592,7 +57586,12 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "$ref": "#/components/schemas/SupportedProvidersInput"
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
+                    ]
                   },
                   "model": {
                     "type": "string",
@@ -57630,7 +57629,12 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "model": {
                       "type": "string",
@@ -57911,7 +57915,12 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "model": {
                       "type": "string",
@@ -58171,10 +58180,11 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/SupportedProvidersInput"
-                      }
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
                     ]
                   },
                   "model": {
@@ -58218,7 +58228,12 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "model": {
                       "type": "string",

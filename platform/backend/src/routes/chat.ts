@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId, SupportedProviders } from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -70,11 +70,11 @@ async function getSmartDefaultModel(
   agentId: string,
   organizationId: string,
 ): Promise<string> {
-  // Check what API keys are available (profile-specific or org defaults)
-  const providers: SupportedChatProvider[] = ["anthropic", "gemini", "openai"];
-
-  // Try to find an available API key in order of preference
-  for (const provider of providers) {
+  /**
+   * Check what API keys are available (profile-specific or org defaults)
+   * Try to find an available API key in order of preference
+   */
+  for (const provider of SupportedProviders) {
     const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
       agentId,
       provider,

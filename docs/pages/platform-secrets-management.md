@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Archestra Platform
 description: "Configure external secrets storage for sensitive data"
 order: 6
-lastUpdated: 2025-12-04
+lastUpdated: 2025-12-15
 ---
 
 <!--
@@ -26,12 +26,12 @@ Archestra supports external secrets storage. When enabled, sensitive data like A
 
 To enable Vault, set `ARCHESTRA_SECRETS_MANAGER` to `VAULT` and configure the address and authentication method.
 
-| Variable                                 | Value                            |
-| ---------------------------------------- | -------------------------------- |
-| `ARCHESTRA_SECRETS_MANAGER`              | `VAULT`                          |
-| `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address        |
-| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN`, `K8S`, or `AWS`         |
-| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value               |
+| Variable                                 | Value                     |
+| ---------------------------------------- | ------------------------- |
+| `ARCHESTRA_SECRETS_MANAGER`              | `VAULT`                   |
+| `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address |
+| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN`, `K8S`, or `AWS`  |
+| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value        |
 
 Configure authentication using one of the methods described in [Vault Authentication](#vault-authentication).
 
@@ -53,13 +53,13 @@ Readonly Vault enables teams to use secrets from their organization's external H
 
 To enable Readonly Vault, configure the following environment variables:
 
-| Variable                                 | Value                            |
-| ---------------------------------------- | -------------------------------- |
-| `ARCHESTRA_SECRETS_MANAGER`              | `READONLY_VAULT`                 |
-| `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address        |
-| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN`, `K8S`, or `AWS`         |
-| `ARCHESTRA_HASHICORP_VAULT_KV_VERSION`   | `1` or `2` (default: `2`)        |
-| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value               |
+| Variable                                 | Value                     |
+| ---------------------------------------- | ------------------------- |
+| `ARCHESTRA_SECRETS_MANAGER`              | `READONLY_VAULT`          |
+| `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address |
+| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN`, `K8S`, or `AWS`  |
+| `ARCHESTRA_HASHICORP_VAULT_KV_VERSION`   | `1` or `2` (default: `2`) |
+| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value        |
 
 Configure authentication using one of the methods described in [Vault Authentication](#vault-authentication).
 
@@ -133,9 +133,9 @@ Archestra supports three authentication methods for connecting to HashiCorp Vaul
 
 ### Token Authentication
 
-| Variable                           | Required | Description                |
-| ---------------------------------- | -------- | -------------------------- |
-| `ARCHESTRA_HASHICORP_VAULT_TOKEN`  | Yes      | Vault authentication token |
+| Variable                          | Required | Description                |
+| --------------------------------- | -------- | -------------------------- |
+| `ARCHESTRA_HASHICORP_VAULT_TOKEN` | Yes      | Vault authentication token |
 
 ### Kubernetes Authentication
 
@@ -149,10 +149,10 @@ The K8S auth method requires a Vault role configured with a bound service accoun
 
 ### AWS IAM Authentication
 
-| Variable                                        | Required | Description                                                         |
-| ----------------------------------------------- | -------- | ------------------------------------------------------------------- |
-| `ARCHESTRA_HASHICORP_VAULT_AWS_ROLE`            | Yes      | Vault role bound to the AWS IAM principal                           |
-| `ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT`     | No       | Vault AWS auth mount point (default: `aws`)                         |
-| `ARCHESTRA_HASHICORP_VAULT_AWS_REGION`          | No       | AWS region for STS signing (default: `us-east-1`)                   |
-| `ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT`    | No       | STS endpoint URL (default: `https://sts.amazonaws.com`)             |
-| `ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID`   | No       | Value for `X-Vault-AWS-IAM-Server-ID` header (additional security)  |
+| Variable                                      | Required | Description                                                        |
+| --------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_ROLE`          | Yes      | Vault role bound to the AWS IAM principal                          |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT`   | No       | Vault AWS auth mount point (default: `aws`)                        |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_REGION`        | No       | AWS region for STS signing (default: `us-east-1`)                  |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT`  | No       | STS endpoint URL (default: `https://sts.amazonaws.com`)            |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID` | No       | Value for `X-Vault-AWS-IAM-Server-ID` header (additional security) |

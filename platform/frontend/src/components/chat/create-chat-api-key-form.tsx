@@ -18,10 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  useChatApiKeysOptional,
-  useCreateChatApiKey,
-} from "@/lib/chat-settings.query";
+import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
 
 type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
@@ -90,7 +87,7 @@ export function CreateChatApiKeyForm({
   onSuccess,
   showConsoleLink = true,
 }: CreateChatApiKeyFormProps) {
-  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
+  const { data: chatApiKeys = [] } = useChatApiKeys();
   const createChatApiKey = useCreateChatApiKey();
 
   const [provider, setProvider] = useState<SupportedChatProvider>("anthropic");

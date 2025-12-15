@@ -28,8 +28,8 @@
     "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.7",
-    "turbo": "^2.6.1",
+    "@biomejs/biome": "2.3.8",
+    "turbo": "^2.6.3",
     "typescript": "^5.9.2"
   },
   "pnpm": {

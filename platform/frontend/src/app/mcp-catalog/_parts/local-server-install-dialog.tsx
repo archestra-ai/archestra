@@ -68,8 +68,8 @@ export function LocalServerInstallDialog({
 
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
-  >(() => {
-    const initial = promptedEnvVars.reduce<Record<string, string>>(
+  >(() =>
+    promptedEnvVars.reduce<Record<string, string>>(
       (acc, env) => {
         const defaultValue =
           env.default !== undefined ? String(env.default) : "";
@@ -77,9 +77,8 @@ export function LocalServerInstallDialog({
         return acc;
       },
       {},
-    );
-    return initial;
-  });
+    ),
+  );
 
   // BYOS (Bring Your Own Secrets) state - per-field vault references
   const [vaultSecrets, setVaultSecrets] = useState<
@@ -206,25 +205,25 @@ export function LocalServerInstallDialog({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 components={{
-                  p: ({ node, ...props }) => (
+                  p: (props) => (
                     <p
                       className="text-muted-foreground leading-relaxed"
                       {...props}
                     />
                   ),
-                  strong: ({ node, ...props }) => (
+                  strong: (props) => (
                     <strong
                       className="font-semibold text-foreground"
                       {...props}
                     />
                   ),
-                  code: ({ node, ...props }) => (
+                  code: (props) => (
                     <code
                       className="bg-muted text-foreground px-1.5 py-0.5 rounded text-xs font-mono"
                       {...props}
                     />
                   ),
-                  a: ({ node, ...props }) => (
+                  a: (props) => (
                     <a
                       className="text-primary hover:underline"
                       target="_blank"
@@ -266,19 +265,19 @@ export function LocalServerInstallDialog({
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
                         components={{
-                          p: ({ node, ...props }) => (
+                          p: (props) => (
                             <p
                               className="text-muted-foreground leading-relaxed text-xs"
                               {...props}
                             />
                           ),
-                          code: ({ node, ...props }) => (
+                          code: (props) => (
                             <code
                               className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
                               {...props}
                             />
                           ),
-                          a: ({ node, ...props }) => (
+                          a: (props) => (
                             <a
                               className="text-primary hover:underline"
                               target="_blank"
@@ -355,19 +354,19 @@ export function LocalServerInstallDialog({
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkBreaks]}
                           components={{
-                            p: ({ node, ...props }) => (
+                            p: (props) => (
                               <p
                                 className="text-muted-foreground leading-relaxed text-xs"
                                 {...props}
                               />
                             ),
-                            code: ({ node, ...props }) => (
+                            code: (props) => (
                               <code
                                 className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
                                 {...props}
                               />
                             ),
-                            a: ({ node, ...props }) => (
+                            a: (props) => (
                               <a
                                 className="text-primary hover:underline"
                                 target="_blank"

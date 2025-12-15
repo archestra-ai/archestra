@@ -44,6 +44,11 @@ export const E2eTestId = {
   RevokeCredentialButton: "revoke-credential-button",
   ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
+  ConfigureVaultFolderButton: "configure-vault-folder-button",
+  InlineVaultSecretSelectorSecretTrigger:
+    "inline-vault-secret-selector-secret-trigger",
+  InlineVaultSecretSelectorSecretTriggerKey:
+    "inline-vault-secret-selector-secret-trigger-key",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
   AddChatApiKeyButton: "add-chat-api-key-button",

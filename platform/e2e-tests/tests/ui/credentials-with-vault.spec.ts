@@ -4,11 +4,19 @@ import {
   E2eTestId,
   SecretsManagerType,
 } from "@shared";
-import { expect, goToPage, test } from "../../fixtures";
-import { addCustomSelfHostedCatalogItem } from "../../utils";
+import { DEFAULT_TEAM_NAME } from "../../consts";
+import { expect, goToPage, request, test } from "../../fixtures";
+import {
+  addCustomSelfHostedCatalogItem,
+  goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
+  verifyToolCallResultViaApi,
+} from "../../utils";
 
 const vaultAddr = "http://localhost:8200";
-const teamFolderPath = "secret/data/teams/default-team";
+const teamFolderPath = "secret/data/teams";
+const secretName = "default-team";
+const secretKey = "api_key";
+const secretValue = "Admin-personal-credential";
 
 test.describe("Credentials with Vault", () => {
   test.describe.configure({ mode: "serial" });
@@ -29,17 +37,15 @@ test.describe("Credentials with Vault", () => {
     expect(data?.type).toBe(SecretsManagerType.BYOS_VAULT);
   });
 
-  test("Create folder in Vault for Default Team and exemplary secret", async () => {
+  test("Then we create folder in Vault for Default Team and exemplary secret", async () => {
     // Define the path for Default Team secrets
     // Using the format: secret/data/teams/default-team
-    const secretName = "example-api-key";
     const fullSecretPath = `${teamFolderPath}/${secretName}`;
 
     // Create an exemplary secret in Vault using KV v2 format
     const secretData = {
       data: {
-        api_key: "sk-test-1234567890abcdef",
-        api_secret: "secret-abcdef1234567890",
+        [secretKey]: secretValue,
         description: "Example API credentials for Default Team",
       },
     };
@@ -68,11 +74,32 @@ test.describe("Credentials with Vault", () => {
     const readData = await readResponse.json();
 
     // Verify the secret data matches what we wrote
-    expect(readData.data.data.api_key).toBe("sk-test-1234567890abcdef");
-    expect(readData.data.data.api_secret).toBe("secret-abcdef1234567890");
-    expect(readData.data.data.description).toBe(
-      "Example API credentials for Default Team",
-    );
+    expect(readData.data.data[secretKey]).toBe(secretValue);
+  });
+
+  test("Then we configure vault for Default Team", async ({ adminPage }) => {
+    await goToPage(adminPage, "/settings/teams");
+    await adminPage
+      .getByTestId(
+        `${E2eTestId.ConfigureVaultFolderButton}-${DEFAULT_TEAM_NAME}`,
+      )
+      .click();
+    await adminPage
+      .getByRole("textbox", { name: "Vault Path" })
+      .fill(teamFolderPath);
+
+    // test connection
+    await adminPage.getByRole("button", { name: "Test Connection" }).click();
+    await expect(adminPage.getByText("Connection Successful")).toBeVisible();
+
+    const alreadyConfigured = await adminPage
+      .getByText("Connection Successful")
+      .isVisible();
+
+    // save if not already configured
+    if (!alreadyConfigured) {
+      await adminPage.getByRole("button", { name: "Save Path" }).click();
+    }
   });
 
   test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
@@ -104,8 +131,41 @@ test.describe("Credentials with Vault", () => {
       )
       .click();
 
-    // Check that secrets are loading from Vault
-    await expect(adminPage.getByText("Loading secrets...")).toBeVisible();
+    // Select secret from vault
+    await adminPage
+      .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
+      .click();
+    await adminPage.getByText(secretName).click();
+    await adminPage.waitForLoadState("networkidle");
+    await adminPage
+      .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
+      .click();
+    await adminPage.getByText(secretKey).click();
+
+    // install server
+    await adminPage.getByRole("button", { name: "Install" }).click();
+
+    await adminPage.waitForLoadState("networkidle");
+
+    // Assign tool to profiles using admin static credential
+    await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+    });
+
+    // Select default team credential
+    await adminPage.getByRole("option", { name: DEFAULT_TEAM_NAME }).click();
+    await adminPage.getByText("Assign to 1 profile").click();
+    await adminPage.waitForLoadState("networkidle");
+
+    // Verify tool call result using admin static credential
+    await verifyToolCallResultViaApi({
+      request: adminPage.request,
+      expectedResult: secretValue,
+      tokenToUse: "org-token",
+      toolName: `${newCatalogItem.name}__print_archestra_test`,
+      cookieHeaders,
+    });
 
     // CLEANUP: Delete the catalog item
     await archestraApiSdk.deleteInternalMcpCatalogItem({

@@ -14,6 +14,7 @@ import {
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
 } from "@/lib/team-vault-folder.query";
+import { E2eTestId } from "../../../shared";
 
 interface InlineVaultSecretSelectorProps {
   /** The team ID whose vault folder to use */
@@ -135,7 +136,10 @@ export function InlineVaultSecretSelector({
         onValueChange={handleSecretChange}
         disabled={disabled}
       >
-        <SelectTrigger className="w-48">
+        <SelectTrigger
+          className="w-48"
+          data-testid={E2eTestId.InlineVaultSecretSelectorSecretTrigger}
+        >
           <SelectValue placeholder={secretPlaceholder} />
         </SelectTrigger>
         <SelectContent>
@@ -177,7 +181,10 @@ export function InlineVaultSecretSelector({
             onValueChange={handleKeyChange}
             disabled={disabled}
           >
-            <SelectTrigger className="w-48">
+            <SelectTrigger
+              className="w-48"
+              data-testid={E2eTestId.InlineVaultSecretSelectorSecretTriggerKey}
+            >
               <SelectValue placeholder={keyPlaceholder} />
             </SelectTrigger>
             <SelectContent>

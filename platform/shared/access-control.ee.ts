@@ -272,6 +272,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteInternalMcpCatalogItem]: {
     internalMcpCatalog: ["delete"],
   },
+  [RouteId.DeleteInternalMcpCatalogItemByName]: {
+    internalMcpCatalog: ["delete"],
+  },
   [RouteId.GetMcpServers]: {
     mcpServer: ["read"],
   },

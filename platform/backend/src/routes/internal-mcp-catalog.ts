@@ -427,6 +427,53 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
     },
   );
+
+  fastify.delete(
+    "/api/internal_mcp_catalog/by-name/:name",
+    {
+      schema: {
+        operationId: RouteId.DeleteInternalMcpCatalogItemByName,
+        description: "Delete an Internal MCP catalog item by name",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          name: z.string().min(1),
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { name } }, reply) => {
+      // Find the catalog item by name
+      const catalogItem = await InternalMcpCatalogModel.findByName(name);
+
+      if (!catalogItem) {
+        throw new ApiError(404, `Catalog item with name "${name}" not found`);
+      }
+
+      // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
+      const catalogItemWithSecrets = await InternalMcpCatalogModel.findById(
+        catalogItem.id,
+        {
+          expandSecrets: false,
+        },
+      );
+
+      if (catalogItemWithSecrets?.clientSecretId) {
+        // Delete the associated OAuth secret
+        await secretManager.deleteSecret(catalogItemWithSecrets.clientSecretId);
+      }
+
+      if (catalogItemWithSecrets?.localConfigSecretId) {
+        // Delete the associated local config secret
+        await secretManager.deleteSecret(
+          catalogItemWithSecrets.localConfigSecretId,
+        );
+      }
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.delete(catalogItem.id),
+      });
+    },
+  );
 };
 
 export default internalMcpCatalogRoutes;

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7](https://github.com/archestra-ai/archestra/compare/platform-v1.0.6...platform-v1.0.7) (2025-12-15)
+
+
+### Bug Fixes
+
+* support Gemini for token prices, deduplicate `SupportedProviders` type/schema ([#1591](https://github.com/archestra-ai/archestra/issues/1591)) ([81dff9a](https://github.com/archestra-ai/archestra/commit/81dff9ae1e6d5152602f76bec7b58aced5cfa122))
+
 ## [1.0.6](https://github.com/archestra-ai/archestra/compare/platform-v1.0.5...platform-v1.0.6) (2025-12-15)
 
 

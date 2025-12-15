@@ -495,9 +495,6 @@ function PromptTile({
                   side="bottom"
                   align="center"
                   avoidCollisions={true}
-                  className="max-w-xs max-h-48 overflow-y-auto text-xs"
-                  onWheel={(e) => e.stopPropagation()}
-                  onTouchMove={(e) => e.stopPropagation()}
                 >
                   <div className="space-y-2">
                     <div className="font-medium text-sm">

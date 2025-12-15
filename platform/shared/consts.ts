@@ -44,6 +44,7 @@ export const E2eTestId = {
   RevokeCredentialButton: "revoke-credential-button",
   ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
+  AddCatalogItemButton: "add-catalog-item-button",
   ConfigureVaultFolderButton: "configure-vault-folder-button",
   ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
   ExternalSecretSelectorSecretTrigger:

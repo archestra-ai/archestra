@@ -127,44 +127,7 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
           # Deploy Vault as a Kubernetes service
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: vault
-            labels:
-              app: vault
-          spec:
-            containers:
-            - name: vault
-              image: hashicorp/vault:latest
-              env:
-              - name: VAULT_DEV_ROOT_TOKEN_ID
-                value: "dev-root-token"
-              - name: VAULT_DEV_LISTEN_ADDRESS
-                value: "0.0.0.0:8200"
-              ports:
-              - containerPort: 8200
-                name: vault
-              securityContext:
-                capabilities:
-                  add:
-                  - IPC_LOCK
-          ---
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: vault
-          spec:
-            type: NodePort
-            selector:
-              app: vault
-            ports:
-            - port: 8200
-              targetPort: 8200
-              nodePort: 30200
-              protocol: TCP
-          EOF
+          kubectl apply -f .github/vault-ci.yaml
 
           # Wait for Vault pod to be ready
           kubectl wait --for=condition=Ready pod/vault --timeout=120s
@@ -172,14 +135,6 @@ jobs:
           # Wait for Vault service to be ready (access via kind port mapping: host:8200 -> nodePort:30200)
           timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
           echo "Vault is ready at localhost:8200 (via kind port mapping to NodePort 30200)"
-
-      - name: Restart backend to connect to Vault
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          # Restart the backend pod so it can connect to Vault (which was started after initial deployment)
-          kubectl rollout restart deployment/archestra-platform
-          kubectl rollout status deployment/archestra-platform --timeout=120s
-          echo "Backend restarted and ready"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check

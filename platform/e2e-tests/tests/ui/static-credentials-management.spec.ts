@@ -74,6 +74,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
         .click();
+      await page.waitForLoadState("networkidle");
       // Personal credential type should be selected by default if vault is disabled
       // otherwise team credential type should be selected
       await expect(
@@ -240,6 +241,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .click();
     // And this time team credential type should be selected by default for everyone, install using team credential
     await page.getByRole("button", { name: "Install" }).click();
+    await page.waitForLoadState("networkidle");
   };
 
   // Each user adds personal and 1 team credential

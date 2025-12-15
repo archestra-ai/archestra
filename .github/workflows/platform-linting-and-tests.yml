@@ -7,6 +7,11 @@ on:
         description: "Whether to force the checks to succeed"
         required: false
         type: boolean
+      is-release-please-pr:
+        description: "Whether this is a release-please PR (enables auto-commit of codegen changes)"
+        required: false
+        type: boolean
+        default: false
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN:
         required: true
@@ -16,6 +21,13 @@ on:
         required: true
       DOCKER_PASSWORD:
         required: true
+      # Required for release-please PRs to push codegen changes with a token that triggers workflow re-runs
+      # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
+      # see https://stackoverflow.com/a/67551255
+      ARCHESTRA_RELEASER_GITHUB_APP_ID:
+        required: false
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
+        required: false
 
 jobs:
   paths-filter:
@@ -79,13 +91,35 @@ jobs:
     name: Platform e2e Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
-      contents: read
+      contents: write
     steps:
+      # Generate a GitHub App token for release-please PRs
+      # This is needed because pushes made with GITHUB_TOKEN do not trigger workflow re-runs,
+      # but pushes made with a GitHub App token DO trigger workflows.
+      # This allows the codegen commit to properly re-trigger CI checks.
+      #
+      # see https://stackoverflow.com/a/67551255
+      - name: Generate token for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        id: generate-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
+          # Persist credentials for release-please PRs to allow auto-committing codegen changes
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked] -- persist-credentials is conditionally true only for release-please PRs
+          # For release-please PRs, checkout the actual PR branch (not the merge commit)
+          # to avoid detached HEAD state which would cause git push to fail
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          # Use the GitHub App token for release-please PRs so that the codegen commit push
+          # triggers a new workflow run (pushes with GITHUB_TOKEN don't trigger workflows)
+          # see https://stackoverflow.com/a/67551255
+          token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -96,7 +130,9 @@ jobs:
       - name: Setup environment variables
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -112,6 +148,19 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
+      - name: Deploy HashiCorp Vault in Kubernetes
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          # Deploy Vault as a Kubernetes service
+          kubectl apply -f .github/vault-ci.yaml
+
+          # Wait for Vault pod to be ready
+          kubectl wait --for=condition=Ready pod/vault --timeout=120s
+
+          # Wait for Vault service to be ready (access via kind port mapping: host:8200 -> nodePort:30200)
+          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready at localhost:8200 (via kind port mapping to NodePort 30200)"
+
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check
       # The drizzle-kit check command lets you check consistency of your generated SQL migrations history
@@ -123,15 +172,40 @@ jobs:
       - name: Check for codegen'd changes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
+        env:
+          IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
         run: |
-          pnpm codegen:api-client
+          pnpm codegen
           # Ensure generated files are properly formatted and linted
           pnpm lint:fix
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "::error::Generated code is not up to date. Please run 'pnpm codegen:api-client && pnpm lint:fix' locally and commit the changes."
-            exit 1
+            # For release-please PRs, auto-commit the codegen changes
+            # This is needed because release-please bumps the version in package.json,
+            # which causes generated files (like docs/openapi.json) to be out of date
+            if [ "$IS_RELEASE_PLEASE_PR" == "true" ]; then
+              echo "📦 Release-please PR with codegen changes detected. Auto-committing..."
+
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+
+              # Only add changes under docs/ and platform/ - these are the directories
+              # that may have codegen changes (e.g., docs/openapi.json version bump,
+              # docs/pages/platform-access-control.md front matter timestamp)
+              git -C "$GITHUB_WORKSPACE" add docs/ platform/
+
+              git commit -m "chore: update docs/openapi.json version for release"
+              git push
+
+              echo "✅ Changes committed. Workflow will be re-triggered."
+
+              # Exit early - the push triggers a new workflow run with the updated code
+              exit 0
+            else
+              echo "::error::Generated code is not up to date. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the changes."
+              exit 1
+            fi
           else
             echo "Generated code is up to date"
             echo "codegen-changes=false" >> $GITHUB_OUTPUT
@@ -295,8 +369,7 @@ jobs:
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           ignore-unchanged: true
           only-severities: critical,high
-          write-comment: true
-          github-token: ${{ secrets.GITHUB_TOKEN }} # to be able to write the comment
+          write-comment: false
           sarif-file: sarif.output.json
 
       # Upload SARIF result to GitHub Code Scanning

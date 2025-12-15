@@ -3,6 +3,7 @@ import type { Attach, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import { vi } from "vitest";
 import type { z } from "zod";
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
@@ -1198,6 +1199,255 @@ describe("K8sPod.generatePodSpec", () => {
       },
     ]);
   });
+
+  test("rewrite localhost URLs when backend is external to MCP pods", () => {
+    // Save original value
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+
+    // Mock config to simulate backend running in-cluster (production deployment)
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
+
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "API_ENDPOINT",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "API endpoint",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "http://localhost:3002/",
+        API_ENDPOINT: "http://127.0.0.1:8080/api",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    // Find the rewritten URLs
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+    const apiEndpoint = envVars.find((env) => env.name === "API_ENDPOINT");
+
+    expect(grafanaUrl?.value).toBe("http://host.docker.internal:3002/");
+    expect(apiEndpoint?.value).toBe("http://host.docker.internal:8080/api");
+
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
+  });
+
+  test("does not rewrite non-localhost URLs", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "https://grafana.example.com:3000/",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+
+    // Should NOT be rewritten
+    expect(grafanaUrl?.value).toBe("https://grafana.example.com:3000/");
+  });
+
+  test("does not rewrite non-HTTP/HTTPS protocols (MongoDB, PostgreSQL, etc.)", () => {
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "DATABASE_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Database URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "MONGODB_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "MongoDB URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "REDIS_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "Redis URL",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        DATABASE_URL: "postgresql://localhost:5432/mydb",
+        MONGODB_URL: "mongodb://127.0.0.1:27017/mydb",
+        REDIS_URL: "redis://localhost:6379",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    const databaseUrl = envVars.find((env) => env.name === "DATABASE_URL");
+    const mongodbUrl = envVars.find((env) => env.name === "MONGODB_URL");
+    const redisUrl = envVars.find((env) => env.name === "REDIS_URL");
+
+    // Should NOT be rewritten - only HTTP/HTTPS protocols are rewritten
+    expect(databaseUrl?.value).toBe("postgresql://localhost:5432/mydb");
+    expect(mongodbUrl?.value).toBe("mongodb://127.0.0.1:27017/mydb");
+    expect(redisUrl?.value).toBe("redis://localhost:6379");
+  });
+
+  test("does not rewrite localhost URLs when backend shares environment with K8s cluster", () => {
+    // Save original value
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+
+    // Mock config to simulate backend running in-cluster (production deployment)
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+
+    const mockCatalogItem = {
+      id: "test-catalog-id",
+      name: "test-catalog",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "GRAFANA_URL",
+            type: "plain_text" as const,
+            value: "",
+            required: true,
+            description: "Grafana URL",
+            promptOnInstallation: true,
+          },
+          {
+            key: "API_ENDPOINT",
+            type: "plain_text" as const,
+            value: "",
+            required: false,
+            description: "API endpoint",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+    };
+
+    const pod = createK8sPodInstance(
+      {
+        GRAFANA_URL: "http://localhost:3002/",
+        API_ENDPOINT: "http://127.0.0.1:8080/api",
+      },
+      undefined,
+    );
+
+    // Use reflection to set the catalog item
+    // @ts-expect-error - accessing private property for testing
+    pod.catalogItem = mockCatalogItem;
+
+    const podSpec = pod.generatePodSpec(
+      "test-image",
+      mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
+      false,
+      8080,
+    );
+
+    const envVars = podSpec.spec?.containers[0]?.env || [];
+
+    // Find the URLs
+    const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
+    const apiEndpoint = envVars.find((env) => env.name === "API_ENDPOINT");
+
+    // Should NOT be rewritten when backend runs in cluster
+    expect(grafanaUrl?.value).toBe("http://localhost:3002/");
+    expect(apiEndpoint?.value).toBe("http://127.0.0.1:8080/api");
+
+    // Restore original value
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
+  });
 });
 
 describe("K8sPod.createK8sSecret", () => {
@@ -1502,5 +1752,225 @@ describe("K8sPod.constructK8sSecretName", () => {
     const result = K8sPod.constructK8sSecretName(mcpServerId);
     expect(result).toBe(expected);
     expect(result).toMatch(/^mcp-server-.+-secrets$/);
+  });
+});
+
+describe("K8sPod.generatePodSpec - serviceAccountName", () => {
+  test("does not set serviceAccountName when not provided in localConfig", () => {
+    const mockMcpServer = {
+      id: "test-server",
+      name: "Test Server",
+      catalogId: "test-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "test-image:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(podSpec.spec?.serviceAccountName).toBeUndefined();
+  });
+
+  test("uses serviceAccount role as-is when release name prefix is empty", () => {
+    // This test verifies that when a serviceAccount role is specified but the release name is empty,
+    // we use the role name as-is without the prefix and middle part
+
+    // Mock config with empty release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "";
+
+    const mockMcpServer = {
+      id: "k8s-server",
+      name: "Kubernetes MCP",
+      catalogId: "k8s-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "docker",
+      arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
+      serviceAccount: "operator",
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "kubernetes-mcp:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    // When release name is empty, use role as-is
+    expect(podSpec.spec?.serviceAccountName).toBe("operator");
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
+  });
+
+  test("uses custom serviceAccount as-is when prefix is not configured", () => {
+    // Mock config with empty release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = "";
+
+    const mockMcpServer = {
+      id: "custom-server",
+      name: "Custom Server",
+      catalogId: "custom-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      serviceAccount: "custom-service-account",
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "test-image:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    expect(podSpec.spec?.serviceAccountName).toBe("custom-service-account");
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
+  });
+
+  test("automatically constructs full service account name from role", () => {
+    // Mock config with release name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
+      "archestra-platform";
+
+    const mockMcpServer = {
+      id: "k8s-server",
+      name: "Kubernetes MCP",
+      catalogId: "k8s-catalog",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      serverType: "local",
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const k8sPod = new K8sPod(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.Attach,
+      {} as k8s.Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "docker",
+      arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
+      serviceAccount: "operator",
+    };
+
+    const podSpec = k8sPod.generatePodSpec(
+      "kubernetes-mcp:latest",
+      localConfig,
+      false,
+      8080,
+    );
+
+    // Should construct full name: {releaseName}-mcp-k8s-{role}
+    expect(podSpec.spec?.serviceAccountName).toBe(
+      "archestra-platform-mcp-k8s-operator",
+    );
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 });

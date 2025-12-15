@@ -97,7 +97,7 @@ Options:
   if (modelIndex !== -1) {
     model = process.argv[modelIndex + 1];
   } else if (isGoogle) {
-    model = "gemini-2.5-flash";
+    model = "gemini-2.5-pro";
   } else if (provider === "anthropic") {
     model = "claude-sonnet-4-5-20250929";
   } else if (provider === "bedrock") {

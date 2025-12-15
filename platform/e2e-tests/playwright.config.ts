@@ -12,6 +12,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
+  /* Reduce workers in CI to avoid resource contention */
   workers: process.env.CI ? 6 : 3,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.CI ? "html" : "line",
@@ -23,6 +24,14 @@ export default defineConfig({
     video: "retain-on-failure",
     /* Take screenshot only when test fails */
     screenshot: "only-on-failure",
+    /* Timeout for each action (click, fill, etc.) */
+    actionTimeout: 15_000,
+    /* Timeout for navigation actions */
+    navigationTimeout: 30_000,
+  },
+  /* Expect timeout for assertions */
+  expect: {
+    timeout: 10_000,
   },
 
   /* Configure projects for major browsers */
@@ -47,10 +56,12 @@ export default defineConfig({
       // Teams setup needs users to be created first
       dependencies: ["setup-users"],
     },
-    // API tests only run on chromium (browser doesn't matter for API integration tests)
+    // This runs first and by default we use Vault as secrets manager
+    // At the end of this test we switch to DB as secrets manager because all other tests rely on it
     {
-      name: "api",
-      testDir: "./tests/api",
+      name: "credentials-with-vault",
+      testMatch: /credentials-with-vault\.spec\.ts/,
+      testDir: "./tests/ui",
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
@@ -63,37 +74,53 @@ export default defineConfig({
     {
       name: "chromium",
       testDir: "./tests/ui",
+      testIgnore: /credentials-with-vault\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
     },
     {
       name: "firefox",
       testDir: "./tests/ui",
+      testIgnore: /credentials-with-vault\.spec\.ts/,
       use: {
         ...devices["Desktop Firefox"],
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
       grep: /@firefox/,
     },
     {
       name: "webkit",
       testDir: "./tests/ui",
+      testIgnore: /credentials-with-vault\.spec\.ts/,
       use: {
         ...devices["Desktop Safari"],
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
       // Run all setup projects before tests
-      dependencies: ["setup-teams"],
+      dependencies: ["credentials-with-vault"],
       grep: /@webkit/,
+    },
+    // API tests only run on chromium (browser doesn't matter for API integration tests)
+    // API tests run after all UI tests complete
+    {
+      name: "api",
+      testDir: "./tests/api",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run after all UI test projects complete
+      dependencies: ["credentials-with-vault", "chromium", "firefox", "webkit"],
     },
   ],
 });

@@ -31,6 +31,7 @@ export type ArchestraMcpServerManifest = {
             provider: 'whatsapp';
         }>;
         docker_image?: string;
+        service_account?: string;
     } | {
         type: 'remote';
         url: string;
@@ -71,6 +72,7 @@ export type ArchestraMcpServerManifest = {
             max?: number;
         };
     };
+    instructions?: string;
     readme: string | null;
     category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General';
     quality_score: number | null;

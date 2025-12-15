@@ -1,0 +1,61 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
+    "headers": {
+      "x-goog-api-key": {
+        "contains": "test-case-1-gemini-tool-call"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "functionCall": {
+                  "name": "read_file",
+                  "args": {
+                    "file_path": "/etc/passwd"
+                  }
+                }
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0,
+          "safetyRatings": [
+            {
+              "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              "probability": "NEGLIGIBLE"
+            },
+            {
+              "category": "HARM_CATEGORY_HATE_SPEECH",
+              "probability": "NEGLIGIBLE"
+            },
+            {
+              "category": "HARM_CATEGORY_HARASSMENT",
+              "probability": "NEGLIGIBLE"
+            },
+            {
+              "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+              "probability": "NEGLIGIBLE"
+            }
+          ]
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 100,
+        "candidatesTokenCount": 20,
+        "totalTokenCount": 120
+      }
+    }
+  }
+}

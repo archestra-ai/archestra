@@ -3,7 +3,7 @@ export * from "./agent";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";
-export * from "./chat-settings";
+export * from "./chat-api-key";
 export * from "./conversation";
 export * from "./dual-llm-config";
 export * from "./dual-llm-result";

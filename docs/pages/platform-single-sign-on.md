@@ -35,7 +35,7 @@ Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OID
 
 Once you have configured SSO providers, you can optionally disable the username/password login form to enforce SSO-only authentication. This is useful for organizations that want to centralize authentication through their identity provider.
 
-To disable basic authentication, set the `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` environment variable to `true`. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for configuration details.
+To disable basic authentication, set the `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` environment variable to `true`. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for configuration details.
 
 > **Important:** Ensure at least one SSO provider is configured and working before disabling basic authentication. Otherwise, users (including administrators) will not be able to sign in.
 
@@ -43,7 +43,7 @@ To disable basic authentication, set the `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` env
 
 For organizations using SSO with automatic user provisioning, you may want to disable the manual invitation system entirely. This hides the invitation UI and blocks invitation API endpoints.
 
-To disable invitations, set the `ARCHESTRA_AUTH_DISABLE_INVITATIONS` environment variable to `true`. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for configuration details.
+To disable invitations, set the `ARCHESTRA_AUTH_DISABLE_INVITATIONS` environment variable to `true`. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for configuration details.
 
 ## Callback URLs
 

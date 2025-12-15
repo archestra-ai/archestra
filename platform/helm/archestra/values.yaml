@@ -12,6 +12,20 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
+  # Annotations to add to pods created by the Deployment
+  # This is useful for integrations that require pod-level annotations, such as:
+  # - Service mesh sidecars (Istio, Linkerd)
+  # - Prometheus scraping
+  # - Cloud provider features (AWS IAM roles, GKE Workload Identity)
+  # - Secrets injection (Vault agent, External Secrets Operator)
+  # Example:
+  #   podAnnotations:
+  #     prometheus.io/scrape: "true"
+  #     prometheus.io/port: "9050"
+  #     vault.hashicorp.com/agent-inject: "true"
+  #     sidecar.istio.io/inject: "true"
+  podAnnotations: {}
+
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.
@@ -58,6 +72,14 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # Resource requests and limits for the Archestra container
+  # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  resources:
+    requests:
+      memory: "2Gi"
+    limits:
+      memory: "3Gi"
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
@@ -99,6 +121,15 @@ archestra:
         # Specifies whether a service account should be created
         create: true
         # Annotations to add to the service account
+        # Use this for cloud provider integrations like GKE Workload Identity or AWS IRSA
+        #
+        # GKE Workload Identity example (for Vertex AI authentication):
+        #   annotations:
+        #     iam.gke.io/gcp-service-account: my-gsa@my-project.iam.gserviceaccount.com
+        #
+        # AWS IRSA example:
+        #   annotations:
+        #     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/my-role
         annotations: {}
         # The name of the service account to use.
         # If not set and create is true, a name is generated using the fullname template
@@ -114,6 +145,15 @@ archestra:
       rbac:
         # Specifies whether RBAC resources should be created
         create: true
+
+      # RBAC configuration for MCP server pods that need Kubernetes API access
+      # Creates a dedicated service account with namespace-scoped permissions for K8s resources
+      # Permissions: manage pods, services, deployments, jobs (read-only for secrets removed)
+      # IMPORTANT: Only the Kubernetes MCP server uses this service account - all other MCP servers
+      # use the default service account with no permissions, maintaining proper isolation
+      mcpServerRbac:
+        # Specifies whether RBAC resources (ServiceAccount, Role, RoleBinding) should be created
+        create: false
 
   # Service configuration
   service:
@@ -205,6 +245,60 @@ archestra:
     # - AlwaysAllow: Running pods that are not yet healthy can be evicted regardless of whether the criteria in a PodDisruptionBudget is met
     # See: https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy
     unhealthyPodEvictionPolicy: null
+
+  # GKE BackendConfig configuration
+  # Creates GKE-specific BackendConfig resources for configuring Google Cloud Load Balancer behavior
+  # See: https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#configuring_backendconfig
+  #
+  # NOTE: These health check settings are tuned to work with Kubernetes startup probes that allow
+  # up to 305 seconds (30 * 10s + 5s) for pods to start.
+  # unhealthyThreshold=10 with checkIntervalSec=15 allows ~150 seconds before marking unhealthy,
+  # giving pods enough time to start during deployments while still detecting failures.
+  gkeBackendConfig:
+    # Enable or disable GKE BackendConfig resources
+    # When enabled, creates two BackendConfig resources: one for the backend (port 9000) and one for the frontend (port 3000)
+    enabled: false
+
+    # Backend API configuration (port 9000)
+    backend:
+      # Request timeout in seconds for the load balancer
+      # Recommended: 600 (10 minutes) for streaming responses and long-running MCP operations
+      # If not set, uses GKE default (30 seconds)
+      timeoutSec: null
+
+      # Connection draining configuration
+      # connectionDraining:
+      #   drainingTimeoutSec: 60
+
+      # Health check configuration for the backend service
+      healthCheck:
+        checkIntervalSec: 15
+        timeoutSec: 10
+        healthyThreshold: 1
+        unhealthyThreshold: 10
+        type: HTTP
+        requestPath: /health
+        port: 9000
+
+    # Frontend configuration (port 3000)
+    frontend:
+      # Request timeout in seconds for the load balancer
+      # If not set, uses GKE default (30 seconds)
+      timeoutSec: null
+
+      # Connection draining configuration
+      # connectionDraining:
+      #   drainingTimeoutSec: 60
+
+      # Health check configuration for the frontend service
+      healthCheck:
+        checkIntervalSec: 15
+        timeoutSec: 10
+        healthyThreshold: 1
+        unhealthyThreshold: 10
+        type: HTTP
+        requestPath: /health
+        port: 3000
 
 # PostgreSQL configuration
 postgresql:

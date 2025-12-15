@@ -1,6 +1,6 @@
 "use client";
 
-import type { SsoProviderFormValues } from "@shared";
+import { E2eTestId, type SsoProviderFormValues } from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
 import { useCallback, useId, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -35,6 +35,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useRoles } from "@/lib/role.query";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
@@ -69,6 +70,8 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
   const [ruleIds, setRuleIds] = useState<string[]>(() =>
     rules.map((_, i) => `${baseId}-rule-${i}`),
   );
+  // Fetch all roles (predefined + custom)
+  const { data: roles = [] } = useRoles();
 
   // Scroll the accordion content into view when expanded
   const handleAccordionChange = useCallback((value: string) => {
@@ -147,6 +150,7 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                   variant="outline"
                   size="sm"
                   onClick={addRule}
+                  data-testid={E2eTestId.SsoRoleMappingAddRule}
                 >
                   <Plus className="mr-1 h-4 w-4" />
                   Add Rule
@@ -178,6 +182,9 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                 <Input
                                   placeholder='{{#includes groups "admin"}}true{{/includes}}'
                                   className="font-mono text-sm"
+                                  data-testid={
+                                    E2eTestId.SsoRoleMappingRuleTemplate
+                                  }
                                   {...field}
                                 />
                               </FormControl>
@@ -198,13 +205,20 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                                 value={field.value}
                               >
                                 <FormControl>
-                                  <SelectTrigger>
+                                  <SelectTrigger
+                                    data-testid={
+                                      E2eTestId.SsoRoleMappingRuleRole
+                                    }
+                                  >
                                     <SelectValue placeholder="Select role" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                  <SelectItem value="member">Member</SelectItem>
+                                  {roles.map((role) => (
+                                    <SelectItem key={role.id} value={role.role}>
+                                      {role.name}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -238,13 +252,18 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
                     value={field.value || "member"}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger
+                        data-testid={E2eTestId.SsoRoleMappingDefaultRole}
+                      >
                         <SelectValue placeholder="Select default role" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="member">Member</SelectItem>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.role}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormDescription>

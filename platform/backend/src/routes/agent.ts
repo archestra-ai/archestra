@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
-import { AgentLabelModel, AgentModel } from "@/models";
+import { AgentLabelModel, AgentModel, TeamModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -108,7 +108,41 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body }, reply) => {
+    async ({ body, user, headers }, reply) => {
+      const { success: isProfileAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Validate team assignment for non-admin users
+      if (!isProfileAdmin) {
+        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+        if (body.teams.length === 0) {
+          // Non-admin users must select at least one team they're a member of
+          if (userTeamIds.length === 0) {
+            throw new ApiError(
+              403,
+              "You must be a member of at least one team to create a profile",
+            );
+          }
+          throw new ApiError(
+            400,
+            "You must assign at least one team to the profile",
+          );
+        }
+
+        // Verify user is a member of all specified teams
+        const userTeamIdSet = new Set(userTeamIds);
+        const invalidTeams = body.teams.filter((id) => !userTeamIdSet.has(id));
+        if (invalidTeams.length > 0) {
+          throw new ApiError(
+            403,
+            "You can only assign profiles to teams you are a member of",
+          );
+        }
+      }
+
       const agent = await AgentModel.create(body);
       const labelKeys = await AgentLabelModel.getAllKeys();
 
@@ -163,7 +197,39 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, user, headers }, reply) => {
+      // Validate team assignment for non-admin users if teams are being updated
+      if (body.teams !== undefined) {
+        const { success: isProfileAdmin } = await hasPermission(
+          { profile: ["admin"] },
+          headers,
+        );
+
+        if (!isProfileAdmin) {
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+          if (body.teams.length === 0) {
+            // Non-admin users must assign at least one team
+            throw new ApiError(
+              400,
+              "You must assign at least one team to the profile",
+            );
+          }
+
+          // Verify user is a member of all specified teams
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = body.teams.filter(
+            (teamId) => !userTeamIdSet.has(teamId),
+          );
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign profiles to teams you are a member of",
+            );
+          }
+        }
+      }
+
       const agent = await AgentModel.update(id, body);
 
       if (!agent) {

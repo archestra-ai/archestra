@@ -1,11 +1,20 @@
+const isMainModule =
+  process.argv[1]?.includes("server.mjs") ||
+  process.argv[1]?.includes("server.ts") ||
+  process.argv[1]?.endsWith("/server");
+
 /**
  * Import sentry for error-tracking
  *
  * THEN import tracing to ensure auto-instrumentation works properly (must import sentry before tracing as
  * some of Sentry's auto-instrumentations rely on the sentry client being initialized)
+ *
+ * Only do this if the server is being run directly (not imported)
  */
-import "./sentry";
-import "./tracing";
+if (isMainModule) {
+  await import("./sentry");
+  await import("./tracing");
+}
 
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
@@ -58,34 +67,104 @@ const {
   observability,
 } = config;
 
-// Register schemas in global registry for OpenAPI generation
-z.globalRegistry.add(SupportedProvidersSchema, {
-  id: "SupportedProviders",
-});
-z.globalRegistry.add(SupportedProvidersDiscriminatorSchema, {
-  id: "SupportedProvidersDiscriminator",
-});
-z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
-  id: "OpenAiChatCompletionRequest",
-});
-z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
-  id: "OpenAiChatCompletionResponse",
-});
-z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
-  id: "GeminiGenerateContentRequest",
-});
-z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
-  id: "GeminiGenerateContentResponse",
-});
-z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
-  id: "AnthropicMessagesRequest",
-});
-z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
-  id: "AnthropicMessagesResponse",
-});
-z.globalRegistry.add(WebSocketMessageSchema, {
-  id: "WebSocketMessage",
-});
+/**
+ * Register schemas in global zod registry for OpenAPI generation.
+ * This enables proper $ref generation in the OpenAPI spec.
+ */
+export function registerOpenApiSchemas() {
+  z.globalRegistry.add(SupportedProvidersSchema, {
+    id: "SupportedProviders",
+  });
+  z.globalRegistry.add(SupportedProvidersDiscriminatorSchema, {
+    id: "SupportedProvidersDiscriminator",
+  });
+  z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
+    id: "OpenAiChatCompletionRequest",
+  });
+  z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
+    id: "OpenAiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
+    id: "GeminiGenerateContentRequest",
+  });
+  z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
+    id: "GeminiGenerateContentResponse",
+  });
+  z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
+    id: "AnthropicMessagesRequest",
+  });
+  z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
+    id: "AnthropicMessagesResponse",
+  });
+  z.globalRegistry.add(WebSocketMessageSchema, {
+    id: "WebSocketMessage",
+  });
+}
+
+// Register schemas at module load time
+registerOpenApiSchemas();
+
+/** Type for the Fastify instance with Zod type provider */
+export type FastifyInstanceWithZod = ReturnType<typeof createFastifyInstance>;
+
+/**
+ * Register the OpenAPI/Swagger plugin on a Fastify instance.
+ * @param fastify - The Fastify instance to register the plugin on
+ * @param options - Optional overrides for the OpenAPI spec (e.g., servers)
+ */
+export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
+  await fastify.register(fastifySwagger, {
+    openapi: {
+      openapi: "3.0.0",
+      info: {
+        title: name,
+        version,
+      },
+    },
+    hideUntagged: true,
+    transform: jsonSchemaTransform,
+    transformObject: jsonSchemaTransformObject,
+  });
+}
+
+/**
+ * Register the health endpoint on a Fastify instance.
+ */
+export function registerHealthEndpoint(fastify: FastifyInstanceWithZod) {
+  fastify.get(
+    "/health",
+    {
+      schema: {
+        tags: ["health"],
+        response: {
+          200: z.object({
+            name: z.string(),
+            status: z.string(),
+            version: z.string(),
+          }),
+        },
+      },
+    },
+    async () => ({
+      name,
+      status: "ok",
+      version,
+    }),
+  );
+}
+
+/**
+ * Register all API routes on a Fastify instance.
+ * @param fastify - The Fastify instance to register routes on
+ */
+export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
+  for (const route of Object.values(routes)) {
+    fastify.register(route);
+  }
+  for (const route of Object.values(eeRoutes)) {
+    fastify.register(route);
+  }
+}
 
 /**
  * Sets up logging and zod type provider + request validation & response serialization
@@ -337,60 +416,14 @@ const start = async () => {
      * NOTE: Note: @fastify/swagger must be registered before any routes to ensure proper route discovery. Routes
      * registered before this plugin will not appear in the generated documentation.
      */
-    await fastify.register(fastifySwagger, {
-      openapi: {
-        openapi: "3.0.0",
-        info: {
-          title: name,
-          version,
-        },
-      },
-
-      /**
-       * basically we use this hide untagged option to NOT include fastify-http-proxy routes in the OpenAPI spec
-       * (ex. we use this in several spots, as of this writing, under ./routes/proxy/)
-       */
-      hideUntagged: true,
-
-      /**
-       * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-use-together-with-fastifyswagger
-       */
-      transform: jsonSchemaTransform,
-      /**
-       * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-create-refs-to-the-schemas
-       */
-      transformObject: jsonSchemaTransformObject,
-    });
+    await registerSwaggerPlugin(fastify);
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    fastify.get(
-      "/health",
-      {
-        schema: {
-          tags: ["health"],
-          response: {
-            200: z.object({
-              name: z.string(),
-              status: z.string(),
-              version: z.string(),
-            }),
-          },
-        },
-      },
-      async () => ({
-        name,
-        status: "ok",
-        version,
-      }),
-    );
+    registerHealthEndpoint(fastify);
 
-    for (const route of Object.values(routes)) {
-      fastify.register(route);
-    }
-    for (const route of Object.values(eeRoutes)) {
-      fastify.register(route);
-    }
+    // Register all API routes (eeRoutes already loaded at module level)
+    await registerApiRoutes(fastify);
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
@@ -433,4 +466,10 @@ const start = async () => {
   }
 };
 
-start();
+/**
+ * Only start the server if this file is being run directly (not imported)
+ * This allows other scripts to import helper functions without starting the server
+ */
+if (isMainModule) {
+  start();
+}

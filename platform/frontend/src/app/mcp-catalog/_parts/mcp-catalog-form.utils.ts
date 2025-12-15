@@ -38,6 +38,12 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
     };
+
+    // BYOS: Include local config vault path and key if set
+    if (values.localConfigVaultPath && values.localConfigVaultKey) {
+      data.localConfigVaultPath = values.localConfigVaultPath;
+      data.localConfigVaultKey = values.localConfigVaultKey;
+    }
   }
 
   // Handle OAuth configuration
@@ -59,12 +65,22 @@ export function transformFormToApiData(
       name: values.name, // Use name as OAuth provider name
       server_url: values.serverUrl || "", // Use serverUrl as OAuth server URL
       client_id: values.oauthConfig.client_id || "",
-      client_secret: values.oauthConfig.client_secret || undefined,
+      // Only include client_secret if no BYOS vault path is set
+      client_secret: values.oauthClientSecretVaultPath
+        ? undefined
+        : values.oauthConfig.client_secret || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
       default_scopes: ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
+
+    // BYOS: Include OAuth client secret vault path and key if set
+    if (values.oauthClientSecretVaultPath && values.oauthClientSecretVaultKey) {
+      data.oauthClientSecretVaultPath = values.oauthClientSecretVaultPath;
+      data.oauthClientSecretVaultKey = values.oauthClientSecretVaultKey;
+    }
+
     // Clear userConfig when using OAuth
     data.userConfig = {};
   } else if (values.authMethod === "pat") {
@@ -89,9 +105,41 @@ export function transformFormToApiData(
   return data;
 }
 
+/**
+ * Check if a value is a BYOS vault reference (path#key format)
+ * Type guard to narrow string | undefined to string
+ */
+export function isVaultReference(value: string | undefined): value is string {
+  if (!value) return false;
+  // Vault references look like "secret/data/path/to/secret#keyname"
+  // They contain a # and the part before # looks like a path
+  const hashIndex = value.indexOf("#");
+  if (hashIndex === -1) return false;
+  const path = value.substring(0, hashIndex);
+  // Basic check: path should contain "/" and not be too short
+  return path.includes("/") && path.length > 5;
+}
+
+/**
+ * Parse a vault reference into path and key
+ */
+export function parseVaultReference(value: string): {
+  path: string;
+  key: string;
+} {
+  const hashIndex = value.indexOf("#");
+  return {
+    path: value.substring(0, hashIndex),
+    key: value.substring(hashIndex + 1),
+  };
+}
+
 // Transform catalog item to form values
 export function transformCatalogItemToFormValues(
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+  localConfigSecret?: {
+    secret: Record<string, unknown>;
+  } | null,
 ): McpCatalogFormValues {
   // Determine auth method
   let authMethod: "none" | "pat" | "oauth" = "none";
@@ -107,6 +155,16 @@ export function transformCatalogItemToFormValues(
     authMethod = "pat";
   }
 
+  // Check if OAuth client_secret is a BYOS vault reference
+  let oauthClientSecretVaultPath: string | undefined;
+  let oauthClientSecretVaultKey: string | undefined;
+  const clientSecretValue = item.oauthConfig?.client_secret;
+  if (isVaultReference(clientSecretValue)) {
+    const parsed = parseVaultReference(clientSecretValue);
+    oauthClientSecretVaultPath = parsed.path;
+    oauthClientSecretVaultKey = parsed.key;
+  }
+
   // Extract OAuth config if present
   let oauthConfig:
     | {
@@ -120,7 +178,10 @@ export function transformCatalogItemToFormValues(
   if (item.oauthConfig) {
     oauthConfig = {
       client_id: item.oauthConfig.client_id || "",
-      client_secret: item.oauthConfig.client_secret || "",
+      // Don't include vault reference as client_secret - it will be handled via BYOS fields
+      client_secret: oauthClientSecretVaultPath
+        ? ""
+        : item.oauthConfig.client_secret || "",
       redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
@@ -153,18 +214,35 @@ export function transformCatalogItemToFormValues(
 
     const config = item.localConfig;
 
-    localConfig = {
-      command: item.localConfig.command || "",
-      arguments: argumentsString,
-      environment:
-        item.localConfig.environment?.map((env) => ({
+    // Map environment variables and populate values from secret if available
+    const environment =
+      item.localConfig.environment?.map((env) => {
+        const envVar = {
           ...env,
           // Add promptOnInstallation with default value if missing
           promptOnInstallation: env.promptOnInstallation ?? false,
           // Preserve required and description fields
           required: env.required ?? false,
           description: env.description ?? "",
-        })) || [],
+        };
+
+        // If we have a secret and the secret contains a value for this env var key, use it
+        if (localConfigSecret?.secret && env.key in localConfigSecret.secret) {
+          const secretValue = localConfigSecret.secret[env.key];
+          // Convert the value to string if it's not already
+          envVar.value =
+            secretValue !== null && secretValue !== undefined
+              ? String(secretValue)
+              : undefined;
+        }
+
+        return envVar;
+      }) || [];
+
+    localConfig = {
+      command: item.localConfig.command || "",
+      arguments: argumentsString,
+      environment,
       dockerImage: item.localConfig.dockerImage || "",
       transportType: config.transportType || undefined,
       httpPort: config.httpPort?.toString() || undefined,
@@ -179,6 +257,9 @@ export function transformCatalogItemToFormValues(
     authMethod,
     oauthConfig,
     localConfig,
+    // BYOS: Include parsed vault path and key if OAuth secret is a vault reference
+    oauthClientSecretVaultPath,
+    oauthClientSecretVaultKey,
   } as McpCatalogFormValues;
 }
 

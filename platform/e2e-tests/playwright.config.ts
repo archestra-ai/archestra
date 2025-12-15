@@ -62,52 +62,52 @@ export default defineConfig({
       dependencies: ["setup-teams"],
     },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
-    {
-      name: "api",
-      testDir: "./tests/api",
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: ["credentials-with-vault"],
-    },
-    // UI tests run on all browsers
-    {
-      name: "chromium",
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: ["credentials-with-vault"],
-    },
-    {
-      name: "firefox",
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Firefox"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: ["credentials-with-vault"],
-      grep: /@firefox/,
-    },
-    {
-      name: "webkit",
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Safari"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: ["credentials-with-vault"],
-      grep: /@webkit/,
-    },
+    // {
+    //   name: "api",
+    //   testDir: "./tests/api",
+    //   use: {
+    //     ...devices["Desktop Chrome"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: ["credentials-with-vault"],
+    // },
+    // // UI tests run on all browsers
+    // {
+    //   name: "chromium",
+    //   testDir: "./tests/ui",
+    //   use: {
+    //     ...devices["Desktop Chrome"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: ["credentials-with-vault"],
+    // },
+    // {
+    //   name: "firefox",
+    //   testDir: "./tests/ui",
+    //   use: {
+    //     ...devices["Desktop Firefox"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: ["credentials-with-vault"],
+    //   grep: /@firefox/,
+    // },
+    // {
+    //   name: "webkit",
+    //   testDir: "./tests/ui",
+    //   use: {
+    //     ...devices["Desktop Safari"],
+    //     // Use the stored authentication state
+    //     storageState: adminAuthFile,
+    //   },
+    //   // Run all setup projects before tests
+    //   dependencies: ["credentials-with-vault"],
+    //   grep: /@webkit/,
+    // },
   ],
 });

@@ -109,7 +109,43 @@ jobs:
           cp .env.example .env
           sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
-      - name: Setup Archestra Platform
+      - name: Create kind cluster only (without platform deployment)
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        with:
+          config: .github/kind.yaml
+          cluster_name: archestra-ci-cluster
+          install_only: false
+
+      - name: Start HashiCorp Vault
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          # Start Vault in dev mode (auto-unsealed, in-memory storage)
+          # Use default bridge network with port publishing for host/Playwright access
+          docker run -d \
+            --name archestra-vault \
+            -p 8200:8200 \
+            -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token \
+            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
+            --cap-add IPC_LOCK \
+            hashicorp/vault:latest
+
+          # Wait for Vault to be ready on host
+          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready on host at localhost:8200"
+
+          # Get Vault's IP address on the default bridge network
+          VAULT_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' archestra-vault)
+          echo "Vault IP on bridge network: $VAULT_IP"
+
+          # Verify Vault is accessible from kind cluster using Vault's IP
+          docker exec archestra-ci-cluster-control-plane curl -s http://$VAULT_IP:8200/v1/sys/health
+          echo "Vault is accessible from kind cluster at $VAULT_IP:8200"
+
+          # Store Vault IP for use in Helm deployment
+          echo "VAULT_IP=$VAULT_IP" >> $GITHUB_ENV
+
+      - name: Deploy Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform
         with:
@@ -122,29 +158,6 @@ jobs:
           platform-context: ./platform
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Start HashiCorp Vault
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          # Start Vault in dev mode (auto-unsealed, in-memory storage)
-          # Start directly on kind network so pods can access it by name,
-          # and publish port so host/Playwright can access at localhost:8200
-          docker run -d \
-            --name archestra-vault \
-            --network kind \
-            -p 8200:8200 \
-            -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token \
-            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
-            --cap-add IPC_LOCK \
-            hashicorp/vault:latest
-
-          # Wait for Vault to be ready
-          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
-          echo "Vault is ready on host at localhost:8200"
-
-          # Verify Vault is accessible from kind cluster
-          docker exec archestra-ci-cluster-control-plane curl -s http://archestra-vault:8200/v1/sys/health
-          echo "Vault is accessible from kind cluster at archestra-vault:8200"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check

@@ -18,8 +18,10 @@ archestra:
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Vault configuration for BYOS tests
-    # Vault container is connected to kind network, accessible by container name
-    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://archestra-vault:8200"
+    # NOTE: ARCHESTRA_HASHICORP_VAULT_ADDR is dynamically set via --set during Helm deployment
+    # to use the Vault container's IP on the Docker bridge network (e.g., http://172.17.0.X:8200)
+    # This default value is only used if VAULT_IP env var is not set during deployment
+    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://localhost:8200"
     ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
     ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
 

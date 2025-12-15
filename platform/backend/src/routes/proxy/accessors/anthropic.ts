@@ -9,6 +9,7 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import type {
   Anthropic,
+  ChunkProcessingResult,
   CommonMessage,
   LLMProviderAdapterFactory,
   LLMRequestAccessor,
@@ -19,10 +20,10 @@ import type {
   ToolCallView,
   ToolDefinitionView,
   ToolResultView,
+  ToonCompressionResult,
   UsageView,
-  ChunkProcessingResult,
-  createStreamAccumulatorState,
 } from "@/types";
+import { MockAnthropicClient } from "../mock-anthropic-client";
 import * as anthropicAdapter from "../utils/adapters/anthropic";
 
 // =============================================================================
@@ -157,6 +158,24 @@ class AnthropicRequestAccessor
     Object.assign(this.toolResultUpdates, updates);
   }
 
+  async applyToonCompression(model: string): Promise<ToonCompressionResult> {
+    const { messages: compressedMessages, stats } =
+      await anthropicAdapter.convertToolResultsToToon(
+        this.request.messages,
+        model,
+      );
+    // Update internal messages state
+    this.request = {
+      ...this.request,
+      messages: compressedMessages,
+    };
+    return {
+      tokensBefore: stats.toonTokensBefore,
+      tokensAfter: stats.toonTokensAfter,
+      costSavings: stats.toonCostSavings,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------
@@ -166,7 +185,10 @@ class AnthropicRequestAccessor
 
     // Apply tool result updates if any
     if (Object.keys(this.toolResultUpdates).length > 0) {
-      messages = anthropicAdapter.applyUpdates(messages, this.toolResultUpdates);
+      messages = anthropicAdapter.applyUpdates(
+        messages,
+        this.toolResultUpdates,
+      );
     }
 
     return {
@@ -269,7 +291,7 @@ class AnthropicResponseAccessor
   }
 
   toRefusalResponse(
-    refusalMessage: string,
+    _refusalMessage: string,
     contentMessage: string,
   ): AnthropicResponse {
     return {
@@ -306,6 +328,7 @@ class AnthropicStreamAccessor
       model: model,
       text: "",
       toolCalls: [],
+      rawToolCallEvents: [],
       usage: null,
       stopReason: null,
       timing: {
@@ -349,6 +372,8 @@ class AnthropicStreamAccessor
             name: chunk.content_block.name,
             arguments: "",
           });
+          // Store raw event for replay after policy approval
+          this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
         }
         break;
@@ -362,6 +387,8 @@ class AnthropicStreamAccessor
             this.state.toolCalls[this.currentToolCallIndex].arguments +=
               chunk.delta.partial_json;
           }
+          // Store raw event for replay after policy approval
+          this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
         }
         break;
@@ -370,6 +397,8 @@ class AnthropicStreamAccessor
         if (!this.toolUseBlockIndices.has(chunk.index)) {
           sseData = `event: content_block_stop\ndata: ${JSON.stringify(chunk)}\n\n`;
         } else {
+          // Store raw event for replay after policy approval
+          this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
         }
         break;
@@ -412,6 +441,25 @@ class AnthropicStreamAccessor
       ).toISOString(),
       "request-id": `req-proxy-${Date.now()}`,
     };
+  }
+
+  formatTextSSE(text: string): string {
+    const event = {
+      type: "content_block_delta",
+      index: 0,
+      delta: {
+        type: "text_delta",
+        text,
+      },
+    };
+    return `event: content_block_delta\ndata: ${JSON.stringify(event)}\n\n`;
+  }
+
+  getRawToolCallEvents(): string[] {
+    return this.state.rawToolCallEvents.map(
+      (event) =>
+        `event: ${(event as { type: string }).type}\ndata: ${JSON.stringify(event)}\n\n`,
+    );
   }
 
   formatToolCallsSSE(): string[] {
@@ -460,7 +508,7 @@ class AnthropicStreamAccessor
     return events;
   }
 
-  formatRefusalSSE(refusalMessage: string, contentMessage: string): string[] {
+  formatRefusalSSE(_refusalMessage: string, contentMessage: string): string[] {
     return [
       `event: content_block_start\ndata: ${JSON.stringify({
         type: "content_block_start",
@@ -555,7 +603,7 @@ class AnthropicStreamAccessor
   }
 
   toProviderRefusalResponse(
-    refusalMessage: string,
+    _refusalMessage: string,
     contentMessage: string,
   ): AnthropicResponse {
     return {
@@ -650,8 +698,11 @@ export const anthropicAdapterFactory: LLMProviderAdapterFactory<
 
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch },
+    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
   ): AnthropicProvider {
+    if (options?.mockMode) {
+      return new MockAnthropicClient() as unknown as AnthropicProvider;
+    }
     return new AnthropicProvider({
       apiKey,
       baseURL: options?.baseUrl,

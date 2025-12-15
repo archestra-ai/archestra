@@ -52,9 +52,9 @@ import type { SupportedProvider } from "./llm-providers";
 // These minimal types are used by business logic (trusted data, tool invocation)
 export type { CommonMessage, ToolResultUpdates } from "./llm-proxy";
 export type {
+  CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
-  CommonMcpToolDefinition,
 } from "./tool-execution";
 
 // =============================================================================
@@ -181,6 +181,13 @@ export interface LLMRequestAccessor<TRequest, TMessages = unknown> {
    */
   applyToolResultUpdates(updates: Record<string, string>): void;
 
+  /**
+   * Apply TOON compression to tool results
+   * @param model - Model name for token counting
+   * @returns Compression statistics
+   */
+  applyToonCompression(model: string): Promise<ToonCompressionResult>;
+
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------
@@ -263,6 +270,8 @@ export interface StreamAccumulatorState {
     name: string;
     arguments: string;
   }>;
+  /** Raw tool call events stored for replay after policy approval */
+  rawToolCallEvents: unknown[];
   usage: UsageView | null;
   stopReason: StopReasonView | null;
   timing: {
@@ -316,6 +325,15 @@ export interface LLMStreamAccessor<TChunk, TResponse> {
 
   /** Format SSE headers for response */
   getSSEHeaders(): Record<string, string>;
+
+  /**
+   * Format a text chunk as SSE (provider-specific format)
+   * Used for dual LLM progress, arbitrary text during streaming
+   */
+  formatTextSSE(text: string): string;
+
+  /** Get raw tool call events as SSE strings (for replay after policy approval) */
+  getRawToolCallEvents(): string[];
 
   /** Format accumulated tool calls as SSE events (after policy approval) */
   formatToolCallsSSE(): string[];
@@ -380,7 +398,9 @@ export interface LLMProviderAdapterFactory<
   // ---------------------------------------------------------------------------
 
   /** Create a request accessor */
-  createRequestAccessor(request: TRequest): LLMRequestAccessor<TRequest, TMessages>;
+  createRequestAccessor(
+    request: TRequest,
+  ): LLMRequestAccessor<TRequest, TMessages>;
 
   /** Create a response accessor */
   createResponseAccessor(response: TResponse): LLMResponseAccessor<TResponse>;
@@ -398,7 +418,7 @@ export interface LLMProviderAdapterFactory<
   /** Create provider client */
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch },
+    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
   ): unknown;
 
   // ---------------------------------------------------------------------------
@@ -409,7 +429,10 @@ export interface LLMProviderAdapterFactory<
   execute(client: unknown, request: TRequest): Promise<TResponse>;
 
   /** Execute streaming request */
-  executeStream(client: unknown, request: TRequest): Promise<AsyncIterable<TChunk>>;
+  executeStream(
+    client: unknown,
+    request: TRequest,
+  ): Promise<AsyncIterable<TChunk>>;
 }
 
 // =============================================================================
@@ -497,7 +520,10 @@ export interface ToolRefusal {
 export interface InteractionData {
   profileId: string;
   externalAgentId?: string;
-  type: "openai:chatCompletions" | "gemini:generateContent" | "anthropic:messages";
+  type:
+    | "openai:chatCompletions"
+    | "gemini:generateContent"
+    | "anthropic:messages";
   model: string;
 
   inputTokens: number | null;
@@ -575,6 +601,7 @@ export function createStreamAccumulatorState(): StreamAccumulatorState {
     model: "",
     text: "",
     toolCalls: [],
+    rawToolCallEvents: [],
     usage: null,
     stopReason: null,
     timing: {

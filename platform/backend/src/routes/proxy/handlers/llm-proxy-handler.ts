@@ -1,0 +1,821 @@
+/**
+ * Generic LLM Proxy Handler
+ *
+ * A reusable handler that works with any LLM provider through the accessor pattern.
+ * Routes choose which adapter factory to use based on URL.
+ */
+
+import type { FastifyReply } from "fastify";
+import { get } from "lodash-es";
+import config from "@/config";
+import getDefaultPricing from "@/default-model-prices";
+import {
+  getObservableFetch,
+  reportBlockedTools,
+  reportLLMCost,
+  reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
+} from "@/llm-metrics";
+import logger from "@/logging";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  TokenPriceModel,
+} from "@/models";
+import type {
+  Agent,
+  InteractionRequest,
+  InteractionResponse,
+  LLMProviderAdapterFactory,
+  LLMStreamAccessor,
+  ToonCompressionResult,
+} from "@/types";
+import * as utils from "../utils";
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+export interface HandleLLMProxyContext {
+  organizationId: string;
+  agentId?: string;
+  externalAgentId?: string;
+}
+
+// =============================================================================
+// MAIN HANDLER
+// =============================================================================
+
+/**
+ * Generic LLM proxy handler that works with any provider through accessors
+ */
+export async function handleLLMProxy<
+  TRequest,
+  TResponse,
+  TMessages,
+  TChunk,
+  THeaders,
+>(
+  body: TRequest,
+  headers: THeaders,
+  reply: FastifyReply,
+  adapterFactory: LLMProviderAdapterFactory<
+    TRequest,
+    TResponse,
+    TMessages,
+    TChunk,
+    THeaders
+  >,
+  context: HandleLLMProxyContext,
+): Promise<FastifyReply> {
+  const { agentId, externalAgentId } = context;
+  const provider = adapterFactory.provider;
+
+  // Create request accessor
+  const requestAccessor = adapterFactory.createRequestAccessor(body);
+
+  // Create stream accessor early (for SSE formatting, even for non-streaming)
+  const streamAccessor = adapterFactory.createStreamAccessor(
+    requestAccessor.getModel(),
+  );
+
+  logger.debug(
+    {
+      agentId,
+      model: requestAccessor.getModel(),
+      stream: requestAccessor.isStreaming(),
+      messagesCount: requestAccessor.getProviderMessages(),
+      toolsCount: requestAccessor.getTools().length,
+    },
+    `[${provider}Proxy] handleLLMProxy: request received`,
+  );
+
+  // Resolve agent
+  let resolvedAgent: Agent;
+  if (agentId) {
+    logger.debug(
+      { agentId },
+      `[${provider}Proxy] Resolving explicit agent by ID`,
+    );
+    const agent = await AgentModel.findById(agentId);
+    if (!agent) {
+      logger.debug({ agentId }, `[${provider}Proxy] Agent not found`);
+      return reply.status(404).send({
+        error: {
+          message: `Agent with ID ${agentId} not found`,
+          type: "not_found",
+        },
+      });
+    }
+    resolvedAgent = agent;
+  } else {
+    logger.debug(
+      { userAgent: (headers as Record<string, unknown>)["user-agent"] },
+      `[${provider}Proxy] Resolving default agent by user-agent`,
+    );
+    resolvedAgent = await AgentModel.getAgentOrCreateDefault(
+      (headers as Record<string, unknown>)["user-agent"] as string | undefined,
+    );
+  }
+
+  const resolvedAgentId = resolvedAgent.id;
+  logger.debug(
+    { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
+    `[${provider}Proxy] Agent resolved`,
+  );
+
+  // Extract API key
+  const apiKey = adapterFactory.extractApiKey(headers);
+
+  try {
+    // Check usage limits
+    logger.debug(
+      { resolvedAgentId },
+      `[${provider}Proxy] Checking usage limits`,
+    );
+    const limitViolation =
+      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+    if (limitViolation) {
+      const [_refusalMessage, contentMessage] = limitViolation;
+      logger.info(
+        { resolvedAgentId, reason: "token_cost_limit_exceeded" },
+        `${provider} request blocked due to token cost limit`,
+      );
+      return reply.status(429).send({
+        error: {
+          message: contentMessage,
+          type: "rate_limit_exceeded",
+          code: "token_cost_limit_exceeded",
+        },
+      });
+    }
+    logger.debug({ resolvedAgentId }, `[${provider}Proxy] Limit check passed`);
+
+    // Persist tools declared by client
+    const tools = requestAccessor.getTools();
+    if (tools.length > 0) {
+      logger.debug(
+        { toolCount: tools.length },
+        `[${provider}Proxy] Processing tools from request`,
+      );
+      await utils.tools.persistTools(
+        tools.map((t) => ({
+          toolName: t.name,
+          toolParameters: t.parameters,
+          toolDescription: t.description,
+        })),
+        resolvedAgentId,
+      );
+    }
+
+    // Cost optimization - potentially switch to cheaper model
+    const baselineModel = requestAccessor.getModel();
+    const hasTools = requestAccessor.hasTools();
+    // Cast messages since getOptimizedModel expects specific provider types
+    // but our generic accessor provides the correct type at runtime
+    const optimizedModel = await utils.costOptimization.getOptimizedModel(
+      resolvedAgent,
+      requestAccessor.getProviderMessages() as Parameters<
+        typeof utils.costOptimization.getOptimizedModel
+      >[1],
+      provider as Parameters<
+        typeof utils.costOptimization.getOptimizedModel
+      >[2],
+      hasTools,
+    );
+
+    if (optimizedModel) {
+      requestAccessor.setModel(optimizedModel);
+      logger.info(
+        { resolvedAgentId, optimizedModel },
+        "Optimized model selected",
+      );
+    } else {
+      logger.info(
+        { resolvedAgentId, baselineModel },
+        "No matching optimized model found, proceeding with baseline model",
+      );
+    }
+
+    const actualModel = requestAccessor.getModel();
+
+    // Ensure token prices exist
+    const baselinePricing = getDefaultPricing(baselineModel);
+    await TokenPriceModel.createIfNotExists(baselineModel, {
+      provider,
+      ...baselinePricing,
+    });
+
+    if (actualModel !== baselineModel) {
+      const optimizedPricing = getDefaultPricing(actualModel);
+      await TokenPriceModel.createIfNotExists(actualModel, {
+        provider,
+        ...optimizedPricing,
+      });
+    }
+
+    // Set SSE headers early if streaming
+    if (requestAccessor.isStreaming()) {
+      logger.debug(`[${provider}Proxy] Setting up streaming response headers`);
+      const sseHeaders = streamAccessor.getSSEHeaders();
+      for (const [key, value] of Object.entries(sseHeaders)) {
+        reply.header(key, value);
+      }
+    }
+
+    // Evaluate trusted data policies
+    logger.debug(
+      {
+        resolvedAgentId,
+        considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+      },
+      `[${provider}Proxy] Evaluating trusted data policies`,
+    );
+
+    const commonMessages = requestAccessor.getMessagesForPolicyEvaluation();
+    const { toolResultUpdates, contextIsTrusted } =
+      await utils.trustedData.evaluateIfContextIsTrusted(
+        commonMessages,
+        resolvedAgentId,
+        apiKey,
+        provider,
+        resolvedAgent.considerContextUntrusted,
+        // Streaming callbacks for dual LLM progress
+        requestAccessor.isStreaming()
+          ? () => {
+              reply.raw.write(
+                streamAccessor.formatTextSSE("Analyzing with Dual LLM:\n\n"),
+              );
+            }
+          : undefined,
+        requestAccessor.isStreaming()
+          ? (progress) => {
+              const optionsText = progress.options
+                .map((opt, idx) => `  ${idx}: ${opt}`)
+                .join("\n");
+              reply.raw.write(
+                streamAccessor.formatTextSSE(
+                  `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+                ),
+              );
+            }
+          : undefined,
+      );
+
+    // Apply tool result updates
+    requestAccessor.applyToolResultUpdates(toolResultUpdates);
+
+    logger.info(
+      {
+        resolvedAgentId,
+        toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
+        contextIsTrusted,
+      },
+      "Messages filtered after trusted data evaluation",
+    );
+
+    // Apply TOON compression if enabled
+    let toonStats: ToonCompressionResult = {
+      tokensBefore: null,
+      tokensAfter: null,
+      costSavings: null,
+    };
+
+    const shouldApplyToonCompression =
+      await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
+
+    if (shouldApplyToonCompression) {
+      toonStats = await requestAccessor.applyToonCompression(actualModel);
+    }
+
+    logger.info(
+      {
+        shouldApplyToonCompression,
+        toonTokensBefore: toonStats.tokensBefore,
+        toonTokensAfter: toonStats.tokensAfter,
+        toonCostSavings: toonStats.costSavings,
+      },
+      `${provider} proxy: tool results compression completed`,
+    );
+
+    // Create client
+    const client = adapterFactory.createClient(apiKey, {
+      baseUrl: getBaseUrl(provider),
+      fetch: getObservableFetch(provider, resolvedAgent, externalAgentId),
+      mockMode: config.benchmark.mockMode,
+    });
+
+    // Build final request
+    const finalRequest = requestAccessor.toProviderRequest();
+
+    if (requestAccessor.isStreaming()) {
+      return handleStreaming(
+        client,
+        finalRequest,
+        reply,
+        adapterFactory,
+        streamAccessor,
+        resolvedAgent,
+        contextIsTrusted,
+        baselineModel,
+        actualModel,
+        requestAccessor.getOriginalRequest(),
+        toonStats,
+        externalAgentId,
+      );
+    } else {
+      return handleNonStreaming(
+        client,
+        finalRequest,
+        reply,
+        adapterFactory,
+        resolvedAgent,
+        contextIsTrusted,
+        baselineModel,
+        actualModel,
+        requestAccessor.getOriginalRequest(),
+        toonStats,
+        externalAgentId,
+      );
+    }
+  } catch (error) {
+    return handleError(error, reply, provider, requestAccessor.isStreaming());
+  }
+}
+
+// =============================================================================
+// STREAMING HANDLER
+// =============================================================================
+
+async function handleStreaming<
+  TRequest,
+  TResponse,
+  TMessages,
+  TChunk,
+  THeaders,
+>(
+  client: unknown,
+  request: TRequest,
+  reply: FastifyReply,
+  adapterFactory: LLMProviderAdapterFactory<
+    TRequest,
+    TResponse,
+    TMessages,
+    TChunk,
+    THeaders
+  >,
+  streamAccessor: LLMStreamAccessor<TChunk, TResponse>,
+  agent: Agent,
+  contextIsTrusted: boolean,
+  baselineModel: string,
+  actualModel: string,
+  originalRequest: TRequest,
+  toonStats: ToonCompressionResult,
+  externalAgentId?: string,
+): Promise<FastifyReply> {
+  const provider = adapterFactory.provider;
+  const streamStartTime = Date.now();
+  let firstChunkTime: number | undefined;
+
+  logger.debug(
+    { model: actualModel },
+    `[${provider}Proxy] Starting streaming request`,
+  );
+
+  try {
+    // Execute streaming request with tracing
+    const stream = await utils.tracing.startActiveLlmSpan(
+      `${provider}.messages`,
+      provider,
+      actualModel,
+      true,
+      agent,
+      async (llmSpan) => {
+        const result = await adapterFactory.executeStream(client, request);
+        llmSpan.end();
+        return result;
+      },
+    );
+
+    // Process chunks
+    for await (const chunk of stream) {
+      // Track first chunk time
+      if (!firstChunkTime) {
+        firstChunkTime = Date.now();
+        const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+        reportTimeToFirstToken(
+          provider,
+          agent,
+          actualModel,
+          ttftSeconds,
+          externalAgentId,
+        );
+      }
+
+      const result = streamAccessor.processChunk(chunk);
+
+      // Stream non-tool-call data immediately
+      if (result.sseData) {
+        reply.raw.write(result.sseData);
+      }
+
+      if (result.isFinal) {
+        break;
+      }
+    }
+
+    logger.info("Stream loop completed, processing final events");
+
+    // Evaluate tool invocation policies
+    const toolCalls = streamAccessor.state.toolCalls;
+    let toolInvocationRefusal: [string, string] | null = null;
+
+    if (toolCalls.length > 0) {
+      logger.info(
+        {
+          toolCallCount: toolCalls.length,
+          toolNames: toolCalls.map((tc) => tc.name),
+        },
+        "Evaluating tool invocation policies",
+      );
+
+      // Parse tool arguments for policy evaluation
+      const toolCallsForPolicy = toolCalls.map((tc) => {
+        let argsString = tc.arguments;
+        try {
+          // Verify it's valid JSON
+          JSON.parse(tc.arguments);
+        } catch {
+          // If not valid JSON, wrap it
+          argsString = JSON.stringify({ raw: tc.arguments });
+        }
+        return {
+          toolCallName: tc.name,
+          toolCallArgs: argsString,
+        };
+      });
+
+      toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+        toolCallsForPolicy,
+        agent.id,
+        contextIsTrusted,
+      );
+
+      logger.info(
+        { refused: !!toolInvocationRefusal },
+        "Tool invocation policy result",
+      );
+    }
+
+    if (toolInvocationRefusal) {
+      const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
+      // Stream refusal
+      const refusalEvents = streamAccessor.formatRefusalSSE(
+        _refusalMessage,
+        contentMessage,
+      );
+      for (const event of refusalEvents) {
+        reply.raw.write(event);
+      }
+
+      reportBlockedTools(
+        provider,
+        agent,
+        toolCalls.length,
+        actualModel,
+        externalAgentId,
+      );
+    } else if (toolCalls.length > 0) {
+      // Tool calls approved - stream raw events
+      logger.info(
+        { toolCallCount: toolCalls.length },
+        "Tool calls allowed, streaming them now",
+      );
+
+      const rawEvents = streamAccessor.getRawToolCallEvents();
+      for (const event of rawEvents) {
+        reply.raw.write(event);
+      }
+    }
+
+    // Stream end events
+    reply.raw.write(streamAccessor.formatEndSSE());
+    reply.raw.end();
+
+    // Record interaction and report metrics
+    const usage = streamAccessor.state.usage;
+    if (usage) {
+      reportLLMTokens(
+        provider,
+        agent,
+        { input: usage.inputTokens, output: usage.outputTokens },
+        actualModel,
+        externalAgentId,
+      );
+
+      if (usage.outputTokens && firstChunkTime) {
+        const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+        reportTokensPerSecond(
+          provider,
+          agent,
+          actualModel,
+          usage.outputTokens,
+          totalDurationSeconds,
+          externalAgentId,
+        );
+      }
+
+      const baselineCost = await utils.costOptimization.calculateCost(
+        baselineModel,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+      const actualCost = await utils.costOptimization.calculateCost(
+        actualModel,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+
+      reportLLMCost(provider, agent, actualModel, actualCost, externalAgentId);
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId,
+        type: adapterFactory.interactionType,
+        // Cast generic types to interaction types - valid at runtime
+        request: originalRequest as unknown as InteractionRequest,
+        processedRequest: request as unknown as InteractionRequest,
+        response:
+          streamAccessor.toProviderResponse() as unknown as InteractionResponse,
+        model: actualModel,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cost: actualCost?.toFixed(10) ?? null,
+        baselineCost: baselineCost?.toFixed(10) ?? null,
+        toonTokensBefore: toonStats.tokensBefore,
+        toonTokensAfter: toonStats.tokensAfter,
+        toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+      });
+    }
+
+    return reply;
+  } catch (error) {
+    return handleError(error, reply, provider, true);
+  }
+}
+
+// =============================================================================
+// NON-STREAMING HANDLER
+// =============================================================================
+
+async function handleNonStreaming<
+  TRequest,
+  TResponse,
+  TMessages,
+  TChunk,
+  THeaders,
+>(
+  client: unknown,
+  request: TRequest,
+  reply: FastifyReply,
+  adapterFactory: LLMProviderAdapterFactory<
+    TRequest,
+    TResponse,
+    TMessages,
+    TChunk,
+    THeaders
+  >,
+  agent: Agent,
+  contextIsTrusted: boolean,
+  baselineModel: string,
+  actualModel: string,
+  originalRequest: TRequest,
+  toonStats: ToonCompressionResult,
+  externalAgentId?: string,
+): Promise<FastifyReply> {
+  const provider = adapterFactory.provider;
+
+  logger.debug(
+    { model: actualModel },
+    `[${provider}Proxy] Starting non-streaming request`,
+  );
+
+  // Execute request with tracing
+  const response = await utils.tracing.startActiveLlmSpan(
+    `${provider}.messages`,
+    provider,
+    actualModel,
+    false,
+    agent,
+    async (llmSpan) => {
+      const result = await adapterFactory.execute(client, request);
+      llmSpan.end();
+      return result;
+    },
+  );
+
+  // Create response accessor
+  const responseAccessor = adapterFactory.createResponseAccessor(response);
+
+  const toolCalls = responseAccessor.getToolCalls();
+  logger.debug(
+    { toolCallCount: toolCalls.length },
+    `[${provider}Proxy] Non-streaming response received, checking tool invocation policies`,
+  );
+
+  // Evaluate tool invocation policies
+  if (toolCalls.length > 0) {
+    const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+      toolCalls.map((tc) => ({
+        toolCallName: tc.name,
+        toolCallArgs:
+          typeof tc.arguments === "string"
+            ? tc.arguments
+            : JSON.stringify(tc.arguments),
+      })),
+      agent.id,
+      contextIsTrusted,
+    );
+
+    if (toolInvocationRefusal) {
+      const [refusalMessage, contentMessage] = toolInvocationRefusal;
+      logger.debug(
+        { toolCallCount: toolCalls.length },
+        `[${provider}Proxy] Tool invocation blocked by policy`,
+      );
+
+      const refusalResponse = responseAccessor.toRefusalResponse(
+        refusalMessage,
+        contentMessage,
+      );
+
+      reportBlockedTools(
+        provider,
+        agent,
+        toolCalls.length,
+        actualModel,
+        externalAgentId,
+      );
+
+      // Record interaction with refusal
+      const usage = responseAccessor.getUsage();
+      const baselineCost = await utils.costOptimization.calculateCost(
+        baselineModel,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+      const actualCost = await utils.costOptimization.calculateCost(
+        actualModel,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+
+      reportLLMCost(provider, agent, actualModel, actualCost, externalAgentId);
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId,
+        type: adapterFactory.interactionType,
+        // Cast generic types to interaction types - valid at runtime
+        request: originalRequest as unknown as InteractionRequest,
+        processedRequest: request as unknown as InteractionRequest,
+        response: refusalResponse as unknown as InteractionResponse,
+        model: actualModel,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cost: actualCost?.toFixed(10) ?? null,
+        baselineCost: baselineCost?.toFixed(10) ?? null,
+        toonTokensBefore: toonStats.tokensBefore,
+        toonTokensAfter: toonStats.tokensAfter,
+        toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+      });
+
+      return reply.send(refusalResponse);
+    }
+  }
+
+  // Tool calls allowed (or no tool calls) - return response
+  const usage = responseAccessor.getUsage();
+
+  reportLLMTokens(
+    provider,
+    agent,
+    { input: usage.inputTokens, output: usage.outputTokens },
+    actualModel,
+    externalAgentId,
+  );
+
+  const baselineCost = await utils.costOptimization.calculateCost(
+    baselineModel,
+    usage.inputTokens,
+    usage.outputTokens,
+  );
+  const actualCost = await utils.costOptimization.calculateCost(
+    actualModel,
+    usage.inputTokens,
+    usage.outputTokens,
+  );
+
+  reportLLMCost(provider, agent, actualModel, actualCost, externalAgentId);
+
+  await InteractionModel.create({
+    profileId: agent.id,
+    externalAgentId,
+    type: adapterFactory.interactionType,
+    // Cast generic types to interaction types - valid at runtime
+    request: originalRequest as unknown as InteractionRequest,
+    processedRequest: request as unknown as InteractionRequest,
+    response:
+      responseAccessor.getOriginalResponse() as unknown as InteractionResponse,
+    model: actualModel,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cost: actualCost?.toFixed(10) ?? null,
+    baselineCost: baselineCost?.toFixed(10) ?? null,
+    toonTokensBefore: toonStats.tokensBefore,
+    toonTokensAfter: toonStats.tokensAfter,
+    toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
+  });
+
+  return reply.send(responseAccessor.getOriginalResponse());
+}
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+function getBaseUrl(provider: string): string | undefined {
+  switch (provider) {
+    case "anthropic":
+      return config.llm.anthropic.baseUrl;
+    case "openai":
+      return config.llm.openai.baseUrl;
+    case "gemini":
+      return config.llm.gemini.baseUrl;
+    default:
+      return undefined;
+  }
+}
+
+function handleError(
+  error: unknown,
+  reply: FastifyReply,
+  _provider: string,
+  isStreaming: boolean,
+): FastifyReply {
+  logger.error(error);
+
+  const statusCode =
+    error instanceof Error && "status" in error
+      ? (error.status as 200 | 400 | 404 | 403 | 500)
+      : 500;
+
+  // Extract error message
+  const getErrorMessage = (err: unknown): string => {
+    // Try to extract from nested error structures (common in provider SDKs)
+    const nestedMessage = get(err, "error.error.message");
+    if (typeof nestedMessage === "string") {
+      return nestedMessage;
+    }
+
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return "Internal server error";
+  };
+
+  const errorMessage = getErrorMessage(error);
+
+  if (isStreaming) {
+    const errorEvent = {
+      type: "error",
+      error: {
+        type: "api_error",
+        message: errorMessage,
+      },
+    };
+
+    if (reply.sent) {
+      // Headers already sent, write to stream
+      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+      reply.raw.end();
+    } else {
+      // Headers not sent, send as SSE format
+      const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
+      return reply.status(200).send(sseError);
+    }
+    return reply;
+  }
+
+  // Non-streaming error
+  return reply.status(statusCode).send({
+    error: {
+      message: errorMessage,
+      type: "api_error",
+    },
+  });
+}

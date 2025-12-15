@@ -169,9 +169,9 @@ jobs:
           # Wait for Vault pod to be ready
           kubectl wait --for=condition=Ready pod/vault --timeout=120s
 
-          # Wait for Vault service to be ready
-          timeout 30 bash -c 'until curl -s http://localhost:30200/v1/sys/health > /dev/null; do sleep 1; done'
-          echo "Vault is ready at localhost:30200 (NodePort) and vault.default.svc.cluster.local:8200 (ClusterIP)"
+          # Wait for Vault service to be ready (access via kind port mapping: host:8200 -> nodePort:30200)
+          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready at localhost:8200 (via kind port mapping to NodePort 30200)"
 
       - name: Restart backend to connect to Vault
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

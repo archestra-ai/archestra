@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
+import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -24,6 +25,30 @@ import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-crede
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
+// Shared markdown components for consistent styling
+const markdownComponents: Components = {
+  p: (props) => (
+    <p className="text-muted-foreground leading-relaxed text-xs" {...props} />
+  ),
+  strong: (props) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  code: (props) => (
+    <code
+      className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
+      {...props}
+    />
+  ),
+  a: (props) => (
+    <a
+      className="text-primary hover:underline"
+      target="_blank"
+      rel="noopener noreferrer"
+      {...props}
+    />
+  ),
+};
 
 export interface LocalServerInstallResult {
   environmentValues: Record<string, string>;
@@ -200,34 +225,7 @@ export function LocalServerInstallDialog({
             <div className="text-sm text-muted-foreground prose prose-sm max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={{
-                  p: (props) => (
-                    <p
-                      className="text-muted-foreground leading-relaxed"
-                      {...props}
-                    />
-                  ),
-                  strong: (props) => (
-                    <strong
-                      className="font-semibold text-foreground"
-                      {...props}
-                    />
-                  ),
-                  code: (props) => (
-                    <code
-                      className="bg-muted text-foreground px-1.5 py-0.5 rounded text-xs font-mono"
-                      {...props}
-                    />
-                  ),
-                  a: (props) => (
-                    <a
-                      className="text-primary hover:underline"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      {...props}
-                    />
-                  ),
-                }}
+                components={markdownComponents}
               >
                 {catalogItem?.instructions ||
                   "Provide the required configuration values to install this MCP server."}
@@ -260,28 +258,7 @@ export function LocalServerInstallDialog({
                     <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
-                        components={{
-                          p: (props) => (
-                            <p
-                              className="text-muted-foreground leading-relaxed text-xs"
-                              {...props}
-                            />
-                          ),
-                          code: (props) => (
-                            <code
-                              className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
-                              {...props}
-                            />
-                          ),
-                          a: (props) => (
-                            <a
-                              className="text-primary hover:underline"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              {...props}
-                            />
-                          ),
-                        }}
+                        components={markdownComponents}
                       >
                         {env.description}
                       </ReactMarkdown>
@@ -349,28 +326,7 @@ export function LocalServerInstallDialog({
                       <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkBreaks]}
-                          components={{
-                            p: (props) => (
-                              <p
-                                className="text-muted-foreground leading-relaxed text-xs"
-                                {...props}
-                              />
-                            ),
-                            code: (props) => (
-                              <code
-                                className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
-                                {...props}
-                              />
-                            ),
-                            a: (props) => (
-                              <a
-                                className="text-primary hover:underline"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                {...props}
-                              />
-                            ),
-                          }}
+                          components={markdownComponents}
                         >
                           {env.description}
                         </ReactMarkdown>

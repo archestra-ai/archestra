@@ -23,6 +23,7 @@ export function BooleanToggle({
   return (
     <ButtonGroup>
       <Button
+        type="button"
         size={size}
         variant={value ? variant : "outline"}
         onClick={() => onChange(true)}
@@ -31,6 +32,7 @@ export function BooleanToggle({
         {trueLabel}
       </Button>
       <Button
+        type="button"
         size={size}
         variant={!value ? variant : "outline"}
         onClick={() => onChange(false)}

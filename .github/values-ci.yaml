@@ -17,6 +17,10 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
+    # Vault configuration for BYOS tests
+    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://host.docker.internal:8200"
+    ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
 
   # Use NodePort service type to expose services on fixed ports
   service:

@@ -121,24 +121,6 @@ jobs:
             --cap-add IPC_LOCK \
             hashicorp/vault:latest
 
-          # Wait for Vault to be ready
-          echo "Waiting for Vault to be ready..."
-          for i in {1..30}; do
-            if curl -f http://localhost:8200/v1/sys/health > /dev/null 2>&1; then
-              echo "✅ Vault is ready"
-              break
-            fi
-            echo "Waiting... (attempt $i/30)"
-            sleep 2
-          done
-
-          # Verify Vault is accessible
-          if ! curl -f http://localhost:8200/v1/sys/health > /dev/null 2>&1; then
-            echo "❌ Vault failed to start"
-            docker logs archestra-vault
-            exit 1
-          fi
-
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform

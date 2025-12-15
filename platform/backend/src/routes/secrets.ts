@@ -6,6 +6,7 @@ import {
   isByosEnabled,
   SecretsManagerType,
   secretManager,
+  secretManagerCoordinator,
 } from "@/secretsmanager";
 import {
   ApiError,
@@ -94,6 +95,32 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (_request, reply) => {
       const result = await secretManager.checkConnectivity();
       return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/secrets/initialize-secrets-manager",
+    {
+      schema: {
+        operationId: RouteId.InitializeSecretsManager,
+        description:
+          "Initialize the secrets manager with a specific type (DB, Vault, or BYOS_VAULT)",
+        tags: ["Secrets"],
+        body: z.object({
+          type: SecretsManagerTypeSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            type: SecretsManagerTypeSchema,
+            meta: z.record(z.string(), z.string()),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { type } = request.body;
+      const instance = secretManagerCoordinator.initialize(type);
+      return reply.send(instance.getUserVisibleDebugInfo());
     },
   );
 };

@@ -200,7 +200,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
 
-  const { data: teams } = useQuery({
+  const { data: _teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getTeams();

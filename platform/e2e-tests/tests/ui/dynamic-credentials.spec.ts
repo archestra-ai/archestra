@@ -48,10 +48,12 @@ test("Verify tool calling using dynamic credentials", async ({
     // Go to MCP Registry page
     await goToPage(page, "/mcp-catalog/registry");
     await page.waitForLoadState("networkidle");
-    // Click connect button for the catalog item
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    // Click connect button for the catalog item - wait for it to be visible
+    const btn = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await btn.waitFor({ state: "visible" });
+    await btn.click();
     // Fill ARCHESTRA_TEST environment variable to mark personal credential
     await page
       .getByRole("textbox", { name: "ARCHESTRA_TEST" })

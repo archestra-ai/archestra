@@ -267,6 +267,13 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       // Verify we're logged in by checking for authenticated UI elements
       // The sidebar navigation only appears when logged in
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
@@ -439,6 +446,13 @@ test.describe("SSO Role Mapping E2E", () => {
 
       // Wait for redirect back to Archestra
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -610,6 +624,13 @@ test.describe("SSO Team Sync E2E", () => {
 
       // Wait for redirect back to Archestra
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -647,9 +668,10 @@ test.describe("SSO Team Sync E2E", () => {
 
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
+      // Team sync might take a moment, so allow more time
       await expect(
         ssoPage.getByRole("dialog").getByText(new RegExp(ADMIN_EMAIL, "i")),
-      ).toBeVisible({ timeout: 5000 });
+      ).toBeVisible({ timeout: 10000 });
 
       // Success! The SSO user was automatically synced to the team
     } finally {
@@ -811,6 +833,13 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       // to the existing account and log us in successfully.
       // The sidebar navigation only appears when logged in
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,

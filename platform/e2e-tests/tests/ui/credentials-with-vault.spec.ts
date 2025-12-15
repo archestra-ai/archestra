@@ -5,7 +5,7 @@ import {
   SecretsManagerType,
 } from "@shared";
 import { DEFAULT_TEAM_NAME } from "../../consts";
-import { expect, goToPage, request, test } from "../../fixtures";
+import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,

@@ -292,3 +292,28 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
     },
   });
 }
+
+export async function clickButton({
+  page,
+  options,
+  first,
+  nth,
+}: {
+  page: Page;
+  options: Parameters<Page["getByRole"]>[1];
+  first?: boolean;
+  nth?: number;
+}) {
+  let button = page.getByRole("button", {
+    disabled: false,
+    ...options,
+  });
+
+  if (first) {
+    button = button.first();
+  } else if (nth !== undefined) {
+    button = button.nth(nth);
+  }
+
+  return await button.click();
+}

@@ -1,5 +1,6 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
+import { clickButton } from "../../utils";
 
 test(
   "can create and delete a profile",
@@ -34,7 +35,7 @@ test(
     await page
       .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
       .click();
-    await page.getByRole("button", { name: "Delete profile" }).click();
+    await clickButton({ page, options: { name: "Delete profile" } });
 
     await expect(
       page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),

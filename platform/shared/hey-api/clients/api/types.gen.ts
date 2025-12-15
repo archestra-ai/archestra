@@ -4,10 +4,6 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type SupportedProvidersInput = 'openai' | 'gemini' | 'anthropic';
-
-export type SupportedProvidersDiscriminatorInput = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
-
 export type OpenAiChatCompletionRequestInput = {
     model: string;
     /**
@@ -1373,10 +1369,6 @@ export type WebSocketMessageInput = {
         [key: string]: unknown;
     };
 };
-
-export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
-
-export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
 
 export type OpenAiChatCompletionRequest = {
     model: string;
@@ -8537,6 +8529,7 @@ export type GetInternalMcpCatalogResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -8617,6 +8610,7 @@ export type CreateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -8764,6 +8758,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -8995,6 +8990,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -9075,6 +9071,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -9224,6 +9221,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -10023,6 +10021,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10101,6 +10100,7 @@ export type CreateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10233,6 +10233,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10464,6 +10465,7 @@ export type GetMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10542,6 +10544,7 @@ export type UpdateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10686,6 +10689,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10840,6 +10844,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -10994,6 +10999,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -11148,6 +11154,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
@@ -12633,7 +12640,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: SupportedProviders;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -12653,7 +12660,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: SupportedProvidersInput;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -12736,7 +12743,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: SupportedProviders;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -12835,7 +12842,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: SupportedProvidersInput;
+        provider?: 'openai' | 'gemini' | 'anthropic';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -12920,7 +12927,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: SupportedProviders;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -14059,6 +14066,88 @@ export type CheckSecretsConnectivityResponses = {
 };
 
 export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
+
+export type InitializeSecretsManagerData = {
+    body: {
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/secrets/initialize-secrets-manager';
+};
+
+export type InitializeSecretsManagerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type InitializeSecretsManagerError = InitializeSecretsManagerErrors[keyof InitializeSecretsManagerErrors];
+
+export type InitializeSecretsManagerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+        meta: {
+            [key: string]: string;
+        };
+    };
+};
+
+export type InitializeSecretsManagerResponse = InitializeSecretsManagerResponses[keyof InitializeSecretsManagerResponses];
 
 export type GetPublicSsoProvidersData = {
     body?: never;
@@ -17135,7 +17224,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17148,7 +17237,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: SupportedProvidersInput;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17223,7 +17312,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17387,7 +17476,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17400,7 +17489,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: SupportedProvidersInput;
+        provider?: 'openai' | 'gemini' | 'anthropic';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -17477,7 +17566,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

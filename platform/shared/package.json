@@ -28,10 +28,10 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.88.0",
+    "@hey-api/openapi-ts": "^0.88.1",
     "@types/node": "^24",
-    "knip": "^5.50.0",
-    "tsx": "^4.20.6",
+    "knip": "^5.72.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.2"
   }
 }

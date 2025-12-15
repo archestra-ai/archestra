@@ -24,6 +24,6 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/node": "^24.10.1",
-    "knip": "^5.50.0"
+    "knip": "^5.72.0"
   }
 }

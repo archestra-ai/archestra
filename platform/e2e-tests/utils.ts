@@ -28,6 +28,13 @@ export async function addCustomSelfHostedCatalogItem({
   envVars?: {
     key: string;
     promptOnInstallation: boolean;
+    isSecret?: boolean;
+    vaultSecret?: {
+      name: string;
+      key: string;
+      value: string;
+      teamName: string;
+    };
   };
 }) {
   await goToPage(page, "/mcp-catalog/registry");
@@ -46,10 +53,33 @@ export async function addCustomSelfHostedCatalogItem({
   if (envVars) {
     await page.getByRole("button", { name: "Add Variable" }).click();
     await page.getByRole("textbox", { name: "API_KEY" }).fill(envVars.key);
+    if (envVars.isSecret) {
+      await page.getByTestId(E2eTestId.SelectEnvironmentVariableType).click();
+      await page.getByRole("option", { name: "Secret" }).click();
+    }
     if (envVars.promptOnInstallation) {
       await page
         .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
         .click({ force: true });
+    }
+    if (envVars.vaultSecret) {
+      await page.getByText("Set Secret").click();
+      await page
+        .getByTestId(E2eTestId.ExternalSecretSelectorTeamTrigger)
+        .click();
+      await page
+        .getByRole("option", { name: envVars.vaultSecret.teamName })
+        .click();
+      await page
+        .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
+        .click();
+      await page.getByText(envVars.vaultSecret.name).click();
+      await page
+        .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
+        .click();
+      await page.getByRole("option", { name: envVars.vaultSecret.key }).click();
+      await page.getByRole("button", { name: "Confirm" }).click();
+      await page.waitForTimeout(2_000);
     }
   }
   await page.getByRole("button", { name: "Add Server" }).click();
@@ -82,6 +112,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   const manageToolsButton = page.getByTestId(
     `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
   );
+  await manageToolsButton.waitFor({ state: "visible" });
   await manageToolsButton.click();
   await page
     .getByRole("button", { name: "Assign Tool to Profiles" })
@@ -89,8 +120,11 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     .click();
   await page.getByRole("checkbox").first().click();
   await page.waitForLoadState("networkidle");
-  await page.getByRole("combobox").click();
-  await page.waitForLoadState("networkidle");
+  const combobox = page.getByRole("combobox");
+  await combobox.waitFor({ state: "visible" });
+  await combobox.click();
+  // Wait a brief moment for dropdown to open (dropdowns are client-side, no network request needed)
+  await page.waitForTimeout(100);
 }
 
 export async function verifyToolCallResultViaApi({

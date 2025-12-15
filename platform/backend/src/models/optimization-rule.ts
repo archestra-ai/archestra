@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
@@ -6,7 +7,6 @@ import type {
   InsertOptimizationRule,
   InsertTokenPrice,
   OptimizationRule,
-  SupportedProvider,
   UpdateOptimizationRule,
 } from "@/types";
 

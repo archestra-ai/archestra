@@ -55,7 +55,7 @@ describe("McpClient", () => {
     agentId = agent.id;
 
     // Create secret with access token
-    const secret = await secretManager.createSecret(
+    const secret = await secretManager().createSecret(
       { access_token: "test-github-token-123" },
       "testmcptoken",
     );

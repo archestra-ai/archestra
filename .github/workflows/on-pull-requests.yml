@@ -148,6 +148,10 @@ jobs:
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      # Pass GitHub App credentials for release-please PRs to enable codegen commit pushes
+      # that trigger workflow re-runs (pushes with GITHUB_TOKEN don't trigger workflows)
+      ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
   platform-linting-and-tests-merge-queue:
     name: Platform Linting and Tests (Required)

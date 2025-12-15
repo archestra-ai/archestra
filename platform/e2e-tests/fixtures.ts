@@ -35,8 +35,10 @@ interface TestFixtures {
   goToMemberPage: GoToPageFn;
 }
 
-export const goToPage = async (page: Page, path = "") =>
-  page.goto(`${UI_BASE_URL}${path}`);
+export const goToPage = async (page: Page, path = "") => {
+  await page.goto(`${UI_BASE_URL}${path}`);
+  await page.waitForTimeout(500);
+};
 
 const makeRandomString = (length = 10, prefix = "") =>
   `${prefix}-${Math.random()

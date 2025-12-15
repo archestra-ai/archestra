@@ -23,10 +23,16 @@ export function ChatError({ error }: ChatErrorProps) {
       <Alert variant="destructive" className="max-w-3xl mx-auto">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
-        <AlertDescription
-          className={`whitespace-pre-wrap break-words ${isJson ? "font-mono text-xs" : ""}`}
-        >
-          {displayMessage}
+        <AlertDescription>
+          {isJson ? (
+            <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words">
+              {displayMessage}
+            </pre>
+          ) : (
+            <span className="whitespace-pre-wrap break-words">
+              {displayMessage}
+            </span>
+          )}
         </AlertDescription>
       </Alert>
     </div>

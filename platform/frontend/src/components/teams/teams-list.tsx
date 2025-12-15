@@ -226,6 +226,7 @@ export function TeamsList() {
                             permissions={{ team: ["update"] }}
                             variant="outline"
                             size="sm"
+                            data-testid={`${E2eTestId.ConfigureVaultFolderButton}-${team.name}`}
                             onClick={() => {
                               setSelectedTeam(team);
                               setVaultFolderDialogOpen(true);

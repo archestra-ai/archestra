@@ -1,3 +1,4 @@
+import { SupportedProvidersSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -5,7 +6,6 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { SupportedProvidersSchema } from "./llm-providers";
 
 /**
  * Content length optimization rule conditions

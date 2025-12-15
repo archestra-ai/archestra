@@ -1725,7 +1725,7 @@ export default class K8sPod {
   }
 
   get containerName(): string {
-    return this.deploymentName;
+    return this.podName;
   }
 
   /**

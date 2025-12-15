@@ -89,7 +89,7 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
           {Object.entries(groupedTools).map(([serverName, tools]) => (
             <Tooltip key={serverName}>
               <TooltipTrigger asChild>
-                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                <div className="inline-flex items-center gap-1.5 px-2 h-9 rounded-md bg-secondary text-secondary-foreground cursor-default">
                   <span className="font-medium text-xs">{serverName}</span>
                   <span className="text-muted-foreground text-xs">
                     ({tools.length} {tools.length === 1 ? "tool" : "tools"})

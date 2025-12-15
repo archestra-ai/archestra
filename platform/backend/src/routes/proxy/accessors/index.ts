@@ -1,0 +1,1 @@
+export { anthropicAdapterFactory } from "./anthropic";

@@ -58,19 +58,21 @@ test("Verify tool calling using dynamic credentials", async ({
       .fill(`${user}-personal-credential`);
     // Install using personal credential
     await page.getByRole("button", { name: "Install" }).click();
-    await page.waitForTimeout(2_000);
-    // Then click connect again
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    // Wait for dialog to close and button to be visible again
+    const connectButton = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await connectButton.waitFor({ state: "visible" });
+    await connectButton.click();
     // Fill ARCHESTRA_TEST environment variable to mark team credential
     await page
       .getByRole("textbox", { name: "ARCHESTRA_TEST" })
       .fill(`${team}-team-credential`);
     // And this time team credential type should be selected by default for everyone, install using team credential
     await page.getByRole("button", { name: "Install" }).click();
-    // Wait a bit till pod is up and running
-    await page.waitForTimeout(3_000);
+    // Wait for installation to complete and pod to be ready
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1_000); // Additional wait for pod to be ready
   };
 
   // Each user adds personal and 1 team credential
@@ -83,7 +85,14 @@ test("Verify tool calling using dynamic credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
+  // Wait for dropdown option to be visible and stable before clicking
+  const resolveAtCallTimeOption = adminPage.getByRole("option", {
+    name: "Resolve at call time",
+  });
+  await resolveAtCallTimeOption.waitFor({ state: "visible" });
+  // Additional wait to ensure option is stable (not animating)
+  await adminPage.waitForTimeout(200);
+  await resolveAtCallTimeOption.click();
   await adminPage.getByText("Assign to 1 profile").click();
   await adminPage.waitForLoadState("networkidle");
 

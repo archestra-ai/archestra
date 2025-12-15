@@ -119,8 +119,11 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     .click();
   await page.getByRole("checkbox").first().click();
   await page.waitForLoadState("networkidle");
-  await page.getByRole("combobox").click();
-  await page.waitForLoadState("networkidle");
+  const combobox = page.getByRole("combobox");
+  await combobox.waitFor({ state: "visible" });
+  await combobox.click();
+  // Wait a brief moment for dropdown to open (dropdowns are client-side, no network request needed)
+  await page.waitForTimeout(100);
 }
 
 export async function verifyToolCallResultViaApi({

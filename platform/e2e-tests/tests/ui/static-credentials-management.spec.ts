@@ -235,10 +235,12 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .click();
     // Install using personal credential
     await page.getByRole("button", { name: "Install" }).click();
-    // Then click connect again
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    // Wait for dialog to close and button to be visible again
+    const connectButton = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await connectButton.waitFor({ state: "visible" });
+    await connectButton.click();
     // And this time team credential type should be selected by default for everyone, install using team credential
     await page.getByRole("button", { name: "Install" }).click();
     await page.waitForLoadState("networkidle");

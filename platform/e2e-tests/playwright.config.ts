@@ -13,7 +13,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Reduce workers in CI to avoid resource contention */
-  workers: 4,
+  workers: process.env.CI ? 6 : 3,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.CI ? "html" : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -70,22 +70,11 @@ export default defineConfig({
       // Run all setup projects before tests
       dependencies: ["setup-teams"],
     },
-    // API tests only run on chromium (browser doesn't matter for API integration tests)
-    {
-      name: "api",
-      testDir: "./tests/api",
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
-      },
-      // Run all setup projects before tests
-      dependencies: ["credentials-with-vault"],
-    },
     // UI tests run on all browsers
     {
       name: "chromium",
       testDir: "./tests/ui",
+      testMatch: /^(?!.*credentials-with-vault\.spec\.ts$).*\.spec\.ts$/,
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
@@ -97,6 +86,7 @@ export default defineConfig({
     {
       name: "firefox",
       testDir: "./tests/ui",
+      testMatch: /^(?!.*credentials-with-vault\.spec\.ts$).*\.spec\.ts$/,
       use: {
         ...devices["Desktop Firefox"],
         // Use the stored authentication state
@@ -109,6 +99,7 @@ export default defineConfig({
     {
       name: "webkit",
       testDir: "./tests/ui",
+      testMatch: /^(?!.*credentials-with-vault\.spec\.ts$).*\.spec\.ts$/,
       use: {
         ...devices["Desktop Safari"],
         // Use the stored authentication state
@@ -117,6 +108,19 @@ export default defineConfig({
       // Run all setup projects before tests
       dependencies: ["credentials-with-vault"],
       grep: /@webkit/,
+    },
+    // API tests only run on chromium (browser doesn't matter for API integration tests)
+    // API tests run after all UI tests complete
+    {
+      name: "api",
+      testDir: "./tests/api",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run after all UI test projects complete
+      dependencies: ["credentials-with-vault", "chromium", "firefox", "webkit"],
     },
   ],
 });

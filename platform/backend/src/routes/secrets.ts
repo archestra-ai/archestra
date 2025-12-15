@@ -1,6 +1,7 @@
-import { RouteId, SecretsManagerType } from "@shared";
+import { DEFAULT_VAULT_TOKEN, RouteId, SecretsManagerType } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import SecretModel from "@/models/secret";
 import {
   isByosEnabled,
@@ -117,6 +118,12 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      if (config.vault.token !== DEFAULT_VAULT_TOKEN) {
+        throw new ApiError(
+          400,
+          "Reinitializing secrets manager is not allowed in production environment",
+        );
+      }
       const { type } = request.body;
       const instance = secretManagerCoordinator.initialize(type);
       return reply.send(instance.getUserVisibleDebugInfo());

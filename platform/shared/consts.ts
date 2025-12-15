@@ -109,3 +109,5 @@ export type SsoProviderId =
 
 /** List of all predefined SSO provider IDs for account linking */
 export const SSO_TRUSTED_PROVIDER_IDS = Object.values(SSO_PROVIDER_ID);
+
+export const DEFAULT_VAULT_TOKEN = "dev-root-token";

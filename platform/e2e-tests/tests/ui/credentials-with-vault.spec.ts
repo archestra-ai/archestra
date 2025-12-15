@@ -1,9 +1,13 @@
-import { archestraApiSdk, E2eTestId, SecretsManagerType } from "@shared";
+import {
+  archestraApiSdk,
+  DEFAULT_VAULT_TOKEN,
+  E2eTestId,
+  SecretsManagerType,
+} from "@shared";
 import { expect, goToPage, test } from "../../fixtures";
 import { addCustomSelfHostedCatalogItem } from "../../utils";
 
 const vaultAddr = "http://localhost:8200";
-const vaultToken = "dev-root-token";
 const teamFolderPath = "secret/data/teams/default-team";
 
 test.describe("Credentials with Vault", () => {
@@ -44,7 +48,7 @@ test.describe("Credentials with Vault", () => {
     const response = await fetch(`${vaultAddr}/v1/${fullSecretPath}`, {
       method: "POST",
       headers: {
-        "X-Vault-Token": vaultToken,
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(secretData),
@@ -56,7 +60,7 @@ test.describe("Credentials with Vault", () => {
     const readResponse = await fetch(`${vaultAddr}/v1/${fullSecretPath}`, {
       method: "GET",
       headers: {
-        "X-Vault-Token": vaultToken,
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
       },
     });
 
@@ -113,7 +117,7 @@ test.describe("Credentials with Vault", () => {
     await fetch(`${vaultAddr}/v1/${teamFolderPath}`, {
       method: "DELETE",
       headers: {
-        "X-Vault-Token": vaultToken,
+        "X-Vault-Token": DEFAULT_VAULT_TOKEN,
       },
     });
   });

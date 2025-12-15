@@ -89,12 +89,12 @@ test("Then we configure vault for Default Team", async ({ adminPage }) => {
   await adminPage.getByRole("button", { name: "Test Connection" }).click();
   await expect(adminPage.getByText("Connection Successful")).toBeVisible();
 
-  const alreadyConfigured = await adminPage
-    .getByText("Connection Successful")
+  const saveAvailable = await adminPage
+    .getByRole("button", { name: "Save Path" })
     .isVisible();
 
   // save if not already configured
-  if (!alreadyConfigured) {
+  if (saveAvailable) {
     await adminPage.getByRole("button", { name: "Save Path" }).click();
   }
 });

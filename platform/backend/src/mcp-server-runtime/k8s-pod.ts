@@ -147,8 +147,15 @@ export default class K8sPod {
 
   /**
    * Get catalog item for this MCP server
+   * Uses the catalogItem passed to the constructor if available, otherwise fetches from database
    */
   private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+    // Use catalogItem from constructor if available
+    if (this.catalogItem !== undefined) {
+      return this.catalogItem;
+    }
+
+    // Fallback to fetching from database if not provided in constructor
     if (!this.mcpServer.catalogId) {
       return null;
     }

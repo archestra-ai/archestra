@@ -1526,7 +1526,9 @@ export default class K8sPod {
       logger.warn(
         `Deployment ${this.deploymentName} deletion timeout after ${maxWaitTime}ms, may still be terminating`,
       );
-      this.state = "not_created";
+      throw new Error(
+        `Deployment ${this.deploymentName} deletion timed out after ${maxWaitTime}ms; resource may still be terminating`
+      );
     } catch (error: unknown) {
       if (this.isNotFoundError(error)) {
         // Deployment already doesn't exist, that's fine

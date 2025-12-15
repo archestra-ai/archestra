@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
@@ -225,6 +226,7 @@ export function EnvironmentVariablesFormField<
                       <FormControl>
                         <div className="flex items-center h-10">
                           <Checkbox
+                            data-testid={E2eTestId.PromptOnInstallationCheckbox}
                             checked={field.value}
                             onCheckedChange={(checked) => {
                               field.onChange(checked);

@@ -108,7 +108,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
-          
+
       - name: Start HashiCorp Vault
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
@@ -120,15 +120,6 @@ jobs:
             -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
             --cap-add IPC_LOCK \
             hashicorp/vault:latest
-          
-          # Wait for Vault to be ready
-          echo "Waiting for Vault to be ready..."
-          timeout 30s bash -c 'until docker exec archestra-vault vault status > /dev/null 2>&1; do sleep 1; done' || {
-            echo "Vault failed to start"
-            docker logs archestra-vault
-            exit 1
-          }
-          echo "Vault is ready"
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

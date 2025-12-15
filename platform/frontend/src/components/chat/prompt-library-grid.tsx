@@ -482,7 +482,7 @@ function PromptTile({
         <div className="flex flex-wrap gap-1">
           {profileName && (
             <TooltipProvider>
-              <Tooltip delayDuration={300}>
+              <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge
                     variant="secondary"
@@ -492,9 +492,8 @@ function PromptTile({
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent
-                  side="bottom"
-                  align="center"
-                  avoidCollisions={true}
+                  side="top"
+                  className="max-w-sm max-h-64 overflow-y-auto"
                 >
                   <div className="space-y-2">
                     <div className="font-medium text-sm">

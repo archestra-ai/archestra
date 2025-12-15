@@ -18,9 +18,9 @@ archestra:
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Vault configuration for BYOS tests
-    # Vault container is connected to both default bridge (for host access) and kind network (for pod access)
-    # Pods access Vault using container name on the kind network
-    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://archestra-vault:8200"
+    # Vault runs as a Kubernetes service in the cluster
+    # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200
+    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
     ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
     ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
 

@@ -123,30 +123,55 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Start HashiCorp Vault
+      - name: Deploy HashiCorp Vault in Kubernetes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          # Start Vault in dev mode (auto-unsealed, in-memory storage)
-          # Use default bridge network with port publishing for host/Playwright access
-          docker run -d \
-            --name archestra-vault \
-            -p 8200:8200 \
-            -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token \
-            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
-            --cap-add IPC_LOCK \
-            hashicorp/vault:latest
+          # Deploy Vault as a Kubernetes service
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: vault
+            labels:
+              app: vault
+          spec:
+            containers:
+            - name: vault
+              image: hashicorp/vault:latest
+              env:
+              - name: VAULT_DEV_ROOT_TOKEN_ID
+                value: "dev-root-token"
+              - name: VAULT_DEV_LISTEN_ADDRESS
+                value: "0.0.0.0:8200"
+              ports:
+              - containerPort: 8200
+                name: vault
+              securityContext:
+                capabilities:
+                  add:
+                  - IPC_LOCK
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: vault
+          spec:
+            type: NodePort
+            selector:
+              app: vault
+            ports:
+            - port: 8200
+              targetPort: 8200
+              nodePort: 30200
+              protocol: TCP
+          EOF
 
-          # Wait for Vault to be ready on host
-          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
-          echo "Vault is ready on host at localhost:8200"
+          # Wait for Vault pod to be ready
+          kubectl wait --for=condition=Ready pod/vault --timeout=120s
 
-          # Connect Vault to kind network so pods can access it
-          docker network connect kind archestra-vault
-          echo "Vault connected to kind network"
-
-          # Verify Vault is accessible from kind cluster using container name
-          docker exec archestra-ci-cluster-control-plane curl -s http://archestra-vault:8200/v1/sys/health
-          echo "Vault is accessible from kind cluster at archestra-vault:8200"
+          # Wait for Vault service to be ready
+          timeout 30 bash -c 'until curl -s http://localhost:30200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready at localhost:30200 (NodePort) and vault.default.svc.cluster.local:8200 (ClusterIP)"
 
       - name: Restart backend to connect to Vault
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

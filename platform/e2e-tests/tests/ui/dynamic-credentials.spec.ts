@@ -58,6 +58,7 @@ test("Verify tool calling using dynamic credentials", async ({
       .fill(`${user}-personal-credential`);
     // Install using personal credential
     await page.getByRole("button", { name: "Install" }).click();
+    await page.waitForTimeout(2_000);
     // Then click connect again
     await page
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
@@ -73,7 +74,9 @@ test("Verify tool calling using dynamic credentials", async ({
   };
 
   // Each user adds personal and 1 team credential
-  await Promise.all(MATRIX_A.map((config) => install(config)));
+  for (const config of MATRIX_A) {
+    await install(config);
+  }
 
   // Assign tool to profiles using dynamic credential
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({

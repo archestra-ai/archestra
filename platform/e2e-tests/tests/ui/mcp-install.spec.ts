@@ -47,7 +47,7 @@ test.describe("MCP Install", () => {
     await adminPage
       .getByTestId(`connect-catalog-item-button-${CONTEXT7_CATALOG_ITEM_NAME}`)
       .click();
-    await adminPage.waitForLoadState("networkidle");
+    await adminPage.waitForTimeout(2_000);
 
     // fill the api key (just fake value)
     await adminPage
@@ -114,7 +114,7 @@ test.describe("MCP Install", () => {
 
       // install the server
       await adminPage.getByRole("button", { name: "Install" }).click();
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForTimeout(2_000);
 
       // Check that tools are discovered
       await adminPage

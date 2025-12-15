@@ -29,6 +29,12 @@ export async function addCustomSelfHostedCatalogItem({
     key: string;
     promptOnInstallation: boolean;
     isSecret?: boolean;
+    vaultSecret?: {
+      name: string;
+      key: string;
+      value: string;
+      teamName: string;
+    };
   };
 }) {
   await goToPage(page, "/mcp-catalog/registry");
@@ -55,6 +61,25 @@ export async function addCustomSelfHostedCatalogItem({
       await page
         .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
         .click({ force: true });
+    }
+    if (envVars.vaultSecret) {
+      await page.getByText("Set Secret").click();
+      await page
+        .getByTestId(E2eTestId.ExternalSecretSelectorTeamTrigger)
+        .click();
+      await page
+        .getByRole("option", { name: envVars.vaultSecret.teamName })
+        .click();
+      await page
+        .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
+        .click();
+      await page.getByText(envVars.vaultSecret.name).click();
+      await page
+        .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
+        .click();
+      await page.getByRole("option", { name: envVars.vaultSecret.key }).click();
+      await page.getByRole("button", { name: "Confirm" }).click();
+      await page.waitForTimeout(2_000);
     }
   }
   await page.getByRole("button", { name: "Add Server" }).click();

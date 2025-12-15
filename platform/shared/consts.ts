@@ -45,6 +45,11 @@ export const E2eTestId = {
   ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
   ConfigureVaultFolderButton: "configure-vault-folder-button",
+  ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
+  ExternalSecretSelectorSecretTrigger:
+    "external-secret-selector-secret-trigger",
+  ExternalSecretSelectorSecretTriggerKey:
+    "external-secret-selector-secret-trigger-key",
   InlineVaultSecretSelectorSecretTrigger:
     "inline-vault-secret-selector-secret-trigger",
   InlineVaultSecretSelectorSecretTriggerKey:

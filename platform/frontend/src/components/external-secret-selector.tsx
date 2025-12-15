@@ -148,7 +148,11 @@ export function ExternalSecretSelector({
           onValueChange={handleTeamChange}
           disabled={disabled || isLoadingTeams}
         >
-          <SelectTrigger id="vault-team" className="w-64">
+          <SelectTrigger
+            id="vault-team"
+            className="w-64"
+            data-testid={E2eTestId.ExternalSecretSelectorTeamTrigger}
+          >
             <SelectValue placeholder="Select a team..." />
           </SelectTrigger>
           <SelectContent>
@@ -223,7 +227,11 @@ export function ExternalSecretSelector({
               onValueChange={handleSecretChange}
               disabled={disabled}
             >
-              <SelectTrigger id="vault-secret" className="w-64">
+              <SelectTrigger
+                id="vault-secret"
+                className="w-64"
+                data-testid={E2eTestId.ExternalSecretSelectorSecretTrigger}
+              >
                 <SelectValue placeholder="Select a secret..." />
               </SelectTrigger>
               <SelectContent>
@@ -273,7 +281,11 @@ export function ExternalSecretSelector({
                 onValueChange={handleKeyChange}
                 disabled={disabled}
               >
-                <SelectTrigger id="vault-key" className="w-64">
+                <SelectTrigger
+                  id="vault-key"
+                  className="w-64"
+                  data-testid={E2eTestId.ExternalSecretSelectorSecretTriggerKey}
+                >
                   <SelectValue placeholder="Select a key..." />
                 </SelectTrigger>
                 <SelectContent>

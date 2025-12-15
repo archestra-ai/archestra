@@ -37,7 +37,7 @@ interface TestFixtures {
 
 export const goToPage = async (page: Page, path = "") => {
   await page.goto(`${UI_BASE_URL}${path}`);
-  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(500);
 };
 
 const makeRandomString = (length = 10, prefix = "") =>

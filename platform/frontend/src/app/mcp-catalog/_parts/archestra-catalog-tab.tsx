@@ -144,6 +144,9 @@ export function ArchestraCatalogTab({
                   ]
                     .filter(Boolean)
                     .join(": "),
+                  default: Array.isArray(userConfigEntry.default)
+                    ? undefined
+                    : userConfigEntry.default,
                 };
               }
             }
@@ -156,6 +159,7 @@ export function ArchestraCatalogTab({
               promptOnInstallation: false,
               required: false,
               description: "",
+              default: undefined,
             };
           })
         : [];
@@ -173,6 +177,9 @@ export function ArchestraCatalogTab({
               description: [config.title, config.description]
                 .filter(Boolean)
                 .join(": "),
+              default: Array.isArray(config.default)
+                ? undefined
+                : config.default,
             }))
         : [];
 
@@ -195,6 +202,9 @@ export function ArchestraCatalogTab({
       type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
+      required?: boolean;
+      description?: string;
+      default?: string | number | boolean;
     }>,
   ) => {
     // Rewrite redirect URIs to prefer platform callback (port 3000)

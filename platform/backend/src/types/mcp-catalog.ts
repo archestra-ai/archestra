@@ -47,6 +47,7 @@ const LocalConfigSelectSchema = z.object({
         promptOnInstallation: z.boolean(),
         required: z.boolean().optional(), // Optional in database
         description: z.string().optional(), // Optional in database
+        default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value for installation dialog
       }),
     )
     .optional(),

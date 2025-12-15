@@ -109,19 +109,6 @@ jobs:
           cp .env.example .env
           sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
-      - name: Start HashiCorp Vault
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          # Start Vault in dev mode (auto-unsealed, in-memory storage)
-          # Note: Not using --network host here; will connect to kind network after cluster creation
-          docker run -d \
-            --name archestra-vault \
-            -p 8200:8200 \
-            -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token \
-            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
-            --cap-add IPC_LOCK \
-            hashicorp/vault:latest
-
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform
@@ -136,16 +123,28 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Connect Vault to kind network
+      - name: Start HashiCorp Vault
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          # Connect Vault container to kind network so pods can access it
-          docker network connect kind archestra-vault
-          echo "Vault connected to kind network"
+          # Start Vault in dev mode (auto-unsealed, in-memory storage)
+          # Start directly on kind network so pods can access it by name,
+          # and publish port so host/Playwright can access at localhost:8200
+          docker run -d \
+            --name archestra-vault \
+            --network kind \
+            -p 8200:8200 \
+            -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token \
+            -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
+            --cap-add IPC_LOCK \
+            hashicorp/vault:latest
 
-          # Verify Vault is accessible from kind network
+          # Wait for Vault to be ready
+          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready on host at localhost:8200"
+
+          # Verify Vault is accessible from kind cluster
           docker exec archestra-ci-cluster-control-plane curl -s http://archestra-vault:8200/v1/sys/health
-          echo "Vault is accessible from kind cluster"
+          echo "Vault is accessible from kind cluster at archestra-vault:8200"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check

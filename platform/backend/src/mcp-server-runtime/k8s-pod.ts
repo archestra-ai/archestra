@@ -1567,7 +1567,7 @@ export default class K8sPod {
             podName: this.podName,
             deploymentName: this.deploymentName,
           },
-          "Using fallback to get logs by pod name directly. This may return logs from an old pod during migrations if the deployment has already created a new pod.",
+          "Using fallback to get logs by pod name directly. This may return logs from an old Pod during migrations if the Deployment has already created a new Pod.",
         );
         try {
           const logs = await this.k8sApi.readNamespacedPodLog({

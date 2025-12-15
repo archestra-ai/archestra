@@ -403,7 +403,7 @@ class McpServerModel {
 
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
-      await secretManager.deleteSecret(mcpServer.secretId);
+      await secretManager().deleteSecret(mcpServer.secretId);
     }
 
     // If the MCP server was deleted and had a catalogId, check if this was the last installation
@@ -462,7 +462,7 @@ class McpServerModel {
     // Load secrets if secretId is present
     let secrets: Record<string, unknown> = {};
     if (mcpServer.secretId) {
-      const secretRecord = await secretManager.getSecret(mcpServer.secretId);
+      const secretRecord = await secretManager().getSecret(mcpServer.secretId);
       if (secretRecord) {
         secrets = secretRecord.secret;
       }
@@ -553,7 +553,7 @@ class McpServerModel {
     // Load secrets if secretId is provided
     let secrets: Record<string, unknown> = {};
     if (secretId) {
-      const secretRecord = await secretManager.getSecret(secretId);
+      const secretRecord = await secretManager().getSecret(secretId);
       if (secretRecord) {
         secrets = secretRecord.secret;
       }

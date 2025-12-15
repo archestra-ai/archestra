@@ -1,7 +1,8 @@
+import type { SupportedProvider } from "@shared";
 import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
-import type { CreateTokenPrice, SupportedProvider, TokenPrice } from "@/types";
+import type { CreateTokenPrice, TokenPrice } from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {

@@ -17,17 +17,17 @@ vi.mock("node-vault", () => {
   };
 });
 
+import { SecretsManagerType } from "@shared";
 import {
   createSecretManager,
   DbSecretsManager,
-  getSecretsManagerType,
+  getSecretsManagerTypeBasedOnEnvVars,
   getVaultConfigFromEnv,
   SecretsManagerConfigurationError,
-  SecretsManagerType,
   VaultSecretManager,
 } from "./secretsmanager";
 
-describe("getSecretsManagerType", () => {
+describe("getSecretsManagerTypeBasedOnEnvVars", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -41,7 +41,7 @@ describe("getSecretsManagerType", () => {
   test("should return DB when ARCHESTRA_SECRETS_MANAGER is not set", () => {
     delete process.env.ARCHESTRA_SECRETS_MANAGER;
 
-    const type = getSecretsManagerType();
+    const type = getSecretsManagerTypeBasedOnEnvVars();
 
     expect(type).toBe(SecretsManagerType.DB);
   });
@@ -49,7 +49,7 @@ describe("getSecretsManagerType", () => {
   test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
 
-    const type = getSecretsManagerType();
+    const type = getSecretsManagerTypeBasedOnEnvVars();
 
     expect(type).toBe(SecretsManagerType.DB);
   });
@@ -57,7 +57,7 @@ describe("getSecretsManagerType", () => {
   test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'db' (case insensitive)", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "db";
 
-    const type = getSecretsManagerType();
+    const type = getSecretsManagerTypeBasedOnEnvVars();
 
     expect(type).toBe(SecretsManagerType.DB);
   });
@@ -65,7 +65,7 @@ describe("getSecretsManagerType", () => {
   test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'Vault'", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
 
-    const type = getSecretsManagerType();
+    const type = getSecretsManagerTypeBasedOnEnvVars();
 
     expect(type).toBe(SecretsManagerType.Vault);
   });
@@ -73,7 +73,7 @@ describe("getSecretsManagerType", () => {
   test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'vault' (case insensitive)", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "vault";
 
-    const type = getSecretsManagerType();
+    const type = getSecretsManagerTypeBasedOnEnvVars();
 
     expect(type).toBe(SecretsManagerType.Vault);
   });
@@ -81,7 +81,7 @@ describe("getSecretsManagerType", () => {
   test("should return DB for unknown values", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "unknown";
 
-    const type = getSecretsManagerType();
+    const type = getSecretsManagerTypeBasedOnEnvVars();
 
     expect(type).toBe(SecretsManagerType.DB);
   });

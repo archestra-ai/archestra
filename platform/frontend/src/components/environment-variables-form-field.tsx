@@ -201,7 +201,11 @@ export function EnvironmentVariablesFormField<
                         value={field.value}
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger
+                            data-testid={
+                              E2eTestId.SelectEnvironmentVariableType
+                            }
+                          >
                             <SelectValue placeholder="Type" />
                           </SelectTrigger>
                         </FormControl>

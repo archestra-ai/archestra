@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import { SecretsManagerType } from "@shared";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import config from "@/config";
@@ -22,7 +23,7 @@ export interface SecretsConnectivityResult {
  * SecretManager interface for managing secrets
  * Can be implemented for different secret storage backends (database, AWS Secrets Manager, etc.)
  */
-export interface SecretManager {
+interface ISecretManager {
   /**
    * The type of secrets manager
    */
@@ -96,14 +97,39 @@ export class SecretsManagerConfigurationError extends Error {
   }
 }
 
-/**
- * Supported secrets manager types
- */
-export enum SecretsManagerType {
-  DB = "DB",
-  Vault = "Vault",
-  /** BYOS (Bring Your Own Secrets) - Vault with external team folder support */
-  BYOS_VAULT = "BYOS_VAULT",
+class SecretManager {
+  private static initialized = false;
+  private currentInstance: ISecretManager | null = null;
+  private managerType: SecretsManagerType =
+    getSecretsManagerTypeBasedOnEnvVars();
+
+  constructor() {
+    if (SecretManager.initialized) {
+      throw new Error("SecretManager already initialized");
+    }
+    this.initialize();
+    SecretManager.initialized = true;
+  }
+
+  initialize(managerType?: SecretsManagerType) {
+    this.managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
+    this.currentInstance = createSecretManager(this.managerType);
+    return this.currentInstance;
+  }
+
+  getCurrentInstance(): ISecretManager {
+    if (!this.currentInstance) {
+      throw new Error("SecretManager not initialized");
+    }
+    return this.currentInstance;
+  }
+
+  getManagerType(): SecretsManagerType {
+    if (!this.managerType) {
+      throw new Error("Manager type not set");
+    }
+    return this.managerType;
+  }
 }
 
 /**
@@ -113,8 +139,10 @@ export enum SecretsManagerType {
  * - "BYOS_VAULT": Uses BYOSVaultSecretManager for external team vault folder support
  * - "DB" or not set: Uses DbSecretsManager (default)
  */
-export function createSecretManager(): SecretManager {
-  const managerType = getSecretsManagerType();
+export function createSecretManager(
+  managerType?: SecretsManagerType,
+): ISecretManager {
+  managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
 
   if (managerType === SecretsManagerType.Vault) {
     if (!config.enterpriseLicenseActivated) {
@@ -182,7 +210,7 @@ export function createSecretManager(): SecretManager {
  * Get the secrets manager type from environment variables
  * @returns SecretsManagerType based on ARCHESTRA_SECRETS_MANAGER env var, defaults to DB
  */
-export function getSecretsManagerType(): SecretsManagerType {
+export function getSecretsManagerTypeBasedOnEnvVars(): SecretsManagerType {
   const envValue = process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase();
 
   if (envValue === "VAULT") {
@@ -200,7 +228,7 @@ export function getSecretsManagerType(): SecretsManagerType {
  * Database-backed implementation of SecretManager
  * Stores secrets in the database using SecretModel
  */
-export class DbSecretsManager implements SecretManager {
+export class DbSecretsManager implements ISecretManager {
   readonly type = SecretsManagerType.DB;
 
   async createSecret(
@@ -288,7 +316,7 @@ export interface VaultConfig {
  * Vault-backed implementation of SecretManager
  * Stores secret metadata in PostgreSQL with isVault=true, actual secrets in HashiCorp Vault
  */
-export class VaultSecretManager implements SecretManager {
+export class VaultSecretManager implements ISecretManager {
   readonly type = SecretsManagerType.Vault;
   private client: ReturnType<typeof Vault>;
   private initialized = false;
@@ -817,7 +845,7 @@ export interface VaultFolderConnectivityResult {
  * - Fetches secret values from external Vault paths at read time
  * - Provides additional methods for listing/browsing external Vault folders
  */
-export class BYOSVaultSecretManager implements SecretManager {
+export class BYOSVaultSecretManager implements ISecretManager {
   readonly type = SecretsManagerType.BYOS_VAULT;
   private client: ReturnType<typeof Vault>;
   private initialized = false;
@@ -1639,18 +1667,6 @@ export function getVaultConfigFromEnv(): VaultConfig {
 }
 
 /**
- * Check if BYOS (Bring Your Own Secrets) feature is enabled
- * BYOS allows teams to use external Vault folders for secrets
- * @returns true if ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and enterprise license is active
- */
-export function isByosEnabled(): boolean {
-  return (
-    getSecretsManagerType() === SecretsManagerType.BYOS_VAULT &&
-    config.enterpriseLicenseActivated
-  );
-}
-
-/**
  * Get the Vault KV version when BYOS is enabled
  * @returns "1" or "2" if BYOS is enabled, null otherwise
  */
@@ -1668,4 +1684,19 @@ export function getByosVaultKvVersion(): VaultKvVersion | null {
 /**
  * Default secret manager instance (uses configured backend)
  */
-export const secretManager: SecretManager = createSecretManager();
+export const secretManagerCoordinator = new SecretManager();
+export function secretManager(): ISecretManager {
+  return secretManagerCoordinator.getCurrentInstance();
+}
+
+/**
+ * Check if BYOS (Bring Your Own Secrets) feature is enabled
+ * BYOS allows teams to use external Vault folders for secrets
+ * @returns true if ARCHESTRA_SECRETS_MANAGER=BYOS_VAULT and enterprise license is active
+ */
+export function isByosEnabled(): boolean {
+  return (
+    secretManagerCoordinator.getManagerType() ===
+      SecretsManagerType.BYOS_VAULT && config.enterpriseLicenseActivated
+  );
+}

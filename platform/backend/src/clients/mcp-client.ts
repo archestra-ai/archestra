@@ -263,7 +263,7 @@ class McpClient {
       };
     }
     if (mcpServer.secretId) {
-      const secret = await secretManager.getSecret(mcpServer.secretId);
+      const secret = await secretManager().getSecret(mcpServer.secretId);
       if (secret?.secret) {
         logger.info(
           {

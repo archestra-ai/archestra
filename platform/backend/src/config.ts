@@ -6,6 +6,7 @@ import {
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
+  DEFAULT_VAULT_TOKEN,
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
@@ -279,6 +280,9 @@ export default {
       mcpK8sServiceAccountName:
         process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME || "",
     },
+  },
+  vault: {
+    token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },
   observability: {
     otel: {

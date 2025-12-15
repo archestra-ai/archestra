@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  type archestraCatalogTypes,
+  E2eTestId,
+} from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -600,6 +604,7 @@ function ServerCard({
             disabled={isAdding || isInCatalog}
             size="sm"
             className="w-full"
+            data-testid={E2eTestId.AddCatalogItemButton}
           >
             {isInCatalog
               ? "Added"

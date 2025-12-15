@@ -74,6 +74,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
         .click();
+      await page.waitForLoadState("networkidle");
       // Personal credential type should be selected by default if vault is disabled
       // otherwise team credential type should be selected
       await expect(
@@ -234,12 +235,15 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .click();
     // Install using personal credential
     await page.getByRole("button", { name: "Install" }).click();
-    // Then click connect again
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    // Wait for dialog to close and button to be visible again
+    const connectButton = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await connectButton.waitFor({ state: "visible" });
+    await connectButton.click();
     // And this time team credential type should be selected by default for everyone, install using team credential
     await page.getByRole("button", { name: "Install" }).click();
+    await page.waitForLoadState("networkidle");
   };
 
   // Each user adds personal and 1 team credential
@@ -282,6 +286,7 @@ test("Verify tool calling using different static credentials", async ({
   makeRandomString,
   extractCookieHeaders,
 }) => {
+  test.setTimeout(45_000); // 45 seconds
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   // Assign engineering team to default profile

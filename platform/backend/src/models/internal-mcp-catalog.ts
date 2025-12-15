@@ -13,7 +13,7 @@ class InternalMcpCatalogModel {
   /**
    * Expands secrets and adds them to the catalog items, mutating the items.
    * For BYOS secrets (isByosVault=true), returns vault references / paths as-is.
-   * For non-BYOS secrets, resolves actual values via secretManager.
+   * For non-BYOS secrets, resolves actual values via secretManager().
    */
   private static async expandSecrets(
     catalogItems: InternalMcpCatalog[],
@@ -44,7 +44,9 @@ class InternalMcpCatalogModel {
       (id) => !unresolvedSecretMap.get(id)?.isByosVault,
     );
     const resolvedSecretPromises = nonByosSecretIds.map((id) =>
-      secretManager.getSecret(id).then((secret) => [id, secret] as const),
+      secretManager()
+        .getSecret(id)
+        .then((secret) => [id, secret] as const),
     );
     const resolvedSecretEntries = await Promise.all(resolvedSecretPromises);
     const resolvedSecretMap = new Map(
@@ -112,7 +114,9 @@ class InternalMcpCatalogModel {
 
     // Always resolve using secretManager (resolves BYOS vault references to actual values)
     const secretPromises = Array.from(secretIds).map((id) =>
-      secretManager.getSecret(id).then((secret) => [id, secret] as const),
+      secretManager()
+        .getSecret(id)
+        .then((secret) => [id, secret] as const),
     );
     const secretEntries = await Promise.all(secretPromises);
     const secretMap = new Map(

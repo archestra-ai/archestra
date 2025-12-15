@@ -6,22 +6,6 @@
   },
   "components": {
     "schemas": {
-      "SupportedProvidersInput": {
-        "type": "string",
-        "enum": [
-          "openai",
-          "gemini",
-          "anthropic"
-        ]
-      },
-      "SupportedProvidersDiscriminatorInput": {
-        "type": "string",
-        "enum": [
-          "openai:chatCompletions",
-          "gemini:generateContent",
-          "anthropic:messages"
-        ]
-      },
       "OpenAiChatCompletionRequestInput": {
         "type": "object",
         "properties": {
@@ -3777,22 +3761,6 @@
               "payload"
             ]
           }
-        ]
-      },
-      "SupportedProviders": {
-        "type": "string",
-        "enum": [
-          "openai",
-          "gemini",
-          "anthropic"
-        ]
-      },
-      "SupportedProvidersDiscriminator": {
-        "type": "string",
-        "enum": [
-          "openai:chatCompletions",
-          "gemini:generateContent",
-          "anthropic:messages"
         ]
       },
       "OpenAiChatCompletionRequest": {
@@ -41852,7 +41820,12 @@
                         }
                       },
                       "provider": {
-                        "$ref": "#/components/schemas/SupportedProviders"
+                        "type": "string",
+                        "enum": [
+                          "openai",
+                          "gemini",
+                          "anthropic"
+                        ]
                       },
                       "targetModel": {
                         "type": "string"
@@ -42158,7 +42131,12 @@
                     }
                   },
                   "provider": {
-                    "$ref": "#/components/schemas/SupportedProvidersInput"
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
+                    ]
                   },
                   "targetModel": {
                     "type": "string"
@@ -42239,7 +42217,12 @@
                       }
                     },
                     "provider": {
-                      "$ref": "#/components/schemas/SupportedProviders"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "targetModel": {
                       "type": "string"
@@ -42546,10 +42529,11 @@
                     }
                   },
                   "provider": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/SupportedProvidersInput"
-                      }
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
                     ]
                   },
                   "targetModel": {
@@ -42635,7 +42619,12 @@
                       }
                     },
                     "provider": {
-                      "$ref": "#/components/schemas/SupportedProviders"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "targetModel": {
                       "type": "string"
@@ -46857,6 +46846,281 @@
                   },
                   "required": [
                     "secretCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/secrets/initialize-secrets-manager": {
+      "post": {
+        "operationId": "initializeSecretsManager",
+        "tags": [
+          "Secrets"
+        ],
+        "description": "Initialize the secrets manager with a specific type (DB, Vault, or BYOS_VAULT)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "DB",
+                      "Vault",
+                      "BYOS_VAULT"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "DB",
+                        "Vault",
+                        "BYOS_VAULT"
+                      ]
+                    },
+                    "meta": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "meta"
                   ],
                   "additionalProperties": false
                 }
@@ -56861,7 +57125,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
                       "provider": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "openai",
+                          "gemini",
+                          "anthropic"
+                        ]
                       },
                       "model": {
                         "type": "string",
@@ -57122,7 +57391,12 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "$ref": "#/components/schemas/SupportedProvidersInput"
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
+                    ]
                   },
                   "model": {
                     "type": "string",
@@ -57160,7 +57434,12 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "model": {
                       "type": "string",
@@ -57441,7 +57720,12 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "model": {
                       "type": "string",
@@ -57701,10 +57985,11 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/SupportedProvidersInput"
-                      }
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic"
                     ]
                   },
                   "model": {
@@ -57748,7 +58033,12 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "provider": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic"
+                      ]
                     },
                     "model": {
                       "type": "string",

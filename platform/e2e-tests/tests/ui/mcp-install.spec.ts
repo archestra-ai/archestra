@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, E2eTestId } from "@shared";
 import { goToPage, type Page, test } from "../../fixtures";
 
 /**
@@ -40,15 +40,14 @@ test.describe("MCP Install", () => {
       .getByLabel("Add MCP Server to the Private")
       .getByText(CONTEXT7_CATALOG_ITEM_NAME)
       .waitFor({ state: "visible" });
-    await adminPage
-      .getByRole("button", { name: "Add to Your Registry" })
-      .click();
+    await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
     await adminPage.waitForLoadState("networkidle");
 
     // install the server
     await adminPage
       .getByTestId(`connect-catalog-item-button-${CONTEXT7_CATALOG_ITEM_NAME}`)
       .click();
+    await adminPage.waitForTimeout(2_000);
 
     // fill the api key (just fake value)
     await adminPage
@@ -115,7 +114,7 @@ test.describe("MCP Install", () => {
 
       // install the server
       await adminPage.getByRole("button", { name: "Install" }).click();
-      await adminPage.waitForLoadState("networkidle");
+      await adminPage.waitForTimeout(2_000);
 
       // Check that tools are discovered
       await adminPage
@@ -167,6 +166,7 @@ test.describe("MCP Install", () => {
         .getByTestId(`mcp-server-card-${HF_CATALOG_ITEM_NAME}`)
         .getByRole("button", { name: "Connect" })
         .click();
+      await adminPage.waitForLoadState("networkidle");
 
       // Check that we have input for entering the PAT and fill it with fake value
       await adminPage

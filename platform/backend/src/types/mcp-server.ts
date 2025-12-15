@@ -15,13 +15,21 @@ export const LocalMcpServerInstallationStatusSchema = z.enum([
   "error",
 ]);
 
+export const SecretStorageTypeSchema = z.enum([
+  "vault",
+  "external_vault",
+  "database",
+  "none",
+]);
+
+export type SecretStorageType = z.infer<typeof SecretStorageTypeSchema>;
+
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
   serverType: InternalMcpCatalogServerTypeSchema,
   ownerEmail: z.string().nullable().optional(),
   catalogName: z.string().nullable().optional(),
-  teams: z.array(z.string()).optional(),
   users: z.array(z.string()).optional(),
   userDetails: z
     .array(
@@ -33,21 +41,20 @@ export const SelectMcpServerSchema = createSelectSchema(
     )
     .optional(),
   teamDetails: z
-    .array(
-      z.object({
-        teamId: z.string(),
-        name: z.string(),
-        createdAt: z.coerce.date(),
-      }),
-    )
+    .object({
+      teamId: z.string(),
+      name: z.string(),
+      createdAt: z.coerce.date(),
+    })
+    .nullable()
     .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
+  secretStorageType: SecretStorageTypeSchema.optional(),
 });
 
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
   .extend({
     serverType: InternalMcpCatalogServerTypeSchema,
-    teams: z.array(z.string()).optional(),
     userId: z.string().optional(), // For personal auth
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
     userConfigValues: z.record(z.string(), z.string()).optional(),
@@ -64,7 +71,6 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
     serverType: true, // serverType should not be updated after creation
   })
   .extend({
-    teams: z.array(z.string()).optional(),
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
   });
 

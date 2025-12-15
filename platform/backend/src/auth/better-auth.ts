@@ -1,18 +1,11 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
-import {
-  ac,
-  adminRole,
-  allAvailableActions,
-  editorRole,
-  MEMBER_ROLE_NAME,
-  memberRole,
-  SSO_TRUSTED_PROVIDER_IDS,
-} from "@shared";
+import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
@@ -51,6 +44,17 @@ const isHttps = () => {
   // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
   return frontendBaseUrl.startsWith("https://");
 };
+
+const { allAvailableActions, editorPermissions, memberPermissions } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
+const ac = createAccessControl(allAvailableActions);
+
+const adminRole = ac.newRole(allAvailableActions);
+const editorRole = ac.newRole(editorPermissions);
+const memberRole = ac.newRole(memberPermissions);
 
 // biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
 export const auth: any = betterAuth({
@@ -133,11 +137,35 @@ export const auth: any = betterAuth({
       organizationProvisioning: {
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
+        // IMPORTANT: This callback is ONLY invoked when creating NEW organization memberships
+        // (i.e., first-time SSO logins for a user). For existing users who already have memberships,
+        // this callback is NOT called. To sync roles on every SSO login, we use the `syncSsoRole`
+        // function in `handleAfterHook` which runs on every `/sso/callback/*` request.
         getRole: async (data) => {
+          logger.debug(
+            {
+              providerId: data.provider?.providerId,
+              userId: data.user?.id,
+              userEmail: data.user?.email,
+            },
+            "SSO getRole callback: Invoking SsoProviderModel.resolveSsoRole",
+          );
+
           // Cast to the expected union type (better-auth expects "member" | "admin")
-          return (await SsoProviderModel.resolveSsoRole(data)) as
+          const resolvedRole = (await SsoProviderModel.resolveSsoRole(data)) as
             | "member"
             | "admin";
+
+          logger.debug(
+            {
+              providerId: data.provider?.providerId,
+              userId: data.user?.id,
+              resolvedRole,
+            },
+            "SSO getRole callback: Role resolved successfully",
+          );
+
+          return resolvedRole;
         },
       },
       defaultOverrideUserInfo: true,
@@ -272,15 +300,28 @@ export const auth: any = betterAuth({
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
 
+  logger.debug({ path, method }, "[auth:beforeHook] Processing auth request");
+
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
+    logger.debug(
+      { email: body.email, disableInvitations: config.auth.disableInvitations },
+      "[auth:beforeHook] Processing invitation request",
+    );
     if (config.auth.disableInvitations) {
+      logger.debug(
+        "[auth:beforeHook] Invitations are disabled, blocking request",
+      );
       throw new APIError("FORBIDDEN", {
         message: "User invitations are disabled",
       });
     }
 
     if (!z.email().safeParse(body.email).success) {
+      logger.debug(
+        { email: body.email },
+        "[auth:beforeHook] Invalid email format",
+      );
       throw new APIError("BAD_REQUEST", {
         message: "Invalid email format",
       });
@@ -291,7 +332,17 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
   // Block invitation cancellation when invitations are disabled
   if (path === "/organization/cancel-invitation" && method === "POST") {
+    logger.debug(
+      {
+        invitationId: body.invitationId,
+        disableInvitations: config.auth.disableInvitations,
+      },
+      "[auth:beforeHook] Processing invitation cancellation",
+    );
     if (config.auth.disableInvitations) {
+      logger.debug(
+        "[auth:beforeHook] Invitations are disabled, blocking cancellation",
+      );
       throw new APIError("FORBIDDEN", {
         message: "User invitations are disabled",
       });
@@ -303,7 +354,13 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     const callbackURL = body.callbackURL as string | undefined;
     const invitationId = callbackURL?.split("invitationId=")[1]?.split("&")[0];
 
+    logger.debug(
+      { email: body.email, hasInvitationId: !!invitationId },
+      "[auth:beforeHook] Processing sign-up request",
+    );
+
     if (!invitationId) {
+      logger.debug("[auth:beforeHook] Sign-up without invitation ID blocked");
       throw new APIError("FORBIDDEN", {
         message:
           "Direct sign-up is disabled. You need an invitation to create an account.",
@@ -314,14 +371,23 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     const invitation = await InvitationModel.getById(invitationId);
 
     if (!invitation) {
+      logger.debug({ invitationId }, "[auth:beforeHook] Invitation not found");
       throw new APIError("BAD_REQUEST", {
         message: "Invalid invitation ID",
       });
     }
 
     const { status, expiresAt } = invitation;
+    logger.debug(
+      { invitationId, status, expiresAt },
+      "[auth:beforeHook] Invitation found, validating",
+    );
 
     if (status !== "pending") {
+      logger.debug(
+        { invitationId, status },
+        "[auth:beforeHook] Invitation not pending",
+      );
       throw new APIError("BAD_REQUEST", {
         message: `This invitation has already been ${status}`,
       });
@@ -329,6 +395,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
     // Check if invitation is expired
     if (expiresAt && expiresAt < new Date()) {
+      logger.debug(
+        { invitationId, expiresAt },
+        "[auth:beforeHook] Invitation expired",
+      );
       throw new APIError("BAD_REQUEST", {
         message:
           "The invitation link has expired, please contact your admin for a new invitation",
@@ -337,12 +407,20 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
     // Validate email matches invitation
     if (body.email && invitation.email !== body.email) {
+      logger.debug(
+        { invitationEmail: invitation.email, bodyEmail: body.email },
+        "[auth:beforeHook] Email mismatch",
+      );
       throw new APIError("BAD_REQUEST", {
         message:
           "Email address does not match the invitation. You must use the invited email address.",
       });
     }
 
+    logger.debug(
+      { invitationId },
+      "[auth:beforeHook] Invitation validated successfully",
+    );
     return ctx;
   }
 
@@ -362,11 +440,17 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 export async function handleAfterHook(ctx: HookEndpointContext) {
   const { path, method, body, context } = ctx;
 
+  logger.debug({ path, method }, "[auth:afterHook] Processing post-auth hook");
+
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {
     const invitationId = body.invitationId as string | undefined;
 
     if (invitationId) {
+      logger.debug(
+        { invitationId },
+        "[auth:afterHook] Deleting canceled invitation",
+      );
       try {
         await InvitationModel.delete(invitationId);
         logger.info(`✅ Invitation ${invitationId} deleted from database`);
@@ -382,6 +466,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
     if (userId) {
       // Delete all sessions for this user
+      logger.debug(
+        { userId },
+        "[auth:afterHook] Invalidating all sessions for removed user",
+      );
       try {
         await SessionModel.deleteAllByUserId(userId);
         logger.info(`✅ All sessions for user ${userId} invalidated`);
@@ -400,6 +488,11 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     if (newSession) {
       const { user, session } = newSession;
 
+      logger.debug(
+        { userId: user.id, email: user.email },
+        "[auth:afterHook] Processing sign-up completion",
+      );
+
       // Check if this is an invitation sign-up
       const callbackURL = body.callbackURL as string | undefined;
       const invitationId = callbackURL
@@ -408,9 +501,16 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
       // If there is no invitation ID, it means this is a direct sign-up which is not allowed
       if (!invitationId) {
+        logger.debug(
+          "[auth:afterHook] Sign-up without invitation ID, skipping",
+        );
         return;
       }
 
+      logger.debug(
+        { invitationId, userId: user.id },
+        "[auth:afterHook] Accepting invitation after sign-up",
+      );
       return await InvitationModel.accept(session, user, invitationId);
     }
   }
@@ -423,6 +523,11 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       const sessionId = newSession.session.id;
       const userId = newSession.user.id;
       const { user, session } = newSession;
+
+      logger.debug(
+        { userId, email: user.email, path },
+        "[auth:afterHook] Processing sign-in/SSO callback",
+      );
 
       // Auto-accept any pending invitations for this user's email
       try {
@@ -437,16 +542,28 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           await InvitationModel.accept(session, user, pendingInvitation.id);
           return;
         }
+        logger.debug(
+          { email: user.email },
+          "[auth:afterHook] No pending invitation found for user",
+        );
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to auto-accept invitation:");
       }
 
       try {
         if (!newSession.session.activeOrganizationId) {
+          logger.debug(
+            { userId },
+            "[auth:afterHook] No active organization, looking up first membership",
+          );
           const userMembership =
             await MemberModel.getFirstMembershipForUser(userId);
 
           if (userMembership) {
+            logger.debug(
+              { userId, organizationId: userMembership.organizationId },
+              "[auth:afterHook] Setting active organization from membership",
+            );
             await SessionModel.patch(sessionId, {
               activeOrganizationId: userMembership.organizationId,
             });
@@ -454,18 +571,206 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             logger.info(
               `✅ Active organization set for user ${newSession.user.email}`,
             );
+          } else {
+            logger.debug(
+              { userId },
+              "[auth:afterHook] No membership found for user",
+            );
           }
         }
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
       }
 
-      // SSO Team Sync: Synchronize team memberships based on SSO groups
+      // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
+        logger.debug(
+          { userId, email: user.email },
+          "[auth:afterHook] Processing SSO role and team sync",
+        );
+
+        // Sync role first (based on role mapping rules)
+        await syncSsoRole(userId, user.email);
+
+        // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email);
       }
     }
+  }
+}
+
+/**
+ * Synchronize user's organization role based on SSO claims.
+ * This is called after successful SSO login in the after hook.
+ *
+ * Note: Better-auth's getRole callback is only invoked when creating NEW memberships.
+ * For existing users, we need to manually sync their role on every SSO login.
+ *
+ * @param userId - The user's ID
+ * @param userEmail - The user's email
+ */
+async function syncSsoRole(userId: string, userEmail: string): Promise<void> {
+  logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
+
+  // Get the user's accounts and find the most recently used SSO account
+  const allAccounts = await AccountModel.getAllByUserId(userId);
+
+  // Find an SSO account (providerId != "credential")
+  const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
+
+  if (!ssoAccount) {
+    logger.debug(
+      { userId, userEmail },
+      "No SSO account found for user, skipping role sync",
+    );
+    return;
+  }
+
+  const providerId = ssoAccount.providerId;
+
+  // Get the SSO provider to find the organization ID and role mapping config
+  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+
+  if (!ssoProvider?.organizationId) {
+    logger.debug(
+      { providerId, userEmail },
+      "SSO provider not found or has no organization, skipping role sync",
+    );
+    return;
+  }
+
+  // Check if role mapping is configured
+  const roleMapping = ssoProvider.roleMapping;
+  if (!roleMapping?.rules?.length) {
+    logger.debug(
+      { providerId, userEmail },
+      "No role mapping rules configured, skipping role sync",
+    );
+    return;
+  }
+
+  // Check if skipRoleSync is enabled
+  if (roleMapping.skipRoleSync) {
+    logger.debug(
+      { providerId, userEmail },
+      "skipRoleSync is enabled, skipping role sync for existing user",
+    );
+    return;
+  }
+
+  // Decode the idToken to get claims
+  if (!ssoAccount.idToken) {
+    logger.debug(
+      { providerId, userEmail },
+      "No idToken in SSO account, skipping role sync",
+    );
+    return;
+  }
+
+  let tokenClaims: Record<string, unknown> = {};
+  try {
+    tokenClaims = jwtDecode<Record<string, unknown>>(ssoAccount.idToken);
+    logger.debug(
+      {
+        providerId,
+        userEmail,
+        tokenClaimsKeys: Object.keys(tokenClaims),
+      },
+      "Decoded idToken claims for role sync",
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, providerId, userEmail },
+      "Failed to decode idToken for role sync",
+    );
+    return;
+  }
+
+  // Evaluate role mapping rules
+  const result = SsoProviderModel.evaluateRoleMapping(
+    roleMapping,
+    {
+      token: tokenClaims,
+      provider: {
+        id: ssoProvider.id,
+        providerId: ssoProvider.providerId,
+      },
+    },
+    "member",
+  );
+
+  logger.debug(
+    {
+      providerId,
+      userEmail,
+      result,
+    },
+    "Role mapping evaluation result for role sync",
+  );
+
+  // Handle strict mode: Deny login if no rules matched and strict mode is enabled
+  if (result.error) {
+    logger.warn(
+      { providerId, userEmail, error: result.error },
+      "SSO login denied for existing user due to strict mode - no role mapping rules matched",
+    );
+    throw new APIError("FORBIDDEN", {
+      message: result.error,
+    });
+  }
+
+  if (!result.role) {
+    logger.debug(
+      { providerId, userEmail },
+      "No role determined from mapping rules, skipping role sync",
+    );
+    return;
+  }
+
+  // Get the user's current membership
+  const existingMember = await MemberModel.getByUserId(
+    userId,
+    ssoProvider.organizationId,
+  );
+
+  if (!existingMember) {
+    logger.debug(
+      { providerId, userEmail, organizationId: ssoProvider.organizationId },
+      "User has no membership in organization, skipping role sync (will be handled by organizationProvisioning)",
+    );
+    return;
+  }
+
+  // Update role if it changed
+  if (existingMember.role !== result.role) {
+    await MemberModel.updateRole(
+      userId,
+      ssoProvider.organizationId,
+      result.role,
+    );
+    logger.info(
+      {
+        userId,
+        userEmail,
+        providerId,
+        organizationId: ssoProvider.organizationId,
+        previousRole: existingMember.role,
+        newRole: result.role,
+        matched: result.matched,
+      },
+      "✅ SSO role sync completed - role updated",
+    );
+  } else {
+    logger.debug(
+      {
+        userId,
+        userEmail,
+        providerId,
+        currentRole: existingMember.role,
+      },
+      "SSO role sync - no change needed",
+    );
   }
 }
 
@@ -511,6 +816,26 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
 
   const providerId = ssoAccount.providerId;
 
+  // Get the SSO provider to find the organization ID and teamSyncConfig
+  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+
+  if (!ssoProvider?.organizationId) {
+    logger.debug(
+      { providerId, userEmail },
+      "SSO provider not found or has no organization, skipping team sync",
+    );
+    return;
+  }
+
+  // Check if team sync is explicitly disabled
+  if (ssoProvider.teamSyncConfig?.enabled === false) {
+    logger.debug(
+      { providerId, userEmail },
+      "Team sync is disabled for this SSO provider",
+    );
+    return;
+  }
+
   // Decode the idToken to get groups
   // Note: better-auth stores the idToken in the account table
   if (!ssoAccount.idToken) {
@@ -526,7 +851,7 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
     const idTokenClaims = jwtDecode<Record<string, unknown>>(
       ssoAccount.idToken,
     );
-    groups = extractGroupsFromClaims(idTokenClaims);
+    groups = extractGroupsFromClaims(idTokenClaims, ssoProvider.teamSyncConfig);
     logger.debug(
       {
         providerId,
@@ -548,17 +873,6 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
     logger.debug(
       { providerId, userEmail },
       "No groups found in idToken, skipping team sync",
-    );
-    return;
-  }
-
-  // Get the SSO provider to find the organization ID
-  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
-
-  if (!ssoProvider?.organizationId) {
-    logger.debug(
-      { providerId, userEmail },
-      "SSO provider not found or has no organization, skipping team sync",
     );
     return;
   }

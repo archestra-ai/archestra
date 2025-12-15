@@ -580,7 +580,7 @@ static async findAllPaginated(
 
 ```typescript
 // Model with agentId filter
-static async getAllInteractionsForAgentPaginated(
+static async getAllInteractionsForProfilePaginated(
   agentId: string,
   pagination: PaginationQuery,
 ): Promise<PaginatedResult<Interaction>> {
@@ -618,7 +618,7 @@ fastify.get(
   },
   async ({ query: { agentId, limit, offset } }, reply) => {
     if (agentId) {
-      const result = await InteractionModel.getAllInteractionsForAgentPaginated(
+      const result = await InteractionModel.getAllInteractionsForProfilePaginated(
         agentId,
         { limit, offset },
       );

@@ -11,7 +11,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
-import { InstallationSelect } from "@/components/installation-select";
 import { LoadingSpinner } from "@/components/loading";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
@@ -53,6 +52,12 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
+import {
+  DEFAULT_FILTER_ALL,
+  DEFAULT_SORT_BY,
+  DEFAULT_TOOLS_PAGE_SIZE,
+} from "@/lib/utils";
+import type { ToolsInitialData } from "../page";
 
 type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
@@ -70,6 +75,7 @@ type ToolResultTreatment = ProfileToolData["toolResultTreatment"];
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ProfileToolData) => void;
+  initialData?: ToolsInitialData;
 }
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
@@ -86,15 +92,28 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
+export function AssignedToolsTable({
+  onToolClick,
+  initialData,
+}: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
   const unassignToolMutation = useUnassignTool();
-  const { data: invocationPolicies } = useToolInvocationPolicies();
-  const { data: resultPolicies } = useToolResultPolicies();
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
-  const { data: agents } = useProfiles();
-  const { data: mcpServers } = useMcpServers();
+  const { data: invocationPolicies } = useToolInvocationPolicies(
+    initialData?.toolInvocationPolicies,
+  );
+  const { data: resultPolicies } = useToolResultPolicies(
+    initialData?.toolResultPolicies,
+  );
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+    initialData: initialData?.internalMcpCatalog,
+  });
+  const { data: agents } = useProfiles({
+    initialData: initialData?.agents,
+  });
+  const { data: mcpServers } = useMcpServers({
+    initialData: initialData?.mcpServers,
+  });
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -113,18 +132,22 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   ) as ProfileToolsSortDirectionValues;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || "50");
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TOOLS_PAGE_SIZE);
 
   // State
   const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
-  const [agentFilter, setProfileFilter] = useState(agentIdFromUrl || "all");
-  const [originFilter, setOriginFilter] = useState(originFromUrl || "all");
+  const [agentFilter, setProfileFilter] = useState(
+    agentIdFromUrl || DEFAULT_FILTER_ALL,
+  );
+  const [originFilter, setOriginFilter] = useState(
+    originFromUrl || DEFAULT_FILTER_ALL,
+  );
   const [credentialFilter, setCredentialFilter] = useState(
-    credentialFromUrl || "all",
+    credentialFromUrl || DEFAULT_FILTER_ALL,
   );
   const [sorting, setSorting] = useState<SortingState>([
     {
-      id: sortByFromUrl || "createdAt",
+      id: sortByFromUrl || DEFAULT_SORT_BY,
       desc: sortDirectionFromUrl !== "asc",
     },
   ]);
@@ -136,7 +159,19 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
+  // Only use initialData for first page with default sorting and no filters
+  const useInitialData =
+    pageIndex === 0 &&
+    pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
+    !searchQuery &&
+    agentFilter === DEFAULT_FILTER_ALL &&
+    originFilter === DEFAULT_FILTER_ALL &&
+    credentialFilter === DEFAULT_FILTER_ALL &&
+    (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
+    sorting[0]?.desc !== false;
+
   const { data: agentToolsData, isLoading } = useAllProfileTools({
+    initialData: useInitialData ? initialData?.agentTools : undefined,
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,
@@ -532,37 +567,12 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           );
           const isLocalServer = mcpCatalogItem?.serverType === "local";
 
-          // Show InstallationSelect for local servers, TokenSelect for remote
-          if (isLocalServer) {
-            // Show dynamic value if useDynamicTeamCredential is true
-            const currentValue = row.original.useDynamicTeamCredential
-              ? DYNAMIC_CREDENTIAL_VALUE
-              : row.original.executionSourceMcpServerId;
-
-            return (
-              <InstallationSelect
-                value={currentValue}
-                onValueChange={(value) => {
-                  if (value === null) return;
-
-                  const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
-                  agentToolPatchMutation.mutate({
-                    id: row.original.id,
-                    executionSourceMcpServerId: isDynamic ? null : value,
-                    useDynamicTeamCredential: isDynamic,
-                  });
-                }}
-                catalogId={row.original.tool.catalogId ?? ""}
-                className="h-8 w-[200px] text-xs"
-                shouldSetDefaultValue={false}
-              />
-            );
-          }
-
           // Show dynamic value if useDynamicTeamCredential is true
           const currentValue = row.original.useDynamicTeamCredential
             ? DYNAMIC_CREDENTIAL_VALUE
-            : row.original.credentialSourceMcpServerId;
+            : isLocalServer
+              ? row.original.executionSourceMcpServerId
+              : row.original.credentialSourceMcpServerId;
 
           return (
             <TokenSelect
@@ -573,7 +583,11 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                 const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
                 agentToolPatchMutation.mutate({
                   id: row.original.id,
-                  credentialSourceMcpServerId: isDynamic ? null : value,
+                  ...(isLocalServer
+                    ? { executionSourceMcpServerId: isDynamic ? null : value }
+                    : {
+                        credentialSourceMcpServerId: isDynamic ? null : value,
+                      }),
                   useDynamicTeamCredential: isDynamic,
                 });
               }}
@@ -930,23 +944,23 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             {searchQuery ||
-            agentFilter !== "all" ||
-            originFilter !== "all" ||
-            credentialFilter !== "all"
+            agentFilter !== DEFAULT_FILTER_ALL ||
+            originFilter !== DEFAULT_FILTER_ALL ||
+            credentialFilter !== DEFAULT_FILTER_ALL
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
           {(searchQuery ||
-            agentFilter !== "all" ||
-            originFilter !== "all" ||
-            credentialFilter !== "all") && (
+            agentFilter !== DEFAULT_FILTER_ALL ||
+            originFilter !== DEFAULT_FILTER_ALL ||
+            credentialFilter !== DEFAULT_FILTER_ALL) && (
             <Button
               variant="outline"
               onClick={() => {
                 handleSearchChange("");
-                handleProfileFilterChange("all");
-                handleOriginFilterChange("all");
-                handleCredentialFilterChange("all");
+                handleProfileFilterChange(DEFAULT_FILTER_ALL);
+                handleOriginFilterChange(DEFAULT_FILTER_ALL);
+                handleCredentialFilterChange(DEFAULT_FILTER_ALL);
               }}
             >
               Clear all filters

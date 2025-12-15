@@ -49,8 +49,9 @@ import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
-import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
+import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -97,8 +98,12 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  // Check if API key is configured
-  const { data: chatSettings } = useChatSettingsOptional();
+  // Check if API key is configured for any provider
+  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
+  const { data: features } = useFeatures();
+  // Vertex AI Gemini mode doesn't require an API key (uses ADC)
+  const hasAnyApiKey =
+    chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -360,19 +365,19 @@ export default function ChatPage() {
   );
 
   // If API key is not configured, show setup message
-  if (chatSettings && !chatSettings.anthropicApiKeySecretId) {
+  if (!hasAnyApiKey) {
     return (
       <div className="flex h-screen items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Anthropic API Key Required</CardTitle>
+            <CardTitle>LLM Provider API Key Required</CardTitle>
             <CardDescription>
-              The chat feature requires an Anthropic API key to function.
+              The chat feature requires an LLM provider API key to function.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure your Anthropic API key in Chat Settings to start
+              Please configure an LLM provider API key in Chat Settings to start
               using the chat feature.
             </p>
             <Button asChild>

@@ -5,6 +5,7 @@ import type {
 } from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
+import { team } from "./team";
 import usersTable from "./user";
 
 const mcpServerTable = pgTable("mcp_server", {
@@ -22,6 +23,9 @@ const mcpServerTable = pgTable("mcp_server", {
     onDelete: "set null",
   }),
   ownerId: text("owner_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
+  teamId: text("team_id").references(() => team.id, {
     onDelete: "set null",
   }),
   reinstallRequired: boolean("reinstall_required").notNull().default(false),

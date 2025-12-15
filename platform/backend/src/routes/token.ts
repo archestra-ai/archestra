@@ -1,7 +1,8 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { TeamTokenModel } from "@/models";
+import { hasPermission } from "@/auth";
+import { TeamModel, TeamTokenModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -64,12 +65,26 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { tokenId } = request.params;
-      const { organizationId } = request;
+      const { organizationId, user, headers } = request;
 
       // Verify token exists and belongs to this organization
       const token = await TeamTokenModel.findById(tokenId);
       if (!token || token.organizationId !== organizationId) {
         throw new ApiError(404, "Token not found");
+      }
+
+      // Check if user is team admin
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+
+      // If not team admin, verify user is member of the token's team
+      if (!isTeamAdmin && token.teamId) {
+        const isMember = await TeamModel.isUserInTeam(token.teamId, user.id);
+        if (!isMember) {
+          throw new ApiError(403, "Not authorized to access this token");
+        }
       }
 
       // Get the decrypted token value
@@ -101,12 +116,29 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { tokenId } = request.params;
-      const { organizationId } = request;
+      const { organizationId, user, headers } = request;
 
       // Verify token exists and belongs to this organization
       const existingToken = await TeamTokenModel.findById(tokenId);
       if (!existingToken || existingToken.organizationId !== organizationId) {
         throw new ApiError(404, "Token not found");
+      }
+
+      // Check if user is team admin
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+
+      // If not team admin, verify user is member of the token's team
+      if (!isTeamAdmin && existingToken.teamId) {
+        const isMember = await TeamModel.isUserInTeam(
+          existingToken.teamId,
+          user.id,
+        );
+        if (!isMember) {
+          throw new ApiError(403, "Not authorized to rotate this token");
+        }
       }
 
       // Rotate the token

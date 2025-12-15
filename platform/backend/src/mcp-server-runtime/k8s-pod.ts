@@ -679,6 +679,14 @@ export default class K8sPod {
           return true;
         }
       }
+
+      // If neither value nor valueFrom is defined for both env vars, treat as different (invalid spec)
+      if (
+        !desiredUsesValue && !existingUsesValue &&
+        !desiredUsesValueFrom && !existingUsesValueFrom
+      ) {
+        return true;
+      }
     }
 
     // Check if any existing env vars are missing in desired

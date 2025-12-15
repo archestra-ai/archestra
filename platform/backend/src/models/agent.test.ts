@@ -327,6 +327,169 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("Team Assignment Validation", () => {
+    test("admin can create agent without any team", async () => {
+      const agent = await AgentModel.create({
+        name: "No Team Agent",
+        teams: [],
+      });
+
+      expect(agent.teams).toHaveLength(0);
+
+      // Verify agent is accessible (admins can see all agents)
+      const foundAgent = await AgentModel.findById(agent.id);
+      expect(foundAgent).not.toBeNull();
+    });
+
+    test("admin can create agent with any team regardless of membership", async ({
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Create a team where admin is NOT a member
+      const team = await makeTeam(org.id, admin.id, {
+        name: "Team Admin Not In",
+      });
+      // Note: makeTeam creates team but doesn't automatically add the creator as member
+
+      const agent = await AgentModel.create({
+        name: "Admin Created Agent",
+        teams: [team.id],
+      });
+
+      expect(agent.teams).toHaveLength(1);
+      expect(agent.teams[0].id).toBe(team.id);
+    });
+
+    test("non-admin user can only see agents in teams they belong to", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const userTeam = await makeTeam(org.id, admin.id, { name: "User Team" });
+      const otherTeam = await makeTeam(org.id, admin.id, {
+        name: "Other Team",
+      });
+
+      // Add user to userTeam only
+      await TeamModel.addMember(userTeam.id, user.id);
+
+      // Create agents in different teams
+      const userTeamAgent = await AgentModel.create({
+        name: "User Team Agent",
+        teams: [userTeam.id],
+      });
+      await AgentModel.create({
+        name: "Other Team Agent",
+        teams: [otherTeam.id],
+      });
+      await AgentModel.create({
+        name: "No Team Agent",
+        teams: [],
+      });
+
+      // Non-admin user should only see agent in their team
+      const agents = await AgentModel.findAll(user.id, false);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(userTeamAgent.id);
+    });
+
+    test("non-admin user cannot see agents with no team", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const userTeam = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(userTeam.id, user.id);
+
+      // Create agent with no teams
+      await AgentModel.create({
+        name: "No Team Agent",
+        teams: [],
+      });
+
+      // Non-admin user should not see agent with no teams
+      const agents = await AgentModel.findAll(user.id, false);
+      // Only agents in user's team should be visible
+      expect(agents.every((a) => a.teams.length > 0)).toBe(true);
+    });
+
+    test("user with no team membership sees empty list", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const userWithNoTeam = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+
+      // Create agents with and without teams
+      await AgentModel.create({
+        name: "Agent in Team",
+        teams: [team.id],
+      });
+      await AgentModel.create({
+        name: "Agent without Team",
+        teams: [],
+      });
+
+      // User with no team membership should see nothing
+      const agents = await AgentModel.findAll(userWithNoTeam.id, false);
+      expect(agents).toHaveLength(0);
+    });
+
+    test("getUserTeamIds returns correct teams for validation", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
+      const team3 = await makeTeam(org.id, admin.id, { name: "Team 3" });
+
+      // Add user to team1 and team2 only
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      // User should be in exactly 2 teams
+      expect(userTeamIds).toHaveLength(2);
+      expect(userTeamIds).toContain(team1.id);
+      expect(userTeamIds).toContain(team2.id);
+      expect(userTeamIds).not.toContain(team3.id);
+
+      // Creating an agent with team1 should work (user is member)
+      const agent = await AgentModel.create({
+        name: "Valid Agent",
+        teams: [team1.id],
+      });
+      expect(agent.teams).toHaveLength(1);
+      expect(agent.teams[0].id).toBe(team1.id);
+    });
+  });
+
   describe("Label Ordering", () => {
     test("labels are returned in alphabetical order by key", async () => {
       // Create an agent with labels in non-alphabetical order

@@ -30,7 +30,6 @@ export async function addCustomSelfHostedCatalogItem({
     promptOnInstallation: boolean;
   };
 }) {
-  // Go to Add MCP Server page
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Add MCP Server" }).click();

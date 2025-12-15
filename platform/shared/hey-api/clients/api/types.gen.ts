@@ -9272,6 +9272,85 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
+export type DeleteInternalMcpCatalogItemByNameData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/by-name/{name}';
+};
+
+export type DeleteInternalMcpCatalogItemByNameErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteInternalMcpCatalogItemByNameError = DeleteInternalMcpCatalogItemByNameErrors[keyof DeleteInternalMcpCatalogItemByNameErrors];
+
+export type DeleteInternalMcpCatalogItemByNameResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteInternalMcpCatalogItemByNameResponse = DeleteInternalMcpCatalogItemByNameResponses[keyof DeleteInternalMcpCatalogItemByNameResponses];
+
 export type GetV1McpData = {
     body?: never;
     path?: never;

@@ -359,6 +359,15 @@ export default class K8sPod {
                   },
                 ]
               : undefined,
+            // Set resource requests for the container
+            // It's needed to make k8s scheduler play nice with mcp server pods,
+            // since k8s schedules pods and nodes based on resource requests and limits.
+            resources: {
+              requests: {
+                memory: "128Mi",
+                cpu: "50m",
+              },
+            },
           },
         ],
         restartPolicy: "Always",

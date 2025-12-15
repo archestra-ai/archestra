@@ -69,15 +69,11 @@ export function LocalServerInstallDialog({
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
   >(() =>
-    promptedEnvVars.reduce<Record<string, string>>(
-      (acc, env) => {
-        const defaultValue =
-          env.default !== undefined ? String(env.default) : "";
-        acc[env.key] = env.value || defaultValue;
-        return acc;
-      },
-      {},
-    ),
+    promptedEnvVars.reduce<Record<string, string>>((acc, env) => {
+      const defaultValue = env.default !== undefined ? String(env.default) : "";
+      acc[env.key] = env.value || defaultValue;
+      return acc;
+    }, {}),
   );
 
   // BYOS (Bring Your Own Secrets) state - per-field vault references

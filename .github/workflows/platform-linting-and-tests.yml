@@ -109,13 +109,19 @@ jobs:
           cp .env.example .env
           sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
-      - name: Create kind cluster only (without platform deployment)
+      - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        uses: ./.github/actions/setup-archestra-platform
         with:
-          config: .github/kind.yaml
-          cluster_name: archestra-ci-cluster
-          install_only: false
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          build-platform-image: "true"
+          platform-image-tag: archestra/platform:ci-test
+          platform-context: ./platform
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       - name: Start HashiCorp Vault
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -142,19 +148,13 @@ jobs:
           docker exec archestra-ci-cluster-control-plane curl -s http://archestra-vault:8200/v1/sys/health
           echo "Vault is accessible from kind cluster at archestra-vault:8200"
 
-      - name: Deploy Archestra Platform
+      - name: Restart backend to connect to Vault
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/setup-archestra-platform
-        with:
-          kind-config-path: .github/kind.yaml
-          kind-cluster-name: archestra-ci-cluster
-          helm-values-path: .github/values-ci.yaml
-          deploy-e2e-dependencies: "true"
-          build-platform-image: "true"
-          platform-image-tag: archestra/platform:ci-test
-          platform-context: ./platform
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+        run: |
+          # Restart the backend pod so it can connect to Vault (which was started after initial deployment)
+          kubectl rollout restart deployment/archestra-platform
+          kubectl rollout status deployment/archestra-platform --timeout=120s
+          echo "Backend restarted and ready"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check

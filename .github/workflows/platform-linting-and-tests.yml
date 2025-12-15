@@ -134,16 +134,13 @@ jobs:
           timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
           echo "Vault is ready on host at localhost:8200"
 
-          # Get Vault's IP address on the default bridge network
-          VAULT_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' archestra-vault)
-          echo "Vault IP on bridge network: $VAULT_IP"
+          # Connect Vault to kind network so pods can access it
+          docker network connect kind archestra-vault
+          echo "Vault connected to kind network"
 
-          # Verify Vault is accessible from kind cluster using Vault's IP
-          docker exec archestra-ci-cluster-control-plane curl -s http://$VAULT_IP:8200/v1/sys/health
-          echo "Vault is accessible from kind cluster at $VAULT_IP:8200"
-
-          # Store Vault IP for use in Helm deployment
-          echo "VAULT_IP=$VAULT_IP" >> $GITHUB_ENV
+          # Verify Vault is accessible from kind cluster using container name
+          docker exec archestra-ci-cluster-control-plane curl -s http://archestra-vault:8200/v1/sys/health
+          echo "Vault is accessible from kind cluster at archestra-vault:8200"
 
       - name: Deploy Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

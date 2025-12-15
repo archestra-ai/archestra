@@ -138,7 +138,6 @@ runs:
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
-          $(if [ -n "${VAULT_IP}" ]; then echo "--set archestra.env.ARCHESTRA_HASHICORP_VAULT_ADDR=http://${VAULT_IP}:8200"; fi) \
           --wait --timeout=5m
 
     - name: Verify deployment

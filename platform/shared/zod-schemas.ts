@@ -32,6 +32,7 @@ export const EnvironmentVariableSchema = z.object({
   promptOnInstallation: z.boolean(), // Whether to prompt user during installation
   required: z.boolean().optional(), // Whether this env var is required during installation (only applies when promptOnInstallation is true, defaults to false)
   description: z.string().optional(), // Optional description to show in installation dialog
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value to pre-populate in installation dialog
 });
 
 export const LocalConfigSchema = z

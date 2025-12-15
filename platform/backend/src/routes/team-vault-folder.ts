@@ -31,7 +31,7 @@ function assertByosEnabled(): BYOSVaultSecretManager {
   }
 
   // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
-  return secretManager as BYOSVaultSecretManager;
+  return secretManager() as BYOSVaultSecretManager;
 }
 
 // Response schemas

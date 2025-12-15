@@ -98,9 +98,18 @@ export class SecretsManagerConfigurationError extends Error {
 }
 
 class SecretManager {
+  private static initialized = false;
   private currentInstance: ISecretManager | null = null;
   private managerType: SecretsManagerType =
     getSecretsManagerTypeBasedOnEnvVars();
+
+  constructor() {
+    if (SecretManager.initialized) {
+      throw new Error("SecretManager already initialized");
+    }
+    this.initialize();
+    SecretManager.initialized = true;
+  }
 
   initialize(managerType?: SecretsManagerType) {
     this.managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
@@ -1676,7 +1685,9 @@ export function getByosVaultKvVersion(): VaultKvVersion | null {
  * Default secret manager instance (uses configured backend)
  */
 export const secretManagerCoordinator = new SecretManager();
-export const secretManager = secretManagerCoordinator.initialize();
+export function secretManager(): ISecretManager {
+  return secretManagerCoordinator.getCurrentInstance();
+}
 
 /**
  * Check if BYOS (Bring Your Own Secrets) feature is enabled

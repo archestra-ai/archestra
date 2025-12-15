@@ -187,7 +187,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // userConfigValues already contains vault references in "path#key" format
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             userConfigValues as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
@@ -208,7 +208,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
             );
           }
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             { access_token: accessToken },
             `${serverData.name}-token`,
           );
@@ -227,7 +227,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!isValid) {
             // Clean up the secret we just created if validation fails
             if (createdSecretId) {
-              secretManager.deleteSecret(createdSecretId);
+              secretManager().deleteSecret(createdSecretId);
             }
 
             throw new ApiError(
@@ -291,7 +291,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager.createSecret(
+            const secret = await secretManager().createSecret(
               secretEnvVars,
               `${serverData.name}-vault-secret`,
             );
@@ -343,7 +343,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager.createSecret(
+            const secret = await secretManager().createSecret(
               secretEnvVars,
               `mcp-server-${serverData.name}-env`,
             );
@@ -554,7 +554,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Also clean up the secret if we created one
         if (createdSecretId) {
-          await secretManager.deleteSecret(createdSecretId);
+          await secretManager().deleteSecret(createdSecretId);
         }
 
         throw new ApiError(
@@ -607,7 +607,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // (don't delete OAuth tokens for remote servers)
       if (mcpServer.secretId && mcpServer.serverType === "local") {
         try {
-          await secretManager.deleteSecret(mcpServer.secretId);
+          await secretManager().deleteSecret(mcpServer.secretId);
           logger.info(
             { mcpServerId },
             "Deleted database secret for local MCP server",

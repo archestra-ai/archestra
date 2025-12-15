@@ -82,7 +82,7 @@ async function getSmartDefaultModel(
     );
 
     if (profileApiKey?.secretId) {
-      const secret = await secretManager.getSecret(profileApiKey.secretId);
+      const secret = await secretManager().getSecret(profileApiKey.secretId);
       const secretValue =
         secret?.secret?.apiKey ??
         secret?.secret?.anthropicApiKey ??
@@ -226,7 +226,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (profileApiKey?.secretId) {
-        const secret = await secretManager.getSecret(profileApiKey.secretId);
+        const secret = await secretManager().getSecret(profileApiKey.secretId);
         // Support both old format (anthropicApiKey) and new format (apiKey)
         const secretValue =
           secret?.secret?.apiKey ??
@@ -249,7 +249,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           provider,
         );
         if (orgDefault?.secretId) {
-          const secret = await secretManager.getSecret(orgDefault.secretId);
+          const secret = await secretManager().getSecret(orgDefault.secretId);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
             secret?.secret?.apiKey ??
@@ -767,7 +767,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         if (profileApiKey?.secretId) {
-          const secret = await secretManager.getSecret(profileApiKey.secretId);
+          const secret = await secretManager().getSecret(
+            profileApiKey.secretId,
+          );
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
             secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
@@ -784,7 +786,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "anthropic",
         );
         if (orgDefault?.secretId) {
-          const secret = await secretManager.getSecret(orgDefault.secretId);
+          const secret = await secretManager().getSecret(orgDefault.secretId);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
             secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;

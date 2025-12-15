@@ -34,7 +34,7 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(secretManager.getUserVisibleDebugInfo());
+      return reply.send(secretManager().getUserVisibleDebugInfo());
     },
   );
 
@@ -92,7 +92,7 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const result = await secretManager.checkConnectivity();
+      const result = await secretManager().checkConnectivity();
       return reply.send(result);
     },
   );

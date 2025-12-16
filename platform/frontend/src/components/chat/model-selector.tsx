@@ -60,29 +60,26 @@ export function ModelSelector({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Determine which providers have API keys configured
-  const configuredProviders = new Set<SupportedProvider>();
+  // Build available providers based on configured API keys
+  const availableProviders = useMemo(() => {
+    const configuredProviders = new Set<SupportedProvider>();
 
-  // Check API keys for each provider
-  for (const key of chatApiKeys) {
-    if (key.secretId && key.provider) {
-      configuredProviders.add(key.provider);
+    // Check API keys for each provider
+    for (const key of chatApiKeys) {
+      if (key.secretId && key.provider) {
+        configuredProviders.add(key.provider);
+      }
     }
-  }
 
-  // Gemini with Vertex AI doesn't require an API key
-  if (features?.geminiVertexAiEnabled) {
-    configuredProviders.add("gemini");
-  }
+    // Gemini with Vertex AI doesn't require an API key
+    if (features?.geminiVertexAiEnabled) {
+      configuredProviders.add("gemini");
+    }
 
-  // Build available models based on configured providers
-  const availableProviders = useMemo(
-    () =>
-      (Object.keys(modelsByProvider) as SupportedProvider[]).filter(
-        (provider) => configuredProviders.has(provider),
-      ),
-    [configuredProviders],
-  );
+    return (Object.keys(modelsByProvider) as SupportedProvider[]).filter(
+      (provider) => configuredProviders.has(provider),
+    );
+  }, [chatApiKeys, features?.geminiVertexAiEnabled]);
 
   // Filter models based on search query
   const filteredProviderModels = useMemo(() => {

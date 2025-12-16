@@ -620,5 +620,11 @@ The following environment variables can be used to configure Archestra Platform:
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
+- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
+
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`
+  - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
+
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
   - Please reach out to sales@archestra.ai to learn more about the license.

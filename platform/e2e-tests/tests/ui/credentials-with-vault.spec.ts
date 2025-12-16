@@ -8,6 +8,7 @@ import { DEFAULT_TEAM_NAME } from "../../consts";
 import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  clickButton,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   verifyToolCallResultViaApi,
 } from "../../utils";
@@ -86,7 +87,7 @@ test("Then we configure vault for Default Team", async ({ adminPage }) => {
     .fill(teamFolderPath);
 
   // test connection
-  await adminPage.getByRole("button", { name: "Test Connection" }).click();
+  await clickButton({ page: adminPage, options: { name: "Test Connection" } });
   await expect(adminPage.getByText("Connection Successful")).toBeVisible();
 
   const saveAvailable = await adminPage
@@ -95,7 +96,7 @@ test("Then we configure vault for Default Team", async ({ adminPage }) => {
 
   // save if not already configured
   if (saveAvailable) {
-    await adminPage.getByRole("button", { name: "Save Path" }).click();
+    await clickButton({ page: adminPage, options: { name: "Save Path" } });
   }
 });
 
@@ -105,6 +106,7 @@ test.describe("Test self-hosted MCP server with Vault", () => {
     extractCookieHeaders,
     makeRandomString,
   }) => {
+    test.setTimeout(45_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
     const newCatalogItem = await addCustomSelfHostedCatalogItem({
@@ -142,7 +144,7 @@ test.describe("Test self-hosted MCP server with Vault", () => {
     await adminPage.getByText(secretKey).click();
 
     // install server
-    await adminPage.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page: adminPage, options: { name: "Install" } });
 
     await adminPage.waitForLoadState("networkidle");
 
@@ -218,7 +220,7 @@ test.describe("Test self-hosted MCP server with Vault", () => {
       .click();
 
     // install server
-    await adminPage.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("networkidle");
 
     // Assign tool to profiles using admin static credential

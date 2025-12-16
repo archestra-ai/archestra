@@ -1,5 +1,6 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
+import { clickButton } from "../../utils";
 
 test.describe("Chat Settings UI", () => {
   test.beforeEach(async ({ page, goToPage }) => {
@@ -63,7 +64,7 @@ test.describe("Chat Settings UI", () => {
       .fill("sk-ant-test-key-12345");
 
     // Click Create button
-    await page.getByRole("button", { name: "Create" }).click();
+    await clickButton({ page, options: { name: "Create" } });
 
     // Wait for the dialog to close and table to update
     await expect(page.getByText("API key created successfully")).toBeVisible({
@@ -79,7 +80,7 @@ test.describe("Chat Settings UI", () => {
     await page
       .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
       .click();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
   });
 
   test("should edit an API key name", async ({
@@ -102,7 +103,7 @@ test.describe("Chat Settings UI", () => {
     await page
       .getByRole("textbox", { name: /API Key/i })
       .fill("sk-ant-edit-test-key");
-    await page.getByRole("button", { name: "Create" }).click();
+    await clickButton({ page, options: { name: "Create" } });
     await expect(page.getByText("API key created successfully")).toBeVisible({
       timeout: 5000,
     });
@@ -115,7 +116,7 @@ test.describe("Chat Settings UI", () => {
     // Update the name
     await page.getByLabel(/Name/i).clear();
     await page.getByLabel(/Name/i).fill(updatedName);
-    await page.getByRole("button", { name: "Save" }).click();
+    await clickButton({ page, options: { name: "Save" } });
 
     // Verify the name was updated
     await expect(page.getByText("API key updated successfully")).toBeVisible({
@@ -129,7 +130,7 @@ test.describe("Chat Settings UI", () => {
     await page
       .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${updatedName}`)
       .click();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
   });
 
   test("should delete an API key", async ({
@@ -151,7 +152,7 @@ test.describe("Chat Settings UI", () => {
     await page
       .getByRole("textbox", { name: /API Key/i })
       .fill("sk-ant-delete-test-key");
-    await page.getByRole("button", { name: "Create" }).click();
+    await clickButton({ page, options: { name: "Create" } });
     await expect(page.getByText("API key created successfully")).toBeVisible({
       timeout: 5000,
     });
@@ -165,7 +166,7 @@ test.describe("Chat Settings UI", () => {
     await expect(
       page.getByText(`Are you sure you want to delete "${keyName}"`),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
 
     // Verify the key was deleted
     await expect(page.getByText("API key deleted successfully")).toBeVisible({
@@ -195,7 +196,7 @@ test.describe("Chat Settings UI", () => {
     await page
       .getByRole("textbox", { name: /API Key/i })
       .fill("sk-ant-default-test-key");
-    await page.getByRole("button", { name: "Create" }).click();
+    await clickButton({ page, options: { name: "Create" } });
     await expect(page.getByText("API key created successfully")).toBeVisible({
       timeout: 5000,
     });
@@ -222,6 +223,6 @@ test.describe("Chat Settings UI", () => {
     await page
       .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
       .click();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
   });
 });

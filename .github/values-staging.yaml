@@ -1,6 +1,13 @@
 archestra:
   replicaCount: 4
 
+  # Faster rolling updates: allow 2 pods to be created at once
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: "50%"
+
   # Vertex AI Gemini configuration
   # Uses Application Default Credentials (ADC) via GKE Workload Identity
   # instead of API keys for authentication

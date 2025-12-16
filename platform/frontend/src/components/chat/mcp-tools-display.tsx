@@ -2,7 +2,7 @@
 
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Loader2, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AssignToolsDialog } from "@/app/profiles/assign-tools-dialog";
 import {
   Tooltip,
@@ -12,17 +12,34 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
-import { Button } from "../ui/button";
 
 interface McpToolsDisplayProps {
   agentId: string;
   className?: string;
 }
 
+function AssignToolsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border bg-background text-foreground text-xs hover:bg-accent hover:text-accent-foreground cursor-pointer"
+      onClick={onClick}
+      title="Add more tools"
+    >
+      <Plus className="h-3 w-3" />
+      Assign tools to profile
+    </button>
+  );
+}
+
 export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
   const { data: mcpTools = [], isLoading } = useChatProfileMcpTools(agentId);
   const { data: agent } = useProfile(agentId);
   const [isAssignToolsDialogOpen, setIsAssignToolsDialogOpen] = useState(false);
+  const openAssignToolsDialog = useCallback(
+    () => setIsAssignToolsDialogOpen(true),
+    [],
+  );
 
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = useMemo(
@@ -46,7 +63,7 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
     [mcpTools],
   );
 
-  if (isLoading) {
+  if (isLoading || !agent) {
     return (
       <div className={className}>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -60,24 +77,12 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
   if (Object.keys(groupedTools).length === 0) {
     return (
       <>
-        {agent && (
-          <Button
-            variant="outline"
-            className="inline-flex items-center justify-center"
-            onClick={() => setIsAssignToolsDialogOpen(true)}
-            title="Add more tools"
-          >
-            <Plus className="h-3 w-3" />
-            Assign tools to profile
-          </Button>
-        )}
-        {agent && (
-          <AssignToolsDialog
-            agent={agent}
-            open={isAssignToolsDialogOpen}
-            onOpenChange={setIsAssignToolsDialogOpen}
-          />
-        )}
+        <AssignToolsButton onClick={openAssignToolsDialog} />
+        <AssignToolsDialog
+          agent={agent}
+          open={isAssignToolsDialogOpen}
+          onOpenChange={setIsAssignToolsDialogOpen}
+        />
       </>
     );
   }
@@ -87,9 +92,9 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {Object.entries(groupedTools).map(([serverName, tools]) => (
-            <Tooltip key={serverName}>
+            <Tooltip key={serverName} delayDuration={300}>
               <TooltipTrigger asChild>
-                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-secondary-foreground cursor-default">
                   <span className="font-medium text-xs">{serverName}</span>
                   <span className="text-muted-foreground text-xs">
                     ({tools.length} {tools.length === 1 ? "tool" : "tools"})
@@ -97,8 +102,10 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
                 </div>
               </TooltipTrigger>
               <TooltipContent
-                side="top"
-                className="max-w-sm max-h-64 overflow-y-auto"
+                side="bottom"
+                align="center"
+                avoidCollisions={true}
+                className="max-w-xs max-h-48 overflow-y-auto text-xs"
                 onWheel={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
               >
@@ -127,26 +134,14 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
               </TooltipContent>
             </Tooltip>
           ))}
-          {agent && (
-            <Button
-              variant="outline"
-              className="inline-flex items-center justify-center"
-              onClick={() => setIsAssignToolsDialogOpen(true)}
-              title="Add more tools"
-            >
-              <Plus className="h-3 w-3" />
-              Assign tools to profile
-            </Button>
-          )}
+          <AssignToolsButton onClick={openAssignToolsDialog} />
         </div>
       </TooltipProvider>
-      {agent && (
-        <AssignToolsDialog
-          agent={agent}
-          open={isAssignToolsDialogOpen}
-          onOpenChange={setIsAssignToolsDialogOpen}
-        />
-      )}
+      <AssignToolsDialog
+        agent={agent}
+        open={isAssignToolsDialogOpen}
+        onOpenChange={setIsAssignToolsDialogOpen}
+      />
     </div>
   );
 }

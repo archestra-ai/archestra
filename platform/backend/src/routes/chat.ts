@@ -17,6 +17,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   ChatApiKeyModel,
+  ConversationEnabledToolModel,
   ConversationModel,
   MessageModel,
   PromptModel,
@@ -163,16 +164,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch MCP tools and agent prompts in parallel
-      const [mcpTools, prompt] = await Promise.all([
-        getChatMcpTools({
-          agentName: conversation.agent.name,
-          agentId: conversation.agentId,
-          userId: user.id,
-          userIsProfileAdmin,
-        }),
+      // Fetch enabled tool IDs, MCP tools, and agent prompts in parallel
+      const [enabledToolIds, prompt] = await Promise.all([
+        ConversationEnabledToolModel.findByConversation(conversationId),
         PromptModel.findById(conversation.promptId),
       ]);
+
+      // Fetch MCP tools with enabled tool filtering
+      const mcpTools = await getChatMcpTools({
+        agentName: conversation.agent.name,
+        agentId: conversation.agentId,
+        userId: user.id,
+        userIsProfileAdmin,
+        enabledToolIds,
+      });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
@@ -331,6 +336,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else {
         throw new ApiError(400, `Unsupported provider: ${provider}`);
       }
+
+      console.log("HEEERE", mcpTools);
 
       // Stream with AI SDK
       // Build streamText config conditionally
@@ -859,6 +866,123 @@ The title should capture the main topic or theme of the conversation. Respond wi
         // Return the conversation without title update on error
         return reply.send(conversation);
       }
+    },
+  );
+
+  // Enabled Tools Routes
+
+  fastify.get(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.GetConversationEnabledTools,
+        description:
+          "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.object({
+            hasCustomSelection: z.boolean(),
+            enabledToolIds: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const [hasCustomSelection, enabledToolIds] = await Promise.all([
+        ConversationEnabledToolModel.hasCustomSelection(id),
+        ConversationEnabledToolModel.findByConversation(id),
+      ]);
+
+      return reply.send({
+        hasCustomSelection,
+        enabledToolIds,
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.UpdateConversationEnabledTools,
+        description:
+          "Set enabled tools for a conversation. Replaces all existing selections.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          toolIds: z.array(z.string()),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            hasCustomSelection: z.boolean(),
+            enabledToolIds: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async (
+      { params: { id }, body: { toolIds }, user, organizationId },
+      reply,
+    ) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationEnabledToolModel.setEnabledTools(id, toolIds);
+
+      return reply.send({
+        hasCustomSelection: toolIds.length > 0,
+        enabledToolIds: toolIds,
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.DeleteConversationEnabledTools,
+        description:
+          "Clear custom tool selection for a conversation (revert to all tools enabled)",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationEnabledToolModel.clearCustomSelection(id);
+
+      return reply.send({ success: true });
     },
   );
 };

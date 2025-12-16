@@ -428,6 +428,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
   },
+  [RouteId.GetConversationEnabledTools]: {
+    conversation: ["read"],
+  },
+  [RouteId.UpdateConversationEnabledTools]: {
+    conversation: ["update"],
+  },
+  [RouteId.DeleteConversationEnabledTools]: {
+    conversation: ["update"],
+  },
   [RouteId.GetChatApiKeys]: {
     chatSettings: ["read"],
   },

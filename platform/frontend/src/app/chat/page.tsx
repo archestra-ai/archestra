@@ -24,6 +24,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { ManageChatToolsDialog } from "@/components/chat/manage-chat-tools-dialog";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
@@ -52,6 +53,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
+  useConversationEnabledTools,
   useCreateConversation,
   useUpdateConversation,
 } from "@/lib/chat.query";
@@ -85,6 +87,12 @@ export default function ChatPage() {
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     "custom-request" | "create-catalog"
   >();
+
+  // State for manage tools dialog
+  const [isManageToolsDialogOpen, setIsManageToolsDialogOpen] = useState(false);
+  const [initialDisabledToolIds, setInitialDisabledToolIds] = useState<
+    string[]
+  >([]);
 
   // Check if user can create catalog items directly
   const { data: canCreateCatalog } = useHasPermissions({
@@ -140,8 +148,21 @@ export default function ChatPage() {
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
 
+  // Fetch enabled tools for the conversation
+  const { data: enabledToolsData } =
+    useConversationEnabledTools(conversationId);
+
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
+
+  // Handler to open manage tools dialog with specific tools to disable
+  const handleOpenManageToolsDialog = useCallback(
+    (toolIdsToDisable: string[]) => {
+      setInitialDisabledToolIds(toolIdsToDisable);
+      setIsManageToolsDialogOpen(true);
+    },
+    [],
+  );
 
   // Handle model change with error handling
   const handleModelChange = useCallback(
@@ -607,6 +628,11 @@ export default function ChatPage() {
                       <McpToolsDisplay
                         agentId={currentProfileId}
                         className="text-xs text-muted-foreground"
+                        hasCustomSelection={
+                          enabledToolsData?.hasCustomSelection ?? false
+                        }
+                        enabledToolIds={enabledToolsData?.enabledToolIds ?? []}
+                        onOpenManageDialog={handleOpenManageToolsDialog}
                       />
                     ) : (
                       <Badge variant="outline" className="text-xs my-2">
@@ -642,6 +668,15 @@ export default function ChatPage() {
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
       />
+      {conversationId && currentProfileId && (
+        <ManageChatToolsDialog
+          open={isManageToolsDialogOpen}
+          onOpenChange={setIsManageToolsDialogOpen}
+          conversationId={conversationId}
+          agentId={currentProfileId}
+          initialDisabledToolIds={initialDisabledToolIds}
+        />
+      )}
     </div>
   );
 }

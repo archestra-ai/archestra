@@ -7023,6 +7023,247 @@ export type GenerateChatConversationTitleResponses = {
 
 export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
 
+export type DeleteConversationEnabledToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/enabled-tools';
+};
+
+export type DeleteConversationEnabledToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteConversationEnabledToolsError = DeleteConversationEnabledToolsErrors[keyof DeleteConversationEnabledToolsErrors];
+
+export type DeleteConversationEnabledToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteConversationEnabledToolsResponse = DeleteConversationEnabledToolsResponses[keyof DeleteConversationEnabledToolsResponses];
+
+export type GetConversationEnabledToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/enabled-tools';
+};
+
+export type GetConversationEnabledToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetConversationEnabledToolsError = GetConversationEnabledToolsErrors[keyof GetConversationEnabledToolsErrors];
+
+export type GetConversationEnabledToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasCustomSelection: boolean;
+        enabledToolIds: Array<string>;
+    };
+};
+
+export type GetConversationEnabledToolsResponse = GetConversationEnabledToolsResponses[keyof GetConversationEnabledToolsResponses];
+
+export type UpdateConversationEnabledToolsData = {
+    body: {
+        toolIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/enabled-tools';
+};
+
+export type UpdateConversationEnabledToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateConversationEnabledToolsError = UpdateConversationEnabledToolsErrors[keyof UpdateConversationEnabledToolsErrors];
+
+export type UpdateConversationEnabledToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasCustomSelection: boolean;
+        enabledToolIds: Array<string>;
+    };
+};
+
+export type UpdateConversationEnabledToolsResponse = UpdateConversationEnabledToolsResponses[keyof UpdateConversationEnabledToolsResponses];
+
 export type GetDefaultDualLlmConfigData = {
     body?: never;
     path?: never;

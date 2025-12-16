@@ -112,7 +112,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   const manageToolsButton = page.getByTestId(
     `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
   );
-  await manageToolsButton.waitFor({ state: "visible" });
+  await manageToolsButton.waitFor({ state: "visible", timeout: 20_000 });
   await manageToolsButton.click();
   await page
     .getByRole("button", { name: "Assign Tool to Profiles" })

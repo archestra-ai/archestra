@@ -667,7 +667,7 @@ test.describe("SSO Team Sync E2E", () => {
         .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
         .click();
 
-      await expect(ssoPage.getByRole("dialog")).toBeVisible();
+      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
 
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with

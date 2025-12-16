@@ -662,8 +662,7 @@ test.describe("SSO Team Sync E2E", () => {
         .locator(".rounded-lg.border.p-4")
         .filter({ hasText: teamName });
 
-      await syncedTeamRow;
-      await page
+      await syncedTeamRow
         .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
         .click();
 

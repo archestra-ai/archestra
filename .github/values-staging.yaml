@@ -1,10 +1,37 @@
 archestra:
   replicaCount: 4
 
+  # Faster rolling updates: allow 2 pods to be created at once
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: "50%"
+
+  # Vertex AI Gemini configuration
+  # Uses Application Default Credentials (ADC) via GKE Workload Identity
+  # instead of API keys for authentication
+  env:
+    ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
+    ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
+    ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
+
+  # Orchestrator configuration with Workload Identity for Vertex AI
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        # GKE Workload Identity binding to allow Vertex AI access via ADC
+        # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)
+        # is created and bound in the archestra-ai/infra repo (gke/main.tf)
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+
   service:
     annotations:
       # GKE BackendConfig for custom health checks
-      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+      # Maps backend port (9000) and frontend port (3000) to their respective BackendConfigs
+      # These BackendConfigs are defined in archestra-ai/infra repo (gke/ingress.tf)
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config", "3000":"archestra-platform-frontend-config"}}'
 
   ingress:
     enabled: true

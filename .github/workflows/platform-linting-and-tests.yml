@@ -7,6 +7,11 @@ on:
         description: "Whether to force the checks to succeed"
         required: false
         type: boolean
+      is-release-please-pr:
+        description: "Whether this is a release-please PR (enables auto-commit of codegen changes)"
+        required: false
+        type: boolean
+        default: false
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN:
         required: true
@@ -16,6 +21,13 @@ on:
         required: true
       DOCKER_PASSWORD:
         required: true
+      # Required for release-please PRs to push codegen changes with a token that triggers workflow re-runs
+      # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
+      # see https://stackoverflow.com/a/67551255
+      ARCHESTRA_RELEASER_GITHUB_APP_ID:
+        required: false
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
+        required: false
 
 jobs:
   paths-filter:
@@ -79,13 +91,35 @@ jobs:
     name: Platform e2e Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
-      contents: read
+      contents: write
     steps:
+      # Generate a GitHub App token for release-please PRs
+      # This is needed because pushes made with GITHUB_TOKEN do not trigger workflow re-runs,
+      # but pushes made with a GitHub App token DO trigger workflows.
+      # This allows the codegen commit to properly re-trigger CI checks.
+      #
+      # see https://stackoverflow.com/a/67551255
+      - name: Generate token for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        id: generate-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
+          # Persist credentials for release-please PRs to allow auto-committing codegen changes
+          persist-credentials: ${{ inputs.is-release-please-pr }} # zizmor: ignore[artipacked] -- persist-credentials is conditionally true only for release-please PRs
+          # For release-please PRs, checkout the actual PR branch (not the merge commit)
+          # to avoid detached HEAD state which would cause git push to fail
+          ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          # Use the GitHub App token for release-please PRs so that the codegen commit push
+          # triggers a new workflow run (pushes with GITHUB_TOKEN don't trigger workflows)
+          # see https://stackoverflow.com/a/67551255
+          token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -96,79 +130,36 @@ jobs:
       - name: Setup environment variables
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
-        run: cp .env.example .env
-
-      - name: Install Kind
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
-        with:
-          config: .github/kind.yaml
-          cluster_name: archestra-ci-cluster
-          install_only: false
-
-      - name: Debug Kind cluster
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          echo "=== Kind version ==="
-          kind version
-          echo "=== Available clusters ==="
-          kind get clusters || echo "No clusters found"
-          echo "=== Docker containers ==="
-          docker ps -a | grep kind || echo "No kind containers found"
-          echo "=== Kubectl context ==="
-          kubectl config current-context || echo "No kubectl context"
-          echo "=== Kubectl cluster info ==="
-          kubectl cluster-info || echo "Cluster info failed"
+          cp .env.example .env
+          sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
-      - name: Build Docker image
+      - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: ./.github/actions/build-platform-docker-image
+        uses: ./.github/actions/setup-archestra-platform
         with:
-          context: ./platform
-          load: "true"
-          tags: archestra/platform:ci-test
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          build-platform-image: "true"
+          platform-image-tag: archestra/platform:ci-test
+          platform-context: ./platform
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Load Docker image into kind
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
-
-      - name: Deploy Archestra Platform (and E2E test dependencies) with Helm
+      - name: Deploy HashiCorp Vault in Kubernetes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          # Deploy e2e test dependencies (WireMock, Keycloak)
-          # Test users defined in helm/e2e-tests/values.yaml match Archestra defaults
-          helm install e2e-tests ./platform/helm/e2e-tests
+          # Deploy Vault as a Kubernetes service
+          kubectl apply -f .github/vault-ci.yaml
 
-          helm install archestra-platform ./platform/helm/archestra \
-            --values .github/values-ci.yaml \
-            --set archestra.image=archestra/platform:ci-test \
-            --wait --timeout=5m
+          # Wait for Vault pod to be ready
+          kubectl wait --for=condition=Ready pod/vault --timeout=120s
 
-      - name: Verify deployment
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide
-
-          echo "=== Kubernetes Services ==="
-          kubectl get services
-
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
-
-      - name: Wait for services to be healthy
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "Waiting for platform pods to be ready..."
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
-          echo "Platform pods are ready"
-
-          echo "Verifying services are accessible..."
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
-          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
-          echo "All services are ready"
+          # Wait for Vault service to be ready (access via kind port mapping: host:8200 -> nodePort:30200)
+          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready at localhost:8200 (via kind port mapping to NodePort 30200)"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check
@@ -181,15 +172,40 @@ jobs:
       - name: Check for codegen'd changes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
+        env:
+          IS_RELEASE_PLEASE_PR: ${{ inputs.is-release-please-pr }}
         run: |
-          pnpm codegen:api-client
+          pnpm codegen
           # Ensure generated files are properly formatted and linted
           pnpm lint:fix
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "::error::Generated code is not up to date. Please run 'pnpm codegen:api-client && pnpm lint:fix' locally and commit the changes."
-            exit 1
+            # For release-please PRs, auto-commit the codegen changes
+            # This is needed because release-please bumps the version in package.json,
+            # which causes generated files (like docs/openapi.json) to be out of date
+            if [ "$IS_RELEASE_PLEASE_PR" == "true" ]; then
+              echo "📦 Release-please PR with codegen changes detected. Auto-committing..."
+
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+
+              # Only add changes under docs/ and platform/ - these are the directories
+              # that may have codegen changes (e.g., docs/openapi.json version bump,
+              # docs/pages/platform-access-control.md front matter timestamp)
+              git -C "$GITHUB_WORKSPACE" add docs/ platform/
+
+              git commit -m "chore: update docs/openapi.json version for release"
+              git push
+
+              echo "✅ Changes committed. Workflow will be re-triggered."
+
+              # Exit early - the push triggers a new workflow run with the updated code
+              exit 0
+            else
+              echo "::error::Generated code is not up to date. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the changes."
+              exit 1
+            fi
           else
             echo "Generated code is up to date"
             echo "codegen-changes=false" >> $GITHUB_OUTPUT
@@ -275,16 +291,26 @@ jobs:
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
             /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e"
 
+      - name: Check for flaky tests
+        id: check-flaky
+        if: success()
+        run: |
+          # If there are retry directories in test-results after a successful run, tests were flaky
+          if ls platform/e2e-tests/test-results/*retry* 1>/dev/null 2>&1; then
+            echo "⚠️ Flaky tests detected (retry directories found)"
+            echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload Playwright report
-        if: failure()
+        if: failure() || steps.check-flaky.outputs.has_flaky_tests == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           retention-days: 30
 
-      - name: Show logs on failure
-        if: failure()
+      - name: Show logs on failure or flaky tests
+        if: failure() || steps.check-flaky.outputs.has_flaky_tests == 'true'
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide
@@ -353,8 +379,7 @@ jobs:
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           ignore-unchanged: true
           only-severities: critical,high
-          write-comment: true
-          github-token: ${{ secrets.GITHUB_TOKEN }} # to be able to write the comment
+          write-comment: false
           sarif-file: sarif.output.json
 
       # Upload SARIF result to GitHub Code Scanning
@@ -389,7 +414,7 @@ jobs:
       - name: Tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
           helm unittest .
 
       - name: helm package

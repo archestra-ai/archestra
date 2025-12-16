@@ -53,7 +53,7 @@ describe("Anthropic cost tracking", () => {
 
     // Find the created interaction
     const { InteractionModel } = await import("@/models");
-    const interactions = await InteractionModel.getAllInteractionsForAgent(
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
       agent.id,
     );
     expect(interactions.length).toBeGreaterThan(0);
@@ -93,7 +93,7 @@ describe("Anthropic streaming mode", () => {
 
     // Get initial interaction count
     const initialInteractions =
-      await InteractionModel.getAllInteractionsForAgent(agent.id);
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
     const initialCount = initialInteractions.length;
 
     const response = await app.inject({
@@ -126,7 +126,7 @@ describe("Anthropic streaming mode", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Find the created interaction
-    const interactions = await InteractionModel.getAllInteractionsForAgent(
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
       agent.id,
     );
     expect(interactions.length).toBe(initialCount + 1);
@@ -180,7 +180,7 @@ describe("Anthropic streaming mode", () => {
 
         // Get initial interaction count
         const initialInteractions =
-          await InteractionModel.getAllInteractionsForAgent(agent.id);
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
         const initialCount = initialInteractions.length;
 
         const response = await app.inject({
@@ -208,9 +208,8 @@ describe("Anthropic streaming mode", () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
 
         // Verify interaction was still recorded despite interruption
-        const interactions = await InteractionModel.getAllInteractionsForAgent(
-          agent.id,
-        );
+        const interactions =
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
         expect(interactions.length).toBe(initialCount + 1);
 
         const interaction = interactions[interactions.length - 1];

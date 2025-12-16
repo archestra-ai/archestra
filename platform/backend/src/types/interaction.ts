@@ -1,12 +1,8 @@
+import { SupportedProvidersDiscriminatorSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import {
-  Anthropic,
-  Gemini,
-  OpenAi,
-  SupportedProvidersDiscriminatorSchema,
-} from "./llm-providers";
+import { Anthropic, Gemini, OpenAi } from "./llm-providers";
 
 /**
  * Request/Response schemas that accept any provider type

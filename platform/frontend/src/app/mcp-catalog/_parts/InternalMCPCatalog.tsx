@@ -4,7 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
+import {
+  OAuthConfirmationDialog,
+  type OAuthInstallResult,
+} from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHasPermissions } from "@/lib/auth.query";
@@ -22,15 +25,24 @@ import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { DetailsDialog } from "./details-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
-import { LocalServerInstallDialog } from "./local-server-install-dialog";
+import {
+  LocalServerInstallDialog,
+  type LocalServerInstallResult,
+} from "./local-server-install-dialog";
 import {
   type CatalogItem,
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
-import { NoAuthInstallDialog } from "./no-auth-install-dialog";
+import {
+  NoAuthInstallDialog,
+  type NoAuthInstallResult,
+} from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
-import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
+import {
+  RemoteServerInstallDialog,
+  type RemoteServerInstallResult,
+} from "./remote-server-install-dialog";
 
 export function InternalMCPCatalog({
   initialData,
@@ -152,76 +164,33 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     _teamMode: boolean,
   ) => {
-    // Check if this is a remote server with user configuration
-    if (
-      catalogItem.serverType === "remote" &&
-      catalogItem.userConfig &&
-      Object.keys(catalogItem.userConfig).length > 0
-    ) {
-      setSelectedCatalogItem(catalogItem);
-      openDialog("remote-install");
-      return;
-    }
+    const hasUserConfig =
+      catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
 
-    // Check if this server requires OAuth authentication
-    if (catalogItem.oauthConfig) {
+    // Check if this server requires OAuth authentication if there is no user config
+    if (!hasUserConfig && catalogItem.oauthConfig) {
       setSelectedCatalogItem(catalogItem);
       openDialog("oauth");
       return;
     }
 
-    // For servers without configuration, install directly
-    setInstallingItemId(catalogItem.id);
-    await installMutation.mutateAsync({
-      name: catalogItem.name,
-      catalogId: catalogItem.id,
-      teams: [],
-    });
-    setInstallingItemId(null);
+    setSelectedCatalogItem(catalogItem);
+    openDialog("remote-install");
   };
 
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
-    // Check if we need to show configuration dialog
-    const hasUserConfig =
-      catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
-    const hasPromptedEnvVars = catalogItem.localConfig?.environment?.some(
-      (env) => env.promptOnInstallation === true,
-    );
-
-    if (hasUserConfig || hasPromptedEnvVars) {
-      // Show configuration dialog
-      setLocalServerCatalogItem(catalogItem);
-      openDialog("local-install");
-      return;
-    }
-
-    // No configuration needed, install directly
-    try {
-      setInstallingItemId(catalogItem.id);
-      const result = await installMutation.mutateAsync({
-        name: catalogItem.name,
-        catalogId: catalogItem.id,
-        teams: [],
-        dontShowToast: true,
-      });
-      // Track the installed server for polling
-      const installedServerId = result?.installedServer?.id;
-      if (installedServerId) {
-        setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
-      }
-    } finally {
-      setInstallingItemId(null);
-    }
+    setLocalServerCatalogItem(catalogItem);
+    openDialog("local-install");
   };
 
-  const handleNoAuthConfirm = async (teams: string[] = []) => {
+  const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
     if (!noAuthCatalogItem) return;
 
     setInstallingItemId(noAuthCatalogItem.id);
     await installMutation.mutateAsync({
       name: noAuthCatalogItem.name,
       catalogId: noAuthCatalogItem.id,
-      teams,
+      teamId: result.teamId ?? undefined,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
@@ -229,7 +198,7 @@ export function InternalMCPCatalog({
   };
 
   const handleLocalServerInstallConfirm = async (
-    environmentValues: Record<string, string>,
+    installResult: LocalServerInstallResult,
   ) => {
     if (!localServerCatalogItem) return;
 
@@ -237,8 +206,9 @@ export function InternalMCPCatalog({
     const result = await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
-      teams: [],
-      environmentValues,
+      environmentValues: installResult.environmentValues,
+      isByosVault: installResult.isByosVault,
+      teamId: installResult.teamId ?? undefined,
       dontShowToast: true,
     });
 
@@ -255,27 +225,33 @@ export function InternalMCPCatalog({
 
   const handleRemoteServerInstallConfirm = async (
     catalogItem: CatalogItem,
-    metadata?: Record<string, unknown>,
-    teams: string[] = [],
+    result: RemoteServerInstallResult,
   ) => {
     setInstallingItemId(catalogItem.id);
 
-    // Extract access_token from metadata if present and pass as accessToken
+    // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
+    // For BYOS mode: metadata contains vault references, pass via userConfigValues
     const accessToken =
-      metadata?.access_token && typeof metadata.access_token === "string"
-        ? metadata.access_token
+      !result.isByosVault &&
+      result.metadata?.access_token &&
+      typeof result.metadata.access_token === "string"
+        ? result.metadata.access_token
         : undefined;
 
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
-      teams,
+      ...(result.isByosVault && {
+        userConfigValues: result.metadata as Record<string, string>,
+      }),
+      isByosVault: result.isByosVault,
+      teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);
   };
 
-  const handleOAuthConfirm = async (teams: string[] = []) => {
+  const handleOAuthConfirm = async (result: OAuthInstallResult) => {
     if (!selectedCatalogItem) return;
 
     try {
@@ -296,10 +272,15 @@ export function InternalMCPCatalog({
 
       const { authorizationUrl, state } = await response.json();
 
-      // Store state and teams in session storage for the callback
+      // Store state in session storage for the callback
       sessionStorage.setItem("oauth_state", state);
       sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
-      sessionStorage.setItem("oauth_teams", JSON.stringify(teams));
+      // Store teamId for use after OAuth callback
+      if (result.teamId) {
+        sessionStorage.setItem("oauth_team_id", result.teamId);
+      } else {
+        sessionStorage.removeItem("oauth_team_id");
+      }
 
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
@@ -361,38 +342,10 @@ export function InternalMCPCatalog({
       }
     }
 
-    // Combine all unique teams
-    const allTeams = new Set<string>();
-    const allTeamDetails: Array<{
-      teamId: string;
-      name: string;
-      createdAt: string;
-      serverId: string; // Track which server this team belongs to
-    }> = [];
-
-    for (const server of servers) {
-      if (server.teams) {
-        for (const teamId of server.teams) {
-          allTeams.add(teamId);
-        }
-      }
-      if (server.teamDetails) {
-        for (const teamDetail of server.teamDetails) {
-          // Only add if not already present
-          if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
-            allTeamDetails.push({
-              ...teamDetail,
-              serverId: server.id, // Include the actual server ID
-            });
-          }
-        }
-      }
-    }
-
     aggregated.users = Array.from(allUsers);
     aggregated.userDetails = allUserDetails;
-    aggregated.teams = Array.from(allTeams);
-    aggregated.teamDetails = allTeamDetails;
+    // Note: teamDetails is now a single object per server (many-to-one),
+    // so we use the base server's teamDetails as-is
 
     return aggregated;
   };
@@ -508,7 +461,6 @@ export function InternalMCPCatalog({
       installedServer,
       isInstallInProgress,
       currentUserInstalledLocalServer,
-      currentUserLocalServerInstallation,
     };
   };
 
@@ -564,12 +516,6 @@ export function InternalMCPCatalog({
                   }}
                   onDelete={() => setDeletingItem(item)}
                   onCancelInstallation={handleCancelInstallation}
-                  currentUserInstalledLocalServer={
-                    serverInfo.currentUserInstalledLocalServer
-                  }
-                  currentUserLocalServerInstallation={
-                    serverInfo.currentUserLocalServerInstallation
-                  }
                 />
               );
             })}
@@ -654,7 +600,6 @@ export function InternalMCPCatalog({
           setSelectedCatalogItem(null);
         }}
         catalogId={selectedCatalogItem?.id}
-        installedServers={installedServers}
       />
 
       <ReinstallConfirmationDialog

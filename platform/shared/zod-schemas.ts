@@ -32,6 +32,7 @@ export const EnvironmentVariableSchema = z.object({
   promptOnInstallation: z.boolean(), // Whether to prompt user during installation
   required: z.boolean().optional(), // Whether this env var is required during installation (only applies when promptOnInstallation is true, defaults to false)
   description: z.string().optional(), // Optional description to show in installation dialog
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value to pre-populate in installation dialog
 });
 
 export const LocalConfigSchema = z
@@ -43,6 +44,11 @@ export const LocalConfigSchema = z
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
     httpPath: z.string().optional(),
+    // Kubernetes service account role for MCP server pods that need K8s API access
+    // If not specified, uses the default service account (no K8s permissions)
+    // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:
+    // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-operator")
+    serviceAccount: z.string().optional(),
   })
   .refine(
     (data) => {

@@ -1,6 +1,6 @@
 /** The component to display an editable optimization rule */
 
-import type { archestraApiTypes } from "@shared";
+import { type SupportedProvider, SupportedProviders } from "@shared";
 import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
@@ -34,11 +34,6 @@ type TokenPrices = Array<{
   pricePerMillionOutput: string;
 }>;
 
-type Providers = Extract<
-  archestraApiTypes.SupportedProviders,
-  "openai" | "anthropic"
->;
-
 // Sort models by total cost (input + output price) ascending
 function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
   return [...tokenPrices].sort((a, b) => {
@@ -50,9 +45,10 @@ function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
   });
 }
 
-const providerDictionary: Record<Providers, string> = {
+const providerDictionary: Record<SupportedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
+  gemini: "Gemini",
 };
 
 // Helper to get entity display name
@@ -74,9 +70,9 @@ export function ProviderSelect({
   onChange,
   editable,
 }: {
-  provider: Providers;
-  providers: Providers[];
-  onChange: (provider: Providers) => void;
+  provider: SupportedProvider;
+  providers: SupportedProvider[];
+  onChange: (provider: SupportedProvider) => void;
   editable?: boolean;
 }) {
   if (!editable) {
@@ -114,7 +110,7 @@ function ModelSelect({
   editable,
 }: {
   model: string;
-  provider: Providers;
+  provider: SupportedProvider;
   models: TokenPrices;
   onChange: (model: string) => void;
   editable?: boolean;
@@ -355,7 +351,7 @@ export function Rule({
     entityType: EntityType;
     entityId: string;
     conditions: Conditions;
-    provider: Providers;
+    provider: SupportedProvider;
     targetModel: string;
     enabled: boolean;
   };
@@ -365,7 +361,7 @@ export function Rule({
     entityType,
     entityId,
     conditions,
-    provider: provider as Providers,
+    provider,
     targetModel,
   });
 
@@ -377,7 +373,7 @@ export function Rule({
         entityType,
         entityId,
         conditions,
-        provider: provider as Providers,
+        provider,
         targetModel,
       });
     }
@@ -398,7 +394,7 @@ export function Rule({
     onChange?.(updated);
   };
 
-  const onProviderChange = (provider: Providers) =>
+  const onProviderChange = (provider: SupportedProvider) =>
     updateFormData({
       provider,
       targetModel: "",
@@ -479,7 +475,7 @@ export function Rule({
       with{" "}
       <ProviderSelect
         provider={formData.provider}
-        providers={["anthropic", "openai"]}
+        providers={SupportedProviders}
         onChange={onProviderChange}
         editable={editable}
       />

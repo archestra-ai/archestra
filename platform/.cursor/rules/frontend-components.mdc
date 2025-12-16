@@ -209,6 +209,48 @@ function Sidebar() {
 }
 ```
 
+### Prefer Queries Over Prop Drilling
+
+When a component needs data that's available via a TanStack Query hook, use the hook directly rather than prop drilling:
+
+```typescript
+// ❌ Bad: Prop drilling computed data
+function ParentComponent() {
+  const { data: servers } = useMcpServers();
+  const { data: teams } = useTeams();
+
+  // Computing derived data in parent
+  const hasPersonalInstallation = servers?.some(s => s.ownerId === userId && !s.teamId);
+  const availableTeams = teams?.filter(t => !usedTeamIds.includes(t.id));
+
+  return (
+    <ChildComponent
+      hasPersonalInstallation={hasPersonalInstallation}
+      availableTeams={availableTeams}
+      // ... many more props
+    />
+  );
+}
+
+// ✅ Good: Child component fetches its own data
+function ParentComponent() {
+  return <ChildComponent catalogId={catalogId} />;  // Pass only identifier
+}
+
+function ChildComponent({ catalogId }: Props) {
+  const { data: servers } = useMcpServers();  // Query directly
+  const { data: teams } = useTeams();          // Query directly
+
+  // Compute derived data locally
+  const hasPersonalInstallation = servers?.some(s => s.catalogId === catalogId && !s.teamId);
+  const availableTeams = teams?.filter(t => !usedTeamIds.includes(t.id));
+
+  return <div>...</div>;
+}
+```
+
+TanStack Query's built-in caching ensures no duplicate network requests when multiple components use the same query.
+
 ## shadcn/ui Components
 
 **ALWAYS use shadcn/ui** instead of direct Radix UI:
@@ -418,3 +460,4 @@ export default async function DashboardPage() {
 11. ✅ Avoid React Context - use TanStack Query for shared data
 12. ✅ Extract business logic to pure functions or queries
 13. ✅ Only export what needs to be used by other modules - keep internal helpers private
+14. ✅ Prefer TanStack Query hooks over prop drilling - pass only identifiers, let components fetch their own data

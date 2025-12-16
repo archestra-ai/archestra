@@ -3,13 +3,14 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import { Savings } from "@/components/savings";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
   TooltipContent,
@@ -17,7 +18,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
-import { useInteractions } from "@/lib/interaction.query";
+import {
+  useInteractions,
+  useUniqueExternalAgentIds,
+} from "@/lib/interaction.query";
 
 import { DynamicInteraction } from "@/lib/interaction.utils";
 
@@ -121,40 +125,123 @@ function LogsTable({
   };
 }) {
   const router = useRouter();
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
-  });
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  // Get URL params
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const profileIdFromUrl = searchParams.get("profileId");
+  const externalAgentIdFromUrl = searchParams.get("externalAgentId");
+  const sortByFromUrl = searchParams.get("sortBy");
+  const sortDirectionFromUrl = searchParams.get("sortDirection");
+
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
+
+  const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
+  const [externalAgentIdFilter, setExternalAgentIdFilter] = useState(
+    externalAgentIdFromUrl || "",
+  );
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
+    {
+      id: sortByFromUrl || "createdAt",
+      desc: sortDirectionFromUrl !== "asc",
+    },
   ]);
+
+  // Helper to update URL params
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "" || value === "all") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      });
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      updateUrlParams({
+        page: String(newPagination.pageIndex + 1),
+        pageSize: String(newPagination.pageSize),
+      });
+    },
+    [updateUrlParams],
+  );
+
+  const handleProfileFilterChange = useCallback(
+    (value: string) => {
+      setProfileFilter(value);
+      updateUrlParams({
+        profileId: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
+  const handleExternalAgentIdFilterChange = useCallback(
+    (value: string) => {
+      setExternalAgentIdFilter(value);
+      updateUrlParams({
+        externalAgentId: value || null,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
+  const handleSortingChange = useCallback(
+    (newSorting: SortingState) => {
+      setSorting(newSorting);
+      if (newSorting.length > 0) {
+        updateUrlParams({
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
+      }
+    },
+    [updateUrlParams],
+  );
 
   // Convert TanStack sorting to API format
   const sortBy = sorting[0]?.id;
   const sortDirection = sorting[0]?.desc ? "desc" : "asc";
+
   // Map UI column ids to API sort fields
-  const apiSortBy: NonNullable<
-    archestraApiTypes.GetInteractionsData["query"]
-  >["sortBy"] =
-    sortBy === "agent"
-      ? "agentId"
-      : sortBy === "request.model"
-        ? "model"
-        : sortBy === "createdAt"
-          ? "createdAt"
-          : undefined;
+  const sortByMapping: Record<
+    string,
+    NonNullable<archestraApiTypes.GetInteractionsData["query"]>["sortBy"]
+  > = {
+    agent: "profileId",
+    externalAgentId: "externalAgentId",
+    "request.model": "model",
+    createdAt: "createdAt",
+  };
+  const apiSortBy = sortBy ? sortByMapping[sortBy] : undefined;
 
   const { data: interactionsResponse } = useInteractions({
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
+    limit: pageSize,
+    offset: pageIndex * pageSize,
     sortBy: apiSortBy,
     sortDirection,
+    profileId: profileFilter !== "all" ? profileFilter : undefined,
+    externalAgentId: externalAgentIdFilter || undefined,
     initialData: initialData?.interactions,
   });
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
+
+  const { data: uniqueExternalAgentIds } = useUniqueExternalAgentIds();
 
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
@@ -183,7 +270,7 @@ function LogsTable({
     {
       id: "agent",
       accessorFn: (row) => {
-        const agent = agents?.find((a) => a.id === row.agentId);
+        const agent = agents?.find((a) => a.id === row.profileId);
         return agent?.name ?? "Unknown";
       },
       header: ({ column }) => {
@@ -200,9 +287,38 @@ function LogsTable({
       },
       cell: ({ row }) => {
         const interaction = new DynamicInteraction(row.original);
-        const agent = agents?.find((a) => a.id === interaction.agentId);
+        const agent = agents?.find((a) => a.id === interaction.profileId);
         return (
           <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
+        );
+      },
+    },
+    {
+      id: "externalAgentId",
+      accessorKey: "externalAgentId",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            External Agent ID
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const externalAgentId = row.original.externalAgentId;
+        if (!externalAgentId) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        return (
+          <TruncatedText
+            message={externalAgentId}
+            maxLength={20}
+            className="font-mono text-xs"
+          />
         );
       },
     },
@@ -372,34 +488,86 @@ function LogsTable({
     },
   ];
 
-  if (!interactions || interactions.length === 0) {
-    return <p className="text-muted-foreground">No logs found</p>;
-  }
+  const hasFilters =
+    profileFilter !== "all" || externalAgentIdFilter.length > 0;
 
   return (
-    <DataTable
-      columns={columns}
-      data={interactions}
-      pagination={
-        paginationMeta
-          ? {
-              pageIndex: pagination.pageIndex,
-              pageSize: pagination.pageSize,
-              total: paginationMeta.total,
-            }
-          : undefined
-      }
-      manualPagination
-      onPaginationChange={(newPagination) => {
-        setPagination(newPagination);
-      }}
-      manualSorting
-      sorting={sorting}
-      onSortingChange={setSorting}
-      onRowClick={(row) => {
-        const interaction = new DynamicInteraction(row);
-        router.push(`/logs/${interaction.id}`);
-      }}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4">
+        <SearchableSelect
+          value={profileFilter}
+          onValueChange={handleProfileFilterChange}
+          placeholder="Filter by Profile"
+          items={[
+            { value: "all", label: "All Profiles" },
+            ...(agents?.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
+
+        <SearchableSelect
+          value={externalAgentIdFilter || "all"}
+          onValueChange={(value) =>
+            handleExternalAgentIdFilterChange(value === "all" ? "" : value)
+          }
+          placeholder="Filter by External Agent ID"
+          items={[
+            { value: "all", label: "All External Agent IDs" },
+            ...(uniqueExternalAgentIds?.map((id) => ({
+              value: id,
+              label: id,
+            })) || []),
+          ]}
+          className="w-[250px]"
+        />
+
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              handleProfileFilterChange("all");
+              handleExternalAgentIdFilterChange("");
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {!interactions || interactions.length === 0 ? (
+        <p className="text-muted-foreground">
+          {hasFilters
+            ? "No logs match your filters. Try adjusting your search."
+            : "No logs found"}
+        </p>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={interactions}
+          pagination={
+            paginationMeta
+              ? {
+                  pageIndex,
+                  pageSize,
+                  total: paginationMeta.total,
+                }
+              : undefined
+          }
+          manualPagination
+          onPaginationChange={handlePaginationChange}
+          manualSorting
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+          onRowClick={(row) => {
+            const interaction = new DynamicInteraction(row);
+            router.push(`/logs/${interaction.id}`);
+          }}
+        />
+      )}
+    </div>
   );
 }

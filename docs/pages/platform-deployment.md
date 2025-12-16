@@ -51,7 +51,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
-## Helm Deployment (Recommended for Production)
+## Helm Deployment
 
 Helm deployment is our recommended approach for deploying Archestra Platform to production environments.
 
@@ -391,6 +391,41 @@ Then visit:
 
 - **Admin UI**: <http://localhost:3000>
 - **API**: <http://localhost:9000>
+
+### Production Recommendations
+
+#### PostgreSQL Infrastructure
+
+For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the bundled PostgreSQL instance. Cloud-managed databases provide:
+
+- **High availability** with automatic failover
+- **Automated backups** and point-in-time recovery
+- **Scaling** without downtime
+- **Security** with encryption at rest and in transit
+- **Monitoring** and alerting out of the box
+
+Popular options include:
+
+- **AWS**: Amazon RDS for PostgreSQL or Amazon Aurora PostgreSQL
+- **Google Cloud**: Cloud SQL for PostgreSQL or AlloyDB
+- **Azure**: Azure Database for PostgreSQL
+- **Other**: Supabase, Neon, CrunchyData, or self-managed PostgreSQL clusters
+
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. See the [Environment Variables](#environment-variables) section for details.
+
+**Example configuration:**
+
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set postgresql.external_database_url=postgresql://user:password@your-cloud-db-host:5432/archestra \
+  --wait
+```
+
+When using an external database, the bundled PostgreSQL instance is automatically disabled.
 
 ## Infrastructure as Code
 

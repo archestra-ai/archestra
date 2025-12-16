@@ -21,7 +21,7 @@ spec:
           - CREATE EXTENSION IF NOT EXISTS "uuid-ossp"
           - CREATE EXTENSION IF NOT EXISTS "pg_trgm"
   storage:
-    size: 5Gi
+    size: 50Gi
   resources:
     requests:
       memory: "2Gi"

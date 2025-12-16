@@ -1798,17 +1798,17 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     expect(podSpec.spec?.serviceAccountName).toBeUndefined();
   });
 
-  test("constructs service account name using prefix and operator suffix", () => {
-    // Mock config with prefix
+  test("uses configured service account name", () => {
+    // Mock config with service account name
     const mockConfig = config as {
       orchestrator: {
-        kubernetes: { mcpK8sServiceAccountPrefix: string };
+        kubernetes: { mcpK8sServiceAccountName: string };
       };
     };
     const originalValue =
-      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountPrefix;
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountPrefix =
-      "archestra-archestra-platform";
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
+      "archestra-archestra-platform-mcp-k8s-operator";
 
     const mockMcpServer = {
       id: "k8s-server",
@@ -1849,25 +1849,26 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       8080,
     );
 
-    // Should construct full name: {prefix}-mcp-k8s-operator
+    // Should use the configured service account name directly
     expect(podSpec.spec?.serviceAccountName).toBe(
       "archestra-archestra-platform-mcp-k8s-operator",
     );
 
     // Restore original config value
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountPrefix = originalValue;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 
-  test("uses mcp-k8s-operator when prefix is empty", () => {
-    // Mock config with empty prefix
+  test("uses custom service account name when configured", () => {
+    // Mock config with custom service account name
     const mockConfig = config as {
       orchestrator: {
-        kubernetes: { mcpK8sServiceAccountPrefix: string };
+        kubernetes: { mcpK8sServiceAccountName: string };
       };
     };
     const originalValue =
-      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountPrefix;
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountPrefix = "";
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
+      "custom-mcp-service-account";
 
     const mockMcpServer = {
       id: "k8s-server",
@@ -1908,10 +1909,10 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       8080,
     );
 
-    // When prefix is empty, use just "mcp-k8s-operator"
-    expect(podSpec.spec?.serviceAccountName).toBe("mcp-k8s-operator");
+    // Should use the custom configured name
+    expect(podSpec.spec?.serviceAccountName).toBe("custom-mcp-service-account");
 
     // Restore original config value
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountPrefix = originalValue;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 });

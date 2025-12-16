@@ -277,11 +277,10 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
-      mcpK8sServiceAccountPrefix:
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_PREFIX ||
-        // Matches the  mcp-k8s-operator service account name from the official helm chart
-        // {release-name}-mcp-k8s-operator
-        "archestra-archestra-platform",
+      mcpK8sServiceAccountName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME ||
+        // Default value matches the mcp-k8s-operator service account name from the official helm chart
+        "archestra-archestra-platform-mcp-k8s-operator",
     },
   },
   vault: {

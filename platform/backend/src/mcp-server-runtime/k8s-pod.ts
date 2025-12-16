@@ -306,14 +306,10 @@ export default class K8sPod {
         // This allows MCP servers that need Kubernetes API access (like the K8s MCP server)
         // to use a service account with appropriate permissions
         // Other MCP servers will use the default service account (no K8s permissions)
-        // Service account name: {prefix}-mcp-k8s-operator (e.g., archestra-archestra-platform-mcp-k8s-operator)
-        // If no prefix is configured, uses just "mcp-k8s-operator"
         ...(localConfig.serviceAccount
           ? {
-              serviceAccountName: config.orchestrator.kubernetes
-                .mcpK8sServiceAccountPrefix
-                ? `${config.orchestrator.kubernetes.mcpK8sServiceAccountPrefix}-mcp-k8s-operator`
-                : "mcp-k8s-operator",
+              serviceAccountName:
+                config.orchestrator.kubernetes.mcpK8sServiceAccountName,
             }
           : {}),
         containers: [

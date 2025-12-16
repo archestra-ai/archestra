@@ -65,6 +65,8 @@ export const E2eTestId = {
   SetDefaultChatApiKeyButton: "set-default-chat-api-key-button",
   ManageProfilesChatApiKeyButton: "manage-profiles-chat-api-key-button",
   ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
+  BulkAssignChatApiKeysButton: "bulk-assign-chat-api-keys-button",
+  BulkAssignChatApiKeysDialog: "bulk-assign-chat-api-keys-dialog",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

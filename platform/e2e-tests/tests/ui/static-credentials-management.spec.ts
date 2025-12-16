@@ -12,6 +12,7 @@ import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   assignEngineeringTeamToDefaultProfileViaApi,
+  clickButton,
   getVisibleCredentials,
   getVisibleStaticCredentials,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
@@ -82,7 +83,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       ).toBeChecked();
 
       // Install using personal credential
-      await page.getByRole("button", { name: "Install" }).click();
+      await clickButton({ page, options: { name: "Install" } });
 
       // Credentials count should be 1 for Admin and Editor
       if (user === "Admin" || user === "Editor") {
@@ -127,7 +128,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         .click();
 
       // Install credential for team
-      await page.getByRole("button", { name: "Install" }).click();
+      await clickButton({ page, options: { name: "Install" } });
 
       // Credentials count should be 2 for Admin and Editor
       if (user === "Admin" || user === "Editor") {
@@ -176,14 +177,15 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         // Then we revoke first credential in Manage Credentials dialog, then close dialog
         await goToPage(page, "/mcp-catalog/registry");
         await openManageCredentialsDialog(page, catalogItemName);
-        await page.getByRole("button", { name: "Revoke" }).first().click();
+        await clickButton({ page, options: { name: "Revoke" }, first: true });
         await page.waitForLoadState("networkidle");
-        await page.getByRole("button", { name: "Close" }).nth(1).click();
+        await clickButton({ page, options: { name: "Close" }, nth: 1 });
         // And we check that the credential is revoked
         const expectedCredentialsAfterRevoke = {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
         };
+        await goToPage(page, "/mcp-catalog/registry");
         await openManageCredentialsDialog(page, catalogItemName);
         const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
         await expect(visibleCredentialsAfterRevoke).toHaveLength(
@@ -234,7 +236,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
       .click();
     // Install using personal credential
-    await page.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page, options: { name: "Install" } });
     // Wait for dialog to close and button to be visible again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
@@ -242,7 +244,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await connectButton.waitFor({ state: "visible" });
     await connectButton.click();
     // And this time team credential type should be selected by default for everyone, install using team credential
-    await page.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page, options: { name: "Install" } });
     await page.waitForLoadState("networkidle");
   };
 
@@ -313,7 +315,7 @@ test("Verify tool calling using different static credentials", async ({
   await adminPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Admin-personal-credential");
-  await adminPage.getByRole("button", { name: "Install" }).click();
+  await clickButton({ page: adminPage, options: { name: "Install" } });
   await adminPage.waitForLoadState("networkidle");
 
   // Install test server for editor
@@ -324,7 +326,7 @@ test("Verify tool calling using different static credentials", async ({
   await editorPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Editor-personal-credential");
-  await editorPage.getByRole("button", { name: "Install" }).click();
+  await clickButton({ page: editorPage, options: { name: "Install" } });
   await editorPage.waitForLoadState("networkidle");
 
   // Assign tool to profiles using admin static credential

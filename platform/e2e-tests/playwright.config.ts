@@ -15,7 +15,7 @@ export default defineConfig({
   /* Reduce workers in CI to avoid resource contention */
   workers: process.env.CI ? 6 : 3,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: process.env.CI ? "html" : "line",
+  reporter: process.env.CI ? [["html", "line"]] : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */

@@ -112,7 +112,7 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   const manageToolsButton = page.getByTestId(
     `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
   );
-  await manageToolsButton.waitFor({ state: "visible" });
+  await manageToolsButton.waitFor({ state: "visible", timeout: 20_000 });
   await manageToolsButton.click();
   await page
     .getByRole("button", { name: "Assign Tool to Profiles" })
@@ -291,4 +291,29 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
       teams: [defaultTeam.id, engineeringTeam.id],
     },
   });
+}
+
+export async function clickButton({
+  page,
+  options,
+  first,
+  nth,
+}: {
+  page: Page;
+  options: Parameters<Page["getByRole"]>[1];
+  first?: boolean;
+  nth?: number;
+}) {
+  let button = page.getByRole("button", {
+    disabled: false,
+    ...options,
+  });
+
+  if (first) {
+    button = button.first();
+  } else if (nth !== undefined) {
+    button = button.nth(nth);
+  }
+
+  return await button.click();
 }

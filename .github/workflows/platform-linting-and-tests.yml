@@ -404,7 +404,7 @@ jobs:
       - name: Tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
           helm unittest .
 
       - name: helm package

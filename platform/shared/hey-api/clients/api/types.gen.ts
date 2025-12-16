@@ -16661,497 +16661,6 @@ export type RemoveTeamExternalGroupResponses = {
 
 export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
 
-export type DeleteTeamVaultFolderData = {
-    body?: never;
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder';
-};
-
-export type DeleteTeamVaultFolderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
-
-export type DeleteTeamVaultFolderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
-
-export type GetTeamVaultFolderData = {
-    body?: never;
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder';
-};
-
-export type GetTeamVaultFolderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
-
-export type GetTeamVaultFolderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        teamId: string;
-        vaultPath: string;
-        createdAt: string;
-        updatedAt: string;
-    } | null;
-};
-
-export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
-
-export type SetTeamVaultFolderData = {
-    body: {
-        vaultPath: string;
-    };
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder';
-};
-
-export type SetTeamVaultFolderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
-
-export type SetTeamVaultFolderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        teamId: string;
-        vaultPath: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
-
-export type CheckTeamVaultFolderConnectivityData = {
-    body?: {
-        vaultPath?: string;
-    };
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
-};
-
-export type CheckTeamVaultFolderConnectivityErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
-
-export type CheckTeamVaultFolderConnectivityResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        connected: boolean;
-        secretCount: number;
-        error?: string;
-    };
-};
-
-export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
-
-export type ListTeamVaultFolderSecretsData = {
-    body?: never;
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder/secrets';
-};
-
-export type ListTeamVaultFolderSecretsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
-
-export type ListTeamVaultFolderSecretsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        name: string;
-        path: string;
-    }>;
-};
-
-export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
-
-export type GetTeamVaultSecretKeysData = {
-    body: {
-        secretPath: string;
-    };
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
-};
-
-export type GetTeamVaultSecretKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
-
-export type GetTeamVaultSecretKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        keys: Array<string>;
-    };
-};
-
-export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
-
 export type GetTokenPricesData = {
     body?: never;
     path?: never;
@@ -18381,6 +17890,497 @@ export type UpdateRoleResponses = {
 };
 
 export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
+
+export type DeleteTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type DeleteTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
+
+export type DeleteTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
+
+export type GetTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type GetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
+
+export type GetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    } | null;
+};
+
+export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
+
+export type SetTeamVaultFolderData = {
+    body: {
+        vaultPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type SetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
+
+export type SetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
+
+export type CheckTeamVaultFolderConnectivityData = {
+    body?: {
+        vaultPath?: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
+};
+
+export type CheckTeamVaultFolderConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
+
+export type CheckTeamVaultFolderConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connected: boolean;
+        secretCount: number;
+        error?: string;
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
+
+export type ListTeamVaultFolderSecretsData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets';
+};
+
+export type ListTeamVaultFolderSecretsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
+
+export type ListTeamVaultFolderSecretsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        path: string;
+    }>;
+};
+
+export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
+
+export type GetTeamVaultSecretKeysData = {
+    body: {
+        secretPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
+};
+
+export type GetTeamVaultSecretKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
+
+export type GetTeamVaultSecretKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<string>;
+    };
+};
+
+export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

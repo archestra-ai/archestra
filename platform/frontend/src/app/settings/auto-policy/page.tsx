@@ -2,6 +2,7 @@
 
 import { Sparkles, XCircle } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -9,15 +10,35 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useChatApiKeys } from "@/lib/chat-settings.query";
+import { useOrganization, useUpdateOrganization } from "@/lib/organization.query";
 
 export default function AutoPolicySettingsPage() {
   const { data: chatApiKeys, isLoading } = useChatApiKeys();
+  const { data: organization } = useOrganization();
+  const updateOrgMutation = useUpdateOrganization();
 
   // Find default Anthropic API key
   const hasAnthropicKey = chatApiKeys?.some(
     (key) => key.provider === "anthropic" && key.isOrganizationDefault,
   );
+
+  const handleToggleAutoConfigureNewTools = async (checked: boolean) => {
+    try {
+      await updateOrgMutation.mutateAsync({
+        autoConfigureNewTools: checked,
+      });
+      toast.success(
+        checked
+          ? "Auto-configure enabled for new tool assignments"
+          : "Auto-configure disabled for new tool assignments",
+      );
+    } catch (error) {
+      toast.error("Failed to update auto-configure setting");
+    }
+  };
 
   const prompt = `Analyze this MCP tool and determine security policies:
 
@@ -137,6 +158,40 @@ Examples:
               the Tools table.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Automatic Configuration</CardTitle>
+          <CardDescription>
+            Automatically configure policies when tools are assigned to profiles
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="auto-configure-new-tools">
+                Auto-configure on tool assignment
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                When enabled, security policies will be automatically configured
+                using AI analysis whenever a tool is assigned to a profile
+              </p>
+            </div>
+            <Switch
+              id="auto-configure-new-tools"
+              checked={organization?.autoConfigureNewTools ?? false}
+              onCheckedChange={handleToggleAutoConfigureNewTools}
+              disabled={!hasAnthropicKey || updateOrgMutation.isPending}
+            />
+          </div>
+          {!hasAnthropicKey && (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              This feature requires a default Anthropic API key to be configured
+              in Chat settings.
+            </p>
+          )}
         </CardContent>
       </Card>
 

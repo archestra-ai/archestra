@@ -698,12 +698,25 @@ export async function assignToolToAgent(
 
   // If a new assignment was created, check if auto-configure is enabled
   if (result.status === "created" && result.agentToolId) {
+    logger.debug(
+      { agentId, toolId, agentToolId: result.agentToolId },
+      "New tool assignment created, checking auto-configure setting",
+    );
+
     // Get agent to access organization ID
     const agent = await AgentModel.findById(agentId);
     if (agent) {
       // Get organization settings
       const organization = await OrganizationModel.getById(
         agent.organizationId,
+      );
+
+      logger.debug(
+        {
+          organizationId: agent.organizationId,
+          autoConfigureNewTools: organization?.autoConfigureNewTools,
+        },
+        "Organization auto-configure setting",
       );
 
       // Auto-configure policies if enabled for the organization

@@ -197,8 +197,11 @@ tests:
           path: spec.template.spec.containers[0].env[0].name
           value: ARCHESTRA_DATABASE_URL
       - equal:
-          path: spec.template.spec.containers[0].env[0].value
-          value: postgresql://external:pass@external-host:5432/externaldb
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-archestra-platform-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: database-url
 
   - it: should have init container to wait for PostgreSQL
     documentIndex: 1

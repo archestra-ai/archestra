@@ -56,7 +56,10 @@ Environment variables for the Archestra Platform container
 {{- define "archestra-platform.env" -}}
 {{- if .Values.postgresql.external_database_url }}
 - name: ARCHESTRA_DATABASE_URL
-  value: {{ .Values.postgresql.external_database_url }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "archestra-platform.authSecretName" . }}
+      key: database-url
 {{- else }}
 {{/*
 For the bundled PostgreSQL, we use Kubernetes env variable expansion to inject the password
@@ -79,7 +82,7 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_AUTH_SECRET
   valueFrom:
     secretKeyRef:
-      name: {{ include "archestra-platform.fullname" . }}-auth
+      name: {{ include "archestra-platform.authSecretName" . }}
       key: auth-secret
 {{- end }}
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
@@ -131,6 +134,13 @@ PostgreSQL port for database connectivity checks
 {{- else -}}
 5432
 {{- end -}}
+{{- end }}
+
+{{/*
+Auth secret name for the Archestra Platform
+*/}}
+{{- define "archestra-platform.authSecretName" -}}
+{{- printf "%s-auth" (include "archestra-platform.fullname" .) -}}
 {{- end }}
 
 {{/*

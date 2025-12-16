@@ -563,9 +563,9 @@ The following environment variables can be used to configure Archestra Platform:
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME`** - Kubernetes ServiceAccount name for MCP server pods that need K8s API access.
 
-  - Default: `archestra-archestra-platform-mcp-k8s-operator`
-  - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-archestra-platform-mcp-k8s-operator`
-    So, default value matches it.
+  - Default: `archestra-platform-mcp-k8s-operator`
+  - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-mcp-k8s-operator`
+    So, default value matches it when using `archestra-platform` as the release name.
   - Customize if using a different Helm release name or managing ServiceAccounts manually
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces

@@ -639,40 +639,42 @@ test.describe("SSO Team Sync E2E", () => {
         expect(memberText).not.toBe("0 members");
       }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 4000, 5000] });
 
-      // Click "Manage Members" to verify the specific user
-      const syncedTeamRow = ssoPage
-        .locator(".rounded-lg.border.p-4")
-        .filter({ hasText: teamName });
-
-      await syncedTeamRow
-        .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
-        .click();
-
-      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
-
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
       // Use polling with reload to handle async team sync in CI
+      // Helper function to get fresh locator after potential page reload
+      const getTeamRow = () =>
+        ssoPage.locator(".rounded-lg.border.p-4").filter({ hasText: teamName });
+
       await expect(async () => {
-        // Check if the email is visible in the current dialog
+        // Open the manage members dialog (re-locate after potential reload)
+        const teamRow = getTeamRow();
+        const manageButton = teamRow.getByTestId(
+          `${E2eTestId.ManageMembersButton}-${teamName}`,
+        );
+        await manageButton.click();
+        await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
+
+        // Check if the email is visible in the dialog
         const emailLocator = ssoPage
           .getByRole("dialog")
           .getByText(new RegExp(ADMIN_EMAIL, "i"));
         const isVisible = await emailLocator.isVisible().catch(() => false);
 
         if (!isVisible) {
-          // Close dialog, reload, and reopen
+          // Close dialog and reload for next attempt
           await ssoPage.keyboard.press("Escape");
+          await ssoPage
+            .getByRole("dialog")
+            .waitFor({ state: "hidden", timeout: 5000 })
+            .catch(() => {}); // Ignore if already hidden
           await ssoPage.reload();
           await ssoPage.waitForLoadState("networkidle");
-          await syncedTeamRow
-            .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
-            .click();
-          await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
+          throw new Error("Email not visible yet, retrying...");
         }
 
         await expect(emailLocator).toBeVisible();
-      }).toPass({ timeout: 30_000, intervals: [2000, 3000, 4000, 5000] });
+      }).toPass({ timeout: 45_000, intervals: [3000, 5000, 7000, 10000] });
 
       // Success! The SSO user was automatically synced to the team
     } finally {

@@ -565,9 +565,7 @@ export default class K8sPod {
 
             // Use service DNS for in-cluster, localhost with NodePort for local dev
             let baseUrl: string | undefined;
-            if (
-              config.orchestrator.kubernetes.sameCluster
-            ) {
+            if (config.orchestrator.kubernetes.sameCluster) {
               const serviceName = `${this.podName}-service`;
               baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
             } else {
@@ -758,8 +756,7 @@ export default class K8sPod {
 
       // Create the service
       // Use NodePort for local dev, ClusterIP for production
-      const serviceType = config.orchestrator.kubernetes
-        .sameCluster
+      const serviceType = config.orchestrator.kubernetes.sameCluster
         ? "ClusterIP"
         : "NodePort";
 

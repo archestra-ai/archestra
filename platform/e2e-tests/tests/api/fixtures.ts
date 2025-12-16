@@ -317,6 +317,7 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
 /**
  * Wait for an agent-tool to be registered with retry/polling logic.
  * This helps avoid race conditions when a tool is registered asynchronously.
+ * In CI with parallel workers, tool registration can take longer due to resource contention.
  */
 const waitForAgentTool = async (
   request: APIRequestContext,
@@ -327,8 +328,9 @@ const waitForAgentTool = async (
     delayMs?: number;
   },
 ): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
-  const maxAttempts = options?.maxAttempts ?? 10;
-  const delayMs = options?.delayMs ?? 500;
+  // Increased defaults for CI stability: 20 attempts × 1000ms = 20 seconds total wait
+  const maxAttempts = options?.maxAttempts ?? 20;
+  const delayMs = options?.delayMs ?? 1000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const agentToolsResponse = await makeApiRequest({

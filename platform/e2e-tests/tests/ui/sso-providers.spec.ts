@@ -643,7 +643,8 @@ test.describe("SSO Team Sync E2E", () => {
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("networkidle");
 
-      // Poll for team member count to increase (max 15 seconds)
+      // Poll for team member count to increase (max 30 seconds)
+      // In CI with parallel workers, SSO team sync can take longer due to resource contention
       const teamMemberLocator = ssoPage
         .locator(".rounded-lg.border.p-4")
         .filter({ hasText: teamName })
@@ -654,7 +655,7 @@ test.describe("SSO Team Sync E2E", () => {
         const memberText = await teamMemberLocator.textContent();
         // Team should have at least 1 member after sync
         expect(memberText).not.toBe("0 members");
-      }).toPass({ timeout: 15000, intervals: [1000, 2000, 3000] });
+      }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 4000, 5000] });
 
       // Click "Manage Members" to verify the specific user
       const syncedTeamRow = ssoPage
@@ -669,11 +670,27 @@ test.describe("SSO Team Sync E2E", () => {
 
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
-      // Team sync might take a moment, so allow more time
-      await ssoPage
-        .getByRole("dialog")
-        .getByText(new RegExp(ADMIN_EMAIL, "i"))
-        .waitFor({ state: "visible", timeout: 15_000 });
+      // Use polling with reload to handle async team sync in CI
+      await expect(async () => {
+        // Check if the email is visible in the current dialog
+        const emailLocator = ssoPage
+          .getByRole("dialog")
+          .getByText(new RegExp(ADMIN_EMAIL, "i"));
+        const isVisible = await emailLocator.isVisible().catch(() => false);
+
+        if (!isVisible) {
+          // Close dialog, reload, and reopen
+          await ssoPage.keyboard.press("Escape");
+          await ssoPage.reload();
+          await ssoPage.waitForLoadState("networkidle");
+          await syncedTeamRow
+            .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
+            .click();
+          await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
+        }
+
+        await expect(emailLocator).toBeVisible();
+      }).toPass({ timeout: 30_000, intervals: [2000, 3000, 4000, 5000] });
 
       // Success! The SSO user was automatically synced to the team
     } finally {

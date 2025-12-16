@@ -6372,6 +6372,15 @@ export type BulkAssignChatApiKeysToProfilesErrors = {
     /**
      * Default Response
      */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: {
             message: string;

@@ -3,6 +3,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {{ include "archestra-platform.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
 spec:

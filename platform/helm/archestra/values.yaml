@@ -98,7 +98,7 @@ archestra:
 
       # Method 1: Use in-cluster configuration (recommended when running inside K8s)
       # No additional configuration needed - the platform will automatically use the service account
-      loadKubeconfigFromCurrentCluster: true
+      sameCluster: true
 
       # Method 2: Mount a kubeconfig file from a secret
       # Set useInClusterConfig to false and configure the secret below

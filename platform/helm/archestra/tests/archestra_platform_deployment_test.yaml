@@ -446,7 +446,7 @@ tests:
   - it: should set ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER to false when configured
     documentIndex: 1
     set:
-      archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster: false
+      archestra.orchestrator.kubernetes.sameCluster: false
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -457,7 +457,7 @@ tests:
   - it: should set ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER to true when configured
     documentIndex: 1
     set:
-      archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster: true
+      archestra.orchestrator.kubernetes.sameCluster: true
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env

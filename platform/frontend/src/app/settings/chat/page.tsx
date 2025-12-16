@@ -98,12 +98,10 @@ function ChatSettingsContent() {
   );
 
   // Compute selected API keys from row selection
+  // Since we use getRowId, rowSelection keys are the actual API key IDs
   const selectedApiKeyIds = useMemo(() => {
-    return Object.keys(rowSelection)
-      .filter((index) => rowSelection[index])
-      .map((index) => apiKeys[Number.parseInt(index, 10)]?.id)
-      .filter(Boolean) as string[];
-  }, [rowSelection, apiKeys]);
+    return Object.keys(rowSelection).filter((id) => rowSelection[id]);
+  }, [rowSelection]);
 
   const hasSelection = selectedApiKeyIds.length > 0;
 
@@ -531,6 +529,7 @@ function ChatSettingsContent() {
           data={apiKeys}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.id}
         />
       </div>
 

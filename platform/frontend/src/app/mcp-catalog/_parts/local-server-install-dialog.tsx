@@ -1,10 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { useState } from "react";
-import { InlineVaultSecretSelector } from "@/components/inline-vault-secret-selector";
+import { lazy, useState } from "react";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
+import { BooleanToggle } from "@/components/ui/boolean-toggle";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +22,38 @@ import { Separator } from "@/components/ui/separator";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
+const InlineVaultSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/inline-vault-secret-selector.ee"),
+);
+
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
+// Shared markdown components for consistent styling
+const markdownComponents: Components = {
+  p: (props) => (
+    <p className="text-muted-foreground leading-relaxed text-xs" {...props} />
+  ),
+  strong: (props) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  code: (props) => (
+    <code
+      className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
+      {...props}
+    />
+  ),
+  a: (props) => (
+    <a
+      className="text-primary hover:underline"
+      target="_blank"
+      rel="noopener noreferrer"
+      {...props}
+    />
+  ),
+};
 
 export interface LocalServerInstallResult {
   environmentValues: Record<string, string>;
@@ -65,9 +98,10 @@ export function LocalServerInstallDialog({
 
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
-  >(
+  >(() =>
     promptedEnvVars.reduce<Record<string, string>>((acc, env) => {
-      acc[env.key] = env.value || "";
+      const defaultValue = env.default !== undefined ? String(env.default) : "";
+      acc[env.key] = env.value || defaultValue;
       return acc;
     }, {}),
   );
@@ -144,7 +178,7 @@ export function LocalServerInstallDialog({
   const resetForm = () => {
     setEnvironmentValues(
       promptedEnvVars.reduce<Record<string, string>>((acc, env) => {
-        acc[env.key] = env.value || "";
+        acc[env.key] = env.value || String(env.default ?? "");
         return acc;
       }, {}),
     );
@@ -192,9 +226,16 @@ export function LocalServerInstallDialog({
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Install - {catalogItem?.name}</DialogTitle>
-          <DialogDescription>
-            {catalogItem?.instructions ||
-              "Provide the required configuration values to install this MCP server."}
+          <DialogDescription asChild>
+            <div className="text-sm text-muted-foreground prose prose-sm max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                components={markdownComponents}
+              >
+                {catalogItem?.instructions ||
+                  "Provide the required configuration values to install this MCP server."}
+              </ReactMarkdown>
+            </div>
           </DialogDescription>
         </DialogHeader>
 
@@ -219,30 +260,25 @@ export function LocalServerInstallDialog({
                     )}
                   </Label>
                   {env.description && (
-                    <p className="text-xs text-muted-foreground">
-                      {env.description}
-                    </p>
+                    <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={markdownComponents}
+                      >
+                        {env.description}
+                      </ReactMarkdown>
+                    </div>
                   )}
 
                   {env.type === "boolean" ? (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`env-${env.key}`}
-                        checked={environmentValues[env.key] === "true"}
-                        onCheckedChange={(checked) =>
-                          handleEnvVarChange(
-                            env.key,
-                            checked ? "true" : "false",
-                          )
-                        }
-                        disabled={isInstalling}
-                      />
-                      <span className="text-sm">
-                        {environmentValues[env.key] === "true"
-                          ? "True"
-                          : "False"}
-                      </span>
-                    </div>
+                    <BooleanToggle
+                      value={environmentValues[env.key] === "true"}
+                      onChange={(checked) =>
+                        handleEnvVarChange(env.key, checked ? "true" : "false")
+                      }
+                      disabled={isInstalling}
+                      variant="secondary"
+                    />
                   ) : env.type === "number" ? (
                     <Input
                       id={`env-${env.key}`}
@@ -251,7 +287,9 @@ export function LocalServerInstallDialog({
                       onChange={(e) =>
                         handleEnvVarChange(env.key, e.target.value)
                       }
-                      placeholder="0"
+                      placeholder={
+                        env.default !== undefined ? String(env.default) : "0"
+                      }
                       className="font-mono"
                       disabled={isInstalling}
                     />
@@ -290,9 +328,14 @@ export function LocalServerInstallDialog({
                       )}
                     </Label>
                     {env.description && (
-                      <p className="text-xs text-muted-foreground">
-                        {env.description}
-                      </p>
+                      <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          components={markdownComponents}
+                        >
+                          {env.description}
+                        </ReactMarkdown>
+                      </div>
                     )}
 
                     {/* BYOS mode: vault selector for each secret field */}

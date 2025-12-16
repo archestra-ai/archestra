@@ -77,7 +77,7 @@ class TeamTokenModel {
     const secretName = input.teamId
       ? `team-token-${input.teamId}`
       : `org-token-${input.organizationId}`;
-    const secret = await secretManager.createSecret(
+    const secret = await secretManager().createSecret(
       { token: tokenValue },
       secretName,
       FORCE_DB,
@@ -241,7 +241,7 @@ class TeamTokenModel {
       .where(eq(schema.teamTokensTable.id, id));
 
     // Also delete the secret explicitly
-    await secretManager.deleteSecret(token.secretId);
+    await secretManager().deleteSecret(token.secretId);
 
     return true;
   }
@@ -259,7 +259,7 @@ class TeamTokenModel {
     const newTokenStart = getTokenStart(newTokenValue);
 
     // Update secret with new value
-    await secretManager.updateSecret(token.secretId, {
+    await secretManager().updateSecret(token.secretId, {
       token: newTokenValue,
     });
 
@@ -284,7 +284,7 @@ class TeamTokenModel {
 
     // Check each token's secret
     for (const token of allTokens) {
-      const secret = await secretManager.getSecret(token.secretId);
+      const secret = await secretManager().getSecret(token.secretId);
       if (
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue
@@ -364,7 +364,7 @@ class TeamTokenModel {
     const token = await TeamTokenModel.findById(id);
     if (!token) return null;
 
-    const secret = await secretManager.getSecret(token.secretId);
+    const secret = await secretManager().getSecret(token.secretId);
     if (!secret?.secret) return null;
 
     return (secret.secret as { token?: string }).token ?? null;

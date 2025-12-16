@@ -1,7 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
-  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -21,23 +20,6 @@ const {
 
 export function useChatApiKeys() {
   return useSuspenseQuery({
-    queryKey: ["chat-api-keys"],
-    queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
-      if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch chat API keys",
-        );
-      }
-      return data ?? [];
-    },
-  });
-}
-
-export function useChatApiKeysOptional() {
-  return useQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
       const { data, error } = await getChatApiKeys();

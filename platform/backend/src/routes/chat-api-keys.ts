@@ -54,7 +54,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const forceDB = isByosEnabled();
 
       // Create the secret for the API key
-      const secret = await secretManager.createSecret(
+      const secret = await secretManager().createSecret(
         { apiKey: body.apiKey },
         "chatapikey",
         forceDB,
@@ -142,12 +142,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Update the secret if a new API key is provided
       if (body.apiKey) {
         if (apiKey.secretId) {
-          await secretManager.updateSecret(apiKey.secretId, {
+          await secretManager().updateSecret(apiKey.secretId, {
             apiKey: body.apiKey,
           });
         } else {
           const forceDB = isByosEnabled();
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             { apiKey: body.apiKey },
             "chatapikey",
             forceDB,
@@ -192,7 +192,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Delete the associated secret
       if (apiKey.secretId) {
-        await secretManager.deleteSecret(apiKey.secretId);
+        await secretManager().deleteSecret(apiKey.secretId);
       }
 
       await ChatApiKeyModel.delete(params.id);

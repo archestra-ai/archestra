@@ -43,8 +43,6 @@ import {
   ApiError,
   Gemini,
   OpenAi,
-  SupportedProvidersDiscriminatorSchema,
-  SupportedProvidersSchema,
   WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -72,12 +70,6 @@ const {
  * This enables proper $ref generation in the OpenAPI spec.
  */
 export function registerOpenApiSchemas() {
-  z.globalRegistry.add(SupportedProvidersSchema, {
-    id: "SupportedProviders",
-  });
-  z.globalRegistry.add(SupportedProvidersDiscriminatorSchema, {
-    id: "SupportedProvidersDiscriminator",
-  });
   z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
     id: "OpenAiChatCompletionRequest",
   });

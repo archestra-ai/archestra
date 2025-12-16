@@ -17,6 +17,12 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
+    # Vault configuration for BYOS tests
+    # Vault runs as a Kubernetes service in the cluster
+    # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200
+    ARCHESTRA_HASHICORP_VAULT_ADDR: "http://vault:8200"
+    ARCHESTRA_HASHICORP_VAULT_TOKEN: "dev-root-token"
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN"
 
   # Use NodePort service type to expose services on fixed ports
   service:

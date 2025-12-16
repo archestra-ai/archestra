@@ -278,7 +278,7 @@ export class McpServerRuntimeManager {
 
       // If MCP server has a secretId, fetch secret and create K8s Secret
       if (mcpServer.secretId) {
-        const secret = await secretManager.getSecret(mcpServer.secretId);
+        const secret = await secretManager().getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
           const secretData: Record<string, string> = {};

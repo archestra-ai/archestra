@@ -2,7 +2,7 @@
 
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import type {
   Control,
   FieldArrayWithId,
@@ -15,7 +15,7 @@ import type {
   UseFormWatch,
 } from "react-hook-form";
 import { parseVaultReference } from "@/app/mcp-catalog/_parts/mcp-catalog-form.utils";
-import { ExternalSecretSelector } from "@/components/external-secret-selector";
+import { BooleanToggle } from "@/components/ui/boolean-toggle";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -43,6 +43,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
 
 interface ExternalSecretValue {
   teamId: string | null;
@@ -201,7 +207,11 @@ export function EnvironmentVariablesFormField<
                         value={field.value}
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger
+                            data-testid={
+                              E2eTestId.SelectEnvironmentVariableType
+                            }
+                          >
                             <SelectValue placeholder="Type" />
                           </SelectTrigger>
                         </FormControl>
@@ -339,18 +349,14 @@ export function EnvironmentVariablesFormField<
                           return (
                             <FormItem>
                               <FormControl>
-                                <div className="flex items-center gap-2 h-10">
-                                  <Checkbox
-                                    checked={normalizedValue === "true"}
-                                    onCheckedChange={(checked) =>
+                                <div className="flex items-center h-10">
+                                  <BooleanToggle
+                                    value={normalizedValue === "true"}
+                                    onChange={(checked) =>
                                       field.onChange(checked ? "true" : "false")
                                     }
+                                    variant="secondary"
                                   />
-                                  <span className="text-sm">
-                                    {normalizedValue === "true"
-                                      ? "True"
-                                      : "False"}
-                                  </span>
                                 </div>
                               </FormControl>
                               <FormMessage />

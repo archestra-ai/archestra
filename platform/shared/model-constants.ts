@@ -1,13 +1,33 @@
-import type { SupportedProviders } from "./hey-api/clients/api";
+import { z } from "zod";
 
-type Providers = Extract<SupportedProviders, "openai" | "anthropic">;
+/**
+ * Supported LLM providers
+ */
+export const SupportedProvidersSchema = z.enum([
+  "openai",
+  "gemini",
+  "anthropic",
+]);
 
-export const providerDisplayNames: Record<Providers, string> = {
+export const SupportedProvidersDiscriminatorSchema = z.enum([
+  "openai:chatCompletions",
+  "gemini:generateContent",
+  "anthropic:messages",
+]);
+
+export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
+export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
+export type SupportedProviderDiscriminator = z.infer<
+  typeof SupportedProvidersDiscriminatorSchema
+>;
+
+export const providerDisplayNames: Record<SupportedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
+  gemini: "Gemini",
 };
 
-export const modelsByProvider: Record<Providers, string[]> = {
+export const modelsByProvider: Record<SupportedProvider, string[]> = {
   anthropic: [
     "claude-opus-4.5",
     "claude-haiku-4.5",
@@ -42,5 +62,15 @@ export const modelsByProvider: Record<Providers, string[]> = {
     "o3-mini",
     "o3-pro",
     "o4-mini",
+  ],
+  gemini: [
+    "gemini-3-pro-preview",
+    "gemini-3-pro-image-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-preview",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash-lite-preview-09-2025",
+    "gemini-2.5-pro",
+    "gemini-2.5-pro-preview-tts",
   ],
 };

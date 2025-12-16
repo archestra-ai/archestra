@@ -1,6 +1,7 @@
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, type Page, test } from "../../fixtures";
+import { clickButton } from "../../utils";
 
 // Run tests in this file serially to avoid conflicts when both tests
 // manipulate SSO providers in the same Keycloak realm.
@@ -81,8 +82,10 @@ async function deleteExistingProviderIfExists(
   providerType: "Generic OIDC" | "Generic SAML",
 ): Promise<void> {
   const providerCard = page.getByText(providerType, { exact: true });
+  // Wait for card to be visible and stable before clicking
+  await providerCard.waitFor({ state: "visible" });
   await providerCard.click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
   // Check if this is edit or create dialog by looking for Update Provider button
   const updateButton = page.getByRole("button", { name: "Update Provider" });
@@ -90,9 +93,16 @@ async function deleteExistingProviderIfExists(
 
   if (isEditDialog) {
     // Delete existing provider first
-    await page.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await clickButton({ page, options: { name: "Delete" } });
+    await expect(page.getByText(/Are you sure/i)).toBeVisible({
+      timeout: 10000,
+    });
+    const confirmDeleteButton = page.getByRole("button", {
+      name: "Delete",
+      exact: true,
+    });
+    await confirmDeleteButton.waitFor({ state: "visible" });
+    await confirmDeleteButton.click();
     await expect(page.getByRole("dialog")).not.toBeVisible({
       timeout: 10000,
     });
@@ -101,9 +111,10 @@ async function deleteExistingProviderIfExists(
     await page.reload();
     await page.waitForLoadState("networkidle");
 
-    // Now click again to open create dialog
+    // Wait for card to be visible again after reload, then click to open create dialog
+    await providerCard.waitFor({ state: "visible" });
     await providerCard.click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
   }
   // If not an edit dialog, it's already a create dialog - nothing to delete
 }
@@ -121,13 +132,20 @@ async function loginViaKeycloak(ssoPage: Page): Promise<void> {
     timeout: 15000,
   });
 
+  // Wait for Keycloak login form to be ready
+  await ssoPage.waitForLoadState("networkidle");
+
   // Fill in Keycloak login form
-  await ssoPage.getByLabel("Username or email").fill(KEYCLOAK_TEST_USER);
+  const usernameField = ssoPage.getByLabel("Username or email");
+  await usernameField.waitFor({ state: "visible" });
+  await usernameField.fill(KEYCLOAK_TEST_USER);
+
   // Password field - use getByRole which works for type="password" inputs
-  await ssoPage
-    .getByRole("textbox", { name: "Password" })
-    .fill(KEYCLOAK_TEST_PASSWORD);
-  await ssoPage.getByRole("button", { name: "Sign In" }).click();
+  const passwordField = ssoPage.getByRole("textbox", { name: "Password" });
+  await passwordField.waitFor({ state: "visible" });
+  await passwordField.fill(KEYCLOAK_TEST_PASSWORD);
+
+  await clickButton({ page: ssoPage, options: { name: "Sign In" } });
 
   // Wait for redirect back to Archestra - should land on a logged-in page (not sign-in)
   await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 15000 });
@@ -208,7 +226,7 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       );
 
     // Submit the form
-    await page.getByRole("button", { name: "Create Provider" }).click();
+    await clickButton({ page, options: { name: "Create Provider" } });
 
     // Wait for dialog to close and provider to be created
     await expect(page.getByRole("dialog")).not.toBeVisible({
@@ -236,9 +254,10 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       ).toBeVisible({ timeout: 5000 });
 
       // STEP 4: Click SSO button and login via Keycloak
-      await ssoPage
-        .getByRole("button", { name: new RegExp(providerName, "i") })
-        .click();
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
 
       // Login via Keycloak and wait for redirect back to Archestra
       await loginViaKeycloak(ssoPage);
@@ -246,6 +265,13 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       // Verify we're logged in by checking for authenticated UI elements
       // The sidebar navigation only appears when logged in
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
@@ -270,7 +296,7 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
 
     // Save changes
-    await page.getByRole("button", { name: "Update Provider" }).click();
+    await clickButton({ page, options: { name: "Update Provider" } });
     await expect(page.getByRole("dialog")).not.toBeVisible({
       timeout: 10000,
     });
@@ -280,11 +306,11 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     await expect(page.getByRole("dialog")).toBeVisible();
 
     // Click delete button
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
 
     // Confirm deletion in the confirmation dialog
     await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await clickButton({ page, options: { name: "Delete", exact: true } });
 
     // Wait for dialog to close
     await expect(page.getByRole("dialog")).not.toBeVisible({
@@ -394,7 +420,7 @@ test.describe("SSO Role Mapping E2E", () => {
     }
 
     // Submit the form
-    await page.getByRole("button", { name: "Create Provider" }).click();
+    await clickButton({ page, options: { name: "Create Provider" } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
     // STEP 3: Test SSO login with admin user (in archestra-admins group)
@@ -409,15 +435,23 @@ test.describe("SSO Role Mapping E2E", () => {
       await ssoPage.waitForLoadState("networkidle");
 
       // Click SSO button and login via Keycloak
-      await ssoPage
-        .getByRole("button", { name: new RegExp(providerName, "i") })
-        .click();
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
 
       // Login via Keycloak (admin user is in archestra-admins group)
       await loginViaKeycloak(ssoPage);
 
       // Wait for redirect back to Archestra
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -447,9 +481,9 @@ test.describe("SSO Role Mapping E2E", () => {
 
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
     await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await clickButton({ page, options: { name: "Delete", exact: true } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
   });
 });
@@ -507,7 +541,7 @@ test.describe("SSO Team Sync E2E", () => {
       );
 
     // Submit the form
-    await page.getByRole("button", { name: "Create Provider" }).click();
+    await clickButton({ page, options: { name: "Create Provider" } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
     // STEP 2: Navigate to teams page and create a team
@@ -515,7 +549,7 @@ test.describe("SSO Team Sync E2E", () => {
     await page.waitForLoadState("networkidle");
 
     // Click Create Team button
-    await page.getByRole("button", { name: "Create Team" }).click();
+    await clickButton({ page, options: { name: "Create Team" } });
     await expect(page.getByRole("dialog")).toBeVisible();
 
     // Fill in team details
@@ -555,7 +589,7 @@ test.describe("SSO Team Sync E2E", () => {
 
     // Add the external group mapping
     await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);
-    await page.getByRole("button", { name: "Add" }).click();
+    await clickButton({ page, options: { name: "Add" } });
 
     // Wait for the group to be added
     await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
@@ -563,10 +597,11 @@ test.describe("SSO Team Sync E2E", () => {
     );
 
     // Close the dialog - use first() to target the text button, not the X icon
-    await page
-      .getByRole("button", { name: "Close", exact: true })
-      .first()
-      .click();
+    await clickButton({
+      page,
+      options: { name: "Close", exact: true },
+      first: true,
+    });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
@@ -580,15 +615,23 @@ test.describe("SSO Team Sync E2E", () => {
       await ssoPage.waitForLoadState("networkidle");
 
       // Click SSO button and login via Keycloak
-      await ssoPage
-        .getByRole("button", { name: new RegExp(providerName, "i") })
-        .click();
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
 
       // Login via Keycloak (admin user is in archestra-admins group)
       await loginViaKeycloak(ssoPage);
 
       // Wait for redirect back to Archestra
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -619,16 +662,18 @@ test.describe("SSO Team Sync E2E", () => {
         .filter({ hasText: teamName });
 
       await syncedTeamRow
-        .getByRole("button", { name: "Manage Members" })
+        .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
         .click();
 
-      await expect(ssoPage.getByRole("dialog")).toBeVisible();
+      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
 
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
-      await expect(
-        ssoPage.getByRole("dialog").getByText(new RegExp(ADMIN_EMAIL, "i")),
-      ).toBeVisible({ timeout: 5000 });
+      // Team sync might take a moment, so allow more time
+      await ssoPage
+        .getByRole("dialog")
+        .getByText(new RegExp(ADMIN_EMAIL, "i"))
+        .waitFor({ state: "visible", timeout: 15_000 });
 
       // Success! The SSO user was automatically synced to the team
     } finally {
@@ -653,7 +698,7 @@ test.describe("SSO Team Sync E2E", () => {
       .click();
 
     await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await clickButton({ page, options: { name: "Delete", exact: true } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
     // Delete the SSO provider
@@ -662,9 +707,9 @@ test.describe("SSO Team Sync E2E", () => {
 
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
     await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await clickButton({ page, options: { name: "Delete", exact: true } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
   });
 });
@@ -746,10 +791,12 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page.getByLabel("Last Name Attribute (Optional)").fill("lastName");
 
     // Submit the form
-    await page.getByRole("button", { name: "Create Provider" }).click();
+    await clickButton({ page, options: { name: "Create Provider" } });
 
     // Wait for dialog to close and provider to be created
+    // Also wait for network to be idle to ensure the provider is fully created
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState("networkidle");
 
     // Verify the provider is now shown as "Enabled"
     await page.reload();
@@ -769,14 +816,16 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       await ssoPage.waitForLoadState("networkidle");
 
       // Verify SSO button for our provider appears
-      await expect(
-        ssoPage.getByRole("button", { name: new RegExp(providerName, "i") }),
-      ).toBeVisible({ timeout: 5000 });
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
 
       // STEP 4: Click SSO button and login via Keycloak SAML
-      await ssoPage
-        .getByRole("button", { name: new RegExp(providerName, "i") })
-        .click();
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
 
       // Login via Keycloak and wait for redirect back to Archestra
       await loginViaKeycloak(ssoPage);
@@ -786,6 +835,13 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       // to the existing account and log us in successfully.
       // The sidebar navigation only appears when logged in
       await ssoPage.waitForLoadState("networkidle");
+      // Wait for URL to be on a logged-in page (not /auth/sign-in)
+      await ssoPage.waitForURL(
+        (url) => !url.pathname.includes("/auth/sign-in"),
+        {
+          timeout: 15000,
+        },
+      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
@@ -802,30 +858,36 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page.waitForLoadState("networkidle");
 
     // Click on Generic SAML card to edit (our provider)
-    await page.getByText("Generic SAML", { exact: true }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    const samlCard = page.getByText("Generic SAML", { exact: true });
+    await samlCard.waitFor({ state: "visible" });
+    await samlCard.click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
     // Update the domain (use a subdomain to keep it valid for the same email domain)
     await page.getByLabel("Domain").clear();
     await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
 
     // Save changes
-    await page.getByRole("button", { name: "Update Provider" }).click();
+    await clickButton({ page, options: { name: "Update Provider" } });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState("networkidle");
 
     // STEP 6: Delete the provider
-    await page.getByText("Generic SAML", { exact: true }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    const samlCardForDelete = page.getByText("Generic SAML", { exact: true });
+    await samlCardForDelete.waitFor({ state: "visible" });
+    await samlCardForDelete.click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
     // Click delete button
-    await page.getByRole("button", { name: "Delete" }).click();
+    await clickButton({ page, options: { name: "Delete" } });
 
     // Confirm deletion in the confirmation dialog
     await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await clickButton({ page, options: { name: "Delete", exact: true } });
 
     // Wait for dialog to close
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState("networkidle");
 
     // STEP 7: Verify SSO button no longer appears on login page
     // Use a fresh context to check the sign-in page
@@ -841,7 +903,7 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       // SSO button for our provider should no longer be visible
       await expect(
         verifyPage.getByRole("button", { name: new RegExp(providerName, "i") }),
-      ).not.toBeVisible({ timeout: 5000 });
+      ).not.toBeVisible({ timeout: 10000 });
     } finally {
       await verifyContext.close();
     }

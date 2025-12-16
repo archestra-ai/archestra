@@ -21,6 +21,13 @@ on:
         required: true
       DOCKER_PASSWORD:
         required: true
+      # Required for release-please PRs to push codegen changes with a token that triggers workflow re-runs
+      # (pushes made with GITHUB_TOKEN do not trigger workflows by design)
+      # see https://stackoverflow.com/a/67551255
+      ARCHESTRA_RELEASER_GITHUB_APP_ID:
+        required: false
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
+        required: false
 
 jobs:
   paths-filter:
@@ -86,6 +93,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Generate a GitHub App token for release-please PRs
+      # This is needed because pushes made with GITHUB_TOKEN do not trigger workflow re-runs,
+      # but pushes made with a GitHub App token DO trigger workflows.
+      # This allows the codegen commit to properly re-trigger CI checks.
+      #
+      # see https://stackoverflow.com/a/67551255
+      - name: Generate token for release-please PR
+        if: ${{ inputs.should-skip-running-and-always-succeed != true && inputs.is-release-please-pr == true }}
+        id: generate-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -95,6 +116,10 @@ jobs:
           # For release-please PRs, checkout the actual PR branch (not the merge commit)
           # to avoid detached HEAD state which would cause git push to fail
           ref: ${{ inputs.is-release-please-pr && github.head_ref || '' }}
+          # Use the GitHub App token for release-please PRs so that the codegen commit push
+          # triggers a new workflow run (pushes with GITHUB_TOKEN don't trigger workflows)
+          # see https://stackoverflow.com/a/67551255
+          token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -105,7 +130,9 @@ jobs:
       - name: Setup environment variables
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -120,6 +147,19 @@ jobs:
           platform-context: ./platform
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Deploy HashiCorp Vault in Kubernetes
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          # Deploy Vault as a Kubernetes service
+          kubectl apply -f .github/vault-ci.yaml
+
+          # Wait for Vault pod to be ready
+          kubectl wait --for=condition=Ready pod/vault --timeout=120s
+
+          # Wait for Vault service to be ready (access via kind port mapping: host:8200 -> nodePort:30200)
+          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
+          echo "Vault is ready at localhost:8200 (via kind port mapping to NodePort 30200)"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check
@@ -364,7 +404,7 @@ jobs:
       - name: Tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
           helm unittest .
 
       - name: helm package

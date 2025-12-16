@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Key, Link2, Plus, Settings, Trash2, Users, Vault } from "lucide-react";
 
-import { useState } from "react";
+import { lazy, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,8 +37,13 @@ import { type TeamToken, useTokens } from "@/lib/team-token.query";
 import { WithPermissions } from "../roles/with-permissions";
 import { TeamExternalGroupsDialog } from "./team-external-groups-dialog";
 import { TeamMembersDialog } from "./team-members-dialog";
-import { TeamVaultFolderDialog } from "./team-vault-folder-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
+
+const TeamVaultFolderDialog = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("./team-vault-folder-dialog.ee"),
+);
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
 
@@ -215,6 +220,7 @@ export function TeamsList() {
                         setSelectedTeam(team);
                         setMembersDialogOpen(true);
                       }}
+                      data-testid={`${E2eTestId.ManageMembersButton}-${team.name}`}
                     >
                       <Settings className="mr-2 h-4 w-4" />
                       Manage Members
@@ -226,6 +232,7 @@ export function TeamsList() {
                             permissions={{ team: ["update"] }}
                             variant="outline"
                             size="sm"
+                            data-testid={`${E2eTestId.ConfigureVaultFolderButton}-${team.name}`}
                             onClick={() => {
                               setSelectedTeam(team);
                               setVaultFolderDialogOpen(true);

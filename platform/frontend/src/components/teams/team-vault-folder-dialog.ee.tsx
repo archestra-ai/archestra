@@ -26,7 +26,7 @@ import {
   useDeleteTeamVaultFolder,
   useSetTeamVaultFolder,
   useTeamVaultFolder,
-} from "@/lib/team-vault-folder.query";
+} from "@/lib/team-vault-folder.query.ee";
 
 interface Team {
   id: string;
@@ -40,7 +40,7 @@ interface TeamVaultFolderDialogProps {
   team: Team;
 }
 
-export function TeamVaultFolderDialog({
+export default function TeamVaultFolderDialog({
   open,
   onOpenChange,
   team,

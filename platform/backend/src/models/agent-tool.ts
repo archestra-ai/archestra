@@ -49,6 +49,47 @@ class AgentToolModel {
         ...options,
       })
       .returning();
+
+    // Auto-configure policies if enabled (run in background)
+    // Import at top of method to avoid circular dependency
+    const { agentToolAutoPolicyService } = await import(
+      "./agent-tool-auto-policy"
+    );
+    const { default: OrganizationModel } = await import("./organization");
+
+    // Get agent's organization via team relationship
+    db.select({ organizationId: schema.teamsTable.organizationId })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+
+        const organizationId = rows[0].organizationId;
+        const organization = await OrganizationModel.getById(organizationId);
+
+        if (organization?.autoConfigureNewTools) {
+          return agentToolAutoPolicyService.configurePoliciesForAgentTool(
+            agentTool.id,
+            organizationId,
+          );
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            agentToolId: agentTool.id,
+            agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to auto-configure policies for new agent-tool",
+        );
+      });
+
     return agentTool;
   }
 
@@ -250,10 +291,7 @@ class AgentToolModel {
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
     useDynamicTeamCredential?: boolean,
-  ): Promise<{
-    status: "created" | "updated" | "unchanged";
-    agentToolId?: string;
-  }> {
+  ): Promise<{ status: "created" | "updated" | "unchanged" }> {
     // Check if assignment already exists
     const [existing] = await db
       .select()
@@ -292,8 +330,8 @@ class AgentToolModel {
         options.useDynamicTeamCredential = useDynamicTeamCredential;
       }
 
-      const agentTool = await AgentToolModel.create(agentId, toolId, options);
-      return { status: "created", agentToolId: agentTool.id };
+      await AgentToolModel.create(agentId, toolId, options);
+      return { status: "created" };
     }
 
     // Check if credentials need updating

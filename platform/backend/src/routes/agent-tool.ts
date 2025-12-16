@@ -10,7 +10,6 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  OrganizationModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -688,6 +687,7 @@ export async function assignToolToAgent(
   }
 
   // Create or update the assignment with credentials
+  // Auto-configure happens automatically in AgentToolModel.create() if enabled
   const result = await AgentToolModel.createOrUpdateCredentials(
     agentId,
     toolId,
@@ -695,74 +695,6 @@ export async function assignToolToAgent(
     executionSourceMcpServerId,
     useDynamicTeamCredential,
   );
-
-  // If a new assignment was created, check if auto-configure is enabled
-  if (result.status === "created" && result.agentToolId) {
-    logger.debug(
-      { agentId, toolId, agentToolId: result.agentToolId },
-      "New tool assignment created, checking auto-configure setting",
-    );
-
-    // Get agent to access organization ID
-    const agent = await AgentModel.findById(agentId);
-    if (agent) {
-      // Get organization settings
-      const organization = await OrganizationModel.getById(
-        agent.organizationId,
-      );
-
-      logger.debug(
-        {
-          organizationId: agent.organizationId,
-          autoConfigureNewTools: organization?.autoConfigureNewTools,
-        },
-        "Organization auto-configure setting",
-      );
-
-      // Auto-configure policies if enabled for the organization
-      if (organization?.autoConfigureNewTools) {
-        // Run auto-configure in background (don't await to avoid blocking)
-        agentToolAutoPolicyService
-          .configurePoliciesForAgentTool(result.agentToolId, agent.organizationId)
-          .then((autoPolicyResult) => {
-            if (autoPolicyResult.success) {
-              logger.info(
-                {
-                  agentToolId: result.agentToolId,
-                  agentId,
-                  toolId,
-                  organizationId: agent.organizationId,
-                },
-                "Auto-configured policies for newly assigned tool",
-              );
-            } else {
-              logger.warn(
-                {
-                  agentToolId: result.agentToolId,
-                  agentId,
-                  toolId,
-                  organizationId: agent.organizationId,
-                  error: autoPolicyResult.error,
-                },
-                "Failed to auto-configure policies for newly assigned tool",
-              );
-            }
-          })
-          .catch((error) => {
-            logger.error(
-              {
-                agentToolId: result.agentToolId,
-                agentId,
-                toolId,
-                organizationId: agent.organizationId,
-                error: error instanceof Error ? error.message : String(error),
-              },
-              "Error during auto-configure for newly assigned tool",
-            );
-          });
-      }
-    }
-  }
 
   // Return appropriate status
   if (result.status === "unchanged") {

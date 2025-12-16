@@ -24,7 +24,7 @@ import {
   useTeamVaultFolderSecrets,
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
-} from "@/lib/team-vault-folder.query";
+} from "@/lib/team-vault-folder.query.ee";
 import Divider from "./divider";
 
 interface ExternalSecretSelectorProps {
@@ -37,7 +37,7 @@ interface ExternalSecretSelectorProps {
   disabled?: boolean;
 }
 
-export function ExternalSecretSelector({
+export default function ExternalSecretSelector({
   selectedTeamId,
   selectedSecretPath,
   selectedSecretKey,

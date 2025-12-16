@@ -1212,3 +1212,162 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["config.linkerd.io/proxy-cpu-request"]
           value: "100m"
+
+  # Sensitive environment variable secretKeyRef tests
+  - it: should use secretKeyRef for ARCHESTRA_AUTH_ADMIN_PASSWORD when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUTH_ADMIN_PASSWORD: "my-secure-admin-password"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-auth-admin-password
+
+  - it: should use secretKeyRef for ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD: "otel-password-123"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-otel-exporter-otlp-auth-password
+
+  - it: should use secretKeyRef for ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER: "bearer-token-xyz"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-otel-exporter-otlp-auth-bearer
+
+  - it: should use secretKeyRef for ARCHESTRA_METRICS_SECRET when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_METRICS_SECRET: "metrics-secret-token"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-metrics-secret
+
+  - it: should use secretKeyRef for ARCHESTRA_HASHICORP_VAULT_TOKEN when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_HASHICORP_VAULT_TOKEN: "vault-token-abc123"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-hashicorp-vault-token
+
+  - it: should use secretKeyRef for multiple sensitive env vars when provided together
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUTH_ADMIN_PASSWORD: "admin-password"
+        ARCHESTRA_METRICS_SECRET: "metrics-secret"
+        ARCHESTRA_API_BASE_URL: "https://api.example.com"
+    asserts:
+      # Sensitive vars should use secretKeyRef
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-auth-admin-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-metrics-secret
+      # Non-sensitive vars should use plain value
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_API_BASE_URL
+            value: "https://api.example.com"
+
+  - it: should not expose sensitive env var values as plaintext
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUTH_ADMIN_PASSWORD: "super-secret-password"
+    asserts:
+      # Should NOT contain the value as plaintext
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+            value: "super-secret-password"
+
+  - it: should handle mix of sensitive and non-sensitive env vars correctly
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_FRONTEND_URL: "https://frontend.example.com"
+        ARCHESTRA_HASHICORP_VAULT_TOKEN: "hvs.secret-token"
+        ARCHESTRA_LOGGING_LEVEL: "debug"
+        ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER: "my-bearer-token"
+    asserts:
+      # Non-sensitive vars should use plain value
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_FRONTEND_URL
+            value: "https://frontend.example.com"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_LOGGING_LEVEL
+            value: "debug"
+      # Sensitive vars should use secretKeyRef
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-hashicorp-vault-token
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-otel-exporter-otlp-auth-bearer

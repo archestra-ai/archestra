@@ -54,6 +54,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Environment variables for the Archestra Platform container
 */}}
 {{- define "archestra-platform.env" -}}
+{{/*
+List of sensitive environment variables that should be stored in the Secret
+and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
+This must match the list in secret.yaml.
+*/}}
+{{- $sensitiveEnvVars := list
+  "ARCHESTRA_AUTH_ADMIN_PASSWORD"
+  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
+  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
+  "ARCHESTRA_METRICS_SECRET"
+  "ARCHESTRA_HASHICORP_VAULT_TOKEN"
+}}
 {{- if .Values.postgresql.external_database_url }}
 - name: ARCHESTRA_DATABASE_URL
   valueFrom:
@@ -100,8 +112,17 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- if .Values.archestra.orchestrator.kubernetes.mcpServerRbac.create }}
 {{- end }}
 {{- range $key, $value := .Values.archestra.env }}
+{{- if has $key $sensitiveEnvVars }}
+{{/* Sensitive env vars are stored in the Secret and referenced via secretKeyRef */}}
+- name: {{ $key }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "archestra-platform.authSecretName" $ }}
+      key: {{ $key | lower | replace "_" "-" }}
+{{- else }}
 - name: {{ $key }}
   value: {{ $value | quote }}
+{{- end }}
 {{- end }}
 {{- range .Values.archestra.envFromSecrets }}
 - name: {{ .name }}

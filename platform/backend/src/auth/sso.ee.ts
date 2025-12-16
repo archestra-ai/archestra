@@ -4,7 +4,10 @@ import { jwtDecode } from "jwt-decode";
 import { extractGroupsFromClaims } from "@/auth/sso-team-sync-cache.ee";
 import config from "@/config";
 import logger from "@/logging";
-import { AccountModel, MemberModel, TeamModel } from "@/models";
+// Direct imports to avoid circular dependencies when importing from barrel files
+import TeamModel from "@/models/team";
+import AccountModel from "@/models/account";
+import MemberModel from "@/models/member";
 import SsoProviderModel from "@/models/sso-provider.ee";
 
 export const ssoConfig = {

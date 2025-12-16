@@ -2,7 +2,7 @@ import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
-import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
+import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache.ee";
 import { describe, expect, test } from "@/test";
 import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider.ee";
 

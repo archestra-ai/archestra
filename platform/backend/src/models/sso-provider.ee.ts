@@ -8,7 +8,7 @@ import { auth } from "@/auth/better-auth";
 import {
   cacheSsoGroups,
   extractGroupsFromClaims,
-} from "@/auth/sso-team-sync-cache";
+} from "@/auth/sso-team-sync-cache.ee";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";

@@ -134,7 +134,7 @@ export const auth: any = betterAuth({
     twoFactor({
       issuer: APP_NAME,
     }),
-    ...(ssoConfig ? sso(ssoConfig) : {}),
+    ...(ssoConfig ? [sso(ssoConfig)] : []),
   ],
 
   user: {

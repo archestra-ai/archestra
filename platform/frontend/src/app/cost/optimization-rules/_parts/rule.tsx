@@ -1,10 +1,6 @@
 /** The component to display an editable optimization rule */
 
-import {
-  type archestraApiTypes,
-  type SupportedProvider,
-  SupportedProviders,
-} from "@shared";
+import { type SupportedProvider, SupportedProviders } from "@shared";
 import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";

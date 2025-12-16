@@ -45,7 +45,7 @@ local_resource(
 #       ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token
 local_resource(
   'vault-docker',
-  serve_cmd='docker compose -f docker-compose.vault.yml up',
+  serve_cmd='docker compose -f docker-compose.vault.ee.yml up',
   serve_dir='.',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,

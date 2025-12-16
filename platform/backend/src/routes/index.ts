@@ -26,7 +26,6 @@ export { default as secretsRoutes } from "./secrets";
 export { default as ssoProviderRoutes } from "./sso-provider";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
-export { default as teamVaultFolderRoutes } from "./team-vault-folder";
 export { default as tokenRoutes } from "./token";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";

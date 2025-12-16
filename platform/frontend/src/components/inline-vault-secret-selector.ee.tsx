@@ -13,7 +13,7 @@ import {
   useTeamVaultFolderSecrets,
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
-} from "@/lib/team-vault-folder.query";
+} from "@/lib/team-vault-folder.query.ee";
 import { E2eTestId } from "../../../shared";
 
 interface InlineVaultSecretSelectorProps {
@@ -43,7 +43,7 @@ interface InlineVaultSecretSelectorProps {
  * This component expects a teamId to be provided - the team selection should be
  * handled by a parent component (shared across all secret selectors).
  */
-export function InlineVaultSecretSelector({
+export default function InlineVaultSecretSelector({
   teamId,
   selectedSecretPath,
   selectedSecretKey,

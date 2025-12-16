@@ -1100,57 +1100,6 @@ export const addTeamExternalGroup = <ThrowOnError extends boolean = false>(optio
 export const removeTeamExternalGroup = <ThrowOnError extends boolean = false>(options: Options<RemoveTeamExternalGroupData, ThrowOnError>) => (options.client ?? client).delete<RemoveTeamExternalGroupResponses, RemoveTeamExternalGroupErrors, ThrowOnError>({ url: '/api/teams/{id}/external-groups/{groupId}', ...options });
 
 /**
- * Delete a team's Vault folder mapping
- */
-export const deleteTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).delete<DeleteTeamVaultFolderResponses, DeleteTeamVaultFolderErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder', ...options });
-
-/**
- * Get a team's Vault folder configuration
- */
-export const getTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).get<GetTeamVaultFolderResponses, GetTeamVaultFolderErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder', ...options });
-
-/**
- * Set or update a team's Vault folder path
- */
-export const setTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<SetTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).post<SetTeamVaultFolderResponses, SetTeamVaultFolderErrors, ThrowOnError>({
-    url: '/api/teams/{teamId}/vault-folder',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Check connectivity to a team's Vault folder
- */
-export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = false>(options: Options<CheckTeamVaultFolderConnectivityData, ThrowOnError>) => (options.client ?? client).post<CheckTeamVaultFolderConnectivityResponses, CheckTeamVaultFolderConnectivityErrors, ThrowOnError>({
-    url: '/api/teams/{teamId}/vault-folder/check-connectivity',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List secrets available in a team's Vault folder
- */
-export const listTeamVaultFolderSecrets = <ThrowOnError extends boolean = false>(options: Options<ListTeamVaultFolderSecretsData, ThrowOnError>) => (options.client ?? client).get<ListTeamVaultFolderSecretsResponses, ListTeamVaultFolderSecretsErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder/secrets', ...options });
-
-/**
- * Get the keys of a specific secret in a team's Vault folder
- */
-export const getTeamVaultSecretKeys = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultSecretKeysData, ThrowOnError>) => (options.client ?? client).post<GetTeamVaultSecretKeysResponses, GetTeamVaultSecretKeysErrors, ThrowOnError>({
-    url: '/api/teams/{teamId}/vault-folder/secrets/keys',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Get all token prices
  */
 export const getTokenPrices = <ThrowOnError extends boolean = false>(options?: Options<GetTokenPricesData, ThrowOnError>) => (options?.client ?? client).get<GetTokenPricesResponses, GetTokenPricesErrors, ThrowOnError>({ url: '/api/token-prices', ...options });
@@ -1241,6 +1190,57 @@ export const getRole = <ThrowOnError extends boolean = false>(options: Options<G
  */
 export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
     url: '/api/roles/{roleId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete a team's Vault folder mapping
+ */
+export const deleteTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).delete<DeleteTeamVaultFolderResponses, DeleteTeamVaultFolderErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder', ...options });
+
+/**
+ * Get a team's Vault folder configuration
+ */
+export const getTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).get<GetTeamVaultFolderResponses, GetTeamVaultFolderErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder', ...options });
+
+/**
+ * Set or update a team's Vault folder path
+ */
+export const setTeamVaultFolder = <ThrowOnError extends boolean = false>(options: Options<SetTeamVaultFolderData, ThrowOnError>) => (options.client ?? client).post<SetTeamVaultFolderResponses, SetTeamVaultFolderErrors, ThrowOnError>({
+    url: '/api/teams/{teamId}/vault-folder',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Check connectivity to a team's Vault folder
+ */
+export const checkTeamVaultFolderConnectivity = <ThrowOnError extends boolean = false>(options: Options<CheckTeamVaultFolderConnectivityData, ThrowOnError>) => (options.client ?? client).post<CheckTeamVaultFolderConnectivityResponses, CheckTeamVaultFolderConnectivityErrors, ThrowOnError>({
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List secrets available in a team's Vault folder
+ */
+export const listTeamVaultFolderSecrets = <ThrowOnError extends boolean = false>(options: Options<ListTeamVaultFolderSecretsData, ThrowOnError>) => (options.client ?? client).get<ListTeamVaultFolderSecretsResponses, ListTeamVaultFolderSecretsErrors, ThrowOnError>({ url: '/api/teams/{teamId}/vault-folder/secrets', ...options });
+
+/**
+ * Get the keys of a specific secret in a team's Vault folder
+ */
+export const getTeamVaultSecretKeys = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultSecretKeysData, ThrowOnError>) => (options.client ?? client).post<GetTeamVaultSecretKeysResponses, GetTeamVaultSecretKeysErrors, ThrowOnError>({
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys',
     ...options,
     headers: {
         'Content-Type': 'application/json',

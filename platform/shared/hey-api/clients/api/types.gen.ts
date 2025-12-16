@@ -6322,6 +6322,87 @@ export type UpdateChatApiKeyProfilesResponses = {
 
 export type UpdateChatApiKeyProfilesResponse = UpdateChatApiKeyProfilesResponses[keyof UpdateChatApiKeyProfilesResponses];
 
+export type BulkAssignChatApiKeysToProfilesData = {
+    body: {
+        chatApiKeyIds: Array<string>;
+        profileIds: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys/bulk-assign';
+};
+
+export type BulkAssignChatApiKeysToProfilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkAssignChatApiKeysToProfilesError = BulkAssignChatApiKeysToProfilesErrors[keyof BulkAssignChatApiKeysToProfilesErrors];
+
+export type BulkAssignChatApiKeysToProfilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        assignedCount: number;
+    };
+};
+
+export type BulkAssignChatApiKeysToProfilesResponse = BulkAssignChatApiKeysToProfilesResponses[keyof BulkAssignChatApiKeysToProfilesResponses];
+
 export type StreamChatData = {
     body: {
         id: string;

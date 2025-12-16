@@ -278,9 +278,11 @@ jobs:
       # This eliminates the need for manual Playwright browser installation and caching
       # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
       - name: Run E2E tests
+        id: e2e
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
         run: |
+          set -o pipefail
           docker run --rm \
             --network host \
             --ipc=host \
@@ -289,15 +291,16 @@ jobs:
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e"
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e" \
+            2>&1 | tee playwright-output.txt
 
       - name: Check for flaky tests
         id: check-flaky
         if: success()
         run: |
-          # If there are retry directories in test-results after a successful run, tests were flaky
-          if ls platform/e2e-tests/test-results/*retry* 1>/dev/null 2>&1; then
-            echo "⚠️ Flaky tests detected (retry directories found)"
+          # Playwright outputs "X flaky" in its summary when tests pass on retry
+          if grep -qE "[0-9]+ flaky" platform/playwright-output.txt 2>/dev/null; then
+            echo "⚠️ Flaky tests detected"
             echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
           fi
 

@@ -101,7 +101,7 @@ archestra:
       sameCluster: true
 
       # Method 2: Mount a kubeconfig file from a secret
-      # Set useInClusterConfig to false and configure the secret below
+      # Set sameCluster to false and configure the secret below
       kubeconfig:
         # Enable kubeconfig volume mount
         enabled: false

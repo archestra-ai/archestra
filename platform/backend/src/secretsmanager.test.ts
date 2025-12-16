@@ -114,99 +114,99 @@ describe("SecretsManager", async () => {
       setEnterpriseLicenseActivated(originalEnterpriseLicenseActivated);
     });
 
-    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", () => {
+    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", async () => {
       delete process.env.ARCHESTRA_SECRETS_MANAGER;
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
+    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'DB'", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but VAULT_ADDR is not set", () => {
+    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but VAULT_ADDR is not set", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
       setEnterpriseLicenseActivated(true);
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but token is missing (default auth method)", () => {
+    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but token is missing (default auth method)", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
       setEnterpriseLicenseActivated(true);
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set and enterprise license is activated", () => {
+    test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set and enterprise license is activated", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
       setEnterpriseLicenseActivated(true);
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(VaultSecretManager);
     });
 
-    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but enterprise license is not activated", () => {
+    test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but enterprise license is not activated", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
       setEnterpriseLicenseActivated(false);
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return DbSecretsManager even when vault env vars are set if ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
+    test("should return DbSecretsManager even when vault env vars are set if ARCHESTRA_SECRETS_MANAGER is 'DB'", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
       process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return DbSecretsManager when AUTH_METHOD=K8S but K8S_ROLE is missing", () => {
+    test("should return DbSecretsManager when AUTH_METHOD=K8S but K8S_ROLE is missing", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "K8S";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE;
       setEnterpriseLicenseActivated(true);
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });
 
-    test("should return DbSecretsManager when AUTH_METHOD=AWS but AWS_ROLE is missing", () => {
+    test("should return DbSecretsManager when AUTH_METHOD=AWS but AWS_ROLE is missing", async () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
       process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
       process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
       delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
       setEnterpriseLicenseActivated(true);
 
-      const manager = createSecretManager();
+      const manager = await createSecretManager();
 
       expect(manager).toBeInstanceOf(DbSecretsManager);
     });

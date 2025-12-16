@@ -21,12 +21,8 @@ test(
     await page.locator("[type=submit]").click();
     await page.waitForTimeout(1000);
 
-    // Close the "How to connect" modal which shows up after creating a profile
-    await page
-      .getByTestId(E2eTestId.CreateAgentCloseHowToConnectButton)
-      .click();
-
     // Check if the profile is created
+    await goToPage(page, "/profiles");
     await expect(
       page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
     ).toBeVisible();

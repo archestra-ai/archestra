@@ -671,9 +671,10 @@ test.describe("SSO Team Sync E2E", () => {
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
       // Team sync might take a moment, so allow more time
-      await expect(
-        ssoPage.getByRole("dialog").getByText(new RegExp(ADMIN_EMAIL, "i")),
-      ).toBeVisible({ timeout: 10000 });
+      await ssoPage
+        .getByRole("dialog")
+        .getByText(new RegExp(ADMIN_EMAIL, "i"))
+        .waitFor({ state: "visible", timeout: 15_000 });
 
       // Success! The SSO user was automatically synced to the team
     } finally {

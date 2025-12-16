@@ -663,10 +663,9 @@ test.describe("SSO Team Sync E2E", () => {
         .filter({ hasText: teamName });
 
       await syncedTeamRow;
-      await clickButton({
-        page,
-        options: { name: "Manage Members" },
-      });
+      await page
+        .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
+        .click();
 
       await expect(ssoPage.getByRole("dialog")).toBeVisible();
 

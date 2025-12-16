@@ -55,6 +55,7 @@ export const E2eTestId = {
     "inline-vault-secret-selector-secret-trigger",
   InlineVaultSecretSelectorSecretTriggerKey:
     "inline-vault-secret-selector-secret-trigger-key",
+  ManageMembersButton: "manage-members-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
   AddChatApiKeyButton: "add-chat-api-key-button",

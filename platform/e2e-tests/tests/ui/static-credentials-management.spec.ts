@@ -185,6 +185,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
         };
+        await goToPage(page, "/mcp-catalog/registry");
         await openManageCredentialsDialog(page, catalogItemName);
         const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
         await expect(visibleCredentialsAfterRevoke).toHaveLength(

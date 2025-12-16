@@ -215,6 +215,7 @@ export function TeamsList() {
                         setSelectedTeam(team);
                         setMembersDialogOpen(true);
                       }}
+                      data-testid={`${E2eTestId.ManageMembersButton}-${team.name}`}
                     >
                       <Settings className="mr-2 h-4 w-4" />
                       Manage Members

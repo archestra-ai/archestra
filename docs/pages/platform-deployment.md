@@ -548,6 +548,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
+- **`ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_PREFIX`** - Prefix for constructing Kubernetes service account names for MCP server pods.
+
+  - Default: `archestra-archestra-platform`
+  - Full service account name pattern: `{prefix}-mcp-k8s-operator` (e.g., `archestra-archestra-platform-mcp-k8s-operator`)
+  - When deploying via Helm, this is automatically set to the Helm fullname (`{release-name}-archestra-platform`)
+  - Customize if you use a custom Helm release name or `fullnameOverride`
+
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
 
   - Default: `http://localhost:4318/v1/traces`

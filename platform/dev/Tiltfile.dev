@@ -3,7 +3,7 @@
 # MCP Server RBAC resources for local development
 # Render from Helm chart and filter to only RBAC resources (avoid duplication)
 k8s_yaml(local(
-  'helm template archestra ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
+  'helm template archestra-platform ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
   quiet=True
 ))
 
@@ -11,9 +11,9 @@ k8s_resource(
   new_name='mcp-rbac',
   labels=['dev'],
   objects=[
-    'archestra-archestra-platform-mcp-k8s-operator:serviceaccount:default',
-    'archestra-archestra-platform-mcp-server-operator:role:default',
-    'archestra-archestra-platform-mcp-server-operator:rolebinding:default'
+    'archestra-platform-mcp-k8s-operator:serviceaccount:default',
+    'archestra-platform-mcp-server-operator:role:default',
+    'archestra-platform-mcp-server-operator:rolebinding:default'
   ]
 )
 

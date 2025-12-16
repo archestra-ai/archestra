@@ -1808,7 +1808,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     const originalValue =
       mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
-      "archestra-archestra-platform-mcp-k8s-operator";
+      "archestra-platform-mcp-k8s-operator";
 
     const mockMcpServer = {
       id: "k8s-server",
@@ -1851,7 +1851,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
 
     // Should use the configured service account name directly
     expect(podSpec.spec?.serviceAccountName).toBe(
-      "archestra-archestra-platform-mcp-k8s-operator",
+      "archestra-platform-mcp-k8s-operator",
     );
 
     // Restore original config value

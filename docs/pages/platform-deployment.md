@@ -404,21 +404,7 @@ For production deployments, we strongly recommend using a cloud-hosted PostgreSQ
 - **Security** with encryption at rest and in transit
 - **Monitoring** and alerting out of the box
 
-To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. See the [Environment Variables](#environment-variables) section for details.
-
-**Example configuration:**
-
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set postgresql.external_database_url=postgresql://user:password@your-cloud-db-host:5432/archestra \
-  --wait
-```
-
-When using an external database, the bundled PostgreSQL instance is automatically disabled.
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
 
 ## Infrastructure as Code
 

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
 import type {
   InsertTeamToken,
   SelectTeamToken,
@@ -10,11 +10,18 @@ import type {
 } from "@/types";
 
 /**
- * Team tokens always use DB storage (forceDB: true) because:
- * 1. They are seeded on archestra startup
- * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
+ * Determine if team tokens should be stored in DB instead of the configured secret manager.
+ *
+ * Team tokens use DB storage (forceDB: true) only when BYOS Vault is enabled because:
+ * - BYOS Vault is read-only (customer manages secrets externally)
+ * - Archestra cannot write new tokens to customer's Vault
+ *
+ * For regular Vault mode, tokens are stored in Vault alongside other secrets.
+ * For DB mode, tokens are stored in the database (the default behavior).
  */
-const FORCE_DB = true;
+function shouldForceDbStorage(): boolean {
+  return isByosEnabled();
+}
 
 /** Token prefix for identification */
 const TOKEN_PREFIX = "archestra_";
@@ -80,7 +87,7 @@ class TeamTokenModel {
     const secret = await secretManager().createSecret(
       { token: tokenValue },
       secretName,
-      FORCE_DB,
+      shouldForceDbStorage(),
     );
 
     // Create token record

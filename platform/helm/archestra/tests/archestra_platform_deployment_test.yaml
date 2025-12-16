@@ -908,13 +908,28 @@ tests:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: auth-secret
 
-  - it: should allow overriding ARCHESTRA_AUTH_SECRET with explicit env value
+  - it: should use secretKeyRef for explicit ARCHESTRA_AUTH_SECRET (sensitive env var)
     documentIndex: 1
     set:
       archestra.env:
         ARCHESTRA_AUTH_SECRET: "auth-secret-helm-tests-32-chars!"
     asserts:
       - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-auth-secret
+
+  - it: should not expose explicit ARCHESTRA_AUTH_SECRET value as plaintext
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUTH_SECRET: "auth-secret-helm-tests-32-chars!"
+    asserts:
+      - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_AUTH_SECRET
@@ -1371,3 +1386,109 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: archestra-otel-exporter-otlp-auth-bearer
+
+  # ARCHESTRA_CHAT_*_API_KEY pattern matching tests
+  - it: should use secretKeyRef for ARCHESTRA_CHAT_ANTHROPIC_API_KEY
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_ANTHROPIC_API_KEY: "sk-ant-api-key-123"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-anthropic-api-key
+
+  - it: should use secretKeyRef for ARCHESTRA_CHAT_OPENAI_API_KEY
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_OPENAI_API_KEY: "sk-openai-api-key-456"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-openai-api-key
+
+  - it: should use secretKeyRef for ARCHESTRA_CHAT_GEMINI_API_KEY
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_GEMINI_API_KEY: "AIza-gemini-api-key-789"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_GEMINI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-gemini-api-key
+
+  - it: should use secretKeyRef for multiple ARCHESTRA_CHAT_*_API_KEY env vars
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_ANTHROPIC_API_KEY: "sk-ant-key"
+        ARCHESTRA_CHAT_OPENAI_API_KEY: "sk-openai-key"
+        ARCHESTRA_CHAT_GEMINI_API_KEY: "AIza-key"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-anthropic-api-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-openai-api-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_GEMINI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-gemini-api-key
+
+  - it: should not expose ARCHESTRA_CHAT_*_API_KEY values as plaintext
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_ANTHROPIC_API_KEY: "super-secret-api-key"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_ANTHROPIC_API_KEY
+            value: "super-secret-api-key"
+
+  - it: should handle custom ARCHESTRA_CHAT_*_API_KEY providers dynamically
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_CUSTOM_PROVIDER_API_KEY: "custom-provider-key"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_CUSTOM_PROVIDER_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-chat-custom-provider-api-key

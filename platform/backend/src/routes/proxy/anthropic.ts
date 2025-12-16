@@ -259,6 +259,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      // Extract enabled tool names for filtering in evaluatePolicies
+      const enabledToolNames = new Set(
+        mergedTools.map((tool) => tool.name).filter(Boolean),
+      );
+
       const baselineModel = body.model;
       let model = baselineModel;
       // Optimize model selection for cost using dynamic rules
@@ -607,6 +612,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               })),
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
             fastify.log.info(
               { refused: !!toolInvocationRefusal },
@@ -947,6 +953,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               })),
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
 
           if (toolInvocationRefusal) {

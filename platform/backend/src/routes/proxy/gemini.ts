@@ -227,6 +227,16 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      // Extract enabled tool names from Gemini's functionDeclarations structure
+      const enabledToolNames = new Set(
+        mergedTools
+          .filter((tool) => tool.functionDeclarations !== undefined)
+          .flatMap((tool) =>
+            (tool.functionDeclarations || []).map((fd) => fd.name),
+          )
+          .filter((name): name is string => !!name),
+      );
+
       const baselineModel = modelName;
       let optimizedModelName = baselineModel;
 
@@ -523,6 +533,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   validToolCalls,
                   resolvedAgentId,
                   contextIsTrusted,
+                  enabledToolNames,
                 );
             }
 
@@ -802,6 +813,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               validToolCalls,
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
           }
         }

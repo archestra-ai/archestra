@@ -230,6 +230,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      // Extract enabled tool names for filtering in evaluatePolicies
+      const enabledToolNames = new Set(
+        mergedTools.map((tool) =>
+          tool.type === "function" ? tool.function.name : tool.custom.name,
+        ),
+      );
+
       const baselineModel = body.model;
       let model = baselineModel;
       // Optimize model selection for cost using dynamic rules
@@ -560,6 +567,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }),
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
 
           // If there are tool calls, evaluate policies and stream the result
@@ -882,6 +890,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             resolvedAgentId,
             contextIsTrusted,
+            enabledToolNames,
           );
 
         if (toolInvocationRefusal) {

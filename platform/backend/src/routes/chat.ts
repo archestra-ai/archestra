@@ -337,8 +337,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, `Unsupported provider: ${provider}`);
       }
 
-      console.log("HEEERE", mcpTools);
-
       // Stream with AI SDK
       // Build streamText config conditionally
       const streamTextConfig: Parameters<typeof streamText>[0] = {

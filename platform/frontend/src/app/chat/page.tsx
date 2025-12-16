@@ -282,6 +282,37 @@ export default function ChatPage() {
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
+  const disabledToolNames = chatSession?.disabledToolNames ?? new Set<string>();
+  const setDisabledToolNames = chatSession?.setDisabledToolNames;
+
+  // Callbacks for enabling/disabling tools
+  const handleDisableTools = useCallback(
+    (toolNames: string[]) => {
+      if (!setDisabledToolNames) return;
+      setDisabledToolNames((prev) => {
+        const next = new Set(prev);
+        for (const name of toolNames) {
+          next.add(name);
+        }
+        return next;
+      });
+    },
+    [setDisabledToolNames],
+  );
+
+  const handleEnableTools = useCallback(
+    (toolNames: string[]) => {
+      if (!setDisabledToolNames) return;
+      setDisabledToolNames((prev) => {
+        const next = new Set(prev);
+        for (const name of toolNames) {
+          next.delete(name);
+        }
+        return next;
+      });
+    },
+    [setDisabledToolNames],
+  );
 
   useEffect(() => {
     if (
@@ -607,6 +638,9 @@ export default function ChatPage() {
                       <McpToolsDisplay
                         agentId={currentProfileId}
                         className="text-xs text-muted-foreground"
+                        disabledToolNames={disabledToolNames}
+                        onDisableTools={handleDisableTools}
+                        onEnableTools={handleEnableTools}
                       />
                     ) : (
                       <Badge variant="outline" className="text-xs my-2">

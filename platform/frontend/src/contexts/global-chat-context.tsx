@@ -40,6 +40,8 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  disabledToolNames: Set<string>;
+  setDisabledToolNames: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
 interface ChatContextValue {
@@ -190,9 +192,18 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [disabledToolNames, setDisabledToolNames] = useState<Set<string>>(
+    () => new Set(),
+  );
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
+
+  // Convert Set to Array for useChat body (Sets can't be serialized to JSON)
+  const disabledToolNamesArray = useMemo(
+    () => Array.from(disabledToolNames),
+    [disabledToolNames],
+  );
 
   const {
     messages,
@@ -208,6 +219,9 @@ function ChatSessionHook({
       credentials: "include",
       headers: {
         [EXTERNAL_AGENT_ID_HEADER]: "Archestra Chat",
+      },
+      body: {
+        disabledToolNames: disabledToolNamesArray,
       },
     }),
     id: conversationId,
@@ -283,6 +297,8 @@ function ChatSessionHook({
       lastAccessTime: Date.now(),
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
+      disabledToolNames,
+      setDisabledToolNames,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -299,6 +315,7 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     pendingCustomServerToolCall,
+    disabledToolNames,
     sessionsRef,
     scheduleCleanup,
     notifySessionUpdate,

@@ -135,13 +135,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema, // Chat ID from useChat
           messages: z.array(z.any()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+          disabledToolNames: z.array(z.string()).optional(),
         }),
         // Streaming responses don't have a schema
         response: ErrorResponsesSchema,
       },
     },
     async (
-      { body: { id: conversationId, messages }, user, organizationId, headers },
+      {
+        body: { id: conversationId, messages, disabledToolNames = [] },
+        user,
+        organizationId,
+        headers,
+      },
       reply,
     ) => {
       const { success: userIsProfileAdmin } = await hasPermission(
@@ -164,7 +170,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools and agent prompts in parallel
-      const [mcpTools, prompt] = await Promise.all([
+      const [allMcpTools, prompt] = await Promise.all([
         getChatMcpTools({
           agentName: conversation.agent.name,
           agentId: conversation.agentId,
@@ -173,6 +179,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         PromptModel.findById(conversation.promptId),
       ]);
+
+      // Filter out disabled tools for this session
+      const disabledSet = new Set(disabledToolNames);
+      const mcpTools =
+        disabledToolNames.length > 0
+          ? Object.fromEntries(
+              Object.entries(allMcpTools).filter(
+                ([toolName]) => !disabledSet.has(toolName),
+              ),
+            )
+          : allMcpTools;
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
@@ -203,6 +220,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
+          disabledToolCount: disabledToolNames.length,
           model: conversation.selectedModel,
           provider,
           promptId: prompt?.id,

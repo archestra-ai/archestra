@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  type ChatProvider,
   modelsByProvider,
   providerDisplayNames,
+  type SupportedProvider,
 } from "@shared";
 import { useState } from "react";
 import {
@@ -26,8 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
+import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useFeatures } from "@/lib/features.query";
+import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -42,6 +43,12 @@ interface ModelSelectorProps {
   className?: string;
 }
 
+/**
+ * Model selector dropdown with:
+ * - Models grouped by provider with provider name headers
+ * - Models filtered by configured API keys
+ * - Mid-conversation warning when switching models
+ */
 export function ModelSelector({
   selectedModel,
   onModelChange,
@@ -49,17 +56,17 @@ export function ModelSelector({
   messageCount = 0,
   className,
 }: ModelSelectorProps) {
-  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
+  const { data: chatApiKeys = [] } = useChatApiKeys();
   const { data: features } = useFeatures();
   const [pendingModel, setPendingModel] = useState<string | null>(null);
 
   // Determine which providers have API keys configured
-  const configuredProviders = new Set<ChatProvider>();
+  const configuredProviders = new Set<SupportedProvider>();
 
   // Check API keys for each provider
   for (const key of chatApiKeys) {
     if (key.secretId && key.provider) {
-      configuredProviders.add(key.provider as ChatProvider);
+      configuredProviders.add(key.provider as SupportedProvider);
     }
   }
 
@@ -70,7 +77,7 @@ export function ModelSelector({
 
   // Build available models based on configured providers
   const availableProviders = (
-    Object.keys(modelsByProvider) as ChatProvider[]
+    Object.keys(modelsByProvider) as SupportedProvider[]
   ).filter((provider) => configuredProviders.has(provider));
 
   const handleValueChange = (model: string) => {
@@ -119,7 +126,7 @@ export function ModelSelector({
       >
         <SelectTrigger
           size="sm"
-          className={`${className ?? ""} ${!isModelAvailable ? "border-yellow-500" : ""}`}
+          className={cn(className, !isModelAvailable && "border-yellow-500")}
         >
           <SelectValue placeholder="Select model" />
         </SelectTrigger>

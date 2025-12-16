@@ -404,13 +404,6 @@ For production deployments, we strongly recommend using a cloud-hosted PostgreSQ
 - **Security** with encryption at rest and in transit
 - **Monitoring** and alerting out of the box
 
-Popular options include:
-
-- **AWS**: Amazon RDS for PostgreSQL or Amazon Aurora PostgreSQL
-- **Google Cloud**: Cloud SQL for PostgreSQL or AlloyDB
-- **Azure**: Azure Database for PostgreSQL
-- **Other**: Supabase, Neon, CrunchyData, or self-managed PostgreSQL clusters
-
 To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. See the [Environment Variables](#environment-variables) section for details.
 
 **Example configuration:**

@@ -449,6 +449,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
           useDynamicTeamCredential: true,
+          policiesAutoConfiguredAt: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },

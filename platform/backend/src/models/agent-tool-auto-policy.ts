@@ -63,7 +63,7 @@ export class AgentToolAutoPolicyService {
       "isAvailable: checking auto-policy availability",
     );
 
-    const chatApiKey = await ChatApiKeyModel.findDefaultByOrganizationAndProvider(
+    const chatApiKey = await ChatApiKeyModel.findOrganizationDefault(
       organizationId,
       "anthropic",
     );
@@ -73,7 +73,7 @@ export class AgentToolAutoPolicyService {
       return false;
     }
 
-    const secret = await secretManager.getSecret(chatApiKey.secretId);
+    const secret = await secretManager().getSecret(chatApiKey.secretId);
     const available = !!secret?.secret?.apiKey;
     logger.debug({ organizationId, available }, "isAvailable: result");
     return available;
@@ -87,7 +87,7 @@ export class AgentToolAutoPolicyService {
   ): Promise<string | null> {
     logger.debug({ organizationId }, "getAnthropicApiKey: fetching API key");
 
-    const chatApiKey = await ChatApiKeyModel.findDefaultByOrganizationAndProvider(
+    const chatApiKey = await ChatApiKeyModel.findOrganizationDefault(
       organizationId,
       "anthropic",
     );
@@ -100,7 +100,7 @@ export class AgentToolAutoPolicyService {
       return null;
     }
 
-    const secret = await secretManager.getSecret(chatApiKey.secretId);
+    const secret = await secretManager().getSecret(chatApiKey.secretId);
     if (!secret?.secret?.apiKey) {
       logger.debug({ organizationId }, "getAnthropicApiKey: secret not found");
       return null;
@@ -130,7 +130,7 @@ export class AgentToolAutoPolicyService {
     );
     const anthropic = createAnthropic({
       apiKey: anthropicApiKey,
-      baseURL: config.chat.anthropic.baseUrl,
+      baseURL: `${config.chat.anthropic.baseUrl}/v1`,
     });
 
     const prompt = `Analyze this MCP tool and determine security policies:

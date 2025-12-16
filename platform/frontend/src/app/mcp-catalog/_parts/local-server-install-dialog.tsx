@@ -1,12 +1,11 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { useState } from "react";
+import { lazy, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { InlineVaultSecretSelector } from "@/components/inline-vault-secret-selector";
 import { BooleanToggle } from "@/components/ui/boolean-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +21,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
+
+const InlineVaultSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/inline-vault-secret-selector.ee"),
+);
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];

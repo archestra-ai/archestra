@@ -3,12 +3,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { TeamModel } from "@/models";
-import TeamVaultFolderModel from "@/models/team-vault-folder";
-import {
-  type BYOSVaultSecretManager,
-  isByosEnabled,
-  secretManager,
-} from "@/secretsmanager";
+import TeamVaultFolderModel from "@/models/team-vault-folder.ee";
+import { isByosEnabled, secretManager } from "@/secretsmanager";
+import type { ReadonlyVaultSecretManager } from "@/secretsmanager.readonly-vault";
 import {
   ApiError,
   constructResponseSchema,
@@ -22,7 +19,7 @@ import {
  * Throws appropriate error if not.
  * Returns the secretManager cast to BYOSVaultSecretManager for type narrowing.
  */
-function assertByosEnabled(): BYOSVaultSecretManager {
+function assertByosEnabled(): ReadonlyVaultSecretManager {
   if (!isByosEnabled()) {
     throw new ApiError(
       403,
@@ -31,7 +28,7 @@ function assertByosEnabled(): BYOSVaultSecretManager {
   }
 
   // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
-  return secretManager() as BYOSVaultSecretManager;
+  return secretManager() as ReadonlyVaultSecretManager;
 }
 
 // Response schemas

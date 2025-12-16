@@ -20,12 +20,12 @@ vi.mock("node-vault", () => {
 import { SecretsManagerType } from "@shared";
 import {
   createSecretManager,
-  DbSecretsManager,
   getSecretsManagerTypeBasedOnEnvVars,
   getVaultConfigFromEnv,
   SecretsManagerConfigurationError,
-  VaultSecretManager,
 } from "./secretsmanager";
+import { DbSecretsManager } from "./secretsmanager.db";
+import { VaultSecretManager } from "./secretsmanager.vault";
 
 describe("getSecretsManagerTypeBasedOnEnvVars", () => {
   const originalEnv = process.env;

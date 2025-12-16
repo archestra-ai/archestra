@@ -60,7 +60,7 @@ export default defineConfig({
     // At the end of this test we switch to DB as secrets manager because all other tests rely on it
     {
       name: "credentials-with-vault",
-      testMatch: /credentials-with-vault\.spec\.ts/,
+      testMatch: /credentials-with-vault\.ee\.spec\.ts/,
       testDir: "./tests/ui",
       use: {
         ...devices["Desktop Chrome"],
@@ -74,7 +74,7 @@ export default defineConfig({
     {
       name: "chromium",
       testDir: "./tests/ui",
-      testIgnore: /credentials-with-vault\.spec\.ts/,
+      testIgnore: /credentials-with-vault\.ee\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
@@ -86,7 +86,7 @@ export default defineConfig({
     {
       name: "firefox",
       testDir: "./tests/ui",
-      testIgnore: /credentials-with-vault\.spec\.ts/,
+      testIgnore: /credentials-with-vault\.ee\.spec\.ts/,
       use: {
         ...devices["Desktop Firefox"],
         // Use the stored authentication state
@@ -99,7 +99,7 @@ export default defineConfig({
     {
       name: "webkit",
       testDir: "./tests/ui",
-      testIgnore: /credentials-with-vault\.spec\.ts/,
+      testIgnore: /credentials-with-vault\.ee\.spec\.ts/,
       use: {
         ...devices["Desktop Safari"],
         // Use the stored authentication state

@@ -2,8 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Info, ShieldCheck, User } from "lucide-react";
-import { useState } from "react";
-import { InlineVaultSecretSelector } from "@/components/inline-vault-secret-selector";
+import { lazy, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
+
+const InlineVaultSecretSelector = lazy(
+  // biome-ignore lint/style/noRestrictedImports: lazy loading
+  () => import("@/components/inline-vault-secret-selector.ee"),
+);
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];

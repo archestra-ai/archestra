@@ -22,7 +22,7 @@ The platform supports multiple LLM provider API keys with granular control:
 - **Multiple keys per provider** - Create as many API keys as needed for each provider
 - **Organization defaults** - Set one key per provider as the organization-wide default
 - **Profile assignments** - Assign specific keys to individual profiles for fine-grained control
-- **Bulk assignment** - Select multiple API keys and assign them to profiles at once using row selection
+- **Bulk assignment** - Select multiple API keys and assign them to profiles at once
 
 This is useful when different teams or projects need to use different API keys for billing or access control purposes.
 

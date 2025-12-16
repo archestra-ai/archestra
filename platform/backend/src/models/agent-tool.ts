@@ -250,7 +250,10 @@ class AgentToolModel {
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
     useDynamicTeamCredential?: boolean,
-  ): Promise<{ status: "created" | "updated" | "unchanged" }> {
+  ): Promise<{
+    status: "created" | "updated" | "unchanged";
+    agentToolId?: string;
+  }> {
     // Check if assignment already exists
     const [existing] = await db
       .select()
@@ -289,8 +292,8 @@ class AgentToolModel {
         options.useDynamicTeamCredential = useDynamicTeamCredential;
       }
 
-      await AgentToolModel.create(agentId, toolId, options);
-      return { status: "created" };
+      const agentTool = await AgentToolModel.create(agentId, toolId, options);
+      return { status: "created", agentToolId: agentTool.id };
     }
 
     // Check if credentials need updating
@@ -359,17 +362,25 @@ class AgentToolModel {
     ids: string[],
     field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
     value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+    clearAutoConfigured = false,
   ): Promise<number> {
     if (ids.length === 0) {
       return 0;
     }
 
+    const updateData: Record<string, unknown> = {
+      [field]: value,
+      updatedAt: new Date(),
+    };
+
+    // Clear auto-configured timestamp if requested (manual policy change)
+    if (clearAutoConfigured) {
+      updateData.policiesAutoConfiguredAt = null;
+    }
+
     const result = await db
       .update(schema.agentToolsTable)
-      .set({
-        [field]: value,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(inArray(schema.agentToolsTable.id, ids));
 
     return result.rowCount ?? 0;

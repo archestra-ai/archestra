@@ -3,15 +3,18 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  OrganizationModel,
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentToolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
@@ -284,15 +287,94 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { ids, field, value } = request.body;
+      const { ids, field, value, clearAutoConfigured } = request.body;
 
       const updatedCount = await AgentToolModel.bulkUpdateSameValue(
         ids,
         field,
         value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+        clearAutoConfigured,
       );
 
       return reply.send({ updatedCount });
+    },
+  );
+
+  fastify.post(
+    "/api/agent-tools/auto-configure-policies",
+    {
+      schema: {
+        operationId: RouteId.AutoConfigureAgentToolPolicies,
+        description:
+          "Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis",
+        tags: ["Agent Tools"],
+        body: z.object({
+          agentToolIds: z.array(z.string().uuid()).min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            results: z.array(
+              z.object({
+                agentToolId: z.string().uuid(),
+                success: z.boolean(),
+                config: z
+                  .object({
+                    allowUsageWhenUntrustedDataIsPresent: z.boolean(),
+                    toolResultTreatment: z.enum([
+                      "trusted",
+                      "sanitize_with_dual_llm",
+                      "untrusted",
+                    ]),
+                    reasoning: z.string(),
+                  })
+                  .optional(),
+                error: z.string().optional(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId, user }, reply) => {
+      const { agentToolIds } = body;
+
+      logger.info(
+        { organizationId, userId: user.id, count: agentToolIds.length },
+        "POST /api/agent-tools/auto-configure-policies: request received",
+      );
+
+      // Check if service is available for this organization
+      const available =
+        await agentToolAutoPolicyService.isAvailable(organizationId);
+      if (!available) {
+        logger.warn(
+          { organizationId, userId: user.id },
+          "POST /api/agent-tools/auto-configure-policies: service not available",
+        );
+        throw new ApiError(
+          503,
+          "Auto-policy requires a default Anthropic chat API key to be configured",
+        );
+      }
+
+      const result =
+        await agentToolAutoPolicyService.configurePoliciesForAgentTools(
+          agentToolIds,
+          organizationId,
+        );
+
+      logger.info(
+        {
+          organizationId,
+          userId: user.id,
+          success: result.success,
+          resultsCount: result.results.length,
+        },
+        "POST /api/agent-tools/auto-configure-policies: completed",
+      );
+
+      return reply.send(result);
     },
   );
 
@@ -368,6 +450,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
           useDynamicTeamCredential: true,
+          policiesAutoConfiguredAt: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
@@ -612,6 +695,61 @@ export async function assignToolToAgent(
     executionSourceMcpServerId,
     useDynamicTeamCredential,
   );
+
+  // If a new assignment was created, check if auto-configure is enabled
+  if (result.status === "created" && result.agentToolId) {
+    // Get agent to access organization ID
+    const agent = await AgentModel.findById(agentId);
+    if (agent) {
+      // Get organization settings
+      const organization = await OrganizationModel.getById(
+        agent.organizationId,
+      );
+
+      // Auto-configure policies if enabled for the organization
+      if (organization?.autoConfigureNewTools) {
+        // Run auto-configure in background (don't await to avoid blocking)
+        agentToolAutoPolicyService
+          .configurePoliciesForAgentTool(result.agentToolId, agent.organizationId)
+          .then((autoPolicyResult) => {
+            if (autoPolicyResult.success) {
+              logger.info(
+                {
+                  agentToolId: result.agentToolId,
+                  agentId,
+                  toolId,
+                  organizationId: agent.organizationId,
+                },
+                "Auto-configured policies for newly assigned tool",
+              );
+            } else {
+              logger.warn(
+                {
+                  agentToolId: result.agentToolId,
+                  agentId,
+                  toolId,
+                  organizationId: agent.organizationId,
+                  error: autoPolicyResult.error,
+                },
+                "Failed to auto-configure policies for newly assigned tool",
+              );
+            }
+          })
+          .catch((error) => {
+            logger.error(
+              {
+                agentToolId: result.agentToolId,
+                agentId,
+                toolId,
+                organizationId: agent.organizationId,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "Error during auto-configure for newly assigned tool",
+            );
+          });
+      }
+    }
+  }
 
   // Return appropriate status
   if (result.status === "unchanged") {

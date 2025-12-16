@@ -12,6 +12,13 @@ class TrustedDataPolicyModel {
       .insert(schema.trustedDataPoliciesTable)
       .values(policy)
       .returning();
+
+    // Clear auto-configured timestamp when adding a policy
+    await db
+      .update(schema.agentToolsTable)
+      .set({ policiesAutoConfiguredAt: null })
+      .where(eq(schema.agentToolsTable.id, policy.agentToolId));
+
     return createdPolicy;
   }
 
@@ -41,14 +48,40 @@ class TrustedDataPolicyModel {
       .set(policy)
       .where(eq(schema.trustedDataPoliciesTable.id, id))
       .returning();
+
+    // Clear auto-configured timestamp when updating a policy
+    if (updatedPolicy) {
+      await db
+        .update(schema.agentToolsTable)
+        .set({ policiesAutoConfiguredAt: null })
+        .where(eq(schema.agentToolsTable.id, updatedPolicy.agentToolId));
+    }
+
     return updatedPolicy || null;
   }
 
   static async delete(id: string): Promise<boolean> {
+    // Get the policy first to access agentToolId
+    const policy = await TrustedDataPolicyModel.findById(id);
+    if (!policy) {
+      return false;
+    }
+
     const result = await db
       .delete(schema.trustedDataPoliciesTable)
       .where(eq(schema.trustedDataPoliciesTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+
+    // Clear auto-configured timestamp when deleting a policy
+    if (deleted) {
+      await db
+        .update(schema.agentToolsTable)
+        .set({ policiesAutoConfiguredAt: null })
+        .where(eq(schema.agentToolsTable.id, policy.agentToolId));
+    }
+
+    return deleted;
   }
 
   /**

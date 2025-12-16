@@ -6,7 +6,15 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Search,
+  Sparkles,
+  Unplug,
+  Wand2,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -41,6 +49,7 @@ import {
 import { useProfiles } from "@/lib/agent.query";
 import {
   useAllProfileTools,
+  useAutoConfigurePolicies,
   useBulkUpdateProfileTools,
   useProfileToolPatchMutation,
   useUnassignTool,
@@ -98,6 +107,7 @@ export function AssignedToolsTable({
 }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
+  const autoConfigureMutation = useAutoConfigurePolicies();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies(
     initialData?.toolInvocationPolicies,
@@ -334,6 +344,8 @@ export function AssignedToolsTable({
           ids: toolIds,
           field,
           value,
+          // Clear auto-configured timestamp when manually bulk updating policies
+          clearAutoConfigured: true,
         });
       } catch (error) {
         console.error("Bulk update failed:", error);
@@ -343,6 +355,39 @@ export function AssignedToolsTable({
     },
     [selectedTools, bulkUpdateMutation, invocationPolicies, resultPolicies],
   );
+
+  const handleAutoConfigurePolicies = useCallback(async () => {
+    const agentToolIds = selectedTools.map((tool) => tool.id);
+
+    if (agentToolIds.length === 0) {
+      return;
+    }
+
+    try {
+      const result = await autoConfigureMutation.mutateAsync(agentToolIds);
+
+      const successCount = result.results.filter(
+        (r: { success: boolean }) => r.success,
+      ).length;
+      const failureCount = result.results.filter(
+        (r: { success: boolean }) => !r.success,
+      ).length;
+
+      if (failureCount === 0) {
+        toast.success(`Policies configured for ${successCount} tool(s)`);
+      } else {
+        toast.warning(
+          `Configured ${successCount} tool(s), failed ${failureCount}`,
+        );
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to auto-configure policies";
+      toast.error(errorMessage);
+    }
+  }, [selectedTools, autoConfigureMutation]);
 
   const clearSelection = useCallback(() => {
     setRowSelection({});
@@ -365,7 +410,16 @@ export function AssignedToolsTable({
     async (id: string, field: string, updates: Partial<ProfileToolData>) => {
       setUpdatingRows((prev) => new Set(prev).add({ id, field }));
       try {
-        await agentToolPatchMutation.mutateAsync({ id, ...updates });
+        // Clear auto-configured timestamp when manually updating policies
+        const shouldClearAutoConfig =
+          field === "allowUsageWhenUntrustedDataIsPresent" ||
+          field === "toolResultTreatment";
+
+        await agentToolPatchMutation.mutateAsync({
+          id,
+          ...updates,
+          ...(shouldClearAutoConfig && { policiesAutoConfiguredAt: null }),
+        });
       } catch (error) {
         console.error("Update failed:", error);
       } finally {
@@ -626,6 +680,8 @@ export function AssignedToolsTable({
             "allowUsageWhenUntrustedDataIsPresent",
           );
 
+          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
+
           return (
             <div className="flex items-center gap-2">
               <Switch
@@ -648,6 +704,18 @@ export function AssignedToolsTable({
                   ? "Allowed"
                   : "Blocked"}
               </span>
+              {isAutoConfigured && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Sparkles className="h-3 w-3 text-purple-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Auto-configured by AI</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isUpdating && (
                 <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
               )}
@@ -679,6 +747,8 @@ export function AssignedToolsTable({
             row.original.id,
             "toolResultTreatment",
           );
+
+          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
 
           return (
             <div className="flex items-center gap-2">
@@ -712,6 +782,18 @@ export function AssignedToolsTable({
                   ))}
                 </SelectContent>
               </Select>
+              {isAutoConfigured && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Sparkles className="h-3 w-3 text-purple-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Auto-configured by AI</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isUpdating && (
                 <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
               )}
@@ -923,6 +1005,36 @@ export function AssignedToolsTable({
             </ButtonGroup>
           </div>
           <div className="ml-2 h-4 w-px bg-border" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PermissionButton
+                permissions={{ profile: ["update"], tool: ["update"] }}
+                size="sm"
+                variant="outline"
+                onClick={handleAutoConfigurePolicies}
+                disabled={
+                  !hasSelection ||
+                  isBulkUpdating ||
+                  autoConfigureMutation.isPending
+                }
+              >
+                {autoConfigureMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Configuring...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-4 w-4" />
+                    Auto-Configure
+                  </>
+                )}
+              </PermissionButton>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Automatically configure security policies using AI analysis</p>
+            </TooltipContent>
+          </Tooltip>
           <Button
             size="sm"
             variant="ghost"

@@ -66,7 +66,7 @@ export function ModelSelector({
   // Check API keys for each provider
   for (const key of chatApiKeys) {
     if (key.secretId && key.provider) {
-      configuredProviders.add(key.provider as SupportedProvider);
+      configuredProviders.add(key.provider);
     }
   }
 
@@ -76,9 +76,13 @@ export function ModelSelector({
   }
 
   // Build available models based on configured providers
-  const availableProviders = (
-    Object.keys(modelsByProvider) as SupportedProvider[]
-  ).filter((provider) => configuredProviders.has(provider));
+  const availableProviders = useMemo(
+    () =>
+      (Object.keys(modelsByProvider) as SupportedProvider[]).filter(
+        (provider) => configuredProviders.has(provider),
+      ),
+    [configuredProviders],
+  );
 
   // Filter models based on search query
   const filteredProviderModels = useMemo(() => {
@@ -123,8 +127,9 @@ export function ModelSelector({
   };
 
   // Check if selectedModel is in the available models
-  const allAvailableModels = availableProviders.flatMap(
-    (provider) => modelsByProvider[provider],
+  const allAvailableModels = useMemo(
+    () => availableProviders.flatMap((provider) => modelsByProvider[provider]),
+    [availableProviders],
   );
   const isModelAvailable = allAvailableModels.includes(selectedModel);
 

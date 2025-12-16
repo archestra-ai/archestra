@@ -597,7 +597,6 @@ test.describe("SSO Team Sync E2E", () => {
     );
 
     // Close the dialog - use first() to target the text button, not the X icon
-    await page;
     await clickButton({
       page,
       options: { name: "Close", exact: true },

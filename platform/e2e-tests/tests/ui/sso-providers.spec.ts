@@ -81,9 +81,18 @@ async function deleteExistingProviderIfExists(
   page: Page,
   providerType: "Generic OIDC" | "Generic SAML",
 ): Promise<void> {
+  // Verify we're on the SSO providers page before proceeding
+  // This handles cases where previous test left page on a different route
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 10000 });
+
+  // Wait for the SSO providers heading to be visible (page content loaded)
+  await expect(
+    page.getByRole("heading", { name: "SSO Providers" }),
+  ).toBeVisible({ timeout: 15000 });
+
   const providerCard = page.getByText(providerType, { exact: true });
-  // Wait for card to be visible and stable before clicking
-  await providerCard.waitFor({ state: "visible" });
+  // Wait for card to be visible and stable before clicking (increased timeout for CI)
+  await providerCard.waitFor({ state: "visible", timeout: 20000 });
   await providerCard.click();
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 

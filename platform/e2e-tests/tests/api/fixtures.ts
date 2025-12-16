@@ -347,9 +347,11 @@ const waitForAgentTool = async (
 
     if (agentToolsResponse.ok()) {
       const agentTools = await agentToolsResponse.json();
+      // Defense-in-depth: validate both agentId AND toolName client-side
+      // in case the API silently ignores unknown query params
       const foundTool = agentTools.data.find(
         (at: { agent: { id: string }; tool: { name: string } }) =>
-          at.tool.name === toolName,
+          at.agent.id === agentId && at.tool.name === toolName,
       );
 
       if (foundTool) {

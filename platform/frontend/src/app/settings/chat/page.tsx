@@ -867,7 +867,8 @@ function ChatSettingsContent() {
               onClick={handleBulkAssign}
               disabled={
                 bulkAssignMutation.isPending ||
-                bulkAssignProfileIds.length === 0
+                bulkAssignProfileIds.length === 0 ||
+                selectedApiKeyIds.length === 0
               }
             >
               {bulkAssignMutation.isPending && (

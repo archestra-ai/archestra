@@ -340,11 +340,17 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Assign each API key to each profile
       // The model method handles the one-key-per-provider-per-profile constraint
-      let assignedCount = 0;
       for (const chatApiKeyId of body.chatApiKeyIds) {
         await ChatApiKeyModel.bulkAssignProfiles(chatApiKeyId, body.profileIds);
-        assignedCount += body.profileIds.length;
       }
+
+      // Calculate actual assignment count based on unique providers
+      // Since only one key per provider is allowed per profile, same-provider keys replace each other
+      const validApiKeys = apiKeys.filter(
+        (key): key is NonNullable<typeof key> => key !== null,
+      );
+      const uniqueProviders = new Set(validApiKeys.map((key) => key.provider));
+      const assignedCount = uniqueProviders.size * body.profileIds.length;
 
       return reply.send({
         success: true,

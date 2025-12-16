@@ -168,15 +168,25 @@ tests:
     set:
       postgresql.external_database_url: null
       postgresql.auth.username: testuser
-      postgresql.auth.password: testpass
       postgresql.auth.database: testdb
     asserts:
+      # First env var should be PGPASSWORD from secret
       - equal:
           path: spec.template.spec.containers[0].env[0].name
+          value: PGPASSWORD
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: password
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          pattern: -archestra-platform-postgresql$
+      # Second env var should be ARCHESTRA_DATABASE_URL using $(PGPASSWORD) expansion
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
           value: ARCHESTRA_DATABASE_URL
       - matchRegex:
-          path: spec.template.spec.containers[0].env[0].value
-          pattern: ^postgresql://testuser:testpass@.*-archestra-platform-postgresql:5432/testdb$
+          path: spec.template.spec.containers[0].env[1].value
+          pattern: ^postgresql://testuser:\$\(PGPASSWORD\)@.*-archestra-platform-postgresql:5432/testdb$
 
   - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
     documentIndex: 1
@@ -187,8 +197,11 @@ tests:
           path: spec.template.spec.containers[0].env[0].name
           value: ARCHESTRA_DATABASE_URL
       - equal:
-          path: spec.template.spec.containers[0].env[0].value
-          value: postgresql://external:pass@external-host:5432/externaldb
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-archestra-platform-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: database-url
 
   - it: should have init container to wait for PostgreSQL
     documentIndex: 1
@@ -227,8 +240,13 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-postgresql
+                  key: password
             - name: ARCHESTRA_DATABASE_URL
-              value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+              value: postgresql://archestra:$(PGPASSWORD)@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
             - name: ARCHESTRA_AUTH_SECRET
               valueFrom:
                 secretKeyRef:
@@ -266,8 +284,16 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-postgresql
+                key: password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: ARCHESTRA_DATABASE_URL
-            value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            value: postgresql://archestra:$(PGPASSWORD)@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -674,12 +700,20 @@ tests:
           secretName: my-api-credentials
           secretKey: api-key
     asserts:
-      # Built-in env var
+      # Built-in env vars (PGPASSWORD from secret and ARCHESTRA_DATABASE_URL with expansion)
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-postgresql
+                key: password
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_DATABASE_URL
-            value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            value: postgresql://archestra:$(PGPASSWORD)@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
       # Regular env var
       - contains:
           path: spec.template.spec.containers[0].env

@@ -51,7 +51,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
-## Helm Deployment (Recommended for Production)
+## Helm Deployment
 
 Helm deployment is our recommended approach for deploying Archestra Platform to production environments.
 
@@ -392,6 +392,20 @@ Then visit:
 - **Admin UI**: <http://localhost:3000>
 - **API**: <http://localhost:9000>
 
+### Production Recommendations
+
+#### PostgreSQL Infrastructure
+
+For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the bundled PostgreSQL instance. Cloud-managed databases provide:
+
+- **High availability** with automatic failover
+- **Automated backups** and point-in-time recovery
+- **Scaling** without downtime
+- **Security** with encryption at rest and in transit
+- **Monitoring** and alerting out of the box
+
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
+
 ## Infrastructure as Code
 
 ### Terraform
@@ -547,6 +561,13 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME`** - Kubernetes ServiceAccount name for MCP server pods that need K8s API access.
+
+  - Default: `archestra-archestra-platform-mcp-k8s-operator`
+  - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-archestra-platform-mcp-k8s-operator`
+    So, default value matches it.
+  - Customize if using a different Helm release name or managing ServiceAccounts manually
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
 

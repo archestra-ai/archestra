@@ -4,8 +4,7 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { TeamModel } from "@/models";
 import TeamVaultFolderModel from "@/models/team-vault-folder.ee";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
-import type { ReadonlyVaultSecretManager } from "@/secretsmanager.readonly-vault";
+import { assertByosEnabled } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -13,23 +12,6 @@ import {
   SelectTeamVaultFolderSchema,
   SetTeamVaultFolderBodySchema,
 } from "@/types";
-
-/**
- * Helper to check if BYOS feature is enabled and properly configured.
- * Throws appropriate error if not.
- * Returns the secretManager cast to BYOSVaultSecretManager for type narrowing.
- */
-function assertByosEnabled(): ReadonlyVaultSecretManager {
-  if (!isByosEnabled()) {
-    throw new ApiError(
-      403,
-      "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-    );
-  }
-
-  // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
-  return secretManager() as ReadonlyVaultSecretManager;
-}
 
 // Response schemas
 const VaultFolderConnectivityResponseSchema = z.object({

@@ -33,7 +33,7 @@ import {
  * - Fetches secret values from external Vault paths at read time
  * - Provides additional methods for listing/browsing external Vault folders
  */
-export class ReadonlyVaultSecretManager implements ISecretManager {
+export default class ReadonlyVaultSecretManager implements ISecretManager {
   readonly type = SecretsManagerType.BYOS_VAULT;
   private client: ReturnType<typeof Vault>;
   private initialized = false;

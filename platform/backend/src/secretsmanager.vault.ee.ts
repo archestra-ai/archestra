@@ -18,7 +18,7 @@ import { ApiError, type SecretValue, type SelectSecret } from "./types";
  * Vault-backed implementation of SecretManager
  * Stores secret metadata in PostgreSQL with isVault=true, actual secrets in HashiCorp Vault
  */
-export class VaultSecretManager implements ISecretManager {
+export default class VaultSecretManager implements ISecretManager {
   readonly type = SecretsManagerType.Vault;
   private client: ReturnType<typeof Vault>;
   private initialized = false;

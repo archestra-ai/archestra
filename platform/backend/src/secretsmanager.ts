@@ -7,8 +7,9 @@ import type {
   VaultKvVersion,
 } from "./secretmanager.types";
 import { DbSecretsManager } from "./secretsmanager.db";
-import { ReadonlyVaultSecretManager } from "./secretsmanager.readonly-vault";
-import { VaultSecretManager } from "./secretsmanager.vault";
+// biome-ignore lint/style/noRestrictedImports: only type import
+import type ReadonlyVaultSecretManager from "./secretsmanager.readonly-vault.ee";
+import { ApiError } from "./types";
 
 export class SecretsManagerConfigurationError extends Error {
   constructor(message: string) {
@@ -31,9 +32,9 @@ class SecretManager {
     SecretManager.initialized = true;
   }
 
-  initialize(managerType?: SecretsManagerType) {
+  async initialize(managerType?: SecretsManagerType) {
     this.managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
-    this.currentInstance = createSecretManager(this.managerType);
+    this.currentInstance = await createSecretManager(this.managerType);
     return this.currentInstance;
   }
 
@@ -59,9 +60,9 @@ class SecretManager {
  * - "BYOS_VAULT": Uses BYOSVaultSecretManager for external team vault folder support
  * - "DB" or not set: Uses DbSecretsManager (default)
  */
-export function createSecretManager(
+export async function createSecretManager(
   managerType?: SecretsManagerType,
-): ISecretManager {
+): Promise<ISecretManager> {
   managerType = managerType ?? getSecretsManagerTypeBasedOnEnvVars();
 
   if (managerType === SecretsManagerType.Vault) {
@@ -90,6 +91,9 @@ export function createSecretManager(
       { address: vaultConfig.address, authMethod: vaultConfig.authMethod },
       "createSecretManager: using VaultSecretManager",
     );
+    // biome-ignore lint/style/noRestrictedImports: dynamic import
+    const VaultSecretManager = (await import("./secretsmanager.vault.ee"))
+      .default;
     return new VaultSecretManager(vaultConfig);
   }
 
@@ -119,6 +123,9 @@ export function createSecretManager(
       { address: vaultConfig.address, authMethod: vaultConfig.authMethod },
       "createSecretManager: using BYOSVaultSecretManager",
     );
+    const ReadonlyVaultSecretManager =
+      // biome-ignore lint/style/noRestrictedImports: dynamic import
+      (await import("./secretsmanager.readonly-vault.ee")).default;
     return new ReadonlyVaultSecretManager(vaultConfig);
   }
 
@@ -378,4 +385,21 @@ export function isByosEnabled(): boolean {
     secretManagerCoordinator.getManagerType() ===
       SecretsManagerType.BYOS_VAULT && config.enterpriseLicenseActivated
   );
+}
+
+/**
+ * Helper to check if BYOS feature is enabled and properly configured.
+ * Throws appropriate error if not.
+ * Returns the secretManager cast to BYOSVaultSecretManager for type narrowing.
+ */
+export function assertByosEnabled(): ReadonlyVaultSecretManager {
+  if (!isByosEnabled()) {
+    throw new ApiError(
+      403,
+      "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+    );
+  }
+
+  // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
+  return secretManager() as ReadonlyVaultSecretManager;
 }

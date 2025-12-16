@@ -5,7 +5,8 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
-import { useState } from "react";
+import { Check, ChevronDown, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,16 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useFeatures } from "@/lib/features.query";
 import { cn } from "@/lib/utils";
@@ -46,6 +43,7 @@ interface ModelSelectorProps {
 /**
  * Model selector dropdown with:
  * - Models grouped by provider with provider name headers
+ * - Search functionality to filter models
  * - Models filtered by configured API keys
  * - Mid-conversation warning when switching models
  */
@@ -59,6 +57,8 @@ export function ModelSelector({
   const { data: chatApiKeys = [] } = useChatApiKeys();
   const { data: features } = useFeatures();
   const [pendingModel, setPendingModel] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Determine which providers have API keys configured
   const configuredProviders = new Set<SupportedProvider>();
@@ -80,13 +80,35 @@ export function ModelSelector({
     Object.keys(modelsByProvider) as SupportedProvider[]
   ).filter((provider) => configuredProviders.has(provider));
 
-  const handleValueChange = (model: string) => {
+  // Filter models based on search query
+  const filteredProviderModels = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) {
+      return availableProviders.map((provider) => ({
+        provider,
+        models: modelsByProvider[provider],
+      }));
+    }
+
+    return availableProviders
+      .map((provider) => ({
+        provider,
+        models: modelsByProvider[provider].filter((model) =>
+          model.toLowerCase().includes(query),
+        ),
+      }))
+      .filter((group) => group.models.length > 0);
+  }, [availableProviders, searchQuery]);
+
+  const handleSelectModel = (model: string) => {
     // If there are messages, show warning dialog
     if (messageCount > 0) {
       setPendingModel(model);
     } else {
       onModelChange(model);
     }
+    setOpen(false);
+    setSearchQuery("");
   };
 
   const handleConfirmChange = () => {
@@ -100,66 +122,116 @@ export function ModelSelector({
     setPendingModel(null);
   };
 
-  // If no providers configured, show disabled state
-  if (availableProviders.length === 0) {
-    return (
-      <Select disabled>
-        <SelectTrigger size="sm" className={className}>
-          <SelectValue placeholder="No API keys configured" />
-        </SelectTrigger>
-      </Select>
-    );
-  }
-
   // Check if selectedModel is in the available models
   const allAvailableModels = availableProviders.flatMap(
     (provider) => modelsByProvider[provider],
   );
   const isModelAvailable = allAvailableModels.includes(selectedModel);
 
+  // If no providers configured, show disabled state
+  if (availableProviders.length === 0) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled
+        className={cn("justify-between font-normal", className)}
+      >
+        <span className="truncate">No API keys configured</span>
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      </Button>
+    );
+  }
+
   return (
     <>
-      <Select
-        value={selectedModel}
-        onValueChange={handleValueChange}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          size="sm"
-          className={cn(className, !isModelAvailable && "border-yellow-500")}
-        >
-          <SelectValue placeholder="Select model" />
-        </SelectTrigger>
-        <SelectContent>
-          {/* Show current model if not in available list */}
-          {!isModelAvailable && (
-            <>
-              <SelectGroup>
-                <SelectLabel className="text-yellow-600">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn(
+              "w-[200px] justify-between font-normal",
+              !isModelAvailable && "border-yellow-500",
+              className,
+            )}
+          >
+            <span className="truncate">{selectedModel || "Select model"}</span>
+            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[250px] p-0" align="start">
+          {/* Search input */}
+          <div className="flex items-center border-b px-3 pb-2 pt-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+            <input
+              placeholder="Search models..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+
+          {/* Scrollable model list */}
+          <div className="max-h-[300px] overflow-y-auto p-1">
+            {/* Show current model if not in available list */}
+            {!isModelAvailable && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-semibold text-yellow-600">
                   Current (API key missing)
-                </SelectLabel>
-                <SelectItem value={selectedModel} disabled>
-                  {selectedModel}
-                </SelectItem>
-              </SelectGroup>
-              <SelectSeparator />
-            </>
-          )}
-          {availableProviders.map((provider, index) => (
-            <div key={provider}>
-              {index > 0 && <SelectSeparator />}
-              <SelectGroup>
-                <SelectLabel>{providerDisplayNames[provider]}</SelectLabel>
-                {modelsByProvider[provider].map((model) => (
-                  <SelectItem key={model} value={model}>
-                    {model}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </div>
-          ))}
-        </SelectContent>
-      </Select>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  className="relative flex w-full cursor-not-allowed select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground"
+                >
+                  <Check className="mr-2 h-4 w-4 opacity-100" />
+                  <span className="truncate">{selectedModel}</span>
+                </button>
+                <div className="my-1 h-px bg-border" />
+              </>
+            )}
+
+            {filteredProviderModels.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No models found.
+              </div>
+            ) : (
+              filteredProviderModels.map((group, index) => (
+                <div key={group.provider}>
+                  {index > 0 && <div className="my-1 h-px bg-border" />}
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                    {providerDisplayNames[group.provider]}
+                  </div>
+                  {group.models.map((model) => (
+                    <button
+                      type="button"
+                      key={model}
+                      onClick={() => handleSelectModel(model)}
+                      className={cn(
+                        "relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                        selectedModel === model &&
+                          "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          selectedModel === model ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <span className="truncate">{model}</span>
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
 
       {/* Mid-conversation warning dialog */}
       <AlertDialog

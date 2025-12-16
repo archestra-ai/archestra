@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { SSO_PROVIDERS_API_PREFIX } from "@/constants";
-import { SsoProviderModel } from "@/models";
+import SsoProviderModel from "@/models/sso-provider.ee";
 import {
   ApiError,
   constructResponseSchema,

@@ -4,7 +4,7 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
 import { describe, expect, test } from "@/test";
-import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
+import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider.ee";
 
 // Mock the logger to avoid console output during tests
 vi.mock("@/logging", () => ({

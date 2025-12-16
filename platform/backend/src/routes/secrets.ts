@@ -125,7 +125,7 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       const { type } = request.body;
-      const instance = secretManagerCoordinator.initialize(type);
+      const instance = await secretManagerCoordinator.initialize(type);
       return reply.send(instance.getUserVisibleDebugInfo());
     },
   );

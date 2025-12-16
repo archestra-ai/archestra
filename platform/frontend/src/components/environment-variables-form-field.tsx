@@ -2,7 +2,7 @@
 
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import type {
   Control,
   FieldArrayWithId,
@@ -15,7 +15,6 @@ import type {
   UseFormWatch,
 } from "react-hook-form";
 import { parseVaultReference } from "@/app/mcp-catalog/_parts/mcp-catalog-form.utils";
-import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { BooleanToggle } from "@/components/ui/boolean-toggle";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -44,6 +43,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
 
 interface ExternalSecretValue {
   teamId: string | null;

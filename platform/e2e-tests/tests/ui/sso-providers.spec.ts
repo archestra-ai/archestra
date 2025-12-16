@@ -125,8 +125,9 @@ async function deleteExistingProviderIfExists(
  * Works for both OIDC and SAML flows since Keycloak uses the same login UI.
  *
  * @param ssoPage - The Playwright page that has been redirected to Keycloak
+ * @returns true if login succeeded (landed on non-sign-in page), false if it failed
  */
-async function loginViaKeycloak(ssoPage: Page): Promise<void> {
+async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   // Wait for redirect to Keycloak (external URL for browser)
   await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
     timeout: 15000,
@@ -147,8 +148,15 @@ async function loginViaKeycloak(ssoPage: Page): Promise<void> {
 
   await clickButton({ page: ssoPage, options: { name: "Sign In" } });
 
-  // Wait for redirect back to Archestra - should land on a logged-in page (not sign-in)
-  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 15000 });
+  // Wait for redirect back to Archestra (any page under UI_BASE_URL)
+  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 30000 });
+
+  // Wait for page to settle
+  await ssoPage.waitForLoadState("networkidle");
+
+  // Check if we landed on a logged-in page (not sign-in)
+  const currentUrl = ssoPage.url();
+  return !currentUrl.includes("/auth/sign-in");
 }
 
 /**
@@ -260,18 +268,10 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       });
 
       // Login via Keycloak and wait for redirect back to Archestra
-      await loginViaKeycloak(ssoPage);
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in by checking for authenticated UI elements
-      // The sidebar navigation only appears when logged in
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
@@ -441,17 +441,8 @@ test.describe("SSO Role Mapping E2E", () => {
       });
 
       // Login via Keycloak (admin user is in archestra-admins group)
-      await loginViaKeycloak(ssoPage);
-
-      // Wait for redirect back to Archestra
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -621,17 +612,8 @@ test.describe("SSO Team Sync E2E", () => {
       });
 
       // Login via Keycloak (admin user is in archestra-admins group)
-      await loginViaKeycloak(ssoPage);
-
-      // Wait for redirect back to Archestra
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -845,20 +827,11 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       });
 
       // Login via Keycloak and wait for redirect back to Archestra
-      await loginViaKeycloak(ssoPage);
+      // SAML flows can be slower due to XML processing, so we increased timeout in loginViaKeycloak
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in by checking for authenticated UI elements
-      // The Keycloak test user matches the Archestra admin user, so SSO should link
-      // to the existing account and log us in successfully.
-      // The sidebar navigation only appears when logged in
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,

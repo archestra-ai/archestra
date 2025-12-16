@@ -16,7 +16,7 @@ import type {
 
 const {
   orchestrator: {
-    kubernetes: { namespace, kubeconfig, loadKubeconfigFromCurrentCluster },
+    kubernetes: { namespace, kubeconfig, sameCluster },
   },
 } = config;
 
@@ -103,7 +103,7 @@ export class McpServerRuntimeManager {
 
     try {
       // Validate and load kubeconfig based on configuration
-      if (loadKubeconfigFromCurrentCluster) {
+      if (sameCluster) {
         this.k8sConfig.loadFromCluster();
         logger.info("Loaded kubeconfig from current cluster");
       } else if (kubeconfigPath) {

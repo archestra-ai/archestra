@@ -526,7 +526,7 @@ export default class K8sPod {
         // Rewrite localhost URLs to host.docker.internal for Docker Desktop K8s
         // Only when backend is running on host machine (connecting to K8s from outside)
         // When backend runs inside cluster, pods shouldn't access host services
-        if (!config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+        if (!config.orchestrator.kubernetes.sameCluster) {
           processedValue = this.rewriteLocalhostUrl(processedValue);
         }
 
@@ -566,7 +566,7 @@ export default class K8sPod {
             // Use service DNS for in-cluster, localhost with NodePort for local dev
             let baseUrl: string | undefined;
             if (
-              config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
+              config.orchestrator.kubernetes.sameCluster
             ) {
               const serviceName = `${this.podName}-service`;
               baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
@@ -678,7 +678,7 @@ export default class K8sPod {
 
         // Use service DNS for in-cluster, localhost with NodePort for local dev
         let baseUrl: string;
-        if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+        if (config.orchestrator.kubernetes.sameCluster) {
           // In-cluster: use service DNS name
           const serviceName = `${this.podName}-service`;
           baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
@@ -759,7 +759,7 @@ export default class K8sPod {
       // Create the service
       // Use NodePort for local dev, ClusterIP for production
       const serviceType = config.orchestrator.kubernetes
-        .loadKubeconfigFromCurrentCluster
+        .sameCluster
         ? "ClusterIP"
         : "NodePort";
 

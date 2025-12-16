@@ -273,7 +273,8 @@ export default {
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
-      loadKubeconfigFromCurrentCluster:
+      /** When true, indicates that backend and MCP orchestrator are in the same cluster. */
+      sameCluster:
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",

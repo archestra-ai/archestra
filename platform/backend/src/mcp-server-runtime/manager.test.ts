@@ -57,7 +57,7 @@ vi.mock("@/config", async (importOriginal) => {
         kubernetes: {
           namespace: "test-namespace",
           kubeconfig: undefined,
-          loadKubeconfigFromCurrentCluster: false,
+          sameCluster: false,
         },
       },
     },

@@ -1202,10 +1202,11 @@ describe("K8sPod.generatePodSpec", () => {
 
   test("rewrite localhost URLs when backend is external to MCP pods", () => {
     // Save original value
-    const originalValue = config.orchestrator.kubernetes.sameCluster;
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
 
     // Mock config to simulate backend running in-cluster (production deployment)
-    config.orchestrator.kubernetes.sameCluster = false;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
 
     const mockCatalogItem = {
       id: "test-catalog-id",
@@ -1262,7 +1263,8 @@ describe("K8sPod.generatePodSpec", () => {
     expect(grafanaUrl?.value).toBe("http://host.docker.internal:3002/");
     expect(apiEndpoint?.value).toBe("http://host.docker.internal:8080/api");
 
-    config.orchestrator.kubernetes.sameCluster = originalValue;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
   });
 
   test("does not rewrite non-localhost URLs", () => {
@@ -1380,10 +1382,11 @@ describe("K8sPod.generatePodSpec", () => {
 
   test("does not rewrite localhost URLs when backend shares environment with K8s cluster", () => {
     // Save original value
-    const originalValue = config.orchestrator.kubernetes.sameCluster;
+    const originalValue =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
 
     // Mock config to simulate backend running in-cluster (production deployment)
-    config.orchestrator.kubernetes.sameCluster = true;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
 
     const mockCatalogItem = {
       id: "test-catalog-id",
@@ -1442,7 +1445,8 @@ describe("K8sPod.generatePodSpec", () => {
     expect(apiEndpoint?.value).toBe("http://127.0.0.1:8080/api");
 
     // Restore original value
-    config.orchestrator.kubernetes.sameCluster = originalValue;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalValue;
   });
 });
 

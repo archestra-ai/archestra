@@ -78,7 +78,7 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}
 {{- end }}
 - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
-  value: {{ .Values.archestra.orchestrator.kubernetes.sameCluster | quote }}
+  value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
 {{- if .Values.archestra.orchestrator.kubernetes.mcpServerRbac.create }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME
   value: {{ include "archestra-platform.fullname" . | quote }}

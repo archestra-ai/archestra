@@ -98,10 +98,10 @@ archestra:
 
       # Method 1: Use in-cluster configuration (recommended when running inside K8s)
       # No additional configuration needed - the platform will automatically use the service account
-      sameCluster: true
+      loadKubeconfigFromCurrentCluster: true
 
       # Method 2: Mount a kubeconfig file from a secret
-      # Set sameCluster to false and configure the secret below
+      # Set useInClusterConfig to false and configure the secret below
       kubeconfig:
         # Enable kubeconfig volume mount
         enabled: false

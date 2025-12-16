@@ -32,6 +32,7 @@ export const EnvironmentVariableSchema = z.object({
   promptOnInstallation: z.boolean(), // Whether to prompt user during installation
   required: z.boolean().optional(), // Whether this env var is required during installation (only applies when promptOnInstallation is true, defaults to false)
   description: z.string().optional(), // Optional description to show in installation dialog
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value to pre-populate in installation dialog
 });
 
 export const LocalConfigSchema = z
@@ -43,6 +44,11 @@ export const LocalConfigSchema = z
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
     httpPath: z.string().optional(),
+    // Kubernetes service account role for MCP server pods that need K8s API access
+    // If not specified, uses the default service account (no K8s permissions)
+    // Specify just the role (e.g., "operator") - the platform automatically constructs the full name:
+    // {releaseName}-mcp-k8s-{role} (e.g., "archestra-platform-mcp-k8s-operator")
+    serviceAccount: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -199,6 +205,75 @@ export const SsoProviderSamlConfigSchema = z
     "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40",
   );
 
+/**
+ * Role Mapping Configuration Schema
+ * Supports Handlebars expressions for mapping SSO attributes to Archestra roles
+ */
+export const SsoRoleMappingRuleSchema = z.object({
+  /** Handlebars expression to evaluate against userInfo/token claims */
+  expression: z.string().min(1, "Expression is required"),
+  /** Archestra role to assign when expression evaluates to true */
+  role: z.string().min(1, "Role is required"),
+});
+
+export const SsoRoleMappingConfigSchema = z.object({
+  /**
+   * Ordered list of role mapping rules.
+   * First matching rule wins. If no rules match, defaultRole is used.
+   */
+  rules: z.array(SsoRoleMappingRuleSchema).optional(),
+  /**
+   * Default role when no mapping rules match.
+   * If not specified, falls back to organization default (usually "member")
+   */
+  defaultRole: z.string().optional(),
+  /**
+   * Strict mode: If enabled, denies user login when no role mapping rule matches.
+   * Without strict mode, users who don't match any rule are assigned the default role.
+   * Default: false
+   */
+  strictMode: z.boolean().optional(),
+  /**
+   * Skip role sync: If enabled, the user's role is only set on their first login.
+   * Subsequent logins will not update their role, allowing manual role management.
+   * Default: false (role is synced on every login)
+   */
+  skipRoleSync: z.boolean().optional(),
+});
+
+export type SsoRoleMappingRule = z.infer<typeof SsoRoleMappingRuleSchema>;
+export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
+
+/**
+ * Team Sync Configuration Schema
+ * Supports Handlebars expressions for extracting group identifiers from SSO claims
+ * for automatic team membership synchronization.
+ *
+ * This allows flexibility in how groups are extracted from different IdP token formats.
+ */
+export const SsoTeamSyncConfigSchema = z.object({
+  /**
+   * Handlebars expression to extract group identifiers from ID token claims.
+   * The expression should evaluate to an array of strings (group identifiers).
+   *
+   * Examples:
+   * - `{{#each groups}}{{this}},{{/each}}` - Simple array claim: ["admin", "users"]
+   * - `{{#each roles}}{{this.name}},{{/each}}` - Extract names from array of objects
+   * - `{{{json (pluck (json roles) "name")}}}` - Parse JSON string and extract names
+   *
+   * If not configured, falls back to checking common claim names:
+   * groups, group, memberOf, member_of, roles, role, teams, team
+   */
+  groupsExpression: z.string().optional(),
+  /**
+   * Whether team sync is enabled for this provider.
+   * Default: true (team sync is enabled)
+   */
+  enabled: z.boolean().optional(),
+});
+
+export type SsoTeamSyncConfig = z.infer<typeof SsoTeamSyncConfigSchema>;
+
 // Form schemas for UI
 export const SsoProviderFormSchema = z
   .object({
@@ -208,6 +283,8 @@ export const SsoProviderFormSchema = z
     providerType: z.enum(["oidc", "saml"]),
     oidcConfig: SsoProviderOidcConfigSchema.optional(),
     samlConfig: SsoProviderSamlConfigSchema.optional(),
+    roleMapping: SsoRoleMappingConfigSchema.optional(),
+    teamSyncConfig: SsoTeamSyncConfigSchema.optional(),
   })
   .refine(
     (data) => {

@@ -1,3 +1,4 @@
+import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
 
 /**
@@ -12,9 +13,17 @@ export const evaluatePolicies = async (
   agentId: string,
   contextIsTrusted: boolean,
 ): Promise<null | [string, string]> => {
-  for (const toolCall of toolCalls) {
-    const { toolCallName, toolCallArgs } = toolCall;
+  logger.debug(
+    { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
+    "[toolInvocation] evaluatePolicies: starting evaluation",
+  );
 
+  if (toolCalls.length === 0) {
+    return null;
+  }
+
+  // Parse all tool arguments upfront
+  const parsedToolCalls = toolCalls.map((toolCall) => {
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:
      *
@@ -25,14 +34,29 @@ export const evaluatePolicies = async (
      * So it is possible that the "JSON" here is malformed because the model hallucinated parameters and we
      * may need to explicitly handle this case in the future...
      */
-    const toolInput = JSON.parse(toolCallArgs);
+    return {
+      toolCallName: toolCall.toolCallName,
+      toolInput: JSON.parse(toolCall.toolCallArgs),
+    };
+  });
 
-    const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
+  // Evaluate all tool calls in batch (1-2 queries total instead of N queries)
+  const { isAllowed, reason, toolCallName } =
+    await ToolInvocationPolicyModel.evaluateBatch(
       agentId,
-      toolCallName,
-      toolInput,
+      parsedToolCalls,
       contextIsTrusted,
     );
+
+  logger.debug(
+    { agentId, isAllowed, reason, toolCallName },
+    "[toolInvocation] evaluatePolicies: batch evaluation result",
+  );
+
+  if (!isAllowed && toolCallName) {
+    const toolInput = parsedToolCalls.find(
+      (tc) => tc.toolCallName === toolCallName,
+    )?.toolInput;
 
     const archestraMetadata = `
 <archestra-tool-name>${toolCallName}</archestra-tool-name>
@@ -49,28 +73,34 @@ ${reason}`;
     const refusalMessage = `${archestraMetadata}
 ${contentMessage}`;
 
-    if (!isAllowed) {
-      return [refusalMessage, contentMessage];
-      // TODO: return string or null, not provider specific message type
-      // return {
-      //   finish_reason: "stop",
-      //   index: 0,
-      //   logprobs: null,
-      //   message: {
-      //     role: "assistant",
-      //     /**
-      //      * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-      //      * is that most clients expect to see the content field, and don't conditionally render the refusal field
-      //      *
-      //      * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-      //      * message, but also show some special UI to indicate that the tool call was blocked.
-      //      */
-      //     refusal: refusalMessage,
-      //     content: contentMessage,
-      //   },
-      // };
-    }
+    logger.debug(
+      { agentId, toolCallName, reason },
+      "[toolInvocation] evaluatePolicies: tool invocation blocked",
+    );
+    // TODO: return string or null, not provider specific message type
+    // return {
+    //   finish_reason: "stop",
+    //   index: 0,
+    //   logprobs: null,
+    //   message: {
+    //     role: "assistant",
+    //     /**
+    //      * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
+    //      * is that most clients expect to see the content field, and don't conditionally render the refusal field
+    //      *
+    //      * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
+    //      * message, but also show some special UI to indicate that the tool call was blocked.
+    //      */
+    //     refusal: refusalMessage,
+    //     content: contentMessage,
+    //   },
+    // };
+    return [refusalMessage, contentMessage];
   }
 
+  logger.debug(
+    { agentId, toolCallCount: toolCalls.length },
+    "[toolInvocation] evaluatePolicies: all tool calls allowed",
+  );
   return null;
 };

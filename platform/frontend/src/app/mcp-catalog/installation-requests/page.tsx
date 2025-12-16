@@ -30,7 +30,7 @@ export default function InstallationRequestsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+    <div>
       <Tabs
         value={statusFilter}
         onValueChange={(v) =>

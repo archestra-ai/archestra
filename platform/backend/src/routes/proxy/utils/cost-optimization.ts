@@ -1,17 +1,17 @@
-import { inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentTeamModel,
   OptimizationRuleModel,
+  TeamModel,
   TokenPriceModel,
 } from "@/models";
 import { getTokenizer } from "@/tokenizers";
-import type { Agent, Anthropic, OpenAi } from "@/types";
+import type { Agent, Anthropic, Gemini, OpenAi } from "@/types";
 
 type ProviderMessages = {
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   anthropic: Anthropic.Types.MessagesRequest["messages"];
+  gemini: Gemini.Types.GenerateContentRequest["contents"];
 };
 
 /**
@@ -34,31 +34,23 @@ export async function getOptimizedModel<
 
   if (agentTeamIds.length > 0) {
     // Get organizationId from agent's first team
-    const teams = await db
-      .select()
-      .from(schema.teamsTable)
-      .where(inArray(schema.teamsTable.id, agentTeamIds));
+    const teams = await TeamModel.findByIds(agentTeamIds);
     if (teams.length > 0 && teams[0].organizationId) {
       organizationId = teams[0].organizationId;
       logger.info(
         { agentId, organizationId },
-        "Cost optimization: resolved organizationId from team",
+        "[CostOptimization] resolved organizationId from team",
       );
     }
   } else {
     // If agent has no teams, check if there are any organization optimization rules to apply (fallback)
-    const existingOrgRules = await db
-      .select({ entityId: schema.optimizationRulesTable.entityId })
-      .from(schema.optimizationRulesTable)
-      .where(sql`${schema.optimizationRulesTable.entityType} = 'organization'`)
-      .limit(1);
+    // TODO: this fallback doesn't work if there are multiple organizations.
+    organizationId = await OptimizationRuleModel.getFirstOrganizationId();
 
-    if (existingOrgRules.length > 0) {
-      // TODO: this fallback doesn't work if there are multiple organizations.
-      organizationId = existingOrgRules[0].entityId;
+    if (organizationId) {
       logger.info(
         { agentId, organizationId },
-        "Cost optimization: agent has no teams - using fallback organization",
+        "[CostOptimization] agent has no teams - using fallback organization",
       );
     }
   }
@@ -66,7 +58,7 @@ export async function getOptimizedModel<
   if (!organizationId) {
     logger.warn(
       { agentId },
-      "Cost optimization: could not resolve organizationId",
+      "[CostOptimization] could not resolve organizationId",
     );
     return null;
   }
@@ -81,7 +73,7 @@ export async function getOptimizedModel<
   if (rules.length === 0) {
     logger.info(
       { agentId, organizationId, provider },
-      "Cost optimization: no optimization rules configured",
+      "[CostOptimization] no optimization rules configured",
     );
     return null;
   }
@@ -92,7 +84,7 @@ export async function getOptimizedModel<
 
   logger.info(
     { tokenCount, hasTools },
-    "Cost optimization: LLM request evaluated",
+    "[CostOptimization] LLM request evaluated",
   );
 
   // Evaluate rules and return optimized model (or null if no rule matches)
@@ -104,10 +96,10 @@ export async function getOptimizedModel<
   if (optimizedModel) {
     logger.info(
       { agentId, optimizedModel },
-      "Cost optimization: optimization rule matched",
+      "[CostOptimization] optimization rule matched",
     );
   } else {
-    logger.info({ agentId }, "Cost optimization: no optimization rule matched");
+    logger.info({ agentId }, "[CostOptimization] no optimization rule matched");
   }
 
   return optimizedModel;

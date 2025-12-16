@@ -1,15 +1,22 @@
+import { SupportedProvidersSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
 import { schema } from "@/database";
+
+const fieldsToExtend = {
+  provider: SupportedProvidersSchema,
+};
 
 /**
  * Base database schema derived from Drizzle
  */
 export const SelectTokenPriceSchema = createSelectSchema(
   schema.tokenPricesTable,
+  fieldsToExtend,
 );
 export const InsertTokenPriceSchema = createInsertSchema(
   schema.tokenPricesTable,
+  fieldsToExtend,
 );
 
 /**

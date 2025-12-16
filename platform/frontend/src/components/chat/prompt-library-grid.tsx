@@ -11,6 +11,7 @@ import {
   Pencil,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -85,7 +86,7 @@ export function PromptLibraryGrid({
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (isFreeChatDialogOpen && !selectedProfileId) {
+    if (isFreeChatDialogOpen && !selectedProfileId && agents.length > 0) {
       setSelectedProfileId(agents[0].id);
     }
   }, [isFreeChatDialogOpen, agents, selectedProfileId]);
@@ -120,7 +121,7 @@ export function PromptLibraryGrid({
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+    <div>
       {/* Search Bar */}
       <div className="mb-6 relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -129,8 +130,18 @@ export function PromptLibraryGrid({
           placeholder="Search prompts by name or profile..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-9"
         />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent"
+          >
+            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -140,10 +151,10 @@ export function PromptLibraryGrid({
           permissions={{ conversation: ["create"] }}
           noPermissionHandle="tooltip"
         >
-          {({ isDisabled }) => {
+          {({ hasPermission }) => {
             return (
               <Card
-                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
+                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${hasPermission === false ? "opacity-50 pointer-events-none" : ""}`}
                 onClick={() => setIsFreeChatDialogOpen(true)}
               >
                 <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
@@ -167,7 +178,7 @@ export function PromptLibraryGrid({
               permissions={{ conversation: ["create"] }}
               noPermissionHandle="tooltip"
             >
-              {({ isDisabled }) => {
+              {({ hasPermission }) => {
                 return (
                   <PromptTile
                     key={prompt.id}
@@ -177,7 +188,7 @@ export function PromptLibraryGrid({
                     onEdit={onEdit}
                     onDelete={setPromptToDelete}
                     onViewVersionHistory={onViewVersionHistory}
-                    disabled={isDisabled}
+                    disabled={hasPermission === false}
                   />
                 );
               }}
@@ -380,7 +391,7 @@ function PromptTile({
         <div className="flex items-start justify-between gap-2">
           {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
           <div
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 max-w-[calc(100%-2rem)]"
             onClick={handlePromptClick}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -391,8 +402,8 @@ function PromptTile({
             role="button"
             tabIndex={0}
           >
-            <div className="flex items-baseline gap-2">
-              <CardTitle className="text-base truncate">
+            <div className="flex items-baseline gap-2 overflow-hidden">
+              <CardTitle className="text-base truncate flex-1 min-w-0">
                 <TruncatedText
                   message={prompt.name}
                   className="text-base truncate pr-0"

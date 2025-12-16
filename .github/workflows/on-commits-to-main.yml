@@ -7,11 +7,6 @@ on:
   # Allow manual triggering of the workflow
   workflow_dispatch:
 
-concurrency:
-  # Cancel any running workflow when new commits are pushed to main.
-  group: on-commits-to-main
-  cancel-in-progress: true
-
 # Set default permissions to empty to enforce least privilege
 # Each job will explicitly declare the permissions it needs
 permissions: {}
@@ -54,28 +49,21 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
-
+      # NOTE: only build on amd64 for now as our staging environment runs on amd64
+      # if we will need to support arm64, we should follow the pattern we do in
+      # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build
+      # on both amd64 and arm64 using native arch (to massively speed up the builds)
       - name: Build Docker image
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
-          file: ./platform/Dockerfile
-          # NOTE: only build on amd64 for now as our staging environment runs on amd64
-          # if we will need to support arm64, we should follow the pattern we do in
-          # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build
-          # on both amd64 and arm64 using native arch (to massively speed up the builds)
+          push: "true"
           platforms: linux/amd64
-          build-args: |
-            VERSION=${{ github.sha }}
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-          push: true
-          tags: |
-            europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}
+          version: ${{ github.sha }}
+          tags: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
 
   deploy-to-staging:
     name: Deploy to staging
@@ -120,6 +108,7 @@ jobs:
             --create-namespace \
             --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
+            --set archestra.env.ARCHESTRA_FRONTEND_URL="https://frontend.archestra.dev" \
             --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \
             --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \
@@ -129,6 +118,7 @@ jobs:
             --set archestra.env.ARCHESTRA_SENTRY_ENVIRONMENT="archestra.dev" \
             --set archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}" \
             --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
+            --set archestra.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="true" \
             --values .github/values-staging.yaml \
             --wait
 

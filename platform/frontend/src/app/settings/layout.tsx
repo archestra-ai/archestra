@@ -2,6 +2,8 @@
 
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
+import config from "@/lib/config";
+import { useSecretsType } from "@/lib/secrets.query";
 
 export default function SettingsLayout({
   children,
@@ -16,6 +18,12 @@ export default function SettingsLayout({
     ssoProvider: ["read"],
   });
 
+  const { data: userCanUpdateOrganization } = useHasPermissions({
+    organization: ["update"],
+  });
+
+  const { data: secretsType } = useSecretsType();
+
   const tabs = [
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
@@ -26,11 +34,22 @@ export default function SettingsLayout({
           { label: "Members", href: "/settings/members" },
           { label: "Teams", href: "/settings/teams" },
           { label: "Roles", href: "/settings/roles" },
-          ...(userCanReadSsoProviders
+          /**
+           * SSO Providers tab is only shown when enterprise license is activated
+           * and the user has the permission to read SSO providers.
+           */
+          ...(config.enterpriseLicenseActivated && userCanReadSsoProviders
             ? [{ label: "SSO Providers", href: "/settings/sso-providers" }]
             : []),
           { label: "Appearance", href: "/settings/appearance" },
         ]
+      : []),
+    /**
+     * Secrets tab is only shown when using Vault storage (not DB)
+     * and the user has permission to update organization settings.
+     */
+    ...(userCanUpdateOrganization && secretsType?.type === "Vault"
+      ? [{ label: "Secrets", href: "/settings/secrets" }]
       : []),
   ];
 

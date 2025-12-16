@@ -1,8 +1,14 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  modelsByProvider,
+  providerDisplayNames,
+  type SupportedProvider,
+  SupportedProviders,
+} from "@shared";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,8 +29,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -70,106 +83,128 @@ function TokenPriceInlineForm({
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
+    provider: initialData?.provider || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
   });
 
-  const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      onSave(formData);
-    },
-    [formData, onSave],
+  const modelOptions = useMemo(
+    () =>
+      modelsByProvider[formData.provider].map((model: string) => ({
+        value: model,
+        label: model,
+      })),
+    [formData.provider],
   );
 
   const isValid =
+    formData.provider &&
     formData.model &&
     formData.pricePerMillionInput &&
     formData.pricePerMillionOutput;
 
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (isValid) {
+        onSave(formData);
+      }
+    },
+    [formData, onSave, isValid],
+  );
+
   return (
-    <tr className="border-b">
-      <td colSpan={4} className="p-4 bg-muted/30">
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-wrap items-center gap-4"
-        >
-          <div className="flex items-center gap-2">
-            <Label htmlFor="model" className="text-sm whitespace-nowrap">
-              Model
-            </Label>
-            <Input
-              id="model"
-              type="text"
-              value={formData.model}
-              onChange={(e) =>
-                setFormData({ ...formData, model: e.target.value })
-              }
-              placeholder="e.g. gpt-4"
-              required
-              className="w-48"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="priceInput" className="text-sm whitespace-nowrap">
-              Input Price ($)
-            </Label>
-            <Input
-              id="priceInput"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.pricePerMillionInput}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  pricePerMillionInput: e.target.value,
-                })
-              }
-              placeholder="50.00"
-              required
-              className="w-32"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="priceOutput" className="text-sm whitespace-nowrap">
-              Output Price ($)
-            </Label>
-            <Input
-              id="priceOutput"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.pricePerMillionOutput}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  pricePerMillionOutput: e.target.value,
-                })
-              }
-              placeholder="50.00"
-              required
-              className="w-32"
-            />
-          </div>
-
-          <div className="flex gap-2 flex-shrink-0">
-            <Button type="submit" disabled={!isValid} size="sm">
-              <Save className="h-4 w-4 mr-1" />
-              Save
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              size="sm"
-            >
-              <X className="h-4 w-4 mr-1" />
-              Cancel
-            </Button>
+    <tr className="border-b bg-muted/30">
+      <td colSpan={5} className="p-0">
+        <form onSubmit={handleSubmit}>
+          <div className="flex">
+            <div className="p-4 flex-1">
+              <Select
+                value={formData.provider}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    provider: value as SupportedProvider,
+                    model: "", // Clear model when provider changes
+                  })
+                }
+              >
+                <SelectTrigger id="provider" className="w-full">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SupportedProviders.map((provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {providerDisplayNames[provider]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-4 flex-1">
+              <SearchableSelect
+                value={formData.model}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, model: value })
+                }
+                placeholder="Select or type model"
+                items={modelOptions}
+                allowCustom
+                className="w-full"
+              />
+            </div>
+            <div className="p-4 flex-1">
+              <Input
+                id="priceInput"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.pricePerMillionInput}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    pricePerMillionInput: e.target.value,
+                  })
+                }
+                placeholder="50.00"
+                required
+                className="w-full"
+              />
+            </div>
+            <div className="p-4 flex-1">
+              <Input
+                id="priceOutput"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.pricePerMillionOutput}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    pricePerMillionOutput: e.target.value,
+                  })
+                }
+                placeholder="50.00"
+                required
+                className="w-full"
+              />
+            </div>
+            <div className="p-4 flex gap-2">
+              <Button type="submit" disabled={!isValid} size="sm">
+                <Save className="h-4 w-4 mr-1" />
+                Save
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                size="sm"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </Button>
+            </div>
           </div>
         </form>
       </td>
@@ -205,6 +240,9 @@ function TokenPriceRow({
 
   return (
     <tr className="border-b hover:bg-muted/30">
+      <td className="p-4 capitalize">
+        {providerDisplayNames[tokenPrice.provider]}
+      </td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">
         ${parseFloat(tokenPrice.pricePerMillionInput).toFixed(2)}
@@ -332,6 +370,7 @@ export default function TokenPricePage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Provider</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Input Price ($)</TableHead>
                   <TableHead>Output Price ($)</TableHead>
@@ -348,7 +387,7 @@ export default function TokenPricePage() {
                 {tokenPrices.length === 0 && !isAddingTokenPrice ? (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="text-center py-8 text-muted-foreground"
                     >
                       <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />

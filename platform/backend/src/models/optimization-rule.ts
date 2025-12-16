@@ -1,29 +1,50 @@
-import { and, eq, getTableColumns, or } from "drizzle-orm";
+import type { SupportedProvider } from "@shared";
+import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
+import logger from "@/logging";
 import type {
-  ContentLengthConditions,
   InsertOptimizationRule,
   InsertTokenPrice,
   OptimizationRule,
-  SupportedProvider,
-  ToolPresenceConditions,
   UpdateOptimizationRule,
 } from "@/types";
 
 class OptimizationRuleModel {
+  /**
+   * Create a new optimization rule
+   */
   static async create(data: InsertOptimizationRule): Promise<OptimizationRule> {
+    logger.debug(
+      {
+        entityType: data.entityType,
+        entityId: data.entityId,
+        provider: data.provider,
+      },
+      "OptimizationRuleModel.create: creating rule",
+    );
     const [rule] = await db
       .insert(schema.optimizationRulesTable)
       .values(data)
       .returning();
 
+    logger.debug(
+      { ruleId: rule.id },
+      "OptimizationRuleModel.create: completed",
+    );
     return rule;
   }
 
+  /**
+   * Find all rules for an organization (including team-level rules)
+   */
   static async findByOrganizationId(
     organizationId: string,
   ): Promise<OptimizationRule[]> {
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.findByOrganizationId: fetching rules",
+    );
     const rules = await db
       .select(getTableColumns(schema.optimizationRulesTable))
       .from(schema.optimizationRulesTable)
@@ -47,15 +68,27 @@ class OptimizationRuleModel {
             eq(schema.teamsTable.organizationId, organizationId),
           ),
         ),
-      );
+      )
+      .orderBy(asc(schema.optimizationRulesTable.createdAt));
 
+    logger.debug(
+      { organizationId, count: rules.length },
+      "OptimizationRuleModel.findByOrganizationId: completed",
+    );
     return rules;
   }
 
+  /**
+   * Find enabled rules for an organization and provider
+   */
   static async findEnabledByOrganizationAndProvider(
     organizationId: string,
     provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
+    logger.debug(
+      { organizationId, provider },
+      "OptimizationRuleModel.findEnabledByOrganizationAndProvider: fetching rules",
+    );
     const rules = await db
       .select()
       .from(schema.optimizationRulesTable)
@@ -66,34 +99,77 @@ class OptimizationRuleModel {
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),
-      );
+      )
+      .orderBy(asc(schema.optimizationRulesTable.createdAt));
 
+    logger.debug(
+      { organizationId, provider, count: rules.length },
+      "OptimizationRuleModel.findEnabledByOrganizationAndProvider: completed",
+    );
     return rules;
   }
 
+  /**
+   * Get the first organization ID that has optimization rules
+   * Used as fallback when an agent has no teams
+   */
+  static async getFirstOrganizationId(): Promise<string | null> {
+    logger.debug(
+      "OptimizationRuleModel.getFirstOrganizationId: fetching first organization with rules",
+    );
+    const [result] = await db
+      .select({ entityId: schema.optimizationRulesTable.entityId })
+      .from(schema.optimizationRulesTable)
+      .where(sql`${schema.optimizationRulesTable.entityType} = 'organization'`)
+      .limit(1);
+
+    const organizationId = result?.entityId || null;
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.getFirstOrganizationId: completed",
+    );
+    return organizationId;
+  }
+
+  /**
+   * Update an optimization rule
+   */
   static async update(
     id: string,
     data: Partial<UpdateOptimizationRule>,
   ): Promise<OptimizationRule | undefined> {
+    logger.debug({ id, data }, "OptimizationRuleModel.update: updating rule");
     const [rule] = await db
       .update(schema.optimizationRulesTable)
       .set(data)
       .where(eq(schema.optimizationRulesTable.id, id))
       .returning();
 
+    logger.debug(
+      { id, updated: !!rule },
+      "OptimizationRuleModel.update: completed",
+    );
     return rule;
   }
 
+  /**
+   * Delete an optimization rule
+   */
   static async delete(id: string): Promise<boolean> {
+    logger.debug({ id }, "OptimizationRuleModel.delete: deleting rule");
     const result = await db
       .delete(schema.optimizationRulesTable)
       .where(eq(schema.optimizationRulesTable.id, id));
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+    logger.debug({ id, deleted }, "OptimizationRuleModel.delete: completed");
+    return deleted;
   }
 
-  // Evaluate rules for a given context
-  // Rules are grouped by models. If all rules in such group match, returns the model.
+  /**
+   * Evaluate rules for a given context.
+   * Returns the target model of the first matching rule, or null if no match.
+   */
   static matchByRules(
     rules: OptimizationRule[],
     context: {
@@ -101,42 +177,39 @@ class OptimizationRuleModel {
       hasTools: boolean;
     },
   ): string | null {
-    const rulesByModel: Record<string, OptimizationRule[]> = {};
-
+    logger.debug(
+      { rulesCount: rules.length, context },
+      "OptimizationRuleModel.matchByRules: evaluating rules",
+    );
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      const model = rule.targetModel;
-      if (!rulesByModel[model]) {
-        rulesByModel[model] = [];
-      }
-      rulesByModel[model].push(rule);
-    }
+      logger.debug(
+        { ruleId: rule.id, conditions: rule.conditions, context },
+        "OptimizationRuleModel.matchByRules: checking rule",
+      );
 
-    for (const [model, modelRules] of Object.entries(rulesByModel)) {
-      let match = true;
-
-      for (const rule of modelRules) {
-        if (rule.ruleType === "content_length") {
-          const conditions = rule.conditions as ContentLengthConditions;
-          if (context.tokenCount > conditions.maxLength) {
-            match = false;
-            break;
-          }
-        } else if (rule.ruleType === "tool_presence") {
-          const conditions = rule.conditions as ToolPresenceConditions;
-          if (context.hasTools !== conditions.hasTools) {
-            match = false;
-            break;
-          }
+      // Check if all conditions in the array match
+      const allConditionsMatch = rule.conditions.every((condition) => {
+        if ("maxLength" in condition) {
+          return context.tokenCount <= condition.maxLength;
         }
-      }
+        if ("hasTools" in condition) {
+          return context.hasTools === condition.hasTools;
+        }
+        return false;
+      });
 
-      if (match) {
-        return model;
+      if (allConditionsMatch) {
+        logger.debug(
+          { ruleId: rule.id, targetModel: rule.targetModel },
+          "OptimizationRuleModel.matchByRules: rule matched",
+        );
+        return rule.targetModel;
       }
     }
 
+    logger.debug("OptimizationRuleModel.matchByRules: no rules matched");
     return null;
   }
 
@@ -146,6 +219,9 @@ class OptimizationRuleModel {
   private static async getAllProvidersFromInteractions(): Promise<
     SupportedProvider[]
   > {
+    logger.debug(
+      "OptimizationRuleModel.getAllProvidersFromInteractions: fetching providers",
+    );
     const results = await db
       .select({
         providerDiscriminator: schema.interactionsTable.type,
@@ -159,7 +235,12 @@ class OptimizationRuleModel {
       .filter(Boolean) as SupportedProvider[];
 
     // Return unique providers
-    return [...new Set(providers)];
+    const uniqueProviders = [...new Set(providers)];
+    logger.debug(
+      { providers: uniqueProviders },
+      "OptimizationRuleModel.getAllProvidersFromInteractions: completed",
+    );
+    return uniqueProviders;
   }
 
   /**
@@ -169,15 +250,21 @@ class OptimizationRuleModel {
   static async ensureDefaultOptimizationRules(
     organizationId: string,
   ): Promise<void> {
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.ensureDefaultOptimizationRules: starting",
+    );
     const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
       openai: [
         {
+          provider: "openai",
           model: "gpt-5-mini",
           ...getDefaultModelPrice("gpt-5-mini"),
         },
       ],
       anthropic: [
         {
+          provider: "anthropic",
           model: "claude-haiku-4-5",
           ...getDefaultModelPrice("claude-haiku-4-5"),
         },
@@ -192,17 +279,7 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "tool_presence",
-            conditions: { hasTools: false },
-            provider: "openai",
-            targetModel: "gpt-5-mini",
-            enabled: true,
-          },
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            ruleType: "content_length",
-            conditions: { maxLength: 1000 },
+            conditions: [{ maxLength: 1000 }],
             provider: "openai",
             targetModel: "gpt-5-mini",
             enabled: true,
@@ -212,17 +289,8 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "tool_presence",
-            conditions: { hasTools: false },
-            provider: "anthropic",
-            targetModel: "claude-haiku-4-5",
-            enabled: true,
-          },
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            ruleType: "content_length",
-            conditions: { maxLength: 1000 },
+            // Adding a hasTools: false will not work with chat because it has tools
+            conditions: [{ maxLength: 1000 }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
             enabled: true,
@@ -251,6 +319,10 @@ class OptimizationRuleModel {
         .onConflictDoNothing({
           target: schema.tokenPricesTable.model,
         });
+      logger.debug(
+        { count: defaultPrices.length },
+        "OptimizationRuleModel.ensureDefaultOptimizationRules: inserted token prices",
+      );
     }
 
     // Get existing rules for this organization
@@ -270,7 +342,16 @@ class OptimizationRuleModel {
     // Insert new rules
     if (rulesToCreate.length > 0) {
       await db.insert(schema.optimizationRulesTable).values(rulesToCreate);
+      logger.debug(
+        { count: rulesToCreate.length },
+        "OptimizationRuleModel.ensureDefaultOptimizationRules: inserted default rules",
+      );
     }
+
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.ensureDefaultOptimizationRules: completed",
+    );
   }
 }
 

@@ -85,7 +85,7 @@ export default function SignUpWithInvitationPage() {
     return (
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <main className="flex grow flex-col items-center justify-center md:p-6 h-full">
+          <main className="h-full flex items-center justify-center">
             <LoadingSpinner />
           </main>
         </Suspense>
@@ -96,8 +96,8 @@ export default function SignUpWithInvitationPage() {
   return (
     <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
-        <main className="flex grow flex-col items-center justify-center md:p-6 h-full">
-          <div className="w-[384px] space-y-4">
+        <main className="h-full flex items-center justify-center p-4">
+          <div className="w-full max-w-sm space-y-4">
             {invitationId && (
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center space-y-2">
                 <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">

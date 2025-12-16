@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useState } from "react";
+import Divider from "@/components/divider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,7 +67,7 @@ export default function InstallationRequestDetailPage({
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6 max-w-5xl">
+      <div>
         <Skeleton className="h-8 w-48 mb-6" />
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2 space-y-6">
@@ -98,7 +99,7 @@ export default function InstallationRequestDetailPage({
 
   if (!request) {
     return (
-      <div className="container mx-auto p-6 max-w-5xl">
+      <div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <p className="text-muted-foreground">Request not found</p>
@@ -131,32 +132,28 @@ export default function InstallationRequestDetailPage({
   const isPending = request.status === "pending";
 
   return (
-    <div className="w-full h-full">
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <div className="flex items-center gap-4 mb-2">
-            <Link href="/mcp-catalog/installation-requests">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Installation Request
-            </h1>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground ml-14">
-              Review and manage this installation request
-            </p>
-            <Badge variant="outline" className={status.color}>
-              <StatusIcon className="h-4 w-4 mr-2" />
-              {status.label}
-            </Badge>
-          </div>
-        </div>
+    <div>
+      <div className="flex items-center gap-4 mb-2">
+        <Link href="/mcp-catalog/installation-requests">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Installation Request
+        </h1>
       </div>
-
-      <div className="max-w-5xl mx-auto px-8 py-8">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground ml-14">
+          Review and manage this installation request
+        </p>
+        <Badge variant="outline" className={status.color}>
+          <StatusIcon className="h-4 w-4 mr-2" />
+          {status.label}
+        </Badge>
+      </div>
+      <Divider className="my-6" />
+      <div>
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2 space-y-6">
             <Card>

@@ -1,5 +1,7 @@
 import { type Span, trace } from "@opentelemetry/api";
-import type { Agent, SupportedProvider } from "@/types";
+import type { SupportedProvider } from "@shared";
+import logger from "@/logging";
+import type { Agent } from "@/types";
 
 /**
  * Route categories for tracing
@@ -32,6 +34,10 @@ export async function startActiveLlmSpan<T>(
   agent: Agent | undefined,
   callback: (span: Span) => Promise<T>,
 ): Promise<T> {
+  logger.debug(
+    { spanName, provider, llmModel, stream, agentId: agent?.id },
+    "[tracing] startActiveLlmSpan: creating span",
+  );
   const tracer = trace.getTracer("archestra");
 
   return tracer.startActiveSpan(
@@ -50,6 +56,14 @@ export async function startActiveLlmSpan<T>(
       // agent.* attributes are deprecated and will be removed in a future release.
       // Both are emitted during the transition period to allow dashboards/traces to migrate.
       if (agent) {
+        logger.debug(
+          {
+            agentId: agent.id,
+            agentName: agent.name,
+            labelCount: agent.labels?.length || 0,
+          },
+          "[tracing] startActiveLlmSpan: setting agent attributes",
+        );
         span.setAttribute("agent.id", agent.id);
         span.setAttribute("agent.name", agent.name);
         span.setAttribute("profile.id", agent.id);
@@ -64,6 +78,10 @@ export async function startActiveLlmSpan<T>(
         }
       }
 
+      logger.debug(
+        { spanName },
+        "[tracing] startActiveLlmSpan: executing callback",
+      );
       return await callback(span);
     },
   );

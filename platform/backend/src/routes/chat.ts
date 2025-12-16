@@ -1,19 +1,30 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { RouteId } from "@shared";
-import { convertToModelMessages, stepCountIs, streamText } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId, SupportedProviders } from "@shared";
+import {
+  convertToModelMessages,
+  generateText,
+  stepCountIs,
+  streamText,
+} from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import logger from "@/logging";
 import {
   AgentModel,
-  ChatSettingsModel,
+  ChatApiKeyModel,
   ConversationModel,
   MessageModel,
   PromptModel,
 } from "@/models";
+import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
+import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { secretManager } from "@/secretsmanager";
+import type { SupportedChatProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
@@ -24,6 +35,93 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+
+/**
+ * Detect which provider a model belongs to based on its name
+ */
+function detectProviderFromModel(model: string): SupportedChatProvider {
+  const lowerModel = model.toLowerCase();
+
+  if (lowerModel.includes("claude")) {
+    return "anthropic";
+  }
+
+  if (lowerModel.includes("gemini") || lowerModel.includes("google")) {
+    return "gemini";
+  }
+
+  if (
+    lowerModel.includes("gpt") ||
+    lowerModel.includes("o1") ||
+    lowerModel.includes("o3")
+  ) {
+    return "openai";
+  }
+
+  // Default to anthropic for backwards compatibility
+  return "anthropic";
+}
+
+/**
+ * Get a smart default model based on available API keys for the agent/organization.
+ * Priority: profile-specific key > org default key > env var > fallback
+ */
+async function getSmartDefaultModel(
+  agentId: string,
+  organizationId: string,
+): Promise<string> {
+  /**
+   * Check what API keys are available (profile-specific or org defaults)
+   * Try to find an available API key in order of preference
+   */
+  for (const provider of SupportedProviders) {
+    const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+      agentId,
+      provider,
+      organizationId,
+    );
+
+    if (profileApiKey?.secretId) {
+      const secret = await secretManager().getSecret(profileApiKey.secretId);
+      const secretValue =
+        secret?.secret?.apiKey ??
+        secret?.secret?.anthropicApiKey ??
+        secret?.secret?.geminiApiKey ??
+        secret?.secret?.openaiApiKey;
+
+      if (secretValue) {
+        // Found a valid API key for this provider - return appropriate default model
+        switch (provider) {
+          case "anthropic":
+            return "claude-opus-4-1-20250805";
+          case "gemini":
+            return "gemini-2.5-pro";
+          case "openai":
+            return "gpt-4o";
+        }
+      }
+    }
+  }
+
+  // Check environment variables as fallback
+  if (config.chat.anthropic.apiKey) {
+    return "claude-opus-4-1-20250805";
+  }
+  if (config.chat.openai.apiKey) {
+    return "gpt-4o";
+  }
+  if (config.chat.gemini.apiKey) {
+    return "gemini-2.5-pro";
+  }
+
+  // Check if Vertex AI is enabled - use Gemini without API key
+  if (isVertexAiEnabled()) {
+    return "gemini-2.5-pro";
+  }
+
+  // Ultimate fallback - use configured default
+  return config.chat.defaultModel;
+}
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -43,9 +141,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { id: conversationId, messages }, user, organizationId },
+      { body: { id: conversationId, messages }, user, organizationId, headers },
       reply,
     ) => {
+      const { success: userIsProfileAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Extract external agent ID from incoming request headers to forward to LLM Proxy
+      const externalAgentId = getExternalAgentId(headers);
+
       // Get conversation
       const conversation = await ConversationModel.findById(
         conversationId,
@@ -57,11 +163,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch MCP tools, agent prompts, and chat settings in parallel
-      const [mcpTools, prompt, chatSettings] = await Promise.all([
-        getChatMcpTools(conversation.agentId),
+      // Fetch MCP tools and agent prompts in parallel
+      const [mcpTools, prompt] = await Promise.all([
+        getChatMcpTools({
+          agentName: conversation.agent.name,
+          agentId: conversation.agentId,
+          userId: user.id,
+          userIsProfileAdmin,
+        }),
         PromptModel.findById(conversation.promptId),
-        ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -83,7 +193,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         systemPrompt = allParts.join("\n\n");
       }
 
-      fastify.log.info(
+      // Detect provider from model name
+      const provider = detectProviderFromModel(conversation.selectedModel);
+
+      logger.info(
         {
           conversationId,
           agentId: conversation.agentId,
@@ -91,51 +204,143 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
+          provider,
           promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
+          externalAgentId,
         },
         "Starting chat stream",
       );
 
-      let anthropicApiKey = config.chat.anthropic.apiKey; // Fallback to env var
+      // Resolve API key: profile-specific -> org default -> env var
+      let providerApiKey: string | undefined;
+      let apiKeySource = "environment";
 
-      if (chatSettings?.anthropicApiKeySecretId) {
-        const secret = await secretManager.getSecret(
-          chatSettings.anthropicApiKeySecretId,
-        );
-        if (secret?.secret?.anthropicApiKey) {
-          anthropicApiKey = secret.secret.anthropicApiKey as string;
-          fastify.log.info("Using Anthropic API key from database");
+      // Try profile-specific API key first (getProfileApiKey already falls back to org default)
+      const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+        conversation.agentId,
+        provider,
+        organizationId,
+      );
+
+      if (profileApiKey?.secretId) {
+        const secret = await secretManager().getSecret(profileApiKey.secretId);
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ??
+          secret?.secret?.anthropicApiKey ??
+          secret?.secret?.geminiApiKey ??
+          secret?.secret?.openaiApiKey;
+        if (secretValue) {
+          providerApiKey = secretValue as string;
+          apiKeySource = profileApiKey.isOrganizationDefault
+            ? "organization default"
+            : "profile-specific";
         }
-      } else {
-        fastify.log.info("Using Anthropic API key from environment variable");
       }
 
-      if (!anthropicApiKey) {
+      // If profileApiKey exists but has no secretId, or getProfileApiKey returned null,
+      // explicitly try organization default as a fallback
+      if (!providerApiKey) {
+        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+          organizationId,
+          provider,
+        );
+        if (orgDefault?.secretId) {
+          const secret = await secretManager().getSecret(orgDefault.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ??
+            secret?.secret?.anthropicApiKey ??
+            secret?.secret?.geminiApiKey ??
+            secret?.secret?.openaiApiKey;
+          if (secretValue) {
+            providerApiKey = secretValue as string;
+            apiKeySource = "organization default";
+          }
+        }
+      }
+
+      // Fall back to environment variable
+      if (!providerApiKey) {
+        if (provider === "anthropic" && config.chat.anthropic.apiKey) {
+          providerApiKey = config.chat.anthropic.apiKey;
+          apiKeySource = "environment";
+        } else if (provider === "openai" && config.chat.openai.apiKey) {
+          providerApiKey = config.chat.openai.apiKey;
+          apiKeySource = "environment";
+        } else if (provider === "gemini" && config.chat.gemini.apiKey) {
+          providerApiKey = config.chat.gemini.apiKey;
+          apiKeySource = "environment";
+        }
+      }
+
+      // For Gemini with Vertex AI enabled, API key is not required
+      // The LLM Proxy handles authentication via ADC
+      const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
+
+      logger.info(
+        { apiKeySource, provider, isGeminiWithVertexAi },
+        "Using LLM provider API key",
+      );
+
+      if (!providerApiKey && !isGeminiWithVertexAi) {
         throw new ApiError(
           400,
-          "Anthropic API key not configured. Please configure it in Chat Settings.",
+          "LLM Provider API key not configured. Please configure it in Chat Settings.",
         );
       }
 
-      // Create Anthropic client pointing to LLM Proxy
-      // URL format: /v1/anthropic/:agentId/v1/messages
-      const anthropic = createAnthropic({
-        apiKey: anthropicApiKey,
-        baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-      });
+      // Create provider client pointing to LLM Proxy
+      // Forward external agent ID header if present
+      const clientHeaders = externalAgentId
+        ? {
+            [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
+          }
+        : undefined;
+
+      let llmClient:
+        | ReturnType<typeof createAnthropic>
+        | ReturnType<typeof createGoogleGenerativeAI>
+        | ReturnType<typeof createOpenAI>;
+
+      if (provider === "anthropic") {
+        // URL format: /v1/anthropic/:agentId/v1/messages
+        llmClient = createAnthropic({
+          apiKey: providerApiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
+          headers: clientHeaders,
+        });
+      } else if (provider === "gemini") {
+        // URL format: /v1/gemini/:agentId/v1beta/models
+        // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
+        llmClient = createGoogleGenerativeAI({
+          apiKey: providerApiKey || "vertex-ai-mode",
+          baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
+          headers: clientHeaders,
+        });
+      } else if (provider === "openai") {
+        // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
+        llmClient = createOpenAI({
+          apiKey: providerApiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
+          headers: clientHeaders,
+        });
+      } else {
+        throw new ApiError(400, `Unsupported provider: ${provider}`);
+      }
 
       // Stream with AI SDK
-      const result = streamText({
-        model: anthropic(conversation.selectedModel),
-        system: systemPrompt,
+      // Build streamText config conditionally
+      const streamTextConfig: Parameters<typeof streamText>[0] = {
+        model: llmClient(conversation.selectedModel),
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {
-          fastify.log.info(
+          logger.info(
             {
               conversationId,
               usage,
@@ -144,7 +349,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream finished",
           );
         },
-      });
+      };
+
+      // Only include system property if we have actual content
+      if (systemPrompt) {
+        streamTextConfig.system = systemPrompt;
+      }
+
+      const result = streamText(streamTextConfig);
 
       // Convert to UI message stream response (Response object)
       const response = result.toUIMessageStreamResponse({
@@ -155,7 +367,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          fastify.log.error(
+          logger.error(
             { error, conversationId, agentId: conversation.agentId },
             "Chat stream error occurred",
           );
@@ -163,7 +375,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Return full error as JSON string for debugging
           try {
             const fullError = JSON.stringify(error, null, 2);
-            fastify.log.info(
+            logger.info(
               { fullError, willBeSentToFrontend: true },
               "Returning full error to frontend via stream",
             );
@@ -172,7 +384,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // If stringify fails (circular reference), fall back to error message
             const fallbackMessage =
               error instanceof Error ? error.message : String(error);
-            fastify.log.info(
+            logger.info(
               { fallbackMessage, stringifyError },
               "Failed to stringify error, using fallback",
             );
@@ -213,7 +425,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               await MessageModel.bulkCreate(messageData);
 
-              fastify.log.info(
+              logger.info(
                 `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
               );
             }
@@ -222,7 +434,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Log response headers for debugging
-      fastify.log.info(
+      logger.info(
         {
           conversationId,
           headers: Object.fromEntries(response.headers.entries()),
@@ -326,7 +538,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
-      const mcpTools = await getChatMcpTools(agentId);
+      const mcpTools = await getChatMcpTools({
+        agentName: agent.name,
+        agentId,
+        userId: user.id,
+        userIsProfileAdmin: isAgentAdmin,
+      });
 
       // Convert AI SDK Tool format to simple array for frontend
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({
@@ -381,6 +598,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Determine smart default model if none specified
+      const modelToUse =
+        selectedModel || (await getSmartDefaultModel(agentId, organizationId));
+
+      logger.info(
+        {
+          agentId,
+          organizationId,
+          selectedModel,
+          modelToUse,
+          wasSmartDefault: !selectedModel,
+        },
+        "Creating conversation with model",
+      );
+
       // Create conversation with agent and optional prompt
       return reply.send(
         await ConversationModel.create({
@@ -389,7 +621,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           promptId,
           title,
-          selectedModel: selectedModel || config.chat.defaultModel,
+          selectedModel: modelToUse,
         }),
       );
     },
@@ -437,6 +669,196 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, user, organizationId }, reply) => {
       await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/generate-title",
+    {
+      schema: {
+        operationId: RouteId.GenerateChatConversationTitle,
+        description:
+          "Generate a title for the conversation based on the first user message and assistant response",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z
+          .object({
+            regenerate: z
+              .boolean()
+              .optional()
+              .describe(
+                "Force regeneration even if title already exists (for manual regeneration)",
+              ),
+          })
+          .optional(),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const regenerate = body?.regenerate ?? false;
+
+      // Get conversation with messages
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      // Skip if title is already set (unless regenerating)
+      if (conversation.title && !regenerate) {
+        logger.info(
+          { conversationId: id, existingTitle: conversation.title },
+          "Skipping title generation - title already set",
+        );
+        return reply.send(conversation);
+      }
+
+      // Extract first user message and first assistant message text
+      const messages = conversation.messages || [];
+      let firstUserMessage = "";
+      let firstAssistantMessage = "";
+
+      for (const msg of messages) {
+        // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+        const msgContent = msg as any;
+        if (!firstUserMessage && msgContent.role === "user") {
+          // Extract text from parts
+          for (const part of msgContent.parts || []) {
+            if (part.type === "text" && part.text) {
+              firstUserMessage = part.text;
+              break;
+            }
+          }
+        }
+        if (!firstAssistantMessage && msgContent.role === "assistant") {
+          // Extract text from parts (skip tool calls)
+          for (const part of msgContent.parts || []) {
+            if (part.type === "text" && part.text) {
+              firstAssistantMessage = part.text;
+              break;
+            }
+          }
+        }
+        if (firstUserMessage && firstAssistantMessage) break;
+      }
+
+      // Need at least user message to generate title
+      if (!firstUserMessage) {
+        logger.info(
+          { conversationId: id },
+          "Skipping title generation - no user message found",
+        );
+        return reply.send(conversation);
+      }
+
+      // Resolve API key: profile-specific -> org default -> env var
+      let anthropicApiKey: string | undefined;
+
+      // Try profile-specific API key first (if conversation has an agent)
+      if (conversation.agentId) {
+        const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
+          conversation.agentId,
+          "anthropic",
+          organizationId,
+        );
+
+        if (profileApiKey?.secretId) {
+          const secret = await secretManager().getSecret(
+            profileApiKey.secretId,
+          );
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+          }
+        }
+      }
+
+      // If profileApiKey doesn't work, explicitly try organization default as a fallback
+      if (!anthropicApiKey) {
+        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+          organizationId,
+          "anthropic",
+        );
+        if (orgDefault?.secretId) {
+          const secret = await secretManager().getSecret(orgDefault.secretId);
+          // Support both old format (anthropicApiKey) and new format (apiKey)
+          const secretValue =
+            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+          if (secretValue) {
+            anthropicApiKey = secretValue as string;
+          }
+        }
+      }
+
+      // Fall back to environment variable
+      if (!anthropicApiKey) {
+        anthropicApiKey = config.chat.anthropic.apiKey;
+      }
+
+      if (!anthropicApiKey) {
+        throw new ApiError(
+          400,
+          "LLM Provider API key not configured. Please configure it in Chat Settings.",
+        );
+      }
+
+      // Create Anthropic client (direct, not through LLM proxy - this is a meta operation)
+      const anthropic = createAnthropic({
+        apiKey: anthropicApiKey,
+      });
+
+      // Build prompt for title generation
+      const contextMessages = firstAssistantMessage
+        ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
+        : `User: ${firstUserMessage}`;
+
+      const titlePrompt = `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
+
+${contextMessages}
+
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
+
+      try {
+        // Generate title using a fast model
+        const result = await generateText({
+          model: anthropic("claude-3-5-haiku-20241022"),
+          prompt: titlePrompt,
+        });
+
+        const generatedTitle = result.text.trim();
+
+        logger.info(
+          { conversationId: id, generatedTitle },
+          "Generated conversation title",
+        );
+
+        // Update conversation with generated title
+        const updatedConversation = await ConversationModel.update(
+          id,
+          user.id,
+          organizationId,
+          { title: generatedTitle },
+        );
+
+        if (!updatedConversation) {
+          throw new ApiError(500, "Failed to update conversation with title");
+        }
+
+        return reply.send(updatedConversation);
+      } catch (error) {
+        logger.error(
+          { conversationId: id, error },
+          "Failed to generate conversation title",
+        );
+        // Return the conversation without title update on error
+        return reply.send(conversation);
+      }
     },
   );
 };

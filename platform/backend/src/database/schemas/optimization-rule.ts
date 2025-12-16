@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import {
   boolean,
   index,
@@ -11,8 +12,6 @@ import {
 import type {
   OptimizationRuleConditions,
   OptimizationRuleEntityType,
-  OptimizationRuleType,
-  SupportedProvider,
 } from "@/types";
 
 const optimizationRulesTable = pgTable(
@@ -23,7 +22,6 @@ const optimizationRulesTable = pgTable(
       .$type<OptimizationRuleEntityType>()
       .notNull(),
     entityId: text("entity_id").notNull(),
-    ruleType: text("rule_type").$type<OptimizationRuleType>().notNull(),
     conditions: jsonb("conditions")
       .$type<OptimizationRuleConditions>()
       .notNull(),

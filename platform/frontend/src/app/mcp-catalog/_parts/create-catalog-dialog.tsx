@@ -30,6 +30,7 @@ import { transformFormToApiData } from "./mcp-catalog-form.utils";
 interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 type TabType = "archestra-catalog" | "remote" | "local";
@@ -37,6 +38,7 @@ type TabType = "archestra-catalog" | "remote" | "local";
 export function CreateCatalogDialog({
   isOpen,
   onClose,
+  onSuccess,
 }: CreateCatalogDialogProps) {
   const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
   const createMutation = useCreateInternalMcpCatalogItem();
@@ -52,6 +54,7 @@ export function CreateCatalogDialog({
     const apiData = transformFormToApiData(values);
     await createMutation.mutateAsync(apiData);
     handleClose();
+    onSuccess?.();
   };
 
   const footer = (
@@ -140,6 +143,7 @@ export function CreateCatalogDialog({
             <ArchestraCatalogTab
               catalogItems={catalogItems}
               onClose={handleClose}
+              onSuccess={onSuccess}
             />
           )}
 

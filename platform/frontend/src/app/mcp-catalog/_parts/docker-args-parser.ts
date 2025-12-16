@@ -33,6 +33,15 @@
  * // Returns: { dockerImage: "redis/mcp-redis:latest" }
  *
  * @example
+ * // Docker with flags passed to image entrypoint (no command override)
+ * parseDockerArgsToLocalConfig(
+ *   "docker",
+ *   ["run", "-i", "--rm", "mcp/grafana", "-t", "stdio"],
+ *   "mcp/grafana"
+ * )
+ * // Returns: { arguments: ["-t", "stdio"], dockerImage: "mcp/grafana" }
+ *
+ * @example
  * // Non-Docker command
  * parseDockerArgsToLocalConfig("npx", ["-y", "@modelcontextprotocol/server"], undefined)
  * // Returns: null
@@ -68,6 +77,18 @@ export function parseDockerArgsToLocalConfig(
   if (commandAndArgs.length === 0) {
     // No command specified after image - use image's default CMD
     return { dockerImage };
+  }
+
+  // Check if first item is a flag (starts with -) or a command
+  const firstItem = commandAndArgs[0];
+
+  if (firstItem.startsWith("-")) {
+    // First item is a flag, not a command - pass all items as args to image's entrypoint
+    // Example: ["mcp/grafana", "-t", "stdio"] → command=undefined, arguments=["-t", "stdio"]
+    return {
+      arguments: commandAndArgs,
+      dockerImage,
+    };
   }
 
   // First item is the command, rest are arguments

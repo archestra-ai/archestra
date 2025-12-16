@@ -5,12 +5,18 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@shared"],
-  devIndicators: {
-    position: "bottom-right",
+  // Disable dev indicators so they don't show up in docs automated screenshots
+  devIndicators: false,
+  turbopack: {
+    resolveAlias: {
+      "@shared/access-control.ee": "../shared/access-control.ee.ts",
+      "@shared/access-control": "../shared/access-control.ts",
+    },
   },
   logging: {
     fetches: {
       fullUrl: true,
+      hmrRefreshes: true,
     },
     incomingRequests: true,
   },
@@ -28,6 +34,9 @@ const nextConfig: NextConfig = {
         source: "/api/archestra-catalog/:path*",
         destination: `${MCP_CATALOG_API_BASE_URL}/:path*`,
       },
+      // /api/auth/* is handled by the API route at app/api/auth/[...path]/route.ts
+      // to properly forward the Origin header for SAML SSO callbacks.
+      // API routes take precedence over rewrites in Next.js.
       {
         source: "/api/:path*",
         destination: `${backendUrl}/api/:path*`,

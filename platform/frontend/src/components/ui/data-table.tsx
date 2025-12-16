@@ -43,6 +43,10 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData, event: React.MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
+  /** Hide the "X of Y row(s) selected" text when row selection is not used */
+  hideSelectedCount?: boolean;
+  /** Function to get a stable unique ID for each row. When provided, row selection will use these IDs instead of indices. */
+  getRowId?: (row: TData, index: number) => string;
 }
 
 export function DataTable<TData, TValue>({
@@ -57,6 +61,8 @@ export function DataTable<TData, TValue>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
+  hideSelectedCount = false,
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -67,6 +73,7 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     onSortingChange: (updater) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
@@ -197,7 +204,10 @@ export function DataTable<TData, TValue>({
         </Table>
       </div>
       {(pagination || !manualPagination) && (
-        <DataTablePagination table={table} totalRows={pagination?.total} />
+        <DataTablePagination
+          table={table}
+          totalRows={hideSelectedCount ? data.length : pagination?.total}
+        />
       )}
     </div>
   );

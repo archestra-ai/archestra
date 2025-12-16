@@ -5,6 +5,30 @@ import {
   test,
 } from "./fixtures";
 
+/**
+ * Retry wrapper for external service calls that may fail due to network issues.
+ * Uses exponential backoff.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelayMs = 1000,
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * 2 ** (attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   /**
    * It can take some time to pull the Docker images and start the MCP server.. hence the polling
@@ -86,12 +110,15 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;
 
-        // Install the remote MCP server (no auth required)
-        const installResponse = await installMcpServer(request, {
-          name: "Test Context7 Remote Server",
-          catalogId: catalogId,
+        // Install the remote MCP server with retry logic for network issues
+        // External services can be flaky, so retry up to 3 times with exponential backoff
+        const server = await withRetry(async () => {
+          const installResponse = await installMcpServer(request, {
+            name: "Test Context7 Remote Server",
+            catalogId: catalogId,
+          });
+          return installResponse.json();
         });
-        const server = await installResponse.json();
         serverId = server.id;
       },
     );

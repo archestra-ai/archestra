@@ -7,12 +7,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { InternalMcpCatalogServerType } from "@/types";
+import secretTable from "./secret";
 
 const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   version: text("version"),
   description: text("description"),
+  instructions: text("instructions"),
   repository: text("repository"),
   installationCommand: text("installation_command"),
   requiresAuth: boolean("requires_auth").notNull().default(false),
@@ -34,6 +36,15 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
     .notNull(),
   serverUrl: text("server_url"), // For remote servers
   docsUrl: text("docs_url"), // Documentation URL for remote servers
+  clientSecretId: uuid("client_secret_id").references(() => secretTable.id, {
+    onDelete: "set null",
+  }), // For OAuth client_secret storage
+  localConfigSecretId: uuid("local_config_secret_id").references(
+    () => secretTable.id,
+    {
+      onDelete: "set null",
+    },
+  ), // For local config secret env vars storage
   // Local server configuration
   localConfig: jsonb("local_config").$type<{
     command?: string;
@@ -76,7 +87,6 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
     auth_server_url?: string;
     resource_metadata_url?: string;
     client_id: string;
-    client_secret?: string;
     redirect_uris: Array<string>;
     scopes: Array<string>;
     description?: string;

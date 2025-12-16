@@ -7,11 +7,13 @@ import {
 } from "@shared";
 import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { LoadingSpinner } from "@/components/loading";
 import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import config from "@/lib/config";
 import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
@@ -276,9 +278,18 @@ function SsoProvidersSettingsContent() {
           return p.providerId === config.providerId;
         }
 
-        return !SSO_TRUSTED_PROVIDER_IDS.includes(
+        // For generic providers (empty providerId), match by provider type as well
+        // Check if this is a non-trusted provider and matches the same type (OIDC vs SAML)
+        const isNonTrustedProvider = !SSO_TRUSTED_PROVIDER_IDS.includes(
           p.providerId as SsoProviderId,
         );
+        if (!isNonTrustedProvider) {
+          return false;
+        }
+
+        // Determine provider type from config presence
+        const existingProviderType = p.samlConfig ? "saml" : "oidc";
+        return existingProviderType === config.providerType;
       });
       return provider;
     },
@@ -303,13 +314,25 @@ function SsoProvidersSettingsContent() {
     [getProviderStatus],
   );
 
+  // Show message if SSO feature is disabled (check before loading since query is disabled)
+  if (!config.enterpriseLicenseActivated) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold">SSO Providers</h2>
+          <EnterpriseLicenseRequired featureName="SSO (Single Sign-On)" />
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) return <LoadingSpinner />;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+    <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold">SSO Providers</h1>
-        <p className="text-muted-foreground mt-2">
+        <h2 className="text-lg font-semibold">SSO Providers</h2>
+        <p className="text-sm text-muted-foreground">
           Manage Single Sign-On (SSO) providers for your organization. Configure
           OIDC providers to enable seamless authentication.
         </p>
@@ -327,7 +350,9 @@ function SsoProvidersSettingsContent() {
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <div className={`p-2 rounded-lg ${config.bgColor}`}>
+                  <div
+                    className={`p-2 rounded-lg ${config.bgColor} text-gray-900`}
+                  >
                     <SsoProviderIcon
                       providerId={config.providerId || config.id}
                       size={24}
@@ -377,7 +402,7 @@ function SsoProvidersSettingsContent() {
                     cert: createConfig.config.defaultSamlConfig?.cert || "",
                     callbackUrl:
                       createConfig.config.defaultSamlConfig?.callbackUrl ||
-                      `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/callback/saml`,
+                      `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/saml2/sp/acs/{providerId}`,
                     spMetadata: {},
                     mapping:
                       createConfig.config.defaultSamlConfig?.mapping || {},

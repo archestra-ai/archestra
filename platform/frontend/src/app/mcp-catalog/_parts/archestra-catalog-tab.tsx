@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  type archestraCatalogTypes,
+  E2eTestId,
+} from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -37,9 +41,11 @@ type ServerType = "all" | "remote" | "local";
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
   onClose,
+  onSuccess,
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onClose: () => void;
+  onSuccess?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
@@ -138,6 +144,9 @@ export function ArchestraCatalogTab({
                   ]
                     .filter(Boolean)
                     .join(": "),
+                  default: Array.isArray(userConfigEntry.default)
+                    ? undefined
+                    : userConfigEntry.default,
                 };
               }
             }
@@ -150,6 +159,7 @@ export function ArchestraCatalogTab({
               promptOnInstallation: false,
               required: false,
               description: "",
+              default: undefined,
             };
           })
         : [];
@@ -167,6 +177,9 @@ export function ArchestraCatalogTab({
               description: [config.title, config.description]
                 .filter(Boolean)
                 .join(": "),
+              default: Array.isArray(config.default)
+                ? undefined
+                : config.default,
             }))
         : [];
 
@@ -189,6 +202,9 @@ export function ArchestraCatalogTab({
       type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
+      required?: boolean;
+      description?: string;
+      default?: string | number | boolean;
     }>,
   ) => {
     // Rewrite redirect URIs to prefer platform callback (port 3000)
@@ -214,10 +230,19 @@ export function ArchestraCatalogTab({
         server.server.docker_image,
       );
       if (dockerConfig) {
+        const serviceAccount = (
+          server.server as typeof server.server & { service_account?: string }
+        ).service_account;
         localConfig = {
           command: dockerConfig.command,
           arguments: dockerConfig.arguments,
           dockerImage: dockerConfig.dockerImage,
+          serviceAccount: serviceAccount
+            ? serviceAccount.replace(
+                /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
+                "{{HELM_RELEASE_NAME}}",
+              )
+            : undefined,
           environment:
             environment ||
             (server.server.env
@@ -230,9 +255,18 @@ export function ArchestraCatalogTab({
               : undefined),
         };
       } else {
+        const serviceAccount = (
+          server.server as typeof server.server & { service_account?: string }
+        ).service_account;
         localConfig = {
           command: server.server.command,
           arguments: server.server.args,
+          serviceAccount: serviceAccount
+            ? serviceAccount.replace(
+                /\{\{ARCHESTRA_RELEASE_NAME\}\}/g,
+                "{{HELM_RELEASE_NAME}}",
+              )
+            : undefined,
           environment:
             environment ||
             (server.server.env
@@ -250,6 +284,7 @@ export function ArchestraCatalogTab({
     await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
+      instructions: server.instructions,
       serverType: server.server.type,
       serverUrl:
         server.server.type === "remote" ? server.server.url : undefined,
@@ -264,6 +299,7 @@ export function ArchestraCatalogTab({
 
     // Close the dialog after adding
     onClose();
+    onSuccess?.();
   };
 
   const handleRequestInstallation = async (
@@ -578,6 +614,7 @@ function ServerCard({
             disabled={isAdding || isInCatalog}
             size="sm"
             className="w-full"
+            data-testid={E2eTestId.AddCatalogItemButton}
           >
             {isInCatalog
               ? "Added"

@@ -1,5 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*"],
+  "globalDependencies": [".env"],
   "tasks": {
     "build": {
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
@@ -34,15 +36,13 @@
       "cache": false
     },
     "test:e2e": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]
     },
     "test:e2e:ui": {
       "cache": false
     },
-    "codegen:api-client": {
-      "cache": false
-    },
-    "codegen:theme-css": {
+    "codegen": {
       "cache": false
     },
     "db:generate": {

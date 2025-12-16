@@ -8,9 +8,15 @@ import { schema } from "@/database";
 import { AgentLabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 
+// Team info schema for agent responses (just id and name)
+export const AgentTeamInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
 export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   tools: z.array(SelectToolSchema),
-  teams: z.array(z.string()),
+  teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
 });
 export const InsertAgentSchema = createInsertSchema(schema.agentsTable)

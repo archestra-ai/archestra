@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import config from "@/lib/config";
 
 /**
  * Query key factory for SSO provider-related queries
@@ -14,6 +15,7 @@ export const ssoProviderKeys = {
 /**
  * Get public SSO providers (minimal info for login page, no secrets)
  * Use this for unauthenticated contexts like the login page.
+ * Automatically disabled when enterprise license is not activated.
  */
 export function usePublicSsoProviders() {
   return useQuery({
@@ -24,12 +26,14 @@ export function usePublicSsoProviders() {
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
+    enabled: config.enterpriseLicenseActivated,
   });
 }
 
 /**
  * Get SSO providers with full configuration (admin only, requires authentication)
  * Use this for authenticated admin contexts like the SSO settings page.
+ * Automatically disabled when enterprise license is not activated.
  */
 export function useSsoProviders() {
   return useQuery({
@@ -40,6 +44,7 @@ export function useSsoProviders() {
     },
     retry: false,
     throwOnError: false,
+    enabled: config.enterpriseLicenseActivated,
   });
 }
 
@@ -55,6 +60,7 @@ export function useSsoProvider(id: string) {
     },
     retry: false,
     throwOnError: false,
+    enabled: config.enterpriseLicenseActivated,
   });
 }
 

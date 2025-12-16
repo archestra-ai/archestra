@@ -43,8 +43,9 @@ export function useCreateOptimizationRule() {
       });
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
+    onSuccess: async () => {
+      // Wait for the query to refetch to avoid showing stale data
+      await queryClient.invalidateQueries({
         queryKey: ["optimization-rules"],
       });
     },
@@ -64,8 +65,9 @@ export function useUpdateOptimizationRule() {
       });
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
+    onSuccess: async () => {
+      // Wait for the query to refetch to avoid showing stale data
+      await queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
     },
   });
 }
@@ -80,8 +82,9 @@ export function useDeleteOptimizationRule() {
         path: { id },
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
+    onSuccess: async () => {
+      // Wait for the query to refetch to avoid showing stale data
+      await queryClient.invalidateQueries({ queryKey: ["optimization-rules"] });
     },
   });
 }

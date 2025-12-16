@@ -108,6 +108,7 @@ function LimitInlineForm({
   tokenPrices,
   hasOrganizationMcpLimit,
   getTeamsWithMcpLimits,
+  organizationId,
 }: {
   initialData?: LimitData;
   limitType: TokenCostLimitType | McpServerCallsLimitType;
@@ -118,6 +119,7 @@ function LimitInlineForm({
   tokenPrices: TokenPriceData[];
   hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
   getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
+  organizationId: string;
 }) {
   const [formData, setFormData] = useState<{
     entityType: "organization" | "team" | "agent";
@@ -142,10 +144,12 @@ function LimitInlineForm({
         limitType,
         limitValue: parseInt(formData.limitValue, 10),
         entityId:
-          formData.entityType === "organization" ? "org" : formData.entityId,
+          formData.entityType === "organization"
+            ? organizationId
+            : formData.entityId,
       });
     },
-    [formData, onSave, limitType],
+    [formData, onSave, limitType, organizationId],
   );
 
   const isValid =
@@ -428,6 +432,7 @@ function LimitRow({
   getUsageStatus,
   hasOrganizationMcpLimit,
   getTeamsWithMcpLimits,
+  organizationId,
 }: {
   limit: LimitData;
   isEditing: boolean;
@@ -456,6 +461,7 @@ function LimitRow({
   };
   hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
   getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
+  organizationId: string;
 }) {
   if (isEditing) {
     return (
@@ -471,6 +477,7 @@ function LimitRow({
         tokenPrices={tokenPrices}
         hasOrganizationMcpLimit={hasOrganizationMcpLimit}
         getTeamsWithMcpLimits={getTeamsWithMcpLimits}
+        organizationId={organizationId}
       />
     );
   }
@@ -771,7 +778,6 @@ export default function LimitsPage() {
                 <SelectItem value="1m">Every month</SelectItem>
               </SelectContent>
             </Select>
-            x
           </div>
         </CardHeader>
       </Card>
@@ -821,6 +827,7 @@ export default function LimitsPage() {
                     tokenPrices={tokenPrices}
                     hasOrganizationMcpLimit={hasOrganizationMcpLimit}
                     getTeamsWithMcpLimits={getTeamsWithMcpLimits}
+                    organizationId={organizationDetails?.id || ""}
                   />
                 )}
                 {llmLimits.length === 0 && !isAddingLlmLimit ? (
@@ -853,6 +860,7 @@ export default function LimitsPage() {
                       getUsageStatus={getUsageStatus}
                       hasOrganizationMcpLimit={hasOrganizationMcpLimit}
                       getTeamsWithMcpLimits={getTeamsWithMcpLimits}
+                      organizationId={organizationDetails?.id || ""}
                     />
                   ))
                 )}
@@ -916,6 +924,7 @@ export default function LimitsPage() {
                       tokenPrices={tokenPrices}
                       hasOrganizationMcpLimit={hasOrganizationMcpLimit}
                       getTeamsWithMcpLimits={getTeamsWithMcpLimits}
+                      organizationId={organizationDetails?.id || ""}
                     />
                   )}
                   {mcpLimits.length === 0 && !isAddingMcpLimit ? (
@@ -948,6 +957,7 @@ export default function LimitsPage() {
                         getUsageStatus={getUsageStatus}
                         hasOrganizationMcpLimit={hasOrganizationMcpLimit}
                         getTeamsWithMcpLimits={getTeamsWithMcpLimits}
+                        organizationId={organizationDetails?.id || ""}
                       />
                     ))
                   )}

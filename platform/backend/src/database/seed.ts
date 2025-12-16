@@ -1,11 +1,19 @@
-import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
+import {
+  ADMIN_ROLE_NAME,
+  type PredefinedRoleName,
+  testMcpServerCommand,
+} from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   DualLlmConfigModel,
+  InternalMcpCatalogModel,
   MemberModel,
   OrganizationModel,
   PromptModel,
+  TeamModel,
+  TeamTokenModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -28,7 +36,7 @@ export async function seedDefaultUserAndOrg(
     throw new Error("Failed to seed admin user and default organization");
   }
 
-  const existingMember = await MemberModel.getByUserId(user.id);
+  const existingMember = await MemberModel.getByUserId(user.id, org.id);
 
   if (!existingMember) {
     await MemberModel.create(user.id, org.id, config.role || ADMIN_ROLE_NAME);
@@ -396,12 +404,129 @@ async function seedArchestraTools(): Promise<void> {
   }
 }
 
+/**
+ * Seeds default team and assigns it to the default profile and user
+ */
+async function seedDefaultTeam(): Promise<void> {
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+  if (!user) {
+    logger.error(
+      "Failed to get or create default admin user, skipping default team seeding",
+    );
+    return;
+  }
+
+  // Check if default team already exists
+  const existingTeams = await TeamModel.findByOrganization(org.id);
+  let defaultTeam = existingTeams.find((t) => t.name === "Default Team");
+
+  if (!defaultTeam) {
+    defaultTeam = await TeamModel.create({
+      name: "Default Team",
+      description: "Default team for all users",
+      organizationId: org.id,
+      createdBy: user.id,
+    });
+    logger.info("✓ Seeded default team");
+  } else {
+    logger.info("✓ Default team already exists, skipping creation");
+  }
+
+  // Add default user to team (if not already a member)
+  const isUserInTeam = await TeamModel.isUserInTeam(defaultTeam.id, user.id);
+  if (!isUserInTeam) {
+    await TeamModel.addMember(defaultTeam.id, user.id);
+    logger.info("✓ Added default user to default team");
+  }
+
+  // Assign team to default profile (idempotent)
+  await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [defaultTeam.id]);
+  logger.info("✓ Assigned default team to default profile");
+}
+
+/**
+ * Seeds test MCP server for development
+ * This creates a simple MCP server in the catalog that has one tool: print_archestra_test
+ */
+async function seedTestMcpServer(): Promise<void> {
+  // Only seed in development, or when ENABLE_TEST_MCP_SERVER is explicitly set (e.g., in CI e2e tests)
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_TEST_MCP_SERVER !== "true"
+  ) {
+    return;
+  }
+
+  const existing = await InternalMcpCatalogModel.findByName(
+    "internal-dev-test-server",
+  );
+  if (existing) {
+    logger.info("✓ Test MCP server already exists in catalog, skipping");
+    return;
+  }
+
+  await InternalMcpCatalogModel.create({
+    name: "internal-dev-test-server",
+    description:
+      "Simple test MCP server for development. Has one tool that prints an env var.",
+    serverType: "local",
+    localConfig: {
+      command: "sh",
+      arguments: ["-c", testMcpServerCommand],
+      transportType: "stdio",
+      environment: [
+        {
+          key: "ARCHESTRA_TEST",
+          type: "plain_text",
+          promptOnInstallation: true,
+          required: true,
+          description: "Test value to print (any string)",
+        },
+      ],
+    },
+  });
+  logger.info("✓ Seeded test MCP server (internal-dev-test-server)");
+}
+
+/**
+ * Creates team tokens for existing teams and organization
+ * - Creates "Organization Token" if missing
+ * - Creates team tokens for each team if missing
+ */
+async function seedTeamTokens(): Promise<void> {
+  // Get the default organization
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+
+  // Ensure organization token exists
+  const orgToken = await TeamTokenModel.ensureOrganizationToken();
+  logger.info(
+    { organizationId: org.id, tokenId: orgToken.id },
+    "Ensured organization token exists",
+  );
+
+  // Get all teams for this organization and ensure they have tokens
+  const teams = await TeamModel.findByOrganization(org.id);
+  for (const team of teams) {
+    const teamToken = await TeamTokenModel.ensureTeamToken(team.id, team.name);
+    logger.info(
+      { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
+      "Ensured team token exists",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   // Create default agent before seeding prompts (prompts need agentId)
   await AgentModel.getAgentOrCreateDefault();
+  await seedDefaultTeam();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
   await seedArchestraTools();
+  await seedTestMcpServer();
+  await seedTeamTokens();
 }

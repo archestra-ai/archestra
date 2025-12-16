@@ -1,10 +1,12 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { CheckCircle2, Loader2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { CheckCircle2, Info, Loader2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
+import { CreateChatApiKeyForm } from "@/components/chat/create-chat-api-key-form";
 import { ConnectionOptions } from "@/components/connection-options";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,11 +16,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDefaultProfile } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
+import { useChatApiKeys } from "@/lib/chat-settings.query";
 import {
   useOrganizationOnboardingStatus,
   useUpdateOrganization,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import Divider from "./divider";
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -35,6 +40,17 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
       "Onboarding complete",
       "Failed to complete onboarding",
     );
+
+  // Chat settings state
+  const { data: chatApiKeys = [] } = useChatApiKeys();
+  const { data: canUpdateChatSettings } = useHasPermissions({
+    chatSettings: ["update"],
+  });
+
+  // Check if any API key is configured (for any provider)
+  const hasAnyApiKey = useMemo(() => {
+    return chatApiKeys.some((k) => k.secretId);
+  }, [chatApiKeys]);
 
   const handleFinishOnboarding = useCallback(() => {
     completeOnboarding({
@@ -70,21 +86,76 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
         <div className="flex-1 overflow-y-auto px-6 pt-6 pb-6">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl">
-              {step === 1 ? "Welcome to Archestra!" : "Connect and Verify"}
+              {step === 1 ? "Welcome to Archestra!" : "Connect External Agents"}
             </DialogTitle>
             <DialogDescription>
               {step === 1
                 ? "Let's get you started with a quick overview"
-                : "Configure your agent and verify the connection"}
+                : "Optionally connect your external agents via LLM Proxy or MCP Gateway"}
             </DialogDescription>
           </DialogHeader>
 
           {step === 1 ? (
             <div className="space-y-6">
-              <ArchestraArchitectureDiagram />
+              {/* Overview section */}
+              <div className="space-y-4">
+                <p className="text-muted-foreground">
+                  Archestra provides two ways to use the platform:
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <h3 className="font-semibold">Chat</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Built-in chat interface with MCP tool integration. Start
+                      conversations with AI agents that have access to your
+                      configured tools.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <h3 className="font-semibold">Connect External Agents</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Route your existing agents (Cursor, N8N, etc.) through
+                      Archestra's LLM Proxy and MCP Gateway for centralized
+                      control.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Divider />
+
+              <div>
+                <h3 className="font-semibold">Chat Setup</h3>
+                <p className="text-sm text-muted-foreground">
+                  To use the built-in Chat feature, an LLM provider API key is
+                  required.
+                </p>
+              </div>
+
+              {/* Chat Setup section */}
+              <div className="rounded-lg border p-4 space-y-4">
+                {canUpdateChatSettings ? (
+                  <CreateChatApiKeyForm variant="compact" showConsoleLink />
+                ) : (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      {hasAnyApiKey ? (
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          API key is configured. Chat is ready to use.
+                        </span>
+                      ) : (
+                        "An administrator needs to configure an LLM provider API key to enable Chat. You can configure it later in Settings → Chat."
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
+              <ArchestraArchitectureDiagram />
               <ConnectionOptions agentId={defaultProfile?.id} />
             </div>
           )}
@@ -106,7 +177,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                 size="lg"
                 data-testid={E2eTestId.OnboardingNextButton}
               >
-                Next: Connect Profile
+                Next: Connect External Agents
               </Button>
             </div>
           ) : (
@@ -176,21 +247,30 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                   Back
                 </Button>
 
-                <Button
-                  onClick={handleFinishOnboarding}
-                  disabled={completeOnboardingPending || !hasAnyConnection}
-                  size="lg"
-                  data-testid={E2eTestId.OnboardingFinishButton}
-                >
-                  {completeOnboardingPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Finishing...
-                    </>
-                  ) : (
-                    "Finish Onboarding"
-                  )}
-                </Button>
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={handleFinishOnboarding}
+                    variant="link"
+                    className="text-muted-foreground"
+                  >
+                    Skip this step
+                  </Button>
+                  <Button
+                    onClick={handleFinishOnboarding}
+                    disabled={completeOnboardingPending || !hasAnyConnection}
+                    size="lg"
+                    data-testid={E2eTestId.OnboardingFinishButton}
+                  >
+                    {completeOnboardingPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Finishing...
+                      </>
+                    ) : (
+                      "Finish Onboarding"
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           )}

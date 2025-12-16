@@ -22,6 +22,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
+# Version arg for Sentry release tracking
+ARG VERSION=dev
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
@@ -37,11 +40,16 @@ COPY shared ./shared
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# VERSION is exported as env var for child processes (used by Sentry source map upload)
+ENV VERSION=${VERSION}
+
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
 #
 # TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
 # https://turborepo.com/docs/guides/tools/docker#example
+#
+# SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
 #
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 # https://docs.docker.com/build/building/secrets/#target
@@ -65,6 +73,8 @@ ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_ANALYTICS="enabled"
 ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
+ENV ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="false"
+ENV ARCHESTRA_AUTH_DISABLE_INVITATIONS="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
@@ -154,9 +164,12 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
+# HOSTNAME="0.0.0.0" is required for Next.js standalone server to bind to all interfaces.
+# Without this, Next.js binds only to the container's IP, breaking kubectl port-forward.
+# See: https://nextjs.org/docs/app/api-reference/config/next-config-js/output#automatically-copying-traced-files
 # NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s"
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH="%(ENV_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH)s",NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS="%(ENV_ARCHESTRA_AUTH_DISABLE_INVITATIONS)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)

@@ -4,10 +4,6 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type SupportedProvidersInput = 'openai' | 'gemini' | 'anthropic';
-
-export type SupportedProvidersDiscriminatorInput = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
-
 export type OpenAiChatCompletionRequestInput = {
     model: string;
     /**
@@ -363,7 +359,10 @@ export type GeminiGenerateContentRequestInput = {
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
     contents: Array<{
-        role: 'user' | 'model' | 'function';
+        /**
+         * The role of the author of this content.
+         */
+        role: string;
         parts: Array<{
             /**
              * Indicates if the part is thought from the model
@@ -373,111 +372,202 @@ export type GeminiGenerateContentRequestInput = {
              * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
              */
             thoughtSignature?: string;
+            text: string;
             /**
-             * https://ai.google.dev/api/caching#Part
+             * https://ai.google.dev/api/caching#VideoMetadata
              */
-            data: {
-                text: string;
-            } | {
-                inlineData: {
-                    /**
-                     * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
-                     */
-                    mimeType: string;
-                    /**
-                     * Raw bytes for media formats. Base64 encoded
-                     */
-                    data: string;
-                };
-            } | {
-                functionCall: {
-                    /**
-                     * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
-                     */
-                    id?: string;
-                    name: string;
-                    /**
-                     * The function parameters and values in JSON object format.
-                     */
-                    args?: {
-                        [key: string]: unknown;
-                    };
-                };
-            } | {
-                functionResponse: {
-                    /**
-                     * The id of the function call this response is for. Populated by the client to match the corresponding function call id
-                     */
-                    id?: string;
-                    /**
-                     * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                     */
-                    name: string;
-                    /**
-                     * The function response in JSON object format.
-                     */
-                    response: {
-                        [key: string]: unknown;
-                    };
-                    /**
-                     * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
-                     */
-                    willContinue?: boolean;
-                    /**
-                     *
-                     * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
-                     *
-                     * https://ai.google.dev/api/caching#Scheduling
-                     *
-                     */
-                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-                };
-            } | {
-                fileData: {
-                    /**
-                     * The IANA standard MIME type of the source data
-                     */
-                    mimeType?: string;
-                    /**
-                     * URI
-                     */
-                    fileUri: string;
-                };
-            } | {
+            metadata?: {
                 /**
-                 *
-                 * Programming language of the code
-                 *
-                 * https://ai.google.dev/api/caching#Language
-                 *
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                  */
-                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-                executableCode: {
-                    /**
-                     * The code to be executed
-                     */
-                    code: string;
-                };
-            } | {
-                codeExecutionResult: {
-                    /**
-                     *
-                     * Outcome of the code execution.
-                     *
-                     * https://ai.google.dev/api/caching#Outcome
-                     *
-                     */
-                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                    /**
-                     * Contains stdout when code execution is successful, stderr or other description otherwise
-                     */
-                    output?: string;
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            inlineData: {
+                mimeType?: string;
+                data: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            functionCall: {
+                id?: string;
+                name: string;
+                args?: {
+                    [key: string]: unknown;
                 };
             };
             /**
              * https://ai.google.dev/api/caching#VideoMetadata
              */
-            metadata: {
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            functionResponse: {
+                id?: string;
+                name: string;
+                response: {
+                    [key: string]: unknown;
+                };
+                willContinue?: boolean;
+                scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            fileData: {
+                mimeType?: string;
+                fileUri: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+            executableCode: {
+                code: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            codeExecutionResult: {
+                /**
+                 * Outcome of the code execution.
+                 */
+                outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                output?: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
                 /**
                  * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                  */
@@ -542,7 +632,53 @@ export type GeminiGenerateContentRequestInput = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
-    }>;
+    }> | {
+        functionDeclarations?: Array<{
+            /**
+             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             */
+            name: string;
+            /**
+             * A brief description of the function.
+             */
+            description: string;
+            /**
+             * https://ai.google.dev/api/caching#Behavior
+             */
+            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+            /**
+             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            parametersJsonSchema?: unknown;
+            response?: unknown;
+            responseJsonSchema?: unknown;
+        }>;
+        /**
+         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+         */
+        googleSearchRetrieval?: {
+            /**
+             *
+             * Specifies the dynamic retrieval configuration for the given source.
+             *
+             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+             *
+             */
+            dynamicRetrievalConfig: {
+                /**
+                 * https://ai.google.dev/api/caching#Mode
+                 */
+                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                dynamicThreshold: number;
+            };
+        };
+        codeExecution?: unknown;
+        googleSearch?: unknown;
+        urlContext?: unknown;
+    };
     /**
      * Tool configuration for any Tool specified in the request.
      */
@@ -614,6 +750,110 @@ export type GeminiGenerateContentRequestInput = {
      * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
      */
     cachedContent?: string;
+    config?: {
+        tools?: Array<{
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        }> | {
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        };
+        /**
+         * Tool configuration for any Tool specified in the request.
+         */
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+    };
 };
 
 export type GeminiGenerateContentResponseInput = {
@@ -631,7 +871,10 @@ export type GeminiGenerateContentResponseInput = {
          *
          */
         content: {
-            role: 'user' | 'model' | 'function';
+            /**
+             * The role of the author of this content.
+             */
+            role: string;
             parts: Array<{
                 /**
                  * Indicates if the part is thought from the model
@@ -641,111 +884,202 @@ export type GeminiGenerateContentResponseInput = {
                  * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
                  */
                 thoughtSignature?: string;
+                text: string;
                 /**
-                 * https://ai.google.dev/api/caching#Part
+                 * https://ai.google.dev/api/caching#VideoMetadata
                  */
-                data: {
-                    text: string;
-                } | {
-                    inlineData: {
-                        /**
-                         * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
-                         */
-                        mimeType: string;
-                        /**
-                         * Raw bytes for media formats. Base64 encoded
-                         */
-                        data: string;
-                    };
-                } | {
-                    functionCall: {
-                        /**
-                         * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
-                         */
-                        id?: string;
-                        name: string;
-                        /**
-                         * The function parameters and values in JSON object format.
-                         */
-                        args?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                } | {
-                    functionResponse: {
-                        /**
-                         * The id of the function call this response is for. Populated by the client to match the corresponding function call id
-                         */
-                        id?: string;
-                        /**
-                         * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                         */
-                        name: string;
-                        /**
-                         * The function response in JSON object format.
-                         */
-                        response: {
-                            [key: string]: unknown;
-                        };
-                        /**
-                         * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
-                         */
-                        willContinue?: boolean;
-                        /**
-                         *
-                         * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
-                         *
-                         * https://ai.google.dev/api/caching#Scheduling
-                         *
-                         */
-                        scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-                    };
-                } | {
-                    fileData: {
-                        /**
-                         * The IANA standard MIME type of the source data
-                         */
-                        mimeType?: string;
-                        /**
-                         * URI
-                         */
-                        fileUri: string;
-                    };
-                } | {
+                metadata?: {
                     /**
-                     *
-                     * Programming language of the code
-                     *
-                     * https://ai.google.dev/api/caching#Language
-                     *
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                      */
-                    language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-                    executableCode: {
-                        /**
-                         * The code to be executed
-                         */
-                        code: string;
-                    };
-                } | {
-                    codeExecutionResult: {
-                        /**
-                         *
-                         * Outcome of the code execution.
-                         *
-                         * https://ai.google.dev/api/caching#Outcome
-                         *
-                         */
-                        outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                        /**
-                         * Contains stdout when code execution is successful, stderr or other description otherwise
-                         */
-                        output?: string;
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                inlineData: {
+                    mimeType?: string;
+                    data: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                functionCall: {
+                    id?: string;
+                    name: string;
+                    args?: {
+                        [key: string]: unknown;
                     };
                 };
                 /**
                  * https://ai.google.dev/api/caching#VideoMetadata
                  */
-                metadata: {
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                functionResponse: {
+                    id?: string;
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                    willContinue?: boolean;
+                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                fileData: {
+                    mimeType?: string;
+                    fileUri: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+                executableCode: {
+                    code: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                codeExecutionResult: {
+                    /**
+                     * Outcome of the code execution.
+                     */
+                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                    output?: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
                     /**
                      * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                      */
@@ -771,7 +1105,7 @@ export type GeminiGenerateContentResponseInput = {
          *
          */
         finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
-        safetyRatings: Array<{
+        safetyRatings?: Array<{
             /**
              *
              * The category for this setting
@@ -787,12 +1121,12 @@ export type GeminiGenerateContentResponseInput = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked: boolean;
+            blocked?: boolean;
         }>;
         /**
          * https://ai.google.dev/api/generate-content#citationmetadata
          */
-        citationMetadata: {
+        citationMetadata?: {
             citationSources: Array<{
                 startIndex?: number;
                 endIndex?: number;
@@ -800,12 +1134,12 @@ export type GeminiGenerateContentResponseInput = {
                 license?: string;
             }>;
         };
-        tokenCount: number;
-        groundingAttributions: Array<unknown>;
-        groundingMetadata: unknown;
-        avgLogprobs: number;
-        logprobsResult: unknown;
-        urlContextMetadata: unknown;
+        tokenCount?: number;
+        groundingAttributions?: Array<unknown>;
+        groundingMetadata?: unknown;
+        avgLogprobs?: number;
+        logprobsResult?: unknown;
+        urlContextMetadata?: unknown;
         /**
          * Index of the candidate in the list of response candidates.
          */
@@ -818,7 +1152,7 @@ export type GeminiGenerateContentResponseInput = {
     /**
      * Returns the prompt's feedback related to the content filters
      */
-    promptFeedback: {
+    promptFeedback?: {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
@@ -839,20 +1173,20 @@ export type GeminiGenerateContentResponseInput = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked: boolean;
+            blocked?: boolean;
         }>;
     };
     /**
      * Metadata on the generation requests' token usage
      */
-    usageMetadata: {
+    usageMetadata?: {
         promptTokenCount?: number;
-        cachedContentTokenCount: number;
+        cachedContentTokenCount?: number;
         candidatesTokenCount?: number;
-        toolUsePromptTokenCount: number;
-        thoughtsTokenCount: number;
-        totalTokenCount: number;
-        promptTokensDetails: Array<{
+        toolUsePromptTokenCount?: number;
+        thoughtsTokenCount?: number;
+        totalTokenCount?: number;
+        promptTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -862,7 +1196,7 @@ export type GeminiGenerateContentResponseInput = {
              */
             tokenCount: number;
         }>;
-        cacheTokensDetails: Array<{
+        cacheTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -872,7 +1206,7 @@ export type GeminiGenerateContentResponseInput = {
              */
             tokenCount: number;
         }>;
-        candidatesTokensDetails: Array<{
+        candidatesTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -882,7 +1216,7 @@ export type GeminiGenerateContentResponseInput = {
              */
             tokenCount: number;
         }>;
-        toolUsePromptTokensDetails: Array<{
+        toolUsePromptTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -896,7 +1230,11 @@ export type GeminiGenerateContentResponseInput = {
     /**
      * The model version used to generate the response.
      */
-    modelVersion: string;
+    modelVersion?: string;
+    /**
+     * The unique response ID.
+     */
+    responseId?: string;
 };
 
 export type AnthropicMessagesRequestInput = {
@@ -1031,10 +1369,6 @@ export type WebSocketMessageInput = {
         [key: string]: unknown;
     };
 };
-
-export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
-
-export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
 
 export type OpenAiChatCompletionRequest = {
     model: string;
@@ -1391,7 +1725,10 @@ export type GeminiGenerateContentRequest = {
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
     contents: Array<{
-        role: 'user' | 'model' | 'function';
+        /**
+         * The role of the author of this content.
+         */
+        role: string;
         parts: Array<{
             /**
              * Indicates if the part is thought from the model
@@ -1401,111 +1738,202 @@ export type GeminiGenerateContentRequest = {
              * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
              */
             thoughtSignature?: string;
+            text: string;
             /**
-             * https://ai.google.dev/api/caching#Part
+             * https://ai.google.dev/api/caching#VideoMetadata
              */
-            data: {
-                text: string;
-            } | {
-                inlineData: {
-                    /**
-                     * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
-                     */
-                    mimeType: string;
-                    /**
-                     * Raw bytes for media formats. Base64 encoded
-                     */
-                    data: string;
-                };
-            } | {
-                functionCall: {
-                    /**
-                     * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
-                     */
-                    id?: string;
-                    name: string;
-                    /**
-                     * The function parameters and values in JSON object format.
-                     */
-                    args?: {
-                        [key: string]: unknown;
-                    };
-                };
-            } | {
-                functionResponse: {
-                    /**
-                     * The id of the function call this response is for. Populated by the client to match the corresponding function call id
-                     */
-                    id?: string;
-                    /**
-                     * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                     */
-                    name: string;
-                    /**
-                     * The function response in JSON object format.
-                     */
-                    response: {
-                        [key: string]: unknown;
-                    };
-                    /**
-                     * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
-                     */
-                    willContinue?: boolean;
-                    /**
-                     *
-                     * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
-                     *
-                     * https://ai.google.dev/api/caching#Scheduling
-                     *
-                     */
-                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-                };
-            } | {
-                fileData: {
-                    /**
-                     * The IANA standard MIME type of the source data
-                     */
-                    mimeType?: string;
-                    /**
-                     * URI
-                     */
-                    fileUri: string;
-                };
-            } | {
+            metadata?: {
                 /**
-                 *
-                 * Programming language of the code
-                 *
-                 * https://ai.google.dev/api/caching#Language
-                 *
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                  */
-                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-                executableCode: {
-                    /**
-                     * The code to be executed
-                     */
-                    code: string;
-                };
-            } | {
-                codeExecutionResult: {
-                    /**
-                     *
-                     * Outcome of the code execution.
-                     *
-                     * https://ai.google.dev/api/caching#Outcome
-                     *
-                     */
-                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                    /**
-                     * Contains stdout when code execution is successful, stderr or other description otherwise
-                     */
-                    output?: string;
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            inlineData: {
+                mimeType?: string;
+                data: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            functionCall: {
+                id?: string;
+                name: string;
+                args?: {
+                    [key: string]: unknown;
                 };
             };
             /**
              * https://ai.google.dev/api/caching#VideoMetadata
              */
-            metadata: {
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            functionResponse: {
+                id?: string;
+                name: string;
+                response: {
+                    [key: string]: unknown;
+                };
+                willContinue?: boolean;
+                scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            fileData: {
+                mimeType?: string;
+                fileUri: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+            executableCode: {
+                code: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
+            };
+        } | {
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            codeExecutionResult: {
+                /**
+                 * Outcome of the code execution.
+                 */
+                outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                output?: string;
+            };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata?: {
                 /**
                  * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                  */
@@ -1570,7 +1998,53 @@ export type GeminiGenerateContentRequest = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
-    }>;
+    }> | {
+        functionDeclarations?: Array<{
+            /**
+             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             */
+            name: string;
+            /**
+             * A brief description of the function.
+             */
+            description: string;
+            /**
+             * https://ai.google.dev/api/caching#Behavior
+             */
+            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+            /**
+             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            parametersJsonSchema?: unknown;
+            response?: unknown;
+            responseJsonSchema?: unknown;
+        }>;
+        /**
+         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+         */
+        googleSearchRetrieval?: {
+            /**
+             *
+             * Specifies the dynamic retrieval configuration for the given source.
+             *
+             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+             *
+             */
+            dynamicRetrievalConfig: {
+                /**
+                 * https://ai.google.dev/api/caching#Mode
+                 */
+                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                dynamicThreshold: number;
+            };
+        };
+        codeExecution?: unknown;
+        googleSearch?: unknown;
+        urlContext?: unknown;
+    };
     /**
      * Tool configuration for any Tool specified in the request.
      */
@@ -1642,6 +2116,110 @@ export type GeminiGenerateContentRequest = {
      * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
      */
     cachedContent?: string;
+    config?: {
+        tools?: Array<{
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        }> | {
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        };
+        /**
+         * Tool configuration for any Tool specified in the request.
+         */
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+    };
 };
 
 export type GeminiGenerateContentResponse = {
@@ -1659,7 +2237,10 @@ export type GeminiGenerateContentResponse = {
          *
          */
         content: {
-            role: 'user' | 'model' | 'function';
+            /**
+             * The role of the author of this content.
+             */
+            role: string;
             parts: Array<{
                 /**
                  * Indicates if the part is thought from the model
@@ -1669,111 +2250,202 @@ export type GeminiGenerateContentResponse = {
                  * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
                  */
                 thoughtSignature?: string;
+                text: string;
                 /**
-                 * https://ai.google.dev/api/caching#Part
+                 * https://ai.google.dev/api/caching#VideoMetadata
                  */
-                data: {
-                    text: string;
-                } | {
-                    inlineData: {
-                        /**
-                         * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
-                         */
-                        mimeType: string;
-                        /**
-                         * Raw bytes for media formats. Base64 encoded
-                         */
-                        data: string;
-                    };
-                } | {
-                    functionCall: {
-                        /**
-                         * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
-                         */
-                        id?: string;
-                        name: string;
-                        /**
-                         * The function parameters and values in JSON object format.
-                         */
-                        args?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                } | {
-                    functionResponse: {
-                        /**
-                         * The id of the function call this response is for. Populated by the client to match the corresponding function call id
-                         */
-                        id?: string;
-                        /**
-                         * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
-                         */
-                        name: string;
-                        /**
-                         * The function response in JSON object format.
-                         */
-                        response: {
-                            [key: string]: unknown;
-                        };
-                        /**
-                         * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
-                         */
-                        willContinue?: boolean;
-                        /**
-                         *
-                         * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
-                         *
-                         * https://ai.google.dev/api/caching#Scheduling
-                         *
-                         */
-                        scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
-                    };
-                } | {
-                    fileData: {
-                        /**
-                         * The IANA standard MIME type of the source data
-                         */
-                        mimeType?: string;
-                        /**
-                         * URI
-                         */
-                        fileUri: string;
-                    };
-                } | {
+                metadata?: {
                     /**
-                     *
-                     * Programming language of the code
-                     *
-                     * https://ai.google.dev/api/caching#Language
-                     *
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                      */
-                    language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
-                    executableCode: {
-                        /**
-                         * The code to be executed
-                         */
-                        code: string;
-                    };
-                } | {
-                    codeExecutionResult: {
-                        /**
-                         *
-                         * Outcome of the code execution.
-                         *
-                         * https://ai.google.dev/api/caching#Outcome
-                         *
-                         */
-                        outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
-                        /**
-                         * Contains stdout when code execution is successful, stderr or other description otherwise
-                         */
-                        output?: string;
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                inlineData: {
+                    mimeType?: string;
+                    data: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                functionCall: {
+                    id?: string;
+                    name: string;
+                    args?: {
+                        [key: string]: unknown;
                     };
                 };
                 /**
                  * https://ai.google.dev/api/caching#VideoMetadata
                  */
-                metadata: {
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                functionResponse: {
+                    id?: string;
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                    willContinue?: boolean;
+                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                fileData: {
+                    mimeType?: string;
+                    fileUri: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+                executableCode: {
+                    code: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
+                };
+            } | {
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                codeExecutionResult: {
+                    /**
+                     * Outcome of the code execution.
+                     */
+                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                    output?: string;
+                };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata?: {
                     /**
                      * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
                      */
@@ -1799,7 +2471,7 @@ export type GeminiGenerateContentResponse = {
          *
          */
         finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
-        safetyRatings: Array<{
+        safetyRatings?: Array<{
             /**
              *
              * The category for this setting
@@ -1815,12 +2487,12 @@ export type GeminiGenerateContentResponse = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked: boolean;
+            blocked?: boolean;
         }>;
         /**
          * https://ai.google.dev/api/generate-content#citationmetadata
          */
-        citationMetadata: {
+        citationMetadata?: {
             citationSources: Array<{
                 startIndex?: number;
                 endIndex?: number;
@@ -1828,12 +2500,12 @@ export type GeminiGenerateContentResponse = {
                 license?: string;
             }>;
         };
-        tokenCount: number;
-        groundingAttributions: Array<unknown>;
-        groundingMetadata: unknown;
-        avgLogprobs: number;
-        logprobsResult: unknown;
-        urlContextMetadata: unknown;
+        tokenCount?: number;
+        groundingAttributions?: Array<unknown>;
+        groundingMetadata?: unknown;
+        avgLogprobs?: number;
+        logprobsResult?: unknown;
+        urlContextMetadata?: unknown;
         /**
          * Index of the candidate in the list of response candidates.
          */
@@ -1846,7 +2518,7 @@ export type GeminiGenerateContentResponse = {
     /**
      * Returns the prompt's feedback related to the content filters
      */
-    promptFeedback: {
+    promptFeedback?: {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
@@ -1867,20 +2539,20 @@ export type GeminiGenerateContentResponse = {
             /**
              * Was this content blocked because of this rating?
              */
-            blocked: boolean;
+            blocked?: boolean;
         }>;
     };
     /**
      * Metadata on the generation requests' token usage
      */
-    usageMetadata: {
+    usageMetadata?: {
         promptTokenCount?: number;
-        cachedContentTokenCount: number;
+        cachedContentTokenCount?: number;
         candidatesTokenCount?: number;
-        toolUsePromptTokenCount: number;
-        thoughtsTokenCount: number;
-        totalTokenCount: number;
-        promptTokensDetails: Array<{
+        toolUsePromptTokenCount?: number;
+        thoughtsTokenCount?: number;
+        totalTokenCount?: number;
+        promptTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1890,7 +2562,7 @@ export type GeminiGenerateContentResponse = {
              */
             tokenCount: number;
         }>;
-        cacheTokensDetails: Array<{
+        cacheTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1900,7 +2572,7 @@ export type GeminiGenerateContentResponse = {
              */
             tokenCount: number;
         }>;
-        candidatesTokensDetails: Array<{
+        candidatesTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1910,7 +2582,7 @@ export type GeminiGenerateContentResponse = {
              */
             tokenCount: number;
         }>;
-        toolUsePromptTokensDetails: Array<{
+        toolUsePromptTokensDetails?: Array<{
             /**
              * https://ai.google.dev/api/generate-content#Modality
              */
@@ -1924,7 +2596,11 @@ export type GeminiGenerateContentResponse = {
     /**
      * The model version used to generate the response.
      */
-    modelVersion: string;
+    modelVersion?: string;
+    /**
+     * The unique response ID.
+     */
+    responseId?: string;
 };
 
 export type AnthropicMessagesRequest = {
@@ -2193,7 +2869,10 @@ export type GetAgentsResponses = {
                 createdAt: string;
                 updatedAt: string;
             }>;
-            teams: Array<string>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -2329,7 +3008,10 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2444,7 +3126,10 @@ export type GetAllAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2559,7 +3244,10 @@ export type GetDefaultAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2755,7 +3443,10 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2884,7 +3575,10 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3148,6 +3842,7 @@ export type GetAllAgentToolsResponses = {
             responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
+            useDynamicTeamCredential: boolean;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -3278,6 +3973,7 @@ export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
     } | null;
     path: {
         agentId: string;
@@ -3364,6 +4060,7 @@ export type BulkAssignToolsData = {
             toolId: string;
             credentialSourceMcpServerId?: string | null;
             executionSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
         }>;
     };
     path?: never;
@@ -3642,6 +4339,7 @@ export type UpdateAgentToolData = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
     };
     path: {
         id: string;
@@ -3722,104 +4420,13 @@ export type UpdateAgentToolResponses = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
         createdAt?: string;
         updatedAt?: string;
     };
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
-
-export type GetAgentAvailableTokensData = {
-    body?: never;
-    path?: never;
-    query?: {
-        catalogId?: string;
-    };
-    url: '/api/agents/available-tokens';
-};
-
-export type GetAgentAvailableTokensErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
-
-export type GetAgentAvailableTokensResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        [key: string]: Array<{
-            id: string;
-            name: string;
-            authType: 'personal' | 'team';
-            serverType: 'local' | 'remote';
-            catalogId: string | null;
-            ownerId: string | null;
-            ownerEmail: string | null;
-            teamDetails?: Array<{
-                teamId: string;
-                name: string;
-                createdAt: string;
-            }>;
-        }>;
-    };
-};
-
-export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -5016,6 +5623,786 @@ export type UpdateTrustedDataPolicyResponses = {
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
 
+export type GetChatApiKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys';
+};
+
+export type GetChatApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatApiKeysError = GetChatApiKeysErrors[keyof GetChatApiKeysErrors];
+
+export type GetChatApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    }>;
+};
+
+export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKeysResponses];
+
+export type CreateChatApiKeyData = {
+    body: {
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        apiKey: string;
+        isOrganizationDefault?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys';
+};
+
+export type CreateChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateChatApiKeyError = CreateChatApiKeyErrors[keyof CreateChatApiKeyErrors];
+
+export type CreateChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateChatApiKeyResponse = CreateChatApiKeyResponses[keyof CreateChatApiKeyResponses];
+
+export type DeleteChatApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type DeleteChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteChatApiKeyError = DeleteChatApiKeyErrors[keyof DeleteChatApiKeyErrors];
+
+export type DeleteChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatApiKeyResponse = DeleteChatApiKeyResponses[keyof DeleteChatApiKeyResponses];
+
+export type GetChatApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type GetChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatApiKeyError = GetChatApiKeyErrors[keyof GetChatApiKeyErrors];
+
+export type GetChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type GetChatApiKeyResponse = GetChatApiKeyResponses[keyof GetChatApiKeyResponses];
+
+export type UpdateChatApiKeyData = {
+    body?: {
+        name?: string;
+        apiKey?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}';
+};
+
+export type UpdateChatApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatApiKeyError = UpdateChatApiKeyErrors[keyof UpdateChatApiKeyErrors];
+
+export type UpdateChatApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatApiKeyResponse = UpdateChatApiKeyResponses[keyof UpdateChatApiKeyResponses];
+
+export type SetChatApiKeyDefaultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/set-default';
+};
+
+export type SetChatApiKeyDefaultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetChatApiKeyDefaultError = SetChatApiKeyDefaultErrors[keyof SetChatApiKeyDefaultErrors];
+
+export type SetChatApiKeyDefaultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetChatApiKeyDefaultResponse = SetChatApiKeyDefaultResponses[keyof SetChatApiKeyDefaultResponses];
+
+export type UnsetChatApiKeyDefaultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/unset-default';
+};
+
+export type UnsetChatApiKeyDefaultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnsetChatApiKeyDefaultError = UnsetChatApiKeyDefaultErrors[keyof UnsetChatApiKeyDefaultErrors];
+
+export type UnsetChatApiKeyDefaultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UnsetChatApiKeyDefaultResponse = UnsetChatApiKeyDefaultResponses[keyof UnsetChatApiKeyDefaultResponses];
+
+export type UpdateChatApiKeyProfilesData = {
+    body: {
+        profileIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat-api-keys/{id}/profiles';
+};
+
+export type UpdateChatApiKeyProfilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatApiKeyProfilesError = UpdateChatApiKeyProfilesErrors[keyof UpdateChatApiKeyProfilesErrors];
+
+export type UpdateChatApiKeyProfilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        secretId: string | null;
+        isOrganizationDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        profiles: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type UpdateChatApiKeyProfilesResponse = UpdateChatApiKeyProfilesResponses[keyof UpdateChatApiKeyProfilesResponses];
+
+export type BulkAssignChatApiKeysToProfilesData = {
+    body: {
+        chatApiKeyIds: Array<string>;
+        profileIds: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat-api-keys/bulk-assign';
+};
+
+export type BulkAssignChatApiKeysToProfilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkAssignChatApiKeysToProfilesError = BulkAssignChatApiKeysToProfilesErrors[keyof BulkAssignChatApiKeysToProfilesErrors];
+
+export type BulkAssignChatApiKeysToProfilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        assignedCount: number;
+    };
+};
+
+export type BulkAssignChatApiKeysToProfilesResponse = BulkAssignChatApiKeysToProfilesResponses[keyof BulkAssignChatApiKeysToProfilesResponses];
+
 export type StreamChatData = {
     body: {
         id: string;
@@ -5620,98 +7007,21 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
-export type GetChatSettingsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat-settings';
-};
-
-export type GetChatSettingsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetChatSettingsError = GetChatSettingsErrors[keyof GetChatSettingsErrors];
-
-export type GetChatSettingsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        anthropicApiKeySecretId: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetChatSettingsResponse = GetChatSettingsResponses[keyof GetChatSettingsResponses];
-
-export type UpdateChatSettingsData = {
+export type GenerateChatConversationTitleData = {
     body?: {
-        anthropicApiKey?: string;
-        resetApiKey?: boolean;
+        /**
+         * Force regeneration even if title already exists (for manual regeneration)
+         */
+        regenerate?: boolean;
     };
-    path?: never;
+    path: {
+        id: string;
+    };
     query?: never;
-    url: '/api/chat-settings';
+    url: '/api/chat/conversations/{id}/generate-title';
 };
 
-export type UpdateChatSettingsErrors = {
+export type GenerateChatConversationTitleErrors = {
     /**
      * Default Response
      */
@@ -5768,22 +7078,31 @@ export type UpdateChatSettingsErrors = {
     };
 };
 
-export type UpdateChatSettingsError = UpdateChatSettingsErrors[keyof UpdateChatSettingsErrors];
+export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
 
-export type UpdateChatSettingsResponses = {
+export type GenerateChatConversationTitleResponses = {
     /**
      * Default Response
      */
     200: {
         id: string;
+        userId: string;
         organizationId: string;
-        anthropicApiKeySecretId: string | null;
+        agentId: string;
+        promptId: string | null;
+        title: string | null;
+        selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 
-export type UpdateChatSettingsResponse = UpdateChatSettingsResponses[keyof UpdateChatSettingsResponses];
+export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -6485,22 +7804,25 @@ export type GetFeaturesResponses = {
      */
     200: {
         'orchestrator-k8s-runtime': boolean;
+        byosEnabled: boolean;
+        byosVaultKvVersion: '1' | '2';
+        geminiVertexAiEnabled: boolean;
     };
 };
 
 export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
 
-export type PostV1GeminiModelsByModelGenerateContentData = {
+export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         /**
@@ -6509,10 +7831,10 @@ export type PostV1GeminiModelsByModelGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/models/{model}:generateContent';
+    url: '/v1/gemini/v1beta/models/{model}:generateContent';
 };
 
-export type PostV1GeminiModelsByModelGenerateContentErrors = {
+export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -6569,28 +7891,28 @@ export type PostV1GeminiModelsByModelGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiModelsByModelGenerateContentError = PostV1GeminiModelsByModelGenerateContentErrors[keyof PostV1GeminiModelsByModelGenerateContentErrors];
+export type PostV1GeminiV1BetaModelsByModelGenerateContentError = PostV1GeminiV1BetaModelsByModelGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelGenerateContentErrors];
 
-export type PostV1GeminiModelsByModelGenerateContentResponses = {
+export type PostV1GeminiV1BetaModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
     200: GeminiGenerateContentResponse;
 };
 
-export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
+export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1GeminiV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiV1BetaModelsByModelGenerateContentResponses];
 
-export type PostV1GeminiModelsByModelStreamGenerateContentData = {
+export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         /**
@@ -6599,10 +7921,10 @@ export type PostV1GeminiModelsByModelStreamGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/models/{model}:streamGenerateContent';
+    url: '/v1/gemini/v1beta/models/{model}:streamGenerateContent';
 };
 
-export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
+export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -6659,19 +7981,19 @@ export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
+export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors];
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         agentId: string;
@@ -6681,10 +8003,10 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/{agentId}/models/{model}:generateContent';
+    url: '/v1/gemini/{agentId}/v1beta/models/{model}:generateContent';
 };
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -6741,28 +8063,28 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentError = PostV1GeminiByAgentIdModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentErrors];
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors];
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
     200: GeminiGenerateContentResponse;
 };
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses];
 
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * API key for Google Gemini
+         * API key for Google Gemini. Required for Google AI Studio mode, optional for Vertex AI mode (uses ADC).
          */
-        'x-goog-api-key': string;
+        'x-goog-api-key'?: string;
     };
     path: {
         agentId: string;
@@ -6772,10 +8094,10 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent';
+    url: '/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent';
 };
 
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -6832,19 +8154,23 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
+export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
 
 export type GetInteractionsData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Filter by agent ID
+         * Filter by profile ID (internal Archestra profile)
          */
-        agentId?: string;
+        profileId?: string;
+        /**
+         * Filter by external agent ID (from X-Archestra-Agent-Id header)
+         */
+        externalAgentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -6916,7 +8242,8 @@ export type GetInteractionsResponses = {
     200: {
         data: Array<{
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -6932,7 +8259,8 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -6948,7 +8276,8 @@ export type GetInteractionsResponses = {
             createdAt: string;
         } | {
             id: string;
-            agentId: string;
+            profileId: string;
+            externalAgentId: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -6975,6 +8304,81 @@ export type GetInteractionsResponses = {
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetUniqueExternalAgentIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/external-agent-ids';
+};
+
+export type GetUniqueExternalAgentIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+
+export type GetUniqueExternalAgentIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
 
 export type GetInteractionData = {
     body?: never;
@@ -7050,7 +8454,8 @@ export type GetInteractionResponses = {
      */
     200: {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -7066,7 +8471,8 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -7082,7 +8488,8 @@ export type GetInteractionResponses = {
         createdAt: string;
     } | {
         id: string;
-        agentId: string;
+        profileId: string;
+        externalAgentId: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -7176,6 +8583,7 @@ export type GetInternalMcpCatalogResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7190,6 +8598,8 @@ export type GetInternalMcpCatalogResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7200,6 +8610,7 @@ export type GetInternalMcpCatalogResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -7253,6 +8664,7 @@ export type CreateInternalMcpCatalogItemData = {
         name: string;
         version?: string | null;
         description?: string | null;
+        instructions?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
@@ -7267,6 +8679,8 @@ export type CreateInternalMcpCatalogItemData = {
         serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
+        localConfigSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
@@ -7277,11 +8691,13 @@ export type CreateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            serviceAccount?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -7318,6 +8734,10 @@ export type CreateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
+        localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path?: never;
     query?: never;
@@ -7392,6 +8812,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7406,6 +8827,8 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7416,6 +8839,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -7620,6 +9044,7 @@ export type GetInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7634,6 +9059,8 @@ export type GetInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7644,6 +9071,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -7697,6 +9125,7 @@ export type UpdateInternalMcpCatalogItemData = {
         name?: string;
         version?: string | null;
         description?: string | null;
+        instructions?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
         requiresAuth?: boolean;
@@ -7711,6 +9140,8 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
+        localConfigSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
@@ -7721,11 +9152,13 @@ export type UpdateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
+            serviceAccount?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -7762,6 +9195,10 @@ export type UpdateInternalMcpCatalogItemData = {
             streamable_http_url?: string;
             streamable_http_port?: number;
         } | null;
+        oauthClientSecretVaultPath?: string;
+        oauthClientSecretVaultKey?: string;
+        localConfigVaultPath?: string;
+        localConfigVaultKey?: string;
     };
     path: {
         id: string;
@@ -7838,6 +9275,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         name: string;
         version: string | null;
         description: string | null;
+        instructions: string | null;
         repository: string | null;
         installationCommand: string | null;
         requiresAuth: boolean;
@@ -7852,6 +9290,8 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7862,6 +9302,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
+                default?: string | number | boolean;
             }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
@@ -7909,6 +9350,168 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type DeleteInternalMcpCatalogItemByNameData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/by-name/{name}';
+};
+
+export type DeleteInternalMcpCatalogItemByNameErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteInternalMcpCatalogItemByNameError = DeleteInternalMcpCatalogItemByNameErrors[keyof DeleteInternalMcpCatalogItemByNameErrors];
+
+export type DeleteInternalMcpCatalogItemByNameResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteInternalMcpCatalogItemByNameResponse = DeleteInternalMcpCatalogItemByNameResponses[keyof DeleteInternalMcpCatalogItemByNameResponses];
+
+export type GetV1McpData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp';
+};
+
+export type GetV1McpErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
+
+export type GetV1McpResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+    };
+};
+
+export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
+
+export type PostV1McpData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/mcp';
+};
+
+export type PostV1McpResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp/sessions';
+};
+
+export type DeleteV1McpSessionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
+
+export type DeleteV1McpSessionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
 
 export type GetLimitsData = {
     body?: never;
@@ -8369,89 +9972,6 @@ export type UpdateLimitResponses = {
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
-export type GetV1McpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type GetV1McpErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
-
-export type GetV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        capabilities: {
-            tools: boolean;
-        };
-    };
-};
-
-export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
-
-export type PostV1McpData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type PostV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1McpSessionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp/sessions';
-};
-
-export type DeleteV1McpSessionsErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
-
-export type DeleteV1McpSessionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        message: string;
-        clearedCount: number;
-    };
-};
-
-export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
-
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
     path?: never;
@@ -8582,11 +10102,13 @@ export type GetMcpServerInstallationRequestsResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -8659,11 +10181,13 @@ export type CreateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
     };
@@ -8790,11 +10314,13 @@ export type CreateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9020,11 +10546,13 @@ export type GetMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9097,11 +10625,13 @@ export type UpdateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse?: string | null;
@@ -9240,11 +10770,13 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9393,11 +10925,13 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9546,11 +11080,13 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9699,11 +11235,13 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
+                    default?: string | number | boolean;
                 }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
                 httpPath?: string;
+                serviceAccount?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -9727,7 +11265,7 @@ export type GetMcpServersData = {
     body?: never;
     path?: never;
     query?: {
-        authType?: 'personal' | 'team';
+        catalogId?: string;
     };
     url: '/api/mcp_server';
 };
@@ -9802,7 +11340,7 @@ export type GetMcpServersResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -9810,18 +11348,18 @@ export type GetMcpServersResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
 
@@ -9833,11 +11371,10 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         ownerId?: string | null;
-        authType?: 'personal' | 'team';
+        teamId?: string | null;
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
-        teams?: Array<string>;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -9847,6 +11384,7 @@ export type InstallMcpServerData = {
         };
         agentIds?: Array<string>;
         accessToken?: string;
+        isByosVault?: boolean;
     };
     path?: never;
     query?: never;
@@ -9923,7 +11461,7 @@ export type InstallMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -9931,18 +11469,18 @@ export type InstallMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
 
@@ -10106,7 +11644,7 @@ export type GetMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
+        teamId: string | null;
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10114,18 +11652,18 @@ export type GetMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
-        teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
             email: string;
             createdAt: string;
         }>;
-        teamDetails?: Array<{
+        teamDetails?: {
             teamId: string;
             name: string;
             createdAt: string;
-        }>;
+        } | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
 
@@ -10466,327 +12004,6 @@ export type RestartMcpServerResponses = {
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
-export type RevokeUserMcpServerAccessData = {
-    body?: never;
-    path: {
-        catalogId: string;
-        userId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
-};
-
-export type RevokeUserMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
-
-export type RevokeUserMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
-
-export type RevokeAllTeamsMcpServerAccessData = {
-    body?: never;
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/teams';
-};
-
-export type RevokeAllTeamsMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
-
-export type RevokeAllTeamsMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
-
-export type GrantTeamMcpServerAccessData = {
-    body: {
-        teamIds: Array<string>;
-        userId?: string;
-    };
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/catalog/{catalogId}/teams';
-};
-
-export type GrantTeamMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
-
-export type GrantTeamMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
-
-export type RevokeTeamMcpServerAccessData = {
-    body?: never;
-    path: {
-        id: string;
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/{id}/team/{teamId}';
-};
-
-export type RevokeTeamMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
-
-export type RevokeTeamMcpServerAccessResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
-
 export type GetMcpToolCallsData = {
     body?: never;
     path?: never;
@@ -10991,6 +12208,100 @@ export type GetMcpToolCallResponses = {
 };
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
+
+export type GetV1McpByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type GetV1McpByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+
+export type GetV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+        tokenAuth?: {
+            tokenId: string;
+            teamId: string | null;
+            isOrganizationToken: boolean;
+        };
+    };
+};
+
+export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+
+export type PostV1McpByProfileIdData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type PostV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/sessions/{profileId}';
+};
+
+export type DeleteV1McpSessionsByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdError = DeleteV1McpSessionsByProfileIdErrors[keyof DeleteV1McpSessionsByProfileIdErrors];
+
+export type DeleteV1McpSessionsByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdResponse = DeleteV1McpSessionsByProfileIdResponses[keyof DeleteV1McpSessionsByProfileIdResponses];
 
 export type InitiateOAuthData = {
     body: {
@@ -11405,13 +12716,12 @@ export type GetOptimizationRulesResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
-        provider: SupportedProviders;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -11426,13 +12736,12 @@ export type CreateOptimizationRuleData = {
         id?: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
-        provider: SupportedProvidersInput;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -11510,13 +12819,12 @@ export type CreateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
-        provider: SupportedProviders;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -11610,13 +12918,12 @@ export type UpdateOptimizationRuleData = {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
-        ruleType?: 'content_length' | 'tool_presence';
-        conditions?: {
+        conditions?: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
-        provider?: SupportedProvidersInput;
+        }>;
+        provider?: 'openai' | 'gemini' | 'anthropic';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -11696,13 +13003,12 @@ export type UpdateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
-        provider: SupportedProviders;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -11711,452 +13017,6 @@ export type UpdateOptimizationRuleResponses = {
 };
 
 export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[keyof UpdateOptimizationRuleResponses];
-
-export type GetRolesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/roles';
-};
-
-export type GetRolesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
-
-export type GetRolesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    }>;
-};
-
-export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
-
-export type CreateRoleData = {
-    body: {
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-    };
-    path?: never;
-    query?: never;
-    url: '/api/roles';
-};
-
-export type CreateRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
-
-export type CreateRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    };
-};
-
-export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
-
-export type DeleteRoleData = {
-    body?: never;
-    path: {
-        /**
-         * Custom role ID (base62)
-         */
-        roleId: string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type DeleteRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
-
-export type DeleteRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
-
-export type GetRoleData = {
-    body?: never;
-    path: {
-        /**
-         * Predefined role name or custom role ID
-         */
-        roleId: 'admin' | 'member' | string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type GetRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
-
-export type GetRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    };
-};
-
-export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
-
-export type UpdateRoleData = {
-    body?: {
-        name?: string;
-        permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-    };
-    path: {
-        /**
-         * Predefined role name or custom role ID
-         */
-        roleId: 'admin' | 'member' | string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type UpdateRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
-
-export type UpdateRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId?: string;
-        role: string;
-        name: string;
-        permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
-        };
-        createdAt: string;
-        updatedAt: string | null;
-        predefined: boolean;
-    };
-};
-
-export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
 
 export type GetOrganizationData = {
     body?: never;
@@ -13044,6 +13904,332 @@ export type RollbackPromptResponses = {
 
 export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
 
+export type GetSecretsTypeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/type';
+};
+
+export type GetSecretsTypeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSecretsTypeError = GetSecretsTypeErrors[keyof GetSecretsTypeErrors];
+
+export type GetSecretsTypeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+        meta: {
+            [key: string]: string;
+        };
+    };
+};
+
+export type GetSecretsTypeResponse = GetSecretsTypeResponses[keyof GetSecretsTypeResponses];
+
+export type GetSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/{id}';
+};
+
+export type GetSecretErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSecretError = GetSecretErrors[keyof GetSecretErrors];
+
+export type GetSecretResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        secret: {
+            [key: string]: unknown;
+        };
+        isVault: boolean;
+        isByosVault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetSecretResponse = GetSecretResponses[keyof GetSecretResponses];
+
+export type CheckSecretsConnectivityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/check-connectivity';
+};
+
+export type CheckSecretsConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckSecretsConnectivityError = CheckSecretsConnectivityErrors[keyof CheckSecretsConnectivityErrors];
+
+export type CheckSecretsConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        secretCount: number;
+    };
+};
+
+export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
+
+export type InitializeSecretsManagerData = {
+    body: {
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/secrets/initialize-secrets-manager';
+};
+
+export type InitializeSecretsManagerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type InitializeSecretsManagerError = InitializeSecretsManagerErrors[keyof InitializeSecretsManagerErrors];
+
+export type InitializeSecretsManagerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+        meta: {
+            [key: string]: string;
+        };
+    };
+};
+
+export type InitializeSecretsManagerResponse = InitializeSecretsManagerResponses[keyof InitializeSecretsManagerResponses];
+
 export type GetPublicSsoProvidersData = {
     body?: never;
     path?: never;
@@ -13284,10 +14470,24 @@ export type GetSsoProvidersResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     }>;
 };
 
@@ -13385,9 +14585,23 @@ export type CreateSsoProviderData = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
         userId?: string | null;
         providerId: string;
         domain: string;
+        domainVerified?: boolean | null;
     };
     path?: never;
     query?: never;
@@ -13549,10 +14763,24 @@ export type CreateSsoProviderResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -13801,10 +15029,24 @@ export type GetSsoProviderResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -13902,8 +15144,22 @@ export type UpdateSsoProviderData = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
         providerId?: string;
         domain?: string;
+        domainVerified?: boolean | null;
     };
     path: {
         id: string;
@@ -14067,10 +15323,24 @@ export type UpdateSsoProviderResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -14601,6 +15871,7 @@ export type GetTeamsResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     }>;
@@ -14695,6 +15966,7 @@ export type CreateTeamResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -14867,6 +16139,7 @@ export type GetTeamResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -14964,6 +16237,7 @@ export type UpdateTeamResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -15048,6 +16322,7 @@ export type GetTeamMembersResponses = {
         teamId: string;
         userId: string;
         role: string;
+        syncedFromSso: boolean;
         createdAt: string;
     }>;
 };
@@ -15134,6 +16409,7 @@ export type AddTeamMemberResponses = {
         teamId: string;
         userId: string;
         role: string;
+        syncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -15220,6 +16496,252 @@ export type RemoveTeamMemberResponses = {
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
 
+export type GetTeamExternalGroupsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups';
+};
+
+export type GetTeamExternalGroupsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamExternalGroupsError = GetTeamExternalGroupsErrors[keyof GetTeamExternalGroupsErrors];
+
+export type GetTeamExternalGroupsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        teamId: string;
+        groupIdentifier: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetTeamExternalGroupsResponse = GetTeamExternalGroupsResponses[keyof GetTeamExternalGroupsResponses];
+
+export type AddTeamExternalGroupData = {
+    body: {
+        groupIdentifier: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups';
+};
+
+export type AddTeamExternalGroupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AddTeamExternalGroupError = AddTeamExternalGroupErrors[keyof AddTeamExternalGroupErrors];
+
+export type AddTeamExternalGroupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        groupIdentifier: string;
+        createdAt: string;
+    };
+};
+
+export type AddTeamExternalGroupResponse = AddTeamExternalGroupResponses[keyof AddTeamExternalGroupResponses];
+
+export type RemoveTeamExternalGroupData = {
+    body?: never;
+    path: {
+        id: string;
+        groupId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups/{groupId}';
+};
+
+export type RemoveTeamExternalGroupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RemoveTeamExternalGroupError = RemoveTeamExternalGroupErrors[keyof RemoveTeamExternalGroupErrors];
+
+export type RemoveTeamExternalGroupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
+
 export type GetTokenPricesData = {
     body?: never;
     path?: never;
@@ -15292,6 +16814,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15304,6 +16827,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15378,6 +16902,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15541,6 +17066,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15553,6 +17079,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
+        provider?: 'openai' | 'gemini' | 'anthropic';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -15629,6 +17156,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: 'openai' | 'gemini' | 'anthropic';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15638,6 +17166,260 @@ export type UpdateTokenPriceResponses = {
 };
 
 export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
+
+export type GetTokensData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tokens';
+};
+
+export type GetTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTokensError = GetTokensErrors[keyof GetTokensErrors];
+
+export type GetTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        tokenStart: string;
+        isOrganizationToken: boolean;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetTokensResponse = GetTokensResponses[keyof GetTokensResponses];
+
+export type GetTokenValueData = {
+    body?: never;
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/tokens/{tokenId}/value';
+};
+
+export type GetTokenValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTokenValueError = GetTokenValueErrors[keyof GetTokenValueErrors];
+
+export type GetTokenValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetTokenValueResponse = GetTokenValueResponses[keyof GetTokenValueResponses];
+
+export type RotateTokenData = {
+    body?: never;
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/tokens/{tokenId}/rotate';
+};
+
+export type RotateTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RotateTokenError = RotateTokenErrors[keyof RotateTokenErrors];
+
+export type RotateTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        isOrganizationToken: boolean;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        value: string;
+    };
+};
+
+export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponses];
 
 export type GetToolsData = {
     body?: never;
@@ -15743,6 +17525,943 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type GetRolesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type GetRolesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
+
+export type GetRolesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    }>;
+};
+
+export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
+
+export type CreateRoleData = {
+    body: {
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type CreateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
+
+export type CreateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
+
+export type DeleteRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Custom role ID (base62)
+         */
+        roleId: string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type DeleteRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
+
+export type DeleteRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
+
+export type GetRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type GetRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
+
+export type GetRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
+
+export type UpdateRoleData = {
+    body?: {
+        name?: string;
+        permission?: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+    };
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId?: string;
+        role: string;
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
+
+export type DeleteTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type DeleteTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
+
+export type DeleteTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
+
+export type GetTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type GetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
+
+export type GetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    } | null;
+};
+
+export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
+
+export type SetTeamVaultFolderData = {
+    body: {
+        vaultPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type SetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
+
+export type SetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
+
+export type CheckTeamVaultFolderConnectivityData = {
+    body?: {
+        vaultPath?: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
+};
+
+export type CheckTeamVaultFolderConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
+
+export type CheckTeamVaultFolderConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connected: boolean;
+        secretCount: number;
+        error?: string;
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
+
+export type ListTeamVaultFolderSecretsData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets';
+};
+
+export type ListTeamVaultFolderSecretsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
+
+export type ListTeamVaultFolderSecretsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        path: string;
+    }>;
+};
+
+export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
+
+export type GetTeamVaultSecretKeysData = {
+    body: {
+        secretPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
+};
+
+export type GetTeamVaultSecretKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
+
+export type GetTeamVaultSecretKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<string>;
+    };
+};
+
+export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

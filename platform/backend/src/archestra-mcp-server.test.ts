@@ -3,7 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { InternalMcpCatalogModel } from "@/models";
+import { AgentModel, InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
 import {
@@ -268,7 +268,7 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain(
         "Full Featured Profile",
       );
-      expect((result.content[0] as any).text).toContain(team.id);
+      expect((result.content[0] as any).text).toContain(team.name);
     });
 
     test("should return error when name is missing", async () => {
@@ -299,7 +299,6 @@ describe("executeArchestraTool", () => {
 
     test("should handle errors gracefully", async () => {
       // Mock the AgentModel.create method to throw an error
-      const { AgentModel } = await import("@/models");
       const originalCreate = AgentModel.create;
       AgentModel.create = vi
         .fn()
@@ -337,7 +336,7 @@ describe("executeArchestraTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toMatchObject({ type: "text" });
       expect((result.content[0] as any).text).toContain(
-        "installation request dialog",
+        "A dialog for adding or requesting an MCP",
       );
     });
   });

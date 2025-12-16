@@ -33,8 +33,7 @@ export default function AppearanceSettingsPage() {
     setPreviewFont,
     applyThemeOnUI,
     applyFontOnUI,
-    saveTheme,
-    saveFont,
+    saveAppearance,
     logo,
     DEFAULT_THEME,
     DEFAULT_FONT,
@@ -64,7 +63,7 @@ export default function AppearanceSettingsPage() {
 
   if (isLoadingAppearance) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+      <div>
         <div className="flex items-center justify-center h-64">
           <p className="text-lg text-muted-foreground">Loading...</p>
         </div>
@@ -73,7 +72,7 @@ export default function AppearanceSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+    <div>
       <div className="space-y-6">
         <LightDarkToggle />
         <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
@@ -100,8 +99,10 @@ export default function AppearanceSettingsPage() {
             <PermissionButton
               permissions={{ organization: ["update"] }}
               onClick={() => {
-                saveTheme?.(currentUITheme || DEFAULT_THEME);
-                saveFont?.(currentUIFont || DEFAULT_FONT);
+                saveAppearance?.(
+                  currentUITheme || DEFAULT_THEME,
+                  currentUIFont || DEFAULT_FONT,
+                );
                 setHasChanges(false);
               }}
               disabled={updateAppearanceSettingsMutation.isPending}

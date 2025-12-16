@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
@@ -20,6 +21,8 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const invitationId = searchParams.get("invitationId");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
+
+  const isBasicAuthDisabled = config.disableBasicAuth;
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");
@@ -40,7 +43,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   // Show loading while checking invitation
   if (isLoading && invitationId && isSignUpPath) {
     return (
-      <main className="container flex grow flex-col items-center justify-center self-center h-full">
+      <main className="h-full flex items-center justify-center">
         <LoadingSpinner />
       </main>
     );
@@ -49,7 +52,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   // Block direct sign-up without invitation
   if (isSignUpPath && !invitationId) {
     return (
-      <main className="container flex grow flex-col items-center justify-center self-center p-4 md:p-6 h-full">
+      <main className="h-full flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardHeader>
             <CardTitle>Invitation Required</CardTitle>
@@ -88,11 +91,15 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const showExistingUserMessage =
     path === "sign-in" && invitationId && invitationData;
 
+  // Only show default credentials warning when basic auth is enabled
+  const showDefaultCredentialsWarning =
+    path === "sign-in" && !invitationId && !isBasicAuthDisabled;
+
   return (
-    <main className="container flex grow flex-col items-center justify-center self-center h-full">
-      <div className="space-y-4 w-full max-w-md px-4 md:px-0">
-        {path === "sign-in" && !invitationId && (
-          <div className="max-w-sm p-0 m-0 pb-4">
+    <main className="h-full flex items-center justify-center p-4">
+      <div className="space-y-4 w-full max-w-md">
+        {showDefaultCredentialsWarning && (
+          <div className="p-0 m-0 pb-4">
             <DefaultCredentialsWarning alwaysShow />
           </div>
         )}
@@ -111,7 +118,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
           path={path}
           callbackURL={
             invitationId
-              ? `${path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"}?invitationId=${invitationId}`
+              ? `${
+                  path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
+                }?invitationId=${invitationId}`
               : undefined
           }
         />

@@ -6,6 +6,7 @@ import {
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
+  DEFAULT_VAULT_TOKEN,
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
@@ -105,7 +106,13 @@ const parseAllowedOrigins = (): string[] => {
     return [];
   }
 
-  return [frontendBaseUrl];
+  // ARCHESTRA_FRONTEND_URL if set
+  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
+  if (frontendUrl && frontendUrl !== "") {
+    return [frontendUrl];
+  }
+
+  return [];
 };
 
 /**
@@ -127,7 +134,7 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
  */
-const getTrustedOrigins = (): string[] | undefined => {
+export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
 
   // Default: allow localhost wildcards for development
@@ -140,7 +147,30 @@ const getTrustedOrigins = (): string[] | undefined => {
     ];
   }
 
+  // Production: use configured origins
   return origins;
+};
+
+/**
+ * Parse additional trusted SSO provider IDs from environment variable.
+ * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
+ *
+ * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
+ * Whitespace around each provider ID is trimmed.
+ *
+ * @returns Array of additional trusted SSO provider IDs
+ */
+export const getAdditionalTrustedSsoProviderIds = (): string[] => {
+  const envValue = process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  return envValue
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
 };
 
 export default {
@@ -168,6 +198,9 @@ export default {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    disableInvitations:
+      process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    additionalTrustedSsoProviderIds: getAdditionalTrustedSsoProviderIds(),
   },
   database: {
     url: getDatabaseUrl(),
@@ -180,6 +213,21 @@ export default {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+    },
+    gemini: {
+      baseUrl:
+        process.env.ARCHESTRA_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
+      vertexAi: {
+        enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
+        project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
+        location:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
+        // Path to service account JSON key file for authentication (optional)
+        // If not set, uses default ADC (Workload Identity, attached service account, etc.)
+        credentialsFile:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
+      },
     },
   },
   chat: {
@@ -194,6 +242,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
         "https://api.anthropic.com",
+    },
+    gemini: {
+      apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
@@ -210,6 +264,8 @@ export default {
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
   },
+  enterpriseLicenseActivated:
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -221,7 +277,14 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      mcpK8sServiceAccountName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME ||
+        // Default value matches the mcp-k8s-operator service account name from the official helm chart
+        "archestra-archestra-platform-mcp-k8s-operator",
     },
+  },
+  vault: {
+    token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },
   observability: {
     otel: {

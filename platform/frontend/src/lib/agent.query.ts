@@ -5,6 +5,11 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import {
+  DEFAULT_AGENTS_PAGE_SIZE,
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+} from "./utils";
 
 const {
   createAgent,
@@ -37,13 +42,25 @@ export function useProfiles(
 
 // New paginated hook for the agents page
 export function useProfilesPaginated(params?: {
+  initialData?: archestraApiTypes.GetAgentsResponses["200"];
   limit?: number;
   offset?: number;
   sortBy?: "name" | "createdAt" | "toolsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
 }) {
-  const { limit, offset, sortBy, sortDirection, name } = params || {};
+  const { initialData, limit, offset, sortBy, sortDirection, name } =
+    params || {};
+
+  // Check if we can use initialData (server-side fetched data)
+  // Only use it for the first page (offset 0), default sorting, no search filter,
+  // AND matching default page size (20)
+  const useInitialData =
+    offset === 0 &&
+    (sortBy === undefined || sortBy === DEFAULT_SORT_BY) &&
+    (sortDirection === undefined || sortDirection === DEFAULT_SORT_DIRECTION) &&
+    name === undefined &&
+    (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
 
   return useSuspenseQuery({
     queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],
@@ -59,6 +76,7 @@ export function useProfilesPaginated(params?: {
           },
         })
       ).data ?? null,
+    initialData: useInitialData ? initialData : undefined,
   });
 }
 
@@ -93,8 +111,14 @@ export function useCreateProfile() {
       const response = await createAgent({ body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens for the new profile
+      if (data?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["profileTokens", data.id],
+        });
+      }
     },
   });
 }
@@ -112,8 +136,12 @@ export function useUpdateProfile() {
       const response = await updateAgent({ path: { id }, body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
+      queryClient.invalidateQueries({
+        queryKey: ["profileTokens", variables.id],
+      });
     },
   });
 }

@@ -8,7 +8,7 @@ export default function GatewaysSettingsPage() {
   const { data: defaultProfile } = useDefaultProfile();
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div>
       <div className="bg-card rounded-lg p-8 shadow-sm">
         <ArchestraArchitectureDiagram />
 

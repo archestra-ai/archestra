@@ -1,7 +1,9 @@
+import type { SupportedProvider } from "@shared";
 import {
   index,
   numeric,
   pgTable,
+  text,
   timestamp,
   uuid,
   varchar,
@@ -11,6 +13,7 @@ const tokenPriceTable = pgTable(
   "token_price",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").$type<SupportedProvider>().notNull(),
     model: varchar("model", { length: 255 }).notNull().unique(),
     pricePerMillionInput: numeric("price_per_million_input", {
       precision: 10,

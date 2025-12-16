@@ -1,7 +1,5 @@
-import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
-
-const authFile = path.join(__dirname, "playwright/.auth/user.json");
+import { adminAuthFile } from "./consts";
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -14,9 +12,10 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  workers: 3,
+  /* Reduce workers in CI to avoid resource contention */
+  workers: process.env.CI ? 6 : 3,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: process.env.CI ? "html" : "line",
+  reporter: process.env.CI ? [["html", "line"]] : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
@@ -25,61 +24,103 @@ export default defineConfig({
     video: "retain-on-failure",
     /* Take screenshot only when test fails */
     screenshot: "only-on-failure",
+    /* Timeout for each action (click, fill, etc.) */
+    actionTimeout: 15_000,
+    /* Timeout for navigation actions */
+    navigationTimeout: 30_000,
+  },
+  /* Expect timeout for assertions */
+  expect: {
+    timeout: 10_000,
   },
 
   /* Configure projects for major browsers */
   projects: [
-    // Setup project - runs authentication once before all tests
+    // Setup projects - run authentication in correct order
     {
-      name: "setup",
-      testMatch: /.*\.setup\.ts/,
+      name: "setup-admin",
+      testMatch: /auth\.admin\.setup\.ts/,
       testDir: "./",
     },
+    {
+      name: "setup-users",
+      testMatch: /auth\.users\.setup\.ts/,
+      testDir: "./",
+      // Users setup needs admin to be authenticated first
+      dependencies: ["setup-admin"],
+    },
+    {
+      name: "setup-teams",
+      testMatch: /auth\.teams\.setup\.ts/,
+      testDir: "./",
+      // Teams setup needs users to be created first
+      dependencies: ["setup-users"],
+    },
+    // This runs first and by default we use Vault as secrets manager
+    // At the end of this test we switch to DB as secrets manager because all other tests rely on it
+    {
+      name: "credentials-with-vault",
+      testMatch: /credentials-with-vault\.ee\.spec\.ts/,
+      testDir: "./tests/ui",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run all setup projects before tests
+      dependencies: ["setup-teams"],
+    },
+    // UI tests run on all browsers
+    {
+      name: "chromium",
+      testDir: "./tests/ui",
+      testIgnore: /credentials-with-vault\.ee\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run all setup projects before tests
+      dependencies: ["credentials-with-vault"],
+    },
+    {
+      name: "firefox",
+      testDir: "./tests/ui",
+      testIgnore: /credentials-with-vault\.ee\.spec\.ts/,
+      use: {
+        ...devices["Desktop Firefox"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run all setup projects before tests
+      dependencies: ["credentials-with-vault"],
+      grep: /@firefox/,
+    },
+    {
+      name: "webkit",
+      testDir: "./tests/ui",
+      testIgnore: /credentials-with-vault\.ee\.spec\.ts/,
+      use: {
+        ...devices["Desktop Safari"],
+        // Use the stored authentication state
+        storageState: adminAuthFile,
+      },
+      // Run all setup projects before tests
+      dependencies: ["credentials-with-vault"],
+      grep: /@webkit/,
+    },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
+    // API tests run after all UI tests complete
     {
       name: "api",
       testDir: "./tests/api",
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
-        storageState: authFile,
+        storageState: adminAuthFile,
       },
-      // Run the setup project before tests
-      dependencies: ["setup"],
-    },
-    // UI tests run on all browsers
-    {
-      name: "chromium",
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: authFile,
-      },
-      // Run the setup project before tests
-      dependencies: ["setup"],
-    },
-    {
-      name: "firefox",
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Firefox"],
-        // Use the stored authentication state
-        storageState: authFile,
-      },
-      // Run the setup project before tests
-      dependencies: ["setup"],
-    },
-    {
-      name: "webkit",
-      testDir: "./tests/ui",
-      use: {
-        ...devices["Desktop Safari"],
-        // Use the stored authentication state
-        storageState: authFile,
-      },
-      // Run the setup project before tests
-      dependencies: ["setup"],
+      // Run after all UI test projects complete
+      dependencies: ["credentials-with-vault", "chromium", "firefox", "webkit"],
     },
   ],
 });

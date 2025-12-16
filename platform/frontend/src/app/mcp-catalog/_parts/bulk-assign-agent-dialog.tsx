@@ -3,8 +3,10 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { InstallationSelect } from "@/components/installation-select";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -67,6 +69,11 @@ export function BulkAssignProfileDialog({
   const handleAssign = useCallback(async () => {
     if (!tools || tools.length === 0 || selectedProfileIds.length === 0) return;
 
+    // Check if dynamic credential is selected
+    const useDynamicCredential =
+      credentialSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE ||
+      executionSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE;
+
     // Assign each tool to each selected agent
     const assignments = tools.flatMap((tool) =>
       selectedProfileIds.map((agentId) => ({
@@ -74,10 +81,15 @@ export function BulkAssignProfileDialog({
         toolId: tool.id,
         credentialSourceMcpServerId: isLocalServer
           ? null
-          : credentialSourceMcpServerId,
+          : useDynamicCredential
+            ? null
+            : credentialSourceMcpServerId,
         executionSourceMcpServerId: isLocalServer
-          ? executionSourceMcpServerId
+          ? useDynamicCredential
+            ? null
+            : executionSourceMcpServerId
           : null,
+        useDynamicTeamCredential: useDynamicCredential,
       })),
     );
 
@@ -206,46 +218,28 @@ export function BulkAssignProfileDialog({
           </div>
 
           <div className="mt-10">
-            {isLocalServer ? (
-              <>
-                <Label
-                  htmlFor="installation-select"
-                  className="text-md font-medium mb-1"
-                >
-                  Credential to use *
-                </Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Select whose MCP server installation will execute the tool
-                </p>
-                <InstallationSelect
-                  value={executionSourceMcpServerId}
-                  onValueChange={setExecutionSourceMcpServerId}
-                  className="w-full"
-                  catalogId={catalogId}
-                  shouldSetDefaultValue
-                />
-              </>
-            ) : (
-              <>
-                <Label
-                  htmlFor="token-select"
-                  className="text-md font-medium mb-1"
-                >
-                  Credential to use *
-                </Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Select which token will be used when profiles execute these
-                  tools
-                </p>
-                <TokenSelect
-                  value={credentialSourceMcpServerId}
-                  onValueChange={setCredentialSourceMcpServerId}
-                  className="w-full"
-                  catalogId={catalogId}
-                  shouldSetDefaultValue
-                />
-              </>
-            )}
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Credential to use *
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which credential will be used when profiles execute these
+              tools
+            </p>
+            <TokenSelect
+              value={
+                isLocalServer
+                  ? executionSourceMcpServerId
+                  : credentialSourceMcpServerId
+              }
+              onValueChange={
+                isLocalServer
+                  ? setExecutionSourceMcpServerId
+                  : setCredentialSourceMcpServerId
+              }
+              className="w-full"
+              catalogId={catalogId}
+              shouldSetDefaultValue
+            />
           </div>
         </div>
 

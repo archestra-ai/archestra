@@ -644,7 +644,7 @@ export function generateMockInteraction(
   };
 
   return {
-    agentId,
+    profileId: agentId,
     type: "openai:chatCompletions",
     request,
     response,

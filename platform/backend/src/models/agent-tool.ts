@@ -249,6 +249,7 @@ class AgentToolModel {
     toolId: string,
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
+    useDynamicTeamCredential?: boolean,
   ): Promise<{ status: "created" | "updated" | "unchanged" }> {
     // Check if assignment already exists
     const [existing] = await db
@@ -272,6 +273,7 @@ class AgentToolModel {
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
+          | "useDynamicTeamCredential"
         >
       > = {};
 
@@ -283,6 +285,10 @@ class AgentToolModel {
         options.executionSourceMcpServerId = executionSourceMcpServerId;
       }
 
+      if (useDynamicTeamCredential !== undefined) {
+        options.useDynamicTeamCredential = useDynamicTeamCredential;
+      }
+
       await AgentToolModel.create(agentId, toolId, options);
       return { status: "created" };
     }
@@ -292,22 +298,30 @@ class AgentToolModel {
       existing.credentialSourceMcpServerId !==
         (credentialSourceMcpServerId ?? null) ||
       existing.executionSourceMcpServerId !==
-        (executionSourceMcpServerId ?? null);
+        (executionSourceMcpServerId ?? null) ||
+      (useDynamicTeamCredential !== undefined &&
+        existing.useDynamicTeamCredential !== useDynamicTeamCredential);
 
     if (needsUpdate) {
       // Update credentials
       const updateData: Partial<
         Pick<
           UpdateAgentTool,
-          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+          | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
+          | "useDynamicTeamCredential"
         >
       > = {};
 
-      // Always set both fields to ensure they're updated correctly
+      // Always set credential fields to ensure they're updated correctly
       updateData.credentialSourceMcpServerId =
         credentialSourceMcpServerId ?? null;
       updateData.executionSourceMcpServerId =
         executionSourceMcpServerId ?? null;
+
+      if (useDynamicTeamCredential !== undefined) {
+        updateData.useDynamicTeamCredential = useDynamicTeamCredential;
+      }
 
       await AgentToolModel.update(existing.id, updateData);
       return { status: "updated" };
@@ -326,6 +340,7 @@ class AgentToolModel {
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
+        | "useDynamicTeamCredential"
       >
     >,
   ) {
@@ -626,6 +641,79 @@ class AgentToolModel {
   }
 
   /**
+   * Batch fetch security configs for multiple tools at once.
+   * Returns a Map of toolName -> security config.
+   */
+  static async getSecurityConfigBatch(
+    agentId: string,
+    toolNames: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >
+  > {
+    if (toolNames.length === 0) {
+      return new Map();
+    }
+
+    const agentTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+
+    const result = new Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >();
+
+    for (const tool of agentTools) {
+      result.set(tool.toolName, {
+        allowUsageWhenUntrustedDataIsPresent:
+          tool.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: tool.toolResultTreatment,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Delete all agent-tool assignments that use a specific MCP server as their execution source.
+   * Used when a local MCP server is deleted/uninstalled.
+   */
+  static async deleteByExecutionSourceMcpServerId(
+    mcpServerId: string,
+  ): Promise<number> {
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(
+        eq(schema.agentToolsTable.executionSourceMcpServerId, mcpServerId),
+      );
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * Clean up invalid credential sources when a user is removed from a team.
    * Sets credentialSourceMcpServerId to null for agent-tools where:
    * - The credential source is a personal token owned by the removed user
@@ -648,22 +736,17 @@ class AgentToolModel {
 
     const agentIds = agentsInTeam.map((a) => a.agentId);
 
-    // Get all personal MCP servers owned by this user
-    const userPersonalServers = await db
+    // Get all MCP servers owned by this user
+    const userServers = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(
-        and(
-          eq(schema.mcpServersTable.ownerId, userId),
-          eq(schema.mcpServersTable.authType, "personal"),
-        ),
-      );
+      .where(eq(schema.mcpServersTable.ownerId, userId));
 
-    if (userPersonalServers.length === 0) {
+    if (userServers.length === 0) {
       return 0;
     }
 
-    const serverIds = userPersonalServers.map((s) => s.id);
+    const serverIds = userServers.map((s) => s.id);
 
     // For each agent, check if user still has access through other teams
     let cleanedCount = 0;

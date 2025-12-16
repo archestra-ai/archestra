@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -86,14 +86,14 @@ export function PromptDialog({
     }
   }, [open, prompt, allProfiles, agentId]);
 
-  const handleSave = async () => {
-    if (!name || !agentId) {
-      toast.error("Name and Profile are required");
-      return;
-    }
+  const handleSave = useCallback(async () => {
+    // Trim values once at the start
+    const trimmedName = name.trim();
+    const trimmedUserPrompt = userPrompt.trim();
+    const trimmedSystemPrompt = systemPrompt.trim();
 
-    if (!userPrompt && !systemPrompt) {
-      toast.error("At least one prompt (User or System) is required");
+    if (!trimmedName || !agentId) {
+      toast.error("Name and Profile are required");
       return;
     }
 
@@ -102,19 +102,19 @@ export function PromptDialog({
         await updatePrompt.mutateAsync({
           id: prompt.id,
           data: {
-            name,
+            name: trimmedName,
             agentId,
-            userPrompt: userPrompt || undefined,
-            systemPrompt: systemPrompt || undefined,
+            userPrompt: trimmedUserPrompt || undefined,
+            systemPrompt: trimmedSystemPrompt || undefined,
           },
         });
         toast.success("New version created successfully");
       } else {
         await createPrompt.mutateAsync({
-          name,
+          name: trimmedName,
           agentId,
-          userPrompt: userPrompt || undefined,
-          systemPrompt: systemPrompt || undefined,
+          userPrompt: trimmedUserPrompt || undefined,
+          systemPrompt: trimmedSystemPrompt || undefined,
         });
         toast.success("Prompt created successfully");
       }
@@ -122,7 +122,16 @@ export function PromptDialog({
     } catch (_error) {
       toast.error("Failed to save prompt");
     }
-  };
+  }, [
+    name,
+    agentId,
+    userPrompt,
+    systemPrompt,
+    prompt,
+    updatePrompt,
+    createPrompt,
+    onOpenChange,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -166,12 +175,8 @@ export function PromptDialog({
               permissions={{ profile: ["read"] }}
               noPermissionHandle="tooltip"
             >
-              {({ isDisabled }) => {
-                return isDisabled ? (
-                  <Badge variant="outline" className="text-xs">
-                    Unable to show the list of profiles
-                  </Badge>
-                ) : (
+              {({ hasPermission }) => {
+                return hasPermission === undefined ? null : hasPermission ? (
                   <Select value={agentId} onValueChange={setProfileId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a profile" />
@@ -184,6 +189,10 @@ export function PromptDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    Unable to show the list of profiles
+                  </Badge>
                 );
               }}
             </WithPermissions>
@@ -192,16 +201,16 @@ export function PromptDialog({
                 permissions={{ profile: ["read"] }}
                 noPermissionHandle="tooltip"
               >
-                {({ isDisabled }) => {
-                  return isDisabled ? (
-                    <Badge variant="outline" className="text-xs">
-                      Unable to show the list of tools
-                    </Badge>
-                  ) : (
+                {({ hasPermission }) => {
+                  return hasPermission === undefined ? null : hasPermission ? (
                     <McpToolsDisplay
                       agentId={agentId}
                       className="text-xs text-muted-foreground"
                     />
+                  ) : (
+                    <Badge variant="outline" className="text-xs">
+                      Unable to show the list of tools
+                    </Badge>
                   );
                 }}
               </WithPermissions>
@@ -235,9 +244,8 @@ export function PromptDialog({
           <Button
             onClick={handleSave}
             disabled={
-              !name ||
+              !name.trim() ||
               !agentId ||
-              (!userPrompt && !systemPrompt) ||
               createPrompt.isPending ||
               updatePrompt.isPending
             }

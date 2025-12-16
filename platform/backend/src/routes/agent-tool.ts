@@ -1,6 +1,5 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { groupBy } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
@@ -105,6 +104,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
             executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+            useDynamicTeamCredential: z.boolean().optional(),
           })
           .nullish(),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -112,14 +112,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const { credentialSourceMcpServerId, executionSourceMcpServerId } =
-        request.body || {};
+      const {
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+        useDynamicTeamCredential,
+      } = request.body || {};
 
       const result = await assignToolToAgent(
         agentId,
         toolId,
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
+        undefined,
+        useDynamicTeamCredential,
       );
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -148,6 +153,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               toolId: UuidIdSchema,
               credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
               executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+              useDynamicTeamCredential: z.boolean().optional(),
             }),
           ),
         }),
@@ -220,6 +226,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
             preFetchedData,
+            assignment.useDynamicTeamCredential,
           ),
         ),
       );
@@ -360,12 +367,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
+          useDynamicTeamCredential: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
-      const { credentialSourceMcpServerId, executionSourceMcpServerId } = body;
+      const {
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+        useDynamicTeamCredential,
+      } = body;
 
       // Get the agent-tool relationship for validation (needed for both credential and execution source)
       let agentToolForValidation:
@@ -419,27 +431,33 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentToolForValidation &&
         agentToolForValidation.tool.catalogId
       ) {
+        // Only need serverType for validation, no secrets needed
         const catalogItem = await InternalMcpCatalogModel.findById(
           agentToolForValidation.tool.catalogId,
+          { expandSecrets: false },
         );
         // Check if tool is from local server and executionSourceMcpServerId is being set to null
+        // (allowed if useDynamicTeamCredential is being set to true)
         if (
           catalogItem?.serverType === "local" &&
-          !executionSourceMcpServerId
+          !executionSourceMcpServerId &&
+          !useDynamicTeamCredential
         ) {
           throw new ApiError(
             400,
-            "Execution source installation is required for local MCP server tools and cannot be set to null",
+            "Execution source installation or dynamic team credential is required for local MCP server tools",
           );
         }
         // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+        // (allowed if useDynamicTeamCredential is being set to true)
         if (
           catalogItem?.serverType === "remote" &&
-          !credentialSourceMcpServerId
+          !credentialSourceMcpServerId &&
+          !useDynamicTeamCredential
         ) {
           throw new ApiError(
             400,
-            "Credential source is required for remote MCP server tools and cannot be set to null",
+            "Credential source or dynamic team credential is required for remote MCP server tools",
           );
         }
       }
@@ -457,102 +475,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       clearChatMcpClient(agentTool.agentId);
 
       return reply.send(agentTool);
-    },
-  );
-
-  fastify.get(
-    "/api/agents/available-tokens",
-    {
-      schema: {
-        operationId: RouteId.GetAgentAvailableTokens,
-        description:
-          "Get MCP servers that can be used as credential sources for the specified agents' tools, grouped by catalogId",
-        tags: ["Agent Tools"],
-        querystring: z.object({
-          catalogId: UuidIdSchema.optional(),
-        }),
-        response: constructResponseSchema(
-          z.record(
-            z.string(),
-            z.array(
-              z.object({
-                id: z.string(),
-                name: z.string(),
-                authType: z.enum(["personal", "team"]),
-                serverType: z.enum(["local", "remote"]),
-                catalogId: z.string().nullable(),
-                ownerId: z.string().nullable(),
-                ownerEmail: z.string().nullable(),
-                teamDetails: z
-                  .array(
-                    z.object({
-                      teamId: z.string(),
-                      name: z.string(),
-                      createdAt: z.coerce.date(),
-                    }),
-                  )
-                  .optional(),
-              }),
-            ),
-          ),
-        ),
-      },
-    },
-    async ({ query: { catalogId }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
-
-      // Get all MCP servers accessible to the user
-      const allServers = await McpServerModel.findAll(user.id, isAgentAdmin);
-
-      // Filter by catalogId if provided, otherwise include all
-      const filteredServers = allServers.filter(
-        (server) =>
-          (catalogId ? server.catalogId === catalogId : true) &&
-          server.authType !== null,
-      );
-
-      // Map servers to the response format
-      const mappedServers = filteredServers.map((server) => ({
-        id: server.id,
-        name: server.name,
-        authType: server.authType as "personal" | "team",
-        serverType: server.serverType as "local" | "remote",
-        catalogId: server.catalogId,
-        ownerId: server.ownerId,
-        ownerEmail: server.ownerEmail ?? null,
-        teamDetails: server.teamDetails,
-      }));
-
-      // Sort servers: current user's personal tokens first, then other personal tokens, then team tokens
-      const currentUserId = user.id;
-      const sortedServers = mappedServers.sort((a, b) => {
-        const aIsCurrentUser =
-          a.authType === "personal" && a.ownerId === currentUserId;
-        const bIsCurrentUser =
-          b.authType === "personal" && b.ownerId === currentUserId;
-
-        // Current user's tokens come first
-        if (aIsCurrentUser && !bIsCurrentUser) return -1;
-        if (!aIsCurrentUser && bIsCurrentUser) return 1;
-
-        // Then other personal tokens before team tokens
-        if (a.authType === "personal" && b.authType === "team") return -1;
-        if (a.authType === "team" && b.authType === "personal") return 1;
-
-        // Keep original order otherwise
-        return 0;
-      });
-
-      // Group by catalogId
-      const groupedByCatalogId = groupBy(
-        sortedServers,
-        (server) => server.catalogId,
-      );
-
-      return reply.send(groupedByCatalogId);
     },
   );
 };
@@ -573,6 +495,7 @@ export async function assignToolToAgent(
     toolsMap?: Map<string, Tool>;
     catalogItemsMap?: Map<string, InternalMcpCatalog>;
   },
+  useDynamicTeamCredential?: boolean,
 ): Promise<
   | {
       status: 400 | 404;
@@ -624,29 +547,32 @@ export async function assignToolToAgent(
     if (preFetchedData?.catalogItemsMap) {
       catalogItem = preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
     } else {
-      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+      // Only need serverType for validation, no secrets needed
+      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId, {
+        expandSecrets: false,
+      });
     }
 
     if (catalogItem?.serverType === "local") {
-      if (!executionSourceMcpServerId) {
+      if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
         return {
           status: 400,
           error: {
             message:
-              "Execution source installation is required for local MCP server tools",
+              "Execution source installation or dynamic team credential is required for local MCP server tools",
             type: "validation_error",
           },
         };
       }
     }
-    // Check if tool is from remote server (requires credentialSourceMcpServerId)
+    // Check if tool is from remote server (requires credentialSourceMcpServerId OR useDynamicTeamCredential)
     if (catalogItem?.serverType === "remote") {
-      if (!credentialSourceMcpServerId) {
+      if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
         return {
           status: 400,
           error: {
             message:
-              "Credential source is required for remote MCP server tools",
+              "Credential source or dynamic team credential is required for remote MCP server tools",
             type: "validation_error",
           },
         };
@@ -684,6 +610,7 @@ export async function assignToolToAgent(
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
+    useDynamicTeamCredential,
   );
 
   // Return appropriate status
@@ -741,47 +668,22 @@ async function validateCredentialSource(
     };
   }
 
-  if (mcpServer.authType === "team") {
-    // For team tokens: agent and MCP server must share at least one team
-    const shareTeam = await AgentTeamModel.agentAndMcpServerShareTeam(
-      agentId,
-      credentialSourceMcpServerId,
-    );
+  // Check if the owner has access to the agent (either directly or through teams)
+  const hasAccess = await AgentTeamModel.userHasAgentAccess(
+    owner.id,
+    agentId,
+    true,
+  );
 
-    if (!shareTeam) {
-      return {
-        status: 400,
-        error: {
-          message:
-            "The selected team token must belong to a team that this agent is assigned to",
-          type: "validation_error",
-        },
-      };
-    }
-  } else if (mcpServer.authType === "personal") {
-    /**
-     * For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent
-     * is assigned to
-     *
-     * NOTE: this is granting too much access here.. we should refactor this,
-     * see the comment above the hasPermission call above for more context..
-     */
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      owner.id,
-      agentId,
-      true,
-    );
-
-    if (!hasAccess) {
-      return {
-        status: 400,
-        error: {
-          message:
-            "The selected personal token must belong to a user who is a member of a team that this agent is assigned to",
-          type: "validation_error",
-        },
-      };
-    }
+  if (!hasAccess) {
+    return {
+      status: 400,
+      error: {
+        message:
+          "The credential owner must be a member of a team that this profile is assigned to",
+        type: "validation_error",
+      },
+    };
   }
 
   return null;

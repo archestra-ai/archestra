@@ -19,7 +19,7 @@ export default function CostLayout({
         { label: "Tool results compression", href: "/cost/compression" },
       ]}
     >
-      <div className="max-w-7xl px-4 py-6 md:px-8">{children}</div>
+      {children}
     </PageLayout>
   );
 }

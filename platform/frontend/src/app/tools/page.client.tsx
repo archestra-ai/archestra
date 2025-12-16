@@ -12,11 +12,16 @@ import {
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
+import type { ToolsInitialData } from "./page";
 
 type ProfileToolData =
   archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 
-export function ToolsClient() {
+export function ToolsClient({
+  initialData,
+}: {
+  initialData?: ToolsInitialData;
+}) {
   const queryClient = useQueryClient();
 
   // Prefetch policy data on mount
@@ -30,14 +35,14 @@ export function ToolsClient() {
     <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
-          <ToolsList />
+          <ToolsList initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
   );
 }
 
-function ToolsList() {
+function ToolsList({ initialData }: { initialData?: ToolsInitialData }) {
   const queryClient = useQueryClient();
   const [selectedToolForDialog, setSelectedToolForDialog] =
     useState<ProfileToolData | null>(null);
@@ -69,8 +74,11 @@ function ToolsList() {
   }, [queryClient, selectedToolForDialog]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
-      <AssignedToolsTable onToolClick={setSelectedToolForDialog} />
+    <div>
+      <AssignedToolsTable
+        onToolClick={setSelectedToolForDialog}
+        initialData={initialData}
+      />
 
       <ToolDetailsDialog
         agentTool={selectedToolForDialog}

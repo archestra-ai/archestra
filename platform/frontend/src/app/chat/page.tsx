@@ -594,7 +594,7 @@ export default function ChatPage() {
             />
           </div>
 
-          <div className="sticky bottom-0 bg-background border-t p-4">
+          <div className="sticky bottom-0 bg-background border-t p-4 animate-slide-up">
             <div className="max-w-3xl mx-auto space-y-3">
               {currentProfileId && (
                 <WithPermissions
@@ -618,15 +618,20 @@ export default function ChatPage() {
               )}
               <PromptInput onSubmit={handleSubmit}>
                 <PromptInputBody>
-                  <PromptInputTextarea placeholder="Type a message..." />
+                  <div className="relative flex items-center">
+                    <PromptInputTextarea
+                      placeholder="Type a message..."
+                      className="pr-14"
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <PromptInputSubmit
+                        status={status === "error" ? "ready" : status}
+                        onStop={stop}
+                        className="h-9 w-9 rounded-lg"
+                      />
+                    </div>
+                  </div>
                 </PromptInputBody>
-                <PromptInputToolbar>
-                  <PromptInputTools />
-                  <PromptInputSubmit
-                    status={status === "error" ? "ready" : status}
-                    onStop={stop}
-                  />
-                </PromptInputToolbar>
               </PromptInput>
             </div>
           </div>

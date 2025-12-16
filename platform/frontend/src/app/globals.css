@@ -99,19 +99,41 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+
   /* Override Tailwind's font-sans to use our dynamic CSS variable */
   .font-sans {
     font-family: var(--font-sans) !important;
   }
 }
 
-button, div[role="menuitem"] {
+button,
+div[role="menuitem"] {
   cursor: pointer;
 }
+
 button:disabled {
   cursor: not-allowed;
+}
+
+/* Slide up animation for chat input */
+@keyframes slide-up-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  opacity: 0;
+  animation: slide-up-fade 0.5s ease-out 0.1s forwards;
 }

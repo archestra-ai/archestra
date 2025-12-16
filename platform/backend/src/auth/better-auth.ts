@@ -10,17 +10,17 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import {
-  InvitationModel,
-  MemberModel,
-  SessionModel,
-} from "@/models";
+import { InvitationModel, MemberModel, SessionModel } from "@/models";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
-    await import("./sso.ee")
-    : { ssoConfig: undefined, syncSsoRole: (..._args: any) => {}, syncSsoTeams: (..._args: any) => {} }
+      await import("./sso.ee")
+    : {
+        ssoConfig: undefined,
+        syncSsoRole: (..._args: any) => {},
+        syncSsoTeams: (..._args: any) => {},
+      };
 
 const APP_NAME = "Archestra";
 const {

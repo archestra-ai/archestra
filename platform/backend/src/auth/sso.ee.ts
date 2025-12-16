@@ -1,11 +1,11 @@
-import { MEMBER_ROLE_NAME } from '@shared';
-import logger from '@/logging';
-import SsoProviderModel from '@/models/sso-provider.ee';
-import { AccountModel, MemberModel, TeamModel } from '@/models';
-import { jwtDecode } from 'jwt-decode';
-import { APIError } from 'better-auth';
-import config from '@/config';
-import { extractGroupsFromClaims } from '@/auth/sso-team-sync-cache.ee';
+import { MEMBER_ROLE_NAME } from "@shared";
+import { APIError } from "better-auth";
+import { jwtDecode } from "jwt-decode";
+import { extractGroupsFromClaims } from "@/auth/sso-team-sync-cache.ee";
+import config from "@/config";
+import logger from "@/logging";
+import { AccountModel, MemberModel, TeamModel } from "@/models";
+import SsoProviderModel from "@/models/sso-provider.ee";
 
 export const ssoConfig = {
   organizationProvisioning: {
@@ -51,7 +51,7 @@ export const ssoConfig = {
   domainVerification: {
     enabled: true,
   },
-}
+};
 
 /**
  * Synchronize user's organization role based on SSO claims.
@@ -63,7 +63,10 @@ export const ssoConfig = {
  * @param userId - The user's ID
  * @param userEmail - The user's email
  */
-export async function syncSsoRole(userId: string, userEmail: string): Promise<void> {
+export async function syncSsoRole(
+  userId: string,
+  userEmail: string,
+): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
 
   // Get the user's accounts and find the most recently used SSO account
@@ -227,7 +230,6 @@ export async function syncSsoRole(userId: string, userEmail: string): Promise<vo
   }
 }
 
-
 /**
  * Synchronize user's team memberships based on their SSO groups.
  * This is called after successful SSO login in the after hook.
@@ -235,7 +237,10 @@ export async function syncSsoRole(userId: string, userEmail: string): Promise<vo
  * @param userId - The user's ID
  * @param userEmail - The user's email
  */
-export async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
+export async function syncSsoTeams(
+  userId: string,
+  userEmail: string,
+): Promise<void> {
   logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
 
   // Only sync if enterprise license is activated
@@ -366,5 +371,3 @@ export async function syncSsoTeams(userId: string, userEmail: string): Promise<v
     );
   }
 }
-
-

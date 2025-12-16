@@ -390,50 +390,50 @@ export function SsoProvidersSettingsContent() {
           defaultValues={
             createConfig.config.providerType === "saml"
               ? {
-                providerId: createConfig.config.providerId || "",
-                issuer: createConfig.config.defaultSamlConfig?.issuer || "",
-                domain: "",
-                providerType: "saml" as const,
-                samlConfig: {
+                  providerId: createConfig.config.providerId || "",
                   issuer: createConfig.config.defaultSamlConfig?.issuer || "",
-                  entryPoint:
-                    createConfig.config.defaultSamlConfig?.entryPoint || "",
-                  cert: createConfig.config.defaultSamlConfig?.cert || "",
-                  callbackUrl:
-                    createConfig.config.defaultSamlConfig?.callbackUrl ||
-                    `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/saml2/sp/acs/{providerId}`,
-                  spMetadata: {},
-                  mapping:
-                    createConfig.config.defaultSamlConfig?.mapping || {},
-                },
-              }
-              : {
-                providerId: createConfig.config.providerId || "",
-                issuer: createConfig.config.defaultOidcConfig?.issuer || "",
-                domain: "",
-                providerType: "oidc" as const,
-                oidcConfig: {
-                  ...createConfig.config.defaultOidcConfig,
-                  issuer: createConfig.config.defaultOidcConfig?.issuer || "",
-                  discoveryEndpoint:
-                    createConfig.config.defaultOidcConfig
-                      ?.discoveryEndpoint || "",
-                  scopes: createConfig.config.defaultOidcConfig?.scopes || [
-                    "openid",
-                    "email",
-                    "profile",
-                  ],
-                  mapping: createConfig.config.defaultOidcConfig?.mapping || {
-                    id: "sub",
-                    email: "email",
-                    name: "name",
+                  domain: "",
+                  providerType: "saml" as const,
+                  samlConfig: {
+                    issuer: createConfig.config.defaultSamlConfig?.issuer || "",
+                    entryPoint:
+                      createConfig.config.defaultSamlConfig?.entryPoint || "",
+                    cert: createConfig.config.defaultSamlConfig?.cert || "",
+                    callbackUrl:
+                      createConfig.config.defaultSamlConfig?.callbackUrl ||
+                      `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/saml2/sp/acs/{providerId}`,
+                    spMetadata: {},
+                    mapping:
+                      createConfig.config.defaultSamlConfig?.mapping || {},
                   },
-                  clientId: "",
-                  clientSecret: "",
-                  pkce: !createConfig.config.disablePkce,
-                  overrideUserInfo: true,
-                },
-              }
+                }
+              : {
+                  providerId: createConfig.config.providerId || "",
+                  issuer: createConfig.config.defaultOidcConfig?.issuer || "",
+                  domain: "",
+                  providerType: "oidc" as const,
+                  oidcConfig: {
+                    ...createConfig.config.defaultOidcConfig,
+                    issuer: createConfig.config.defaultOidcConfig?.issuer || "",
+                    discoveryEndpoint:
+                      createConfig.config.defaultOidcConfig
+                        ?.discoveryEndpoint || "",
+                    scopes: createConfig.config.defaultOidcConfig?.scopes || [
+                      "openid",
+                      "email",
+                      "profile",
+                    ],
+                    mapping: createConfig.config.defaultOidcConfig?.mapping || {
+                      id: "sub",
+                      email: "email",
+                      name: "name",
+                    },
+                    clientId: "",
+                    clientSecret: "",
+                    pkce: !createConfig.config.disablePkce,
+                    overrideUserInfo: true,
+                  },
+                }
           }
           providerName={createConfig.config.name}
           hidePkce={createConfig.config.disablePkce}

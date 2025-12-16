@@ -552,6 +552,7 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `archestra-archestra-platform-mcp-k8s-operator`
   - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-archestra-platform-mcp-k8s-operator`
+    So, default value matches it.
   - Customize if using a different Helm release name or managing ServiceAccounts manually
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces

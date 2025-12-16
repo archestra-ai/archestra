@@ -27182,6 +27182,19 @@
                                 },
                                 "description": {
                                   "type": "string"
+                                },
+                                "default": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -27751,6 +27764,19 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "default": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
                             }
                           },
                           "required": [
@@ -28093,6 +28119,19 @@
                               },
                               "description": {
                                 "type": "string"
+                              },
+                              "default": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -28682,6 +28721,19 @@
                               },
                               "description": {
                                 "type": "string"
+                              },
+                              "default": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -29250,6 +29302,19 @@
                             },
                             "description": {
                               "type": "string"
+                            },
+                            "default": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
                             }
                           },
                           "required": [
@@ -29599,6 +29664,19 @@
                               },
                               "description": {
                                 "type": "string"
+                              },
+                              "default": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -32596,6 +32674,19 @@
                                         },
                                         "description": {
                                           "type": "string"
+                                        },
+                                        "default": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
                                         }
                                       },
                                       "required": [
@@ -33136,6 +33227,19 @@
                                     },
                                     "description": {
                                       "type": "string"
+                                    },
+                                    "default": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        }
+                                      ]
                                     }
                                   },
                                   "required": [
@@ -33405,6 +33509,19 @@
                                       },
                                       "description": {
                                         "type": "string"
+                                      },
+                                      "default": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -33973,6 +34090,19 @@
                                       },
                                       "description": {
                                         "type": "string"
+                                      },
+                                      "default": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -34516,6 +34646,19 @@
                                     },
                                     "description": {
                                       "type": "string"
+                                    },
+                                    "default": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        }
+                                      ]
                                     }
                                   },
                                   "required": [
@@ -34835,6 +34978,19 @@
                                       },
                                       "description": {
                                         "type": "string"
+                                      },
+                                      "default": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -35667,6 +35823,19 @@
                                       },
                                       "description": {
                                         "type": "string"
+                                      },
+                                      "default": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -36249,6 +36418,19 @@
                                       },
                                       "description": {
                                         "type": "string"
+                                      },
+                                      "default": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -36836,6 +37018,19 @@
                                       },
                                       "description": {
                                         "type": "string"
+                                      },
+                                      "default": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [

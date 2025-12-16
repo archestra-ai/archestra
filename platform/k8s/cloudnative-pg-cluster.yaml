@@ -1,0 +1,41 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: archestra-cnpg-cluster
+  namespace: archestra-dev
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:18
+  bootstrap:
+    initdb:
+      database: archestra_dev
+      owner: archestra
+      # Import configuration using microservice type
+      import:
+        type: microservice
+        databases:
+          - archestra_dev
+        source:
+          externalCluster: archestra-source-pg
+        postImportApplicationSQL:
+          - CREATE EXTENSION IF NOT EXISTS "uuid-ossp"
+          - CREATE EXTENSION IF NOT EXISTS "pg_trgm"
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "2000m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  externalClusters:
+    - name: archestra-source-pg
+      connectionParameters:
+        host: postgresql.archestra-dev.svc.cluster.local
+        user: archestra
+        dbname: postgres
+        port: "5432"
+      password:
+        name: archestra-pg-source-credentials
+        key: password

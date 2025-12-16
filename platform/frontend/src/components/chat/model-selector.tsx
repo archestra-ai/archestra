@@ -105,6 +105,13 @@ export function ModelSelector({
   }, [availableProviders, searchQuery]);
 
   const handleSelectModel = (model: string) => {
+    // If selecting the same model, just close the popover
+    if (model === selectedModel) {
+      setOpen(false);
+      setSearchQuery("");
+      return;
+    }
+
     // If there are messages, show warning dialog
     if (messageCount > 0) {
       setPendingModel(model);

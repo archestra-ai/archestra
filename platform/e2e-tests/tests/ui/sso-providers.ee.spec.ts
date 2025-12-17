@@ -86,7 +86,9 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
 
   // Check if we got redirected to sign-in (authentication failed)
   if (page.url().includes("/auth/sign-in")) {
-    console.log("API login appeared to fail (redirected to sign-in), trying UI fallback...");
+    console.log(
+      "API login appeared to fail (redirected to sign-in), trying UI fallback...",
+    );
     // Try logging in via UI as fallback
     await page.getByLabel("Email").fill(ADMIN_EMAIL);
     await page.getByLabel("Password").fill(ADMIN_PASSWORD);

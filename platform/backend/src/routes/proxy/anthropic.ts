@@ -1168,7 +1168,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = utils.userId.getUserId(request.headers);
+      const userId = await utils.userId.getUserId(request.headers);
       return handleMessages(
         request.body,
         request.headers,
@@ -1208,7 +1208,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
-      const userId = utils.userId.getUserId(request.headers);
+      const userId = await utils.userId.getUserId(request.headers);
       return handleMessages(
         request.body,
         request.headers,

@@ -95,11 +95,27 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
     const errorToast = page.locator('[role="alert"]').first();
     if (await errorToast.isVisible()) {
       const errorText = await errorToast.textContent().catch(() => null);
-      console.log(`UI Login failed with error: ${errorText}`);
+      if (
+        errorText &&
+        !errorText.includes("Default Admin Credentials Enabled")
+      ) {
+        console.log(`UI Login failed with error: ${errorText}`);
+      }
     }
 
     // Wait for login to complete and redirect away from sign-in
-    await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 45000 });
+    try {
+      await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 45000 });
+    } catch {
+      // If still on sign-in, try a hard reload and check URL again
+      // Sometimes state is stale or cookie needs a nudge
+      console.log(
+        "Still on sign-in after login, attempting reload to check session...",
+      );
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 15000 });
+    }
 
     // Navigate to SSO providers after UI login
     await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
@@ -271,7 +287,10 @@ async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
     // Check for error toast or message on the sign-in page
     const errorToast = ssoPage.locator('[role="alert"]').first();
     const errorText = await errorToast.textContent().catch(() => null);
-    if (errorText) {
+    if (
+      errorText &&
+      !errorText.includes("Default Admin Credentials Enabled")
+    ) {
       console.log(`SSO login failed with error: ${errorText}`);
     }
   }

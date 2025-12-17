@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import {
   ChevronDown,
   ChevronRight,
+  Filter,
   Loader2,
   Search,
   Server,
@@ -70,10 +71,9 @@ export function AssignToolsDialog({
       useDynamicTeamCredential?: boolean;
     }[]
   >([]);
-
-  // Track search query and origin filter
   const [searchQuery, setSearchQuery] = useState("");
   const [originFilter, setOriginFilter] = useState("all");
+  const [showAssignedOnly, setShowAssignedOnly] = useState(false);
 
   // Track expanded tools
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
@@ -102,7 +102,12 @@ export function AssignToolsDialog({
 
   const isLocalServerForBulk = selectedCatalogItem?.serverType === "local";
 
-  // Filter tools based on search query and origin
+  // Get set of assigned tool IDs for quick lookup
+  const assignedToolIds = useMemo(
+    () => new Set(agentToolRelations.map((at) => at.tool.id)),
+    [agentToolRelations],
+  );
+
   const filteredTools = useMemo(() => {
     let tools = mcpTools;
 
@@ -117,8 +122,25 @@ export function AssignToolsDialog({
       tools = tools.filter((tool) => tool.name.toLowerCase().includes(query));
     }
 
-    return tools;
-  }, [mcpTools, searchQuery, originFilter]);
+    // Filter by assigned-only if enabled
+    if (showAssignedOnly) {
+      tools = tools.filter((tool) => assignedToolIds.has(tool.id));
+    }
+
+    // Sort: assigned tools first, then alphabetically by name within each group
+    return [...tools].sort((a, b) => {
+      const aAssigned = assignedToolIds.has(a.id);
+      const bAssigned = assignedToolIds.has(b.id);
+
+      // If assignment status differs, assigned comes first
+      if (aAssigned !== bAssigned) {
+        return aAssigned ? -1 : 1;
+      }
+
+      // Within the same group, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  }, [mcpTools, searchQuery, originFilter, assignedToolIds, showAssignedOnly]);
 
   // Initialize selected tools when agent tools load
   useEffect(() => {
@@ -332,7 +354,18 @@ export function AssignToolsDialog({
   ]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(newOpen) => {
+        onOpenChange(newOpen);
+        if (!newOpen) {
+          // Reset filters when dialog closes
+          setSearchQuery("");
+          setOriginFilter("all");
+          setShowAssignedOnly(false);
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Assign tools to {agent.name} profile</DialogTitle>
@@ -366,14 +399,31 @@ export function AssignToolsDialog({
             className="w-full"
           />
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search tools by name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search tools by name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant={showAssignedOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAssignedOnly(!showAssignedOnly)}
+              className="flex items-center gap-1.5 whitespace-nowrap h-9"
+              title={showAssignedOnly ? "Show all tools" : "Show assigned only"}
+            >
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">Assigned</span>
+              {showAssignedOnly && (
+                <span className="text-xs bg-primary-foreground text-primary rounded-full px-1.5 py-0.5">
+                  {assignedToolIds.size}
+                </span>
+              )}
+            </Button>
           </div>
         </div>
 

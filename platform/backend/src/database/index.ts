@@ -11,5 +11,7 @@ const db = drizzle({
 
 instrumentDrizzleClient(db, { dbSystem: "postgresql" });
 
+export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export default db;
 export { schema };

@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { RoleMappingForm } from "./role-mapping-form";
-import { TeamSyncConfigForm } from "./team-sync-config-form";
+import { RoleMappingForm } from "./role-mapping-form.ee";
+import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
 interface OidcConfigFormProps {
   form: UseFormReturn<SsoProviderFormValues>;

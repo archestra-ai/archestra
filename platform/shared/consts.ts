@@ -80,7 +80,7 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
 export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
-export const DEFAULT_PROFILE_NAME = "Default Profile with Archestra";
+export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -103,6 +103,13 @@ export const MCP_CATALOG_API_BASE_URL =
  * Clients can pass this header to associate interactions with their own agent identifiers.
  */
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
+
+/**
+ * Header name for user ID.
+ * Clients can pass this header to associate interactions with a specific user (by their Archestra user UUID).
+ * Particularly useful for identifying which user was using the Archestra Chat.
+ */
+export const USER_ID_HEADER = "X-Archestra-User-Id";
 
 /**
  * SSO Provider IDs - these are the canonical provider identifiers used for:

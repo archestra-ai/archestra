@@ -8168,9 +8168,13 @@ export type GetInteractionsData = {
          * Filter by external agent ID (from X-Archestra-Agent-Id header)
          */
         externalAgentId?: string;
+        /**
+         * Filter by user ID (from X-Archestra-User-Id header)
+         */
+        userId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -8244,6 +8248,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -8261,6 +8266,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -8278,6 +8284,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -8380,6 +8387,84 @@ export type GetUniqueExternalAgentIdsResponses = {
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
 
+export type GetUniqueUserIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/user-ids';
+};
+
+export type GetUniqueUserIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueUserIdsError = GetUniqueUserIdsErrors[keyof GetUniqueUserIdsErrors];
+
+export type GetUniqueUserIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+    }>;
+};
+
+export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+
 export type GetInteractionData = {
     body?: never;
     path: {
@@ -8456,6 +8541,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -8473,6 +8559,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -8490,6 +8577,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -14230,1122 +14318,6 @@ export type InitializeSecretsManagerResponses = {
 
 export type InitializeSecretsManagerResponse = InitializeSecretsManagerResponses[keyof InitializeSecretsManagerResponses];
 
-export type GetPublicSsoProvidersData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/sso-providers/public';
-};
-
-export type GetPublicSsoProvidersErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPublicSsoProvidersError = GetPublicSsoProvidersErrors[keyof GetPublicSsoProvidersErrors];
-
-export type GetPublicSsoProvidersResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        providerId: string;
-    }>;
-};
-
-export type GetPublicSsoProvidersResponse = GetPublicSsoProvidersResponses[keyof GetPublicSsoProvidersResponses];
-
-export type GetSsoProvidersData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/sso-providers';
-};
-
-export type GetSsoProvidersErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetSsoProvidersError = GetSsoProvidersErrors[keyof GetSsoProvidersErrors];
-
-export type GetSsoProvidersResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
-        oidcConfig?: {
-            issuer: string;
-            pkce: boolean;
-            clientId: string;
-            clientSecret: string;
-            authorizationEndpoint?: string;
-            discoveryEndpoint: string;
-            userInfoEndpoint?: string;
-            scopes?: Array<string>;
-            overrideUserInfo?: boolean;
-            tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
-            jwksEndpoint?: string;
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                image?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
-         */
-        samlConfig?: {
-            issuer: string;
-            entryPoint: string;
-            cert: string;
-            callbackUrl: string;
-            audience?: string;
-            idpMetadata?: {
-                metadata?: string;
-                entityID?: string;
-                entityURL?: string;
-                redirectURL?: string;
-                cert?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-                singleSignOnService?: Array<{
-                    Binding: string;
-                    Location: string;
-                }>;
-            };
-            spMetadata: {
-                metadata?: string;
-                entityID?: string;
-                binding?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-            };
-            wantAssertionsSigned?: boolean;
-            signatureAlgorithm?: string;
-            digestAlgorithm?: string;
-            identifierFormat?: string;
-            privateKey?: string;
-            decryptionPvk?: string;
-            additionalParams?: {
-                [key: string]: unknown;
-            };
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                firstName?: string;
-                lastName?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        roleMapping?: {
-            rules?: Array<{
-                expression: string;
-                role: string;
-            }>;
-            defaultRole?: string;
-            strictMode?: boolean;
-            skipRoleSync?: boolean;
-        };
-        teamSyncConfig?: {
-            groupsExpression?: string;
-            enabled?: boolean;
-        };
-        userId: string | null;
-        providerId: string;
-        organizationId: string | null;
-        domain: string;
-        domainVerified: boolean | null;
-    }>;
-};
-
-export type GetSsoProvidersResponse = GetSsoProvidersResponses[keyof GetSsoProvidersResponses];
-
-export type CreateSsoProviderData = {
-    body: {
-        issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
-        oidcConfig?: {
-            issuer: string;
-            pkce: boolean;
-            clientId: string;
-            clientSecret: string;
-            authorizationEndpoint?: string;
-            discoveryEndpoint: string;
-            userInfoEndpoint?: string;
-            scopes?: Array<string>;
-            overrideUserInfo?: boolean;
-            tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
-            jwksEndpoint?: string;
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                image?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
-         */
-        samlConfig?: {
-            issuer: string;
-            entryPoint: string;
-            cert: string;
-            callbackUrl: string;
-            audience?: string;
-            idpMetadata?: {
-                metadata?: string;
-                entityID?: string;
-                entityURL?: string;
-                redirectURL?: string;
-                cert?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-                singleSignOnService?: Array<{
-                    Binding: string;
-                    Location: string;
-                }>;
-            };
-            spMetadata: {
-                metadata?: string;
-                entityID?: string;
-                binding?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-            };
-            wantAssertionsSigned?: boolean;
-            signatureAlgorithm?: string;
-            digestAlgorithm?: string;
-            identifierFormat?: string;
-            privateKey?: string;
-            decryptionPvk?: string;
-            additionalParams?: {
-                [key: string]: unknown;
-            };
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                firstName?: string;
-                lastName?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        roleMapping?: {
-            rules?: Array<{
-                expression: string;
-                role: string;
-            }>;
-            defaultRole?: string;
-            strictMode?: boolean;
-            skipRoleSync?: boolean;
-        };
-        teamSyncConfig?: {
-            groupsExpression?: string;
-            enabled?: boolean;
-        };
-        userId?: string | null;
-        providerId: string;
-        domain: string;
-        domainVerified?: boolean | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/sso-providers';
-};
-
-export type CreateSsoProviderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateSsoProviderError = CreateSsoProviderErrors[keyof CreateSsoProviderErrors];
-
-export type CreateSsoProviderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
-        oidcConfig?: {
-            issuer: string;
-            pkce: boolean;
-            clientId: string;
-            clientSecret: string;
-            authorizationEndpoint?: string;
-            discoveryEndpoint: string;
-            userInfoEndpoint?: string;
-            scopes?: Array<string>;
-            overrideUserInfo?: boolean;
-            tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
-            jwksEndpoint?: string;
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                image?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
-         */
-        samlConfig?: {
-            issuer: string;
-            entryPoint: string;
-            cert: string;
-            callbackUrl: string;
-            audience?: string;
-            idpMetadata?: {
-                metadata?: string;
-                entityID?: string;
-                entityURL?: string;
-                redirectURL?: string;
-                cert?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-                singleSignOnService?: Array<{
-                    Binding: string;
-                    Location: string;
-                }>;
-            };
-            spMetadata: {
-                metadata?: string;
-                entityID?: string;
-                binding?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-            };
-            wantAssertionsSigned?: boolean;
-            signatureAlgorithm?: string;
-            digestAlgorithm?: string;
-            identifierFormat?: string;
-            privateKey?: string;
-            decryptionPvk?: string;
-            additionalParams?: {
-                [key: string]: unknown;
-            };
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                firstName?: string;
-                lastName?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        roleMapping?: {
-            rules?: Array<{
-                expression: string;
-                role: string;
-            }>;
-            defaultRole?: string;
-            strictMode?: boolean;
-            skipRoleSync?: boolean;
-        };
-        teamSyncConfig?: {
-            groupsExpression?: string;
-            enabled?: boolean;
-        };
-        userId: string | null;
-        providerId: string;
-        organizationId: string | null;
-        domain: string;
-        domainVerified: boolean | null;
-    };
-};
-
-export type CreateSsoProviderResponse = CreateSsoProviderResponses[keyof CreateSsoProviderResponses];
-
-export type DeleteSsoProviderData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/sso-providers/{id}';
-};
-
-export type DeleteSsoProviderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteSsoProviderError = DeleteSsoProviderErrors[keyof DeleteSsoProviderErrors];
-
-export type DeleteSsoProviderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteSsoProviderResponse = DeleteSsoProviderResponses[keyof DeleteSsoProviderResponses];
-
-export type GetSsoProviderData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/sso-providers/{id}';
-};
-
-export type GetSsoProviderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetSsoProviderError = GetSsoProviderErrors[keyof GetSsoProviderErrors];
-
-export type GetSsoProviderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
-        oidcConfig?: {
-            issuer: string;
-            pkce: boolean;
-            clientId: string;
-            clientSecret: string;
-            authorizationEndpoint?: string;
-            discoveryEndpoint: string;
-            userInfoEndpoint?: string;
-            scopes?: Array<string>;
-            overrideUserInfo?: boolean;
-            tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
-            jwksEndpoint?: string;
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                image?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
-         */
-        samlConfig?: {
-            issuer: string;
-            entryPoint: string;
-            cert: string;
-            callbackUrl: string;
-            audience?: string;
-            idpMetadata?: {
-                metadata?: string;
-                entityID?: string;
-                entityURL?: string;
-                redirectURL?: string;
-                cert?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-                singleSignOnService?: Array<{
-                    Binding: string;
-                    Location: string;
-                }>;
-            };
-            spMetadata: {
-                metadata?: string;
-                entityID?: string;
-                binding?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-            };
-            wantAssertionsSigned?: boolean;
-            signatureAlgorithm?: string;
-            digestAlgorithm?: string;
-            identifierFormat?: string;
-            privateKey?: string;
-            decryptionPvk?: string;
-            additionalParams?: {
-                [key: string]: unknown;
-            };
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                firstName?: string;
-                lastName?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        roleMapping?: {
-            rules?: Array<{
-                expression: string;
-                role: string;
-            }>;
-            defaultRole?: string;
-            strictMode?: boolean;
-            skipRoleSync?: boolean;
-        };
-        teamSyncConfig?: {
-            groupsExpression?: string;
-            enabled?: boolean;
-        };
-        userId: string | null;
-        providerId: string;
-        organizationId: string | null;
-        domain: string;
-        domainVerified: boolean | null;
-    };
-};
-
-export type GetSsoProviderResponse = GetSsoProviderResponses[keyof GetSsoProviderResponses];
-
-export type UpdateSsoProviderData = {
-    body?: {
-        issuer?: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
-        oidcConfig?: {
-            issuer: string;
-            pkce: boolean;
-            clientId: string;
-            clientSecret: string;
-            authorizationEndpoint?: string;
-            discoveryEndpoint: string;
-            userInfoEndpoint?: string;
-            scopes?: Array<string>;
-            overrideUserInfo?: boolean;
-            tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
-            jwksEndpoint?: string;
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                image?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
-         */
-        samlConfig?: {
-            issuer: string;
-            entryPoint: string;
-            cert: string;
-            callbackUrl: string;
-            audience?: string;
-            idpMetadata?: {
-                metadata?: string;
-                entityID?: string;
-                entityURL?: string;
-                redirectURL?: string;
-                cert?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-                singleSignOnService?: Array<{
-                    Binding: string;
-                    Location: string;
-                }>;
-            };
-            spMetadata: {
-                metadata?: string;
-                entityID?: string;
-                binding?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-            };
-            wantAssertionsSigned?: boolean;
-            signatureAlgorithm?: string;
-            digestAlgorithm?: string;
-            identifierFormat?: string;
-            privateKey?: string;
-            decryptionPvk?: string;
-            additionalParams?: {
-                [key: string]: unknown;
-            };
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                firstName?: string;
-                lastName?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        roleMapping?: {
-            rules?: Array<{
-                expression: string;
-                role: string;
-            }>;
-            defaultRole?: string;
-            strictMode?: boolean;
-            skipRoleSync?: boolean;
-        };
-        teamSyncConfig?: {
-            groupsExpression?: string;
-            enabled?: boolean;
-        };
-        providerId?: string;
-        domain?: string;
-        domainVerified?: boolean | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/sso-providers/{id}';
-};
-
-export type UpdateSsoProviderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateSsoProviderError = UpdateSsoProviderErrors[keyof UpdateSsoProviderErrors];
-
-export type UpdateSsoProviderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
-        oidcConfig?: {
-            issuer: string;
-            pkce: boolean;
-            clientId: string;
-            clientSecret: string;
-            authorizationEndpoint?: string;
-            discoveryEndpoint: string;
-            userInfoEndpoint?: string;
-            scopes?: Array<string>;
-            overrideUserInfo?: boolean;
-            tokenEndpoint?: string;
-            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
-            jwksEndpoint?: string;
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                image?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
-         */
-        samlConfig?: {
-            issuer: string;
-            entryPoint: string;
-            cert: string;
-            callbackUrl: string;
-            audience?: string;
-            idpMetadata?: {
-                metadata?: string;
-                entityID?: string;
-                entityURL?: string;
-                redirectURL?: string;
-                cert?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-                singleSignOnService?: Array<{
-                    Binding: string;
-                    Location: string;
-                }>;
-            };
-            spMetadata: {
-                metadata?: string;
-                entityID?: string;
-                binding?: string;
-                privateKey?: string;
-                privateKeyPass?: string;
-                isAssertionEncrypted?: boolean;
-                encPrivateKey?: string;
-                encPrivateKeyPass?: string;
-            };
-            wantAssertionsSigned?: boolean;
-            signatureAlgorithm?: string;
-            digestAlgorithm?: string;
-            identifierFormat?: string;
-            privateKey?: string;
-            decryptionPvk?: string;
-            additionalParams?: {
-                [key: string]: unknown;
-            };
-            /**
-             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
-             */
-            mapping?: {
-                id?: string;
-                email?: string;
-                emailVerified?: string;
-                name?: string;
-                firstName?: string;
-                lastName?: string;
-                extraFields?: {
-                    [key: string]: string;
-                };
-            };
-        };
-        roleMapping?: {
-            rules?: Array<{
-                expression: string;
-                role: string;
-            }>;
-            defaultRole?: string;
-            strictMode?: boolean;
-            skipRoleSync?: boolean;
-        };
-        teamSyncConfig?: {
-            groupsExpression?: string;
-            enabled?: boolean;
-        };
-        userId: string | null;
-        providerId: string;
-        organizationId: string | null;
-        domain: string;
-        domainVerified: boolean | null;
-    };
-};
-
-export type UpdateSsoProviderResponse = UpdateSsoProviderResponses[keyof UpdateSsoProviderResponses];
-
 export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
@@ -17971,6 +16943,1122 @@ export type UpdateRoleResponses = {
 };
 
 export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
+
+export type GetPublicSsoProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers/public';
+};
+
+export type GetPublicSsoProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPublicSsoProvidersError = GetPublicSsoProvidersErrors[keyof GetPublicSsoProvidersErrors];
+
+export type GetPublicSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        providerId: string;
+    }>;
+};
+
+export type GetPublicSsoProvidersResponse = GetPublicSsoProvidersResponses[keyof GetPublicSsoProvidersResponses];
+
+export type GetSsoProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers';
+};
+
+export type GetSsoProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProvidersError = GetSsoProvidersErrors[keyof GetSsoProvidersErrors];
+
+export type GetSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    }>;
+};
+
+export type GetSsoProvidersResponse = GetSsoProvidersResponses[keyof GetSsoProvidersResponses];
+
+export type CreateSsoProviderData = {
+    body: {
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId?: string | null;
+        providerId: string;
+        domain: string;
+        domainVerified?: boolean | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers';
+};
+
+export type CreateSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateSsoProviderError = CreateSsoProviderErrors[keyof CreateSsoProviderErrors];
+
+export type CreateSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type CreateSsoProviderResponse = CreateSsoProviderResponses[keyof CreateSsoProviderResponses];
+
+export type DeleteSsoProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type DeleteSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteSsoProviderError = DeleteSsoProviderErrors[keyof DeleteSsoProviderErrors];
+
+export type DeleteSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteSsoProviderResponse = DeleteSsoProviderResponses[keyof DeleteSsoProviderResponses];
+
+export type GetSsoProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type GetSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProviderError = GetSsoProviderErrors[keyof GetSsoProviderErrors];
+
+export type GetSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type GetSsoProviderResponse = GetSsoProviderResponses[keyof GetSsoProviderResponses];
+
+export type UpdateSsoProviderData = {
+    body?: {
+        issuer?: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        providerId?: string;
+        domain?: string;
+        domainVerified?: boolean | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type UpdateSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateSsoProviderError = UpdateSsoProviderErrors[keyof UpdateSsoProviderErrors];
+
+export type UpdateSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type UpdateSsoProviderResponse = UpdateSsoProviderResponses[keyof UpdateSsoProviderResponses];
 
 export type DeleteTeamVaultFolderData = {
     body?: never;

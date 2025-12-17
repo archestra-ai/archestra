@@ -17,6 +17,8 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
+    # Secrets manager configuration for BYOS tests
+    ARCHESTRA_SECRETS_MANAGER: "Vault"
     # Vault configuration for BYOS tests
     # Vault runs as a Kubernetes service in the cluster
     # Pods access via K8s service name, host/Playwright access via NodePort mapped to 8200

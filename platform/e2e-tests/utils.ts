@@ -7,6 +7,7 @@ import {
   E2eTestId,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  UI_BASE_URL,
 } from "./consts";
 import { goToPage } from "./fixtures";
 import {
@@ -109,10 +110,23 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 }) {
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
+
+  // Verify we're actually on the registry page (handle redirect issues)
+  await expect(page).toHaveURL(/\/mcp-catalog\/registry/, { timeout: 10000 });
+
+  // Poll for manage-tools button to appear (MCP tool discovery is async)
+  // After installing, the server needs to: start → connect → discover tools → save to DB
   const manageToolsButton = page.getByTestId(
     `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
   );
-  await manageToolsButton.waitFor({ state: "visible", timeout: 20_000 });
+
+  await expect(async () => {
+    // Re-navigate in case the page got stale
+    await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
+    await page.waitForLoadState("networkidle");
+    await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
+  }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
+
   await manageToolsButton.click();
   await page
     .getByRole("button", { name: "Assign Tool to Profiles" })
@@ -316,4 +330,60 @@ export async function clickButton({
   }
 
   return await button.click();
+}
+
+/**
+ * Login via API (bypasses UI form for reliability).
+ * Handles rate limiting with exponential backoff retry.
+ *
+ * @param page - Playwright page (uses page.request for API calls)
+ * @param email - User email
+ * @param password - User password
+ * @param maxRetries - Maximum number of retries (default 3)
+ * @returns true if login succeeded
+ */
+export async function loginViaApi(
+  page: Page,
+  email: string,
+  password: string,
+  maxRetries = 3,
+): Promise<boolean> {
+  let delay = 1000;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await page.request.post(
+      `${UI_BASE_URL}/api/auth/sign-in/email`,
+      {
+        data: { email, password },
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+
+    if (response.ok()) {
+      return true;
+    }
+
+    // If rate limited or server error, wait and retry
+    if (
+      (response.status() === 429 || response.status() >= 500) &&
+      attempt < maxRetries
+    ) {
+      console.log(
+        `API Login retry ${attempt + 1}/${maxRetries} due to status ${response.status()}`,
+      );
+      await page.waitForTimeout(delay);
+      delay *= 2; // Exponential backoff
+      continue;
+    }
+
+    if (!response.ok()) {
+      console.log(
+        `API Login failed: ${response.status()} ${await response.text().catch(() => "No body")}`,
+      );
+    }
+
+    return false;
+  }
+
+  return false;
 }

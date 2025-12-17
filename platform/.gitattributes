@@ -32,5 +32,7 @@ Dockerfile text eol=lf
 *.tgz binary
 
 # Hide Drizzle ORM snapshots in GitHub pull requests
-backend/src/database/migrations/meta/** linguist-generated=true -diff
-backend/src/database/migrations/meta/*.json linguist-generated=true -diff
+backend/src/database/migrations/meta/** linguist-generated=true
+backend/src/database/migrations/meta/** -diff
+backend/src/database/migrations/meta/*.json linguist-generated=true
+backend/src/database/migrations/meta/*.json -diff

@@ -34,6 +34,12 @@ export interface TestFixtures {
   getTeamByName: typeof getTeamByName;
   addTeamMember: typeof addTeamMember;
   removeTeamMember: typeof removeTeamMember;
+  createLimit: typeof createLimit;
+  deleteLimit: typeof deleteLimit;
+  getLimits: typeof getLimits;
+  createTokenPrice: typeof createTokenPrice;
+  deleteTokenPrice: typeof deleteTokenPrice;
+  getTokenPrices: typeof getTokenPrices;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -317,6 +323,11 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
 /**
  * Wait for an agent-tool to be registered with retry/polling logic.
  * This helps avoid race conditions when a tool is registered asynchronously.
+ * In CI with parallel workers, tool registration can take longer due to resource contention.
+ *
+ * IMPORTANT: Uses server-side filtering by agentId to avoid pagination issues.
+ * The default API limit is 20 items, so without filtering, the tool might not
+ * appear in results if there are many agent-tools in the database.
  */
 const waitForAgentTool = async (
   request: APIRequestContext,
@@ -327,19 +338,23 @@ const waitForAgentTool = async (
     delayMs?: number;
   },
 ): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
-  const maxAttempts = options?.maxAttempts ?? 10;
-  const delayMs = options?.delayMs ?? 500;
+  // Increased defaults for CI stability: 20 attempts × 1000ms = 20 seconds total wait
+  const maxAttempts = options?.maxAttempts ?? 20;
+  const delayMs = options?.delayMs ?? 1000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Use server-side filtering by agentId and increase limit to avoid pagination issues
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/agent-tools",
+      urlSuffix: `/api/agent-tools?agentId=${agentId}&limit=100`,
       ignoreStatusCheck: true,
     });
 
     if (agentToolsResponse.ok()) {
       const agentTools = await agentToolsResponse.json();
+      // Defense-in-depth: validate both agentId AND toolName client-side
+      // in case the API silently ignores unknown query params
       const foundTool = agentTools.data.find(
         (at: { agent: { id: string }; tool: { name: string } }) =>
           at.agent.id === agentId && at.tool.name === toolName,
@@ -423,6 +438,107 @@ export const removeTeamMember = async (
     urlSuffix: `/api/teams/${teamId}/members/${userId}`,
   });
 
+/**
+ * Create a limit (token cost, mcp_server_calls, or tool_calls)
+ * (authnz is handled by the authenticated session)
+ */
+const createLimit = async (
+  request: APIRequestContext,
+  limit: {
+    entityType: "organization" | "team" | "agent";
+    entityId: string;
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls";
+    limitValue: number;
+    model?: string[];
+    mcpServerName?: string;
+    toolName?: string;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/limits",
+    data: limit,
+  });
+
+/**
+ * Delete a limit by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteLimit = async (request: APIRequestContext, limitId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/limits/${limitId}`,
+  });
+
+/**
+ * Get limits with optional filtering
+ * (authnz is handled by the authenticated session)
+ */
+const getLimits = async (
+  request: APIRequestContext,
+  entityType?: "organization" | "team" | "agent",
+  entityId?: string,
+) => {
+  const params = new URLSearchParams();
+  if (entityType) params.append("entityType", entityType);
+  if (entityId) params.append("entityId", entityId);
+  const queryString = params.toString();
+  return makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/limits${queryString ? `?${queryString}` : ""}`,
+  });
+};
+
+/**
+ * Create a token price for a model
+ * (authnz is handled by the authenticated session)
+ */
+const createTokenPrice = async (
+  request: APIRequestContext,
+  tokenPrice: {
+    provider: "openai" | "anthropic" | "gemini";
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/token-prices",
+    data: tokenPrice,
+    ignoreStatusCheck: true, // May return 409 if already exists
+  });
+
+/**
+ * Delete a token price by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteTokenPrice = async (
+  request: APIRequestContext,
+  tokenPriceId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/token-prices/${tokenPriceId}`,
+    ignoreStatusCheck: true, // May already be deleted
+  });
+
+/**
+ * Get all token prices
+ * (authnz is handled by the authenticated session)
+ */
+const getTokenPrices = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/token-prices",
+  });
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -481,6 +597,24 @@ export const test = base.extend<TestFixtures>({
   },
   removeTeamMember: async ({}, use) => {
     await use(removeTeamMember);
+  },
+  createLimit: async ({}, use) => {
+    await use(createLimit);
+  },
+  deleteLimit: async ({}, use) => {
+    await use(deleteLimit);
+  },
+  getLimits: async ({}, use) => {
+    await use(getLimits);
+  },
+  createTokenPrice: async ({}, use) => {
+    await use(createTokenPrice);
+  },
+  deleteTokenPrice: async ({}, use) => {
+    await use(deleteTokenPrice);
+  },
+  getTokenPrices: async ({}, use) => {
+    await use(getTokenPrices);
   },
   /**
    * Admin request - same auth as default `request` fixture

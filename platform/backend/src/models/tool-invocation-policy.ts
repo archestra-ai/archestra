@@ -1,6 +1,6 @@
+import { isArchestraMcpServerTool } from "@shared";
 import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
-import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
 import AgentToolModel from "./agent-tool";

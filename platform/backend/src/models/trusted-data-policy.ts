@@ -1,6 +1,6 @@
+import { isArchestraMcpServerTool } from "@shared";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
-import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 

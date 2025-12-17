@@ -1,3 +1,4 @@
+import { isArchestraMcpServerTool } from "@shared";
 import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
 
@@ -32,14 +33,18 @@ export const evaluatePolicies = async (
   // Filter out disabled tools (not in request's tools list)
   // This is required because otherwise the tool invocation policies will be evaluated
   // for tools that are disabled during chat session.
+  // Note: archestra__* tools are always enabled (built-in tools that bypass policies)
+  const isToolEnabled = (toolName: string) =>
+    isArchestraMcpServerTool(toolName) || enabledToolNames?.has(toolName);
+
   let disabledToolNames: string[] = [];
   let filteredToolCalls = toolCalls;
   if (enabledToolNames && enabledToolNames.size > 0) {
     disabledToolNames = toolCalls
-      .filter((tc) => !enabledToolNames.has(tc.toolCallName))
+      .filter((tc) => !isToolEnabled(tc.toolCallName))
       .map((tc) => tc.toolCallName);
     filteredToolCalls = toolCalls.filter((tc) =>
-      enabledToolNames.has(tc.toolCallName),
+      isToolEnabled(tc.toolCallName),
     );
     if (disabledToolNames.length > 0) {
       logger.info(

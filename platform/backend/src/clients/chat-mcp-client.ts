@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { isArchestraMcpServerTool } from "@shared";
 import { jsonSchema, type Tool } from "ai";
-import {
-  executeArchestraTool,
-  isArchestraMcpServerTool,
-} from "@/archestra-mcp-server";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentTeamModel, TeamModel, TeamTokenModel, ToolModel } from "@/models";

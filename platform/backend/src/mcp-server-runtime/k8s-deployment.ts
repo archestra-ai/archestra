@@ -562,6 +562,60 @@ export default class K8sDeployment {
   }
 
   /**
+   * Ensure HTTP server configuration (Service and URL) is set up
+   */
+  private async ensureHttpServerConfigured(): Promise<void> {
+    const needsHttp = await this.needsHttpPort();
+    if (!needsHttp) {
+      return;
+    }
+
+    const catalogItem = await this.getCatalogItem();
+    const httpPort = catalogItem?.localConfig?.httpPort || 8080;
+    const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+
+    // Ensure Service exists
+    await this.createServiceForHttpServer(httpPort);
+
+    // Resolve HTTP Endpoint URL
+    let baseUrl: string;
+    if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+      // In-cluster: use service DNS name
+      const serviceName = `${this.deploymentName}-service`;
+      baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
+    } else {
+      // Local dev: get NodePort from service
+      const serviceName = `${this.deploymentName}-service`;
+      try {
+        const service = await this.k8sApi.readNamespacedService({
+          name: serviceName,
+          namespace: this.namespace,
+        });
+
+        const nodePort = service.spec?.ports?.[0]?.nodePort;
+        if (!nodePort) {
+          throw new Error(`Service ${serviceName} has no NodePort assigned`);
+        }
+
+        baseUrl = `http://localhost:${nodePort}`;
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Could not resolve NodePort for service ${serviceName}`,
+        );
+        return;
+      }
+    }
+
+    // Set the endpoint URL
+    this.httpEndpointUrl = `${baseUrl}${httpPath}`;
+
+    logger.info(
+      `HTTP endpoint URL for ${this.deploymentName}: ${this.httpEndpointUrl}`,
+    );
+  }
+
+  /**
    * Create or start the deployment for this MCP server
    */
   async startOrCreateDeployment(): Promise<void> {
@@ -622,45 +676,8 @@ export default class K8sDeployment {
             await this.assignHttpPortIfNeeded(pod);
           }
 
-          // Set HTTP endpoint URL if this is an HTTP server
-          const needsHttp = await this.needsHttpPort();
-          if (needsHttp) {
-            const catalogItem = await this.getCatalogItem();
-            const httpPort = catalogItem?.localConfig?.httpPort || 8080;
-            const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
-
-            // Use service DNS for in-cluster, NodePort for local dev
-            let baseUrl: string | undefined;
-            if (
-              config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
-            ) {
-              const serviceName = `${this.deploymentName}-service`;
-              baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
-            } else {
-              // Local dev: get NodePort from service
-              const serviceName = `${this.deploymentName}-service`;
-              try {
-                const service = await this.k8sApi.readNamespacedService({
-                  name: serviceName,
-                  namespace: this.namespace,
-                });
-
-                const nodePort = service.spec?.ports?.[0]?.nodePort;
-                if (nodePort) {
-                  baseUrl = `http://localhost:${nodePort}`;
-                }
-              } catch (error) {
-                logger.error(
-                  { err: error },
-                  `Could not read service ${serviceName} for existing deployment`,
-                );
-              }
-            }
-
-            if (baseUrl) {
-              this.httpEndpointUrl = `${baseUrl}${httpPath}`;
-            }
-          }
+          // Ensure HTTP configuration is set up
+          await this.ensureHttpServerConfigured();
 
           logger.info(`Deployment ${this.deploymentName} is already running`);
           return;
@@ -671,6 +688,9 @@ export default class K8sDeployment {
           `Deployment ${this.deploymentName} exists but is not yet ready`,
         );
         this.state = "pending";
+
+        // Even if pending, ensure HTTP configuration (Service + URL) is set up
+        await this.ensureHttpServerConfigured();
         return;
         // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
@@ -728,42 +748,8 @@ export default class K8sDeployment {
 
       logger.info(`Deployment ${this.deploymentName} created`);
 
-      // For HTTP servers, create a K8s Service and set endpoint URL
-      if (needsHttp) {
-        await this.createServiceForHttpServer(httpPort);
-
-        // Get HTTP path from config (default to /mcp)
-        const httpPath = catalogItem.localConfig.httpPath || "/mcp";
-
-        // Use service DNS for in-cluster, NodePort for local dev
-        let baseUrl: string;
-        if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
-          // In-cluster: use service DNS name
-          const serviceName = `${this.deploymentName}-service`;
-          baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
-        } else {
-          // Local dev: get NodePort from service
-          const serviceName = `${this.deploymentName}-service`;
-          const service = await this.k8sApi.readNamespacedService({
-            name: serviceName,
-            namespace: this.namespace,
-          });
-
-          const nodePort = service.spec?.ports?.[0]?.nodePort;
-          if (!nodePort) {
-            throw new Error(`Service ${serviceName} has no NodePort assigned`);
-          }
-
-          baseUrl = `http://localhost:${nodePort}`;
-        }
-
-        // Append the HTTP path
-        this.httpEndpointUrl = `${baseUrl}${httpPath}`;
-
-        logger.info(
-          `HTTP endpoint URL for ${this.deploymentName}: ${this.httpEndpointUrl}`,
-        );
-      }
+      // Ensure HTTP configuration is set up
+      await this.ensureHttpServerConfigured();
 
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       this.state = "running";

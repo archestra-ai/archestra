@@ -392,9 +392,6 @@ importers:
       react-day-picker:
         specifier: ^9.12.0
         version: 9.12.0(react@19.2.1)
-      react-dom:
-        specifier: 19.2.1
-        version: 19.2.1(react@19.2.1)
       react-error-boundary:
         specifier: ^6.0.0
         version: 6.0.0(react@19.2.1)
@@ -441,9 +438,6 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.1.17
-      '@testing-library/dom':
-        specifier: ^10.4.1
-        version: 10.4.1
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -459,9 +453,6 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.2.7
-      '@types/react-dom':
-        specifier: ^19
-        version: 19.2.3(@types/react@19.2.7)
       '@types/react-syntax-highlighter':
         specifier: ^15.5.13
         version: 15.5.13
@@ -474,9 +465,6 @@ importers:
       knip:
         specifier: ^5.72.0
         version: 5.72.0(@types/node@24.10.1)(typescript@5.9.3)
-      tailwindcss:
-        specifier: ^4
-        version: 4.1.17
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
@@ -11710,6 +11698,7 @@ snapshots:
   '@types/react-dom@19.2.3(@types/react@19.2.7)':
     dependencies:
       '@types/react': 19.2.7
+    optional: true
 
   '@types/react-syntax-highlighter@15.5.13':
     dependencies:

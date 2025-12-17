@@ -46,7 +46,10 @@ export class AgentToolAutoPolicyService {
     );
 
     if (!chatApiKey?.secretId) {
-      logger.debug({ organizationId }, "isAvailable: no Anthropic API key configured");
+      logger.debug(
+        { organizationId },
+        "isAvailable: no Anthropic API key configured",
+      );
       return false;
     }
 

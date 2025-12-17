@@ -46,7 +46,8 @@ export class PolicyConfigSubagent {
   static readonly SUBAGENT_NAME = "Policy Configuration Subagent";
 
   // Analysis prompt template (exposed for UI display)
-  static readonly ANALYSIS_PROMPT_TEMPLATE = `Analyze this MCP tool and determine security policies:
+  static readonly ANALYSIS_PROMPT_TEMPLATE =
+    `Analyze this MCP tool and determine security policies:
 
 Tool: {tool.name}
 Description: {tool.description}

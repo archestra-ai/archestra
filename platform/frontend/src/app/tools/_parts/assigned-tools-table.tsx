@@ -180,7 +180,11 @@ export function AssignedToolsTable({
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
-  const { data: agentToolsData, isLoading, refetch } = useAllProfileTools({
+  const {
+    data: agentToolsData,
+    isLoading,
+    refetch,
+  } = useAllProfileTools({
     initialData: useInitialData ? initialData?.agentTools : undefined,
     pagination: {
       limit: pageSize,
@@ -755,7 +759,9 @@ export function AssignedToolsTable({
                       <Sparkles className="h-3 w-3 text-purple-500" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">Configured by Policy Configuration Subagent</p>
+                      <p className="font-semibold mb-1">
+                        Configured by Policy Configuration Subagent
+                      </p>
                       {row.original.policiesAutoConfiguredReasoning && (
                         <p className="text-xs text-muted-foreground">
                           {row.original.policiesAutoConfiguredReasoning}
@@ -851,7 +857,9 @@ export function AssignedToolsTable({
                       <Sparkles className="h-3 w-3 text-purple-500" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">Configured by Policy Configuration Subagent</p>
+                      <p className="font-semibold mb-1">
+                        Configured by Policy Configuration Subagent
+                      </p>
                       {row.original.policiesAutoConfiguredReasoning && (
                         <p className="text-xs text-muted-foreground">
                           {row.original.policiesAutoConfiguredReasoning}

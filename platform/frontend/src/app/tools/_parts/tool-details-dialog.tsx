@@ -142,7 +142,9 @@ export function ToolDetailsDialog({
                       </p>
                       <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
                         Configured on{" "}
-                        {formatDate({ date: agentTool.policiesAutoConfiguredAt })}
+                        {formatDate({
+                          date: agentTool.policiesAutoConfiguredAt,
+                        })}
                       </p>
                     </div>
                   </div>

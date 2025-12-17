@@ -1,5 +1,8 @@
 import { expect, test } from "../fixtures";
 
+// All compression tests must run serially because they modify shared organization settings
+test.describe.configure({ mode: "serial" });
+
 // =============================================================================
 // Test Configuration Interface
 // =============================================================================

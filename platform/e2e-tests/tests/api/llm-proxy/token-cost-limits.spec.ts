@@ -40,12 +40,12 @@ const openaiConfig: TokenCostLimitTestConfig = {
   modelName: "gpt-4",
 
   // WireMock returns: prompt_tokens: 100, completion_tokens: 20
-  // Cost = (100 * 30 + 20 * 60) / 1,000,000 = $0.0042
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "openai",
     model: "gpt-4",
-    pricePerMillionInput: "30.00",
-    pricePerMillionOutput: "60.00",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
   },
 };
 
@@ -69,12 +69,12 @@ const anthropicConfig: TokenCostLimitTestConfig = {
   modelName: "claude-3-5-sonnet-20241022",
 
   // WireMock returns: input_tokens: 100, output_tokens: 20
-  // Cost = (100 * 3 + 20 * 15) / 1,000,000 = $0.0006
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "anthropic",
     model: "claude-3-5-sonnet-20241022",
-    pricePerMillionInput: "3.00",
-    pricePerMillionOutput: "15.00",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
   },
 };
 
@@ -101,12 +101,12 @@ const geminiConfig: TokenCostLimitTestConfig = {
   modelName: "gemini-2.5-pro",
 
   // WireMock returns: promptTokenCount: 100, candidatesTokenCount: 20
-  // Cost = (100 * 1.25 + 20 * 5) / 1,000,000 = $0.000225
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "gemini",
     model: "gemini-2.5-pro",
-    pricePerMillionInput: "1.25",
-    pricePerMillionOutput: "5.00",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
   },
 };
 
@@ -153,12 +153,12 @@ for (const config of testConfigs) {
       const profile = await createResponse.json();
       profileId = profile.id;
 
-      // 2. Create profile-level limit with very low value (effectively $0)
+      // 2. Create profile-level limit with $3 value (each request costs $2.60, so 2nd request exceeds limit)
       const limitResponse = await createLimit(request, {
         entityType: "agent",
         entityId: profileId,
         limitType: "token_cost",
-        limitValue: 0.0000001,
+        limitValue: 3,
         model: [config.modelName],
       });
       const limit = await limitResponse.json();

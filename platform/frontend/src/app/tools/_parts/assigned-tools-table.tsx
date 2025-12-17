@@ -205,22 +205,22 @@ export function AssignedToolsTable({
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Always clear existing interval first to prevent race conditions
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
     // Check if any tools are currently auto-configuring
     const hasAutoConfiguringTools = agentTools.some(
       (tool) => tool.policiesAutoConfiguringStartedAt,
     );
 
+    // Only create new interval if needed
     if (hasAutoConfiguringTools) {
-      // Start polling every 2 seconds
       pollingIntervalRef.current = setInterval(() => {
         refetch();
       }, 2000);
-    } else {
-      // Clear polling if no tools are auto-configuring
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
     }
 
     // Cleanup on unmount

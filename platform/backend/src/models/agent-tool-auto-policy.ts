@@ -304,7 +304,126 @@ Examples:
   }
 
   /**
+   * Configure a single agent-tool with timeout and loading state management
+   * This is the unified method used by both manual button clicks and automatic tool assignment
+   */
+  async configurePoliciesForAgentToolWithTimeout(
+    agentToolId: string,
+    organizationId: string,
+  ): Promise<AutoPolicyResult & { timedOut?: boolean }> {
+    const db = (await import("@/database")).default;
+    const schema = await import("@/database/schemas");
+    const { eq } = await import("drizzle-orm");
+
+    logger.info(
+      { agentToolId, organizationId },
+      "configurePoliciesForAgentToolWithTimeout: starting",
+    );
+
+    try {
+      // Set loading timestamp to show loading state in UI
+      await db
+        .update(schema.agentToolsTable)
+        .set({ policiesAutoConfiguringStartedAt: new Date() })
+        .where(eq(schema.agentToolsTable.id, agentToolId));
+
+      // Create a 10-second timeout promise
+      const timeoutPromise = new Promise<{
+        success: false;
+        timedOut: true;
+        error: string;
+      }>((resolve) => {
+        setTimeout(() => {
+          resolve({
+            success: false,
+            timedOut: true,
+            error: "Auto-configure timed out (>10s)",
+          });
+        }, 10000);
+      });
+
+      // Race between auto-configure and timeout
+      const result = await Promise.race([
+        this.configurePoliciesForAgentTool(agentToolId, organizationId).then(
+          (res) => ({ ...res, timedOut: false }),
+        ),
+        timeoutPromise,
+      ]);
+
+      // Handle the result and clear loading timestamp
+      if (result.timedOut) {
+        // Just clear the loading timestamp, let background operation continue
+        await db
+          .update(schema.agentToolsTable)
+          .set({ policiesAutoConfiguringStartedAt: null })
+          .where(eq(schema.agentToolsTable.id, agentToolId));
+
+        logger.warn(
+          { agentToolId, organizationId },
+          "configurePoliciesForAgentToolWithTimeout: timed out, continuing in background",
+        );
+      } else if (result.success) {
+        // Success - clear loading timestamp (policiesAutoConfiguredAt already set by configurePoliciesForAgentTool)
+        await db
+          .update(schema.agentToolsTable)
+          .set({ policiesAutoConfiguringStartedAt: null })
+          .where(eq(schema.agentToolsTable.id, agentToolId));
+
+        logger.info(
+          { agentToolId, organizationId },
+          "configurePoliciesForAgentToolWithTimeout: completed successfully",
+        );
+      } else {
+        // Failed - clear both timestamps
+        await db
+          .update(schema.agentToolsTable)
+          .set({
+            policiesAutoConfiguringStartedAt: null,
+            policiesAutoConfiguredAt: null,
+          })
+          .where(eq(schema.agentToolsTable.id, agentToolId));
+
+        logger.warn(
+          {
+            agentToolId,
+            organizationId,
+            error: result.error,
+          },
+          "configurePoliciesForAgentToolWithTimeout: failed",
+        );
+      }
+
+      return result;
+    } catch (error) {
+      // On error, clear both timestamps
+      await db
+        .update(schema.agentToolsTable)
+        .set({
+          policiesAutoConfiguringStartedAt: null,
+          policiesAutoConfiguredAt: null,
+        })
+        .where(eq(schema.agentToolsTable.id, agentToolId))
+        .catch(() => {
+          /* ignore cleanup errors */
+        });
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(
+        { agentToolId, organizationId, error: errorMessage },
+        "configurePoliciesForAgentToolWithTimeout: unexpected error",
+      );
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
    * Auto-configure policies for multiple agent-tool assignments in bulk
+   * Uses the unified timeout logic for consistent behavior
    */
   async configurePoliciesForAgentTools(
     agentToolIds: string[],
@@ -333,14 +452,14 @@ Examples:
       };
     }
 
-    // Process all tools in parallel
+    // Process all tools in parallel using the unified timeout logic
     logger.info(
       { organizationId, count: agentToolIds.length },
       "configurePoliciesForAgentTools: processing tools in parallel",
     );
     const results = await Promise.all(
       agentToolIds.map(async (agentToolId) => {
-        const result = await this.configurePoliciesForAgentTool(
+        const result = await this.configurePoliciesForAgentToolWithTimeout(
           agentToolId,
           organizationId,
         );

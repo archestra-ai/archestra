@@ -58,7 +58,7 @@ class AgentToolModel {
     );
     const { default: OrganizationModel } = await import("./organization");
 
-    // Get agent's organization via team relationship
+    // Get agent's organization via team relationship and trigger auto-configure in background
     db.select({ organizationId: schema.teamsTable.organizationId })
       .from(schema.agentTeamsTable)
       .innerJoin(
@@ -74,109 +74,21 @@ class AgentToolModel {
         const organization = await OrganizationModel.getById(organizationId);
 
         if (organization?.autoConfigureNewTools) {
-          // Set timestamp to show loading state in UI
-          await db
-            .update(schema.agentToolsTable)
-            .set({ policiesAutoConfiguringStartedAt: new Date() })
-            .where(eq(schema.agentToolsTable.id, agentTool.id));
-
-          // Track if we timed out
-          let timedOut = false;
-
-          // Create a timeout promise
-          const timeoutPromise = new Promise<{ success: false; timedOut: true }>(
-            (resolve) => {
-              setTimeout(() => {
-                timedOut = true;
-                resolve({ success: false, timedOut: true });
-              }, 10000); // 10 seconds
-            },
+          // Use the unified method with timeout and loading state management
+          await agentToolAutoPolicyService.configurePoliciesForAgentToolWithTimeout(
+            agentTool.id,
+            organizationId,
           );
-
-          // Race between auto-configure and timeout
-          const result = await Promise.race([
-            agentToolAutoPolicyService
-              .configurePoliciesForAgentTool(agentTool.id, organizationId)
-              .then((res) => ({ ...res, timedOut: false })),
-            timeoutPromise,
-          ]);
-
-          // If we timed out, just clear the loading timestamp
-          // The operation continues in background, and if it completes,
-          // it will set policiesAutoConfiguredAt (which we'll allow)
-          if (result.timedOut) {
-            await db
-              .update(schema.agentToolsTable)
-              .set({
-                policiesAutoConfiguringStartedAt: null,
-              })
-              .where(eq(schema.agentToolsTable.id, agentTool.id));
-
-            logger.warn(
-              {
-                agentToolId: agentTool.id,
-                agentId,
-                organizationId,
-              },
-              "Auto-configure timed out (>10s) for new agent-tool, continuing in background",
-            );
-          } else if (result.success) {
-            // Success within 10 seconds - just clear the loading timestamp
-            await db
-              .update(schema.agentToolsTable)
-              .set({ policiesAutoConfiguringStartedAt: null })
-              .where(eq(schema.agentToolsTable.id, agentTool.id));
-
-            logger.info(
-              {
-                agentToolId: agentTool.id,
-                agentId,
-                organizationId,
-              },
-              "Auto-configured policies for new agent-tool",
-            );
-          } else {
-            // Failed within 10 seconds - clear both timestamps
-            await db
-              .update(schema.agentToolsTable)
-              .set({
-                policiesAutoConfiguringStartedAt: null,
-                policiesAutoConfiguredAt: null,
-              })
-              .where(eq(schema.agentToolsTable.id, agentTool.id));
-
-            logger.warn(
-              {
-                agentToolId: agentTool.id,
-                agentId,
-                organizationId,
-                error: "error" in result ? result.error : undefined,
-              },
-              "Auto-configure failed for new agent-tool",
-            );
-          }
         }
       })
-      .catch(async (error) => {
-        // On error, clear the loading timestamp
-        await db
-          .update(schema.agentToolsTable)
-          .set({
-            policiesAutoConfiguringStartedAt: null,
-            policiesAutoConfiguredAt: null,
-          })
-          .where(eq(schema.agentToolsTable.id, agentTool.id))
-          .catch(() => {
-            /* ignore cleanup errors */
-          });
-
+      .catch((error) => {
         logger.error(
           {
             agentToolId: agentTool.id,
             agentId,
             error: error instanceof Error ? error.message : String(error),
           },
-          "Failed to auto-configure policies for new agent-tool",
+          "Failed to trigger auto-configure for new agent-tool",
         );
       });
 
@@ -472,6 +384,8 @@ class AgentToolModel {
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"
+        | "policiesAutoConfiguredAt"
+        | "policiesAutoConfiguringStartedAt"
       >
     >,
   ) {

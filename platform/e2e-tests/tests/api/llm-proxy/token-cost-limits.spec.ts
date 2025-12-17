@@ -153,12 +153,14 @@ for (const config of testConfigs) {
       const profile = await createResponse.json();
       profileId = profile.id;
 
-      // 2. Create profile-level limit with $3 value (each request costs $2.60, so 2nd request exceeds limit)
+      // 2. Create profile-level limit with $2 value (each request costs $2.60, so usage exceeds limit after 1st request)
+      // The limit check blocks when currentUsage >= limitValue, so with $2.60 usage after first request,
+      // the second request will be blocked because $2.60 >= $2
       const limitResponse = await createLimit(request, {
         entityType: "agent",
         entityId: profileId,
         limitType: "token_cost",
-        limitValue: 3,
+        limitValue: 2,
         model: [config.modelName],
       });
       const limit = await limitResponse.json();
@@ -179,6 +181,10 @@ for (const config of testConfigs) {
           `Initial ${config.providerName} request failed: ${initialResponse.status()} ${errorText}`,
         );
       }
+
+      // Wait for async usage tracking to complete
+      // Usage tracking happens asynchronously after the response is sent
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // 4. Second request should be blocked (limit exceeded)
       const blockedResponse = await makeApiRequest({

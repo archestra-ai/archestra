@@ -4,10 +4,27 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { Loader2, Plus, Wrench, X } from "lucide-react";
+import {
+  GlobeIcon,
+  ListChecks,
+  ListTodo,
+  Loader2,
+  Plus,
+  Wrench,
+  WrenchIcon,
+  X,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
   PromptInputButton,
+  PromptInputCommand,
+  PromptInputCommandEmpty,
+  PromptInputCommandGroup,
+  PromptInputCommandInput,
+  PromptInputCommandItem,
+  PromptInputCommandList,
+  PromptInputCommandSeparator,
+  PromptInputHeader,
   PromptInputHoverCard,
   PromptInputHoverCardContent,
   PromptInputHoverCardTrigger,
@@ -25,6 +42,7 @@ import {
   useConversationEnabledTools,
   useProfileToolsWithIds,
 } from "@/lib/chat.query";
+import Divider from "../divider";
 import { Button } from "../ui/button";
 import { ManageChatToolsDialog } from "./manage-chat-tools-dialog";
 
@@ -32,14 +50,6 @@ interface ChatToolsDisplayProps {
   agentId: string;
   conversationId: string;
   className?: string;
-}
-
-function EnableMoreToolsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button onClick={onClick} title="Enable more tools for this chat">
-      <Plus className="h-3 w-3" /> Enable more tools
-    </Button>
-  );
 }
 
 /**
@@ -186,13 +196,23 @@ export function ChatToolsDisplay({
     );
   }
 
+  const enableMoreToolsButton = (
+    <Button
+      onClick={handleOpenManageDialog}
+      title="Enable more tools for this chat"
+      variant="ghost"
+      size="sm"
+      className="text-xs"
+    >
+      <ListTodo className="h-2 w-2" /> Toggle tools
+    </Button>
+  );
+
   if (Object.keys(groupedTools).length === 0) {
     return (
       <div className={className}>
         <div className="flex flex-wrap gap-2">
-          {hasDisabledTools && (
-            <EnableMoreToolsButton onClick={handleOpenManageDialog} />
-          )}
+          {hasDisabledTools && enableMoreToolsButton}
         </div>
       </div>
     );
@@ -203,73 +223,105 @@ export function ChatToolsDisplay({
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {Object.entries(groupedTools).map(([serverName, tools]) => (
-            <Tooltip key={serverName} delayDuration={300}>
-              <TooltipTrigger asChild>
-                <div className="group inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-secondary-foreground cursor-default">
+            <PromptInputHoverCard key={serverName}>
+              <PromptInputHoverCardTrigger>
+                <PromptInputButton
+                  className="w-[fit-content]"
+                  size="sm"
+                  variant="outline"
+                >
+                  {/* <WrenchIcon className="h-3 w-3" /> */}
                   <span className="font-medium text-xs">{serverName}</span>
                   <span className="text-muted-foreground text-xs">
                     ({tools.length} {tools.length === 1 ? "tool" : "tools"})
                   </span>
-                  {serverName !== "archestra" && (
-                    <Button
-                      className="ml-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                      onClick={(e) => handleDisableServer(serverName, e)}
-                      title={`Disable all ${serverName} tools for this chat`}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent
+                </PromptInputButton>
+              </PromptInputHoverCardTrigger>
+              <PromptInputHoverCardContent
                 side="bottom"
                 align="center"
-                avoidCollisions={true}
-                className="max-w-xs max-h-48 overflow-y-auto text-xs"
+                avoidCollisions
+                className="w-[300px] max-h-200 overflow-y-auto text-xs"
                 onWheel={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
               >
-                <div className="space-y-1">
-                  {tools.map((tool) => {
-                    const parts = tool.name.split(
-                      MCP_SERVER_TOOL_NAME_SEPARATOR,
-                    );
-                    const toolName =
-                      parts.length > 1 ? parts[parts.length - 1] : tool.name;
-                    return (
-                      <div
-                        key={tool.name}
-                        className="group/tool flex items-start justify-between gap-2 text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                      >
-                        <div className="flex-1">
-                          <div className="font-mono font-medium">
-                            {toolName}
-                          </div>
-                          {tool.description && (
-                            <div className="text-muted-foreground mt-0.5">
-                              {tool.description}
-                            </div>
-                          )}
-                        </div>
-                        {!isArchestraMcpServerTool(tool.name) && (
-                          <Button
-                            className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
-                            onClick={(e) => handleDisableTool(tool.name, e)}
-                            title={`Disable ${toolName} for this chat`}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
+                <PromptInputCommand>
+                  <PromptInputCommandInput
+                    className="border-none focus-visible:ring-0"
+                    placeholder="Search tools..."
+                  />
+                  <PromptInputCommandList>
+                    <PromptInputCommandEmpty className="p-3 text-muted-foreground text-sm">
+                      No results found.
+                    </PromptInputCommandEmpty>
+                    <PromptInputCommandGroup heading="Enabled">
+                      <div className="space-y-1">
+                        {tools.map((tool) => {
+                          const parts = tool.name.split(
+                            MCP_SERVER_TOOL_NAME_SEPARATOR,
+                          );
+                          const toolName =
+                            parts.length > 1
+                              ? parts[parts.length - 1]
+                              : tool.name;
+                          return (
+                            <PromptInputCommandItem
+                              key={tool.name}
+                              // className="group/tool flex items-start justify-between gap-2 text-xs border-l-2 border-primary/30 py-0.5"
+                            >
+                              <div className="flex-1">
+                                <div className="font-mono font-medium">
+                                  {toolName}
+                                </div>
+                                {/* {tool.description && (
+                                  <div className="text-muted-foreground mt-0.5">
+                                    {tool.description}
+                                  </div>
+                                )} */}
+                              </div>
+                              {!isArchestraMcpServerTool(tool.name) && (
+                                <Button
+                                  className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
+                                  onClick={(e) =>
+                                    handleDisableTool(tool.name, e)
+                                  }
+                                  title={`Disable ${toolName} for this chat`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </PromptInputCommandItem>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                      {/* <PromptInputCommandItem>
+                        <GlobeIcon />
+                        <span>Active Tabs</span>
+                        <span className="ml-auto text-muted-foreground">✓</span>
+                      </PromptInputCommandItem> */}
+                    </PromptInputCommandGroup>
+                    <PromptInputCommandSeparator />
+                    {/* <PromptInputCommandGroup heading="Other Files">
+                        {tools.map((tool, index) => (
+                          <PromptInputCommandItem key={`${tool.name}-${index}`}>
+                            <GlobeIcon className="text-primary" />
+                            <div className="flex flex-col">
+                              <span className="font-medium text-sm">
+                                {tool.name}
+                              </span>
+                              <span className="text-muted-foreground text-xs">
+                                {tool.description}
+                              </span>
+                            </div>
+                          </PromptInputCommandItem>
+                        ))}
+                      </PromptInputCommandGroup> */}
+                  </PromptInputCommandList>
+                </PromptInputCommand>
+              </PromptInputHoverCardContent>
+            </PromptInputHoverCard>
           ))}
-          {hasDisabledTools && (
-            <EnableMoreToolsButton onClick={handleOpenManageDialog} />
-          )}
+          {hasDisabledTools && enableMoreToolsButton}
         </div>
       </TooltipProvider>
       {conversationId && agentId && (

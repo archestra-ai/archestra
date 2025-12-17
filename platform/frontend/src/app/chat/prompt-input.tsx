@@ -5,8 +5,6 @@ import type { FormEvent } from "react";
 import { useRef } from "react";
 import {
   PromptInput,
-  PromptInputAttachment,
-  PromptInputAttachments,
   PromptInputBody,
   PromptInputFooter,
   PromptInputHeader,
@@ -55,14 +53,12 @@ const ArchestraPromptInput = ({
                 conversationId={conversationId}
               />
             )}
-            <PromptInputAttachments>
-              {(attachment) => <PromptInputAttachment data={attachment} />}
-            </PromptInputAttachments>
           </PromptInputHeader>
           <PromptInputBody>
             <PromptInputTextarea
               placeholder="Type a message..."
               ref={textareaRef}
+              className="px-4"
             />
           </PromptInputBody>
           <PromptInputFooter>

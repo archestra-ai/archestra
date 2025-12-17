@@ -3,7 +3,7 @@
 import { AuthView } from "@daveyplate/better-auth-ui";
 import { AlertCircle, ExternalLink, KeyRound, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { lazy, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import config from "@/lib/config";
-import { usePublicSsoProviders } from "@/lib/sso-provider.query";
+
+let usePublicSsoProvidersEE: any = null;
+
+function usePublicSsoProviders() {
+  if (config.enterpriseLicenseActivated) {
+    if (!usePublicSsoProvidersEE) {
+      // Dynamic import of EE query
+      usePublicSsoProvidersEE = import("@/lib/sso-provider.query.ee").usePublicSsoProviders;
+    }
+    return usePublicSsoProvidersEE();
+  }
+
+  return {
+    data: [],
+    isLoading: false,
+    error: null,
+  };
+}
 
 const { SsoProviderSelector } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams

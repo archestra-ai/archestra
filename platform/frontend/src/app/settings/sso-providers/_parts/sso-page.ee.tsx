@@ -8,12 +8,12 @@ import {
 import { useCallback, useState } from "react";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { LoadingSpinner } from "@/components/loading";
-import { SsoProviderIcon } from "@/components/sso-provider-icons";
+import { SsoProviderIcon } from "@/components/sso-provider-icons.ee";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import config from "@/lib/config";
-import { useSsoProviders } from "@/lib/sso-provider.query";
+import { useSsoProviders } from "@/lib/sso-provider.query.ee";
 import { CreateSsoProviderDialog } from "./create-sso-provider-dialog.ee";
 import { EditSsoProviderDialog } from "./edit-sso-provider-dialog.ee";
 

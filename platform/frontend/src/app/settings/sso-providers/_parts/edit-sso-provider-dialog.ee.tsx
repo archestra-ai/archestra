@@ -29,7 +29,7 @@ import {
   useDeleteSsoProvider,
   useSsoProvider,
   useUpdateSsoProvider,
-} from "@/lib/sso-provider.query";
+} from "@/lib/sso-provider.query.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 

@@ -2,11 +2,11 @@
 
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { SsoProviderIcon } from "@/components/sso-provider-icons";
+import { SsoProviderIcon } from "@/components/sso-provider-icons.ee";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
-import { usePublicSsoProviders } from "@/lib/sso-provider.query";
+import { usePublicSsoProviders } from "@/lib/sso-provider.query.ee";
 
 interface SsoProviderSelectorProps {
   /**

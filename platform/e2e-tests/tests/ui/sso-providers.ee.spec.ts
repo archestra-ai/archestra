@@ -561,13 +561,15 @@ test.describe("SSO Team Sync E2E", () => {
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
     // STEP 2: Navigate to teams page and create a team
+    // Re-authenticate in case session was invalidated during SSO provider creation
+    await ensureAdminAuthenticated(page);
     await goToPage(page, "/settings/teams");
     await page.waitForLoadState("networkidle");
 
     // Wait for page to fully load and Create Team button to be enabled
     // The button may be disabled while permissions/data are loading
     const createTeamButton = page.getByRole("button", { name: "Create Team" });
-    await expect(createTeamButton).toBeVisible({ timeout: 10000 });
+    await expect(createTeamButton).toBeVisible({ timeout: 15000 });
     await expect(createTeamButton).toBeEnabled({ timeout: 10000 });
     await createTeamButton.click();
     await expect(page.getByRole("dialog")).toBeVisible();

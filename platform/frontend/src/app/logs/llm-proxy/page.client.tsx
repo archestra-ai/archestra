@@ -21,6 +21,7 @@ import { useProfiles } from "@/lib/agent.query";
 import {
   useInteractions,
   useUniqueExternalAgentIds,
+  useUniqueUserIds,
 } from "@/lib/interaction.query";
 
 import { DynamicInteraction } from "@/lib/interaction.utils";
@@ -133,6 +134,7 @@ function LogsTable({
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
   const externalAgentIdFromUrl = searchParams.get("externalAgentId");
+  const userIdFromUrl = searchParams.get("userId");
   const sortByFromUrl = searchParams.get("sortBy");
   const sortDirectionFromUrl = searchParams.get("sortDirection");
 
@@ -143,6 +145,7 @@ function LogsTable({
   const [externalAgentIdFilter, setExternalAgentIdFilter] = useState(
     externalAgentIdFromUrl || "",
   );
+  const [userIdFilter, setUserIdFilter] = useState(userIdFromUrl || "");
   const [sorting, setSorting] = useState<SortingState>([
     {
       id: sortByFromUrl || "createdAt",
@@ -198,6 +201,17 @@ function LogsTable({
     [updateUrlParams],
   );
 
+  const handleUserIdFilterChange = useCallback(
+    (value: string) => {
+      setUserIdFilter(value);
+      updateUrlParams({
+        userId: value || null,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
   const handleSortingChange = useCallback(
     (newSorting: SortingState) => {
       setSorting(newSorting);
@@ -216,16 +230,19 @@ function LogsTable({
   const sortDirection = sorting[0]?.desc ? "desc" : "asc";
 
   // Map UI column ids to API sort fields
-  const sortByMapping: Record<
-    string,
-    NonNullable<archestraApiTypes.GetInteractionsData["query"]>["sortBy"]
-  > = {
+  // Note: userId is added as a valid sort field but type may need codegen update
+  const sortByMapping: Record<string, string> = {
     agent: "profileId",
     externalAgentId: "externalAgentId",
+    user: "userId",
     "request.model": "model",
     createdAt: "createdAt",
   };
-  const apiSortBy = sortBy ? sortByMapping[sortBy] : undefined;
+  const apiSortBy = sortBy
+    ? (sortByMapping[sortBy] as NonNullable<
+        archestraApiTypes.GetInteractionsData["query"]
+      >["sortBy"])
+    : undefined;
 
   const { data: interactionsResponse } = useInteractions({
     limit: pageSize,
@@ -234,6 +251,7 @@ function LogsTable({
     sortDirection,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     externalAgentId: externalAgentIdFilter || undefined,
+    userId: userIdFilter || undefined,
     initialData: initialData?.interactions,
   });
 
@@ -242,6 +260,8 @@ function LogsTable({
   });
 
   const { data: uniqueExternalAgentIds } = useUniqueExternalAgentIds();
+
+  const { data: uniqueUserIds } = useUniqueUserIds();
 
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
@@ -290,6 +310,40 @@ function LogsTable({
         const agent = agents?.find((a) => a.id === interaction.profileId);
         return (
           <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
+        );
+      },
+    },
+    {
+      id: "user",
+      accessorKey: "userId",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            User
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        // Cast to access userId - types will be updated after codegen
+        const userId = (row.original as { userId?: string | null }).userId;
+        if (!userId) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        // Find user name from unique user IDs
+        const userInfo = uniqueUserIds?.find(
+          (u: { id: string }) => u.id === userId,
+        );
+        return (
+          <TruncatedText
+            message={userInfo?.name ?? userId}
+            maxLength={20}
+            className="text-xs"
+          />
         );
       },
     },
@@ -489,7 +543,9 @@ function LogsTable({
   ];
 
   const hasFilters =
-    profileFilter !== "all" || externalAgentIdFilter.length > 0;
+    profileFilter !== "all" ||
+    externalAgentIdFilter.length > 0 ||
+    userIdFilter.length > 0;
 
   return (
     <div className="space-y-4">
@@ -503,6 +559,22 @@ function LogsTable({
             ...(agents?.map((agent) => ({
               value: agent.id,
               label: agent.name,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
+
+        <SearchableSelect
+          value={userIdFilter || "all"}
+          onValueChange={(value) =>
+            handleUserIdFilterChange(value === "all" ? "" : value)
+          }
+          placeholder="Filter by User"
+          items={[
+            { value: "all", label: "All Users" },
+            ...(uniqueUserIds?.map((user: { id: string; name: string }) => ({
+              value: user.id,
+              label: user.name,
             })) || []),
           ]}
           className="w-[200px]"
@@ -530,6 +602,7 @@ function LogsTable({
             size="sm"
             onClick={() => {
               handleProfileFilterChange("all");
+              handleUserIdFilterChange("");
               handleExternalAgentIdFilterChange("");
             }}
           >

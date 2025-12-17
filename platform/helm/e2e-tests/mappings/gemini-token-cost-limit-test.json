@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
+    "headers": {
+      "x-goog-api-key": {
+        "contains": "gemini-token-cost-limit-test"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "Hello! I'm here to help."
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 100,
+        "candidatesTokenCount": 20,
+        "totalTokenCount": 120
+      }
+    }
+  }
+}

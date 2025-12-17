@@ -4,40 +4,34 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus, Wrench, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { AssignToolsDialog } from "@/app/profiles/assign-tools-dialog";
+import {
+  PromptInputButton,
+  PromptInputHoverCard,
+  PromptInputHoverCardContent,
+  PromptInputHoverCardTrigger,
+} from "@/components/ai-elements/prompt-input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfile } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   useChatProfileMcpTools,
+  useConversationEnabledTools,
   useProfileToolsWithIds,
 } from "@/lib/chat.query";
 import { Button } from "../ui/button";
+import { ManageChatToolsDialog } from "./manage-chat-tools-dialog";
 
-interface McpToolsDisplayProps {
+interface ChatToolsDisplayProps {
   agentId: string;
+  conversationId: string;
   className?: string;
-  /** Whether conversation has custom tool selection */
-  hasCustomSelection?: boolean;
-  /** Currently enabled tool IDs (empty = all enabled) */
-  enabledToolIds?: string[];
-  /** Callback to open manage tools dialog with specific tools to disable */
-  onOpenManageDialog?: (toolIdsToDisable: string[]) => void;
-}
-
-function AssignToolsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button onClick={onClick} title="Add more tools" variant="outline">
-      <Plus className="h-3 w-3" />
-      Assign tools to profile
-    </Button>
-  );
 }
 
 function EnableMoreToolsButton({ onClick }: { onClick: () => void }) {
@@ -48,21 +42,37 @@ function EnableMoreToolsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function McpToolsDisplay({
+/**
+ * Display tools enabled for a chat conversation with ability to disable them.
+ * Use this component for chat-level tool management (enable/disable).
+ * For profile-level tool assignment, use McpToolsDisplay instead.
+ */
+export function ChatToolsDisplay({
   agentId,
+  conversationId,
   className,
-  hasCustomSelection = false,
-  enabledToolIds = [],
-  onOpenManageDialog,
-}: McpToolsDisplayProps) {
+}: ChatToolsDisplayProps) {
   const { data: mcpTools = [], isLoading } = useChatProfileMcpTools(agentId);
   const { data: profileTools = [] } = useProfileToolsWithIds(agentId);
-  const { data: agent } = useProfile(agentId);
-  const [isAssignToolsDialogOpen, setIsAssignToolsDialogOpen] = useState(false);
-  const openAssignToolsDialog = useCallback(
-    () => setIsAssignToolsDialogOpen(true),
-    [],
-  );
+
+  // State for manage tools dialog
+  const [isManageToolsDialogOpen, setIsManageToolsDialogOpen] = useState(false);
+
+  const [initialDisabledToolIds, setInitialDisabledToolIds] = useState<
+    string[]
+  >([]);
+
+  // Fetch enabled tools for the conversation
+  const { data: enabledToolsData } =
+    useConversationEnabledTools(conversationId);
+  const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
+  const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
+
+  // Handler to open manage tools dialog with specific tools to disable
+  const handleOpenManageToolsDialog = (toolIdsToDisable: string[]) => {
+    setInitialDisabledToolIds(toolIdsToDisable);
+    setIsManageToolsDialogOpen(true);
+  };
 
   // Create a map of tool name -> tool ID for quick lookup
   const toolNameToId = useMemo(
@@ -129,40 +139,43 @@ export function McpToolsDisplay({
   );
 
   // Handle disabling a single tool
-  const handleDisableTool = useCallback(
-    (toolName: string, event: React.MouseEvent) => {
-      event.stopPropagation();
-      const toolId = toolNameToId[toolName];
-      if (toolId && onOpenManageDialog) {
-        onOpenManageDialog([toolId]);
-      }
-    },
-    [toolNameToId, onOpenManageDialog],
-  );
+  const handleDisableTool = (toolName: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const toolId = toolNameToId[toolName];
+    if (toolId) {
+      handleOpenManageToolsDialog([toolId]);
+    }
+  };
 
   // Handle disabling all tools from a server
-  const handleDisableServer = useCallback(
-    (serverName: string, event: React.MouseEvent) => {
-      event.stopPropagation();
-      const serverTools = groupedTools[serverName] || [];
-      const toolIds = serverTools
-        .map((tool) => toolNameToId[tool.name])
-        .filter((id): id is string => !!id);
-      if (toolIds.length > 0 && onOpenManageDialog) {
-        onOpenManageDialog(toolIds);
-      }
-    },
-    [groupedTools, toolNameToId, onOpenManageDialog],
-  );
+  const handleDisableServer = (serverName: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const serverTools = groupedTools[serverName] || [];
+    const toolIds = serverTools
+      .map((tool) => toolNameToId[tool.name])
+      .filter((id): id is string => !!id);
+    if (toolIds.length > 0) {
+      handleOpenManageToolsDialog(toolIds);
+    }
+  };
 
   // Handle opening manage dialog with no pre-disabled tools
-  const handleOpenManageDialog = useCallback(() => {
-    if (onOpenManageDialog) {
-      onOpenManageDialog([]);
-    }
-  }, [onOpenManageDialog]);
+  const handleOpenManageDialog = () => {
+    handleOpenManageToolsDialog([]);
+  };
 
-  if (isLoading || !agent) {
+  console.log({
+    mcpTools,
+    profileTools,
+    enabledToolsData,
+    enabledToolIds,
+    hasCustomSelection,
+    displayedTools,
+    groupedTools,
+    hasDisabledTools,
+  });
+
+  if (isLoading) {
     return (
       <div className={className}>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -177,16 +190,10 @@ export function McpToolsDisplay({
     return (
       <div className={className}>
         <div className="flex flex-wrap gap-2">
-          <AssignToolsButton onClick={openAssignToolsDialog} />
-          {hasDisabledTools && onOpenManageDialog && (
+          {hasDisabledTools && (
             <EnableMoreToolsButton onClick={handleOpenManageDialog} />
           )}
         </div>
-        <AssignToolsDialog
-          agent={agent}
-          open={isAssignToolsDialogOpen}
-          onOpenChange={setIsAssignToolsDialogOpen}
-        />
       </div>
     );
   }
@@ -203,7 +210,7 @@ export function McpToolsDisplay({
                   <span className="text-muted-foreground text-xs">
                     ({tools.length} {tools.length === 1 ? "tool" : "tools"})
                   </span>
-                  {onOpenManageDialog && serverName !== "archestra" && (
+                  {serverName !== "archestra" && (
                     <Button
                       className="ml-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                       onClick={(e) => handleDisableServer(serverName, e)}
@@ -244,16 +251,15 @@ export function McpToolsDisplay({
                             </div>
                           )}
                         </div>
-                        {onOpenManageDialog &&
-                          !isArchestraMcpServerTool(tool.name) && (
-                            <Button
-                              className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
-                              onClick={(e) => handleDisableTool(tool.name, e)}
-                              title={`Disable ${toolName} for this chat`}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          )}
+                        {!isArchestraMcpServerTool(tool.name) && (
+                          <Button
+                            className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
+                            onClick={(e) => handleDisableTool(tool.name, e)}
+                            title={`Disable ${toolName} for this chat`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     );
                   })}
@@ -261,17 +267,20 @@ export function McpToolsDisplay({
               </TooltipContent>
             </Tooltip>
           ))}
-          <AssignToolsButton onClick={openAssignToolsDialog} />
-          {hasDisabledTools && onOpenManageDialog && (
+          {hasDisabledTools && (
             <EnableMoreToolsButton onClick={handleOpenManageDialog} />
           )}
         </div>
       </TooltipProvider>
-      <AssignToolsDialog
-        agent={agent}
-        open={isAssignToolsDialogOpen}
-        onOpenChange={setIsAssignToolsDialogOpen}
-      />
+      {conversationId && agentId && (
+        <ManageChatToolsDialog
+          open={isManageToolsDialogOpen}
+          onOpenChange={setIsManageToolsDialogOpen}
+          conversationId={conversationId}
+          agentId={agentId}
+          initialDisabledToolIds={initialDisabledToolIds}
+        />
+      )}
     </div>
   );
 }

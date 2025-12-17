@@ -9,11 +9,10 @@ import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { AssignToolsToProfile } from "@/components/chat/assign-tools-to-profile";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { ManageChatToolsDialog } from "@/components/chat/manage-chat-tools-dialog";
-import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
-import { ModelSelector } from "@/components/chat/model-selector";
+import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
@@ -40,7 +39,6 @@ import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
-  useConversationEnabledTools,
   useCreateConversation,
   useUpdateConversation,
 } from "@/lib/chat.query";
@@ -75,12 +73,6 @@ export default function ChatPage() {
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     "custom-request" | "create-catalog"
   >();
-
-  // State for manage tools dialog
-  const [isManageToolsDialogOpen, setIsManageToolsDialogOpen] = useState(false);
-  const [initialDisabledToolIds, setInitialDisabledToolIds] = useState<
-    string[]
-  >([]);
 
   // Check if user can create catalog items directly
   const { data: canCreateCatalog } = useHasPermissions({
@@ -136,21 +128,8 @@ export default function ChatPage() {
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
 
-  // Fetch enabled tools for the conversation
-  const { data: enabledToolsData } =
-    useConversationEnabledTools(conversationId);
-
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
-
-  // Handler to open manage tools dialog with specific tools to disable
-  const handleOpenManageToolsDialog = useCallback(
-    (toolIdsToDisable: string[]) => {
-      setInitialDisabledToolIds(toolIdsToDisable);
-      setIsManageToolsDialogOpen(true);
-    },
-    [],
-  );
 
   // Handle model change with error handling
   const handleModelChange = useCallback(
@@ -551,7 +530,7 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1">
               {conversation?.agent.id && (
                 <WithPermissions
                   permissions={{ profile: ["read"] }}
@@ -560,8 +539,9 @@ export default function ChatPage() {
                   {({ hasPermission }) => {
                     return hasPermission ===
                       undefined ? null : hasPermission ? (
-                      <McpToolsDisplay
+                      <AssignToolsToProfile
                         agentId={conversation.agent.id}
+                        showAssignedToolsList={false}
                         className="text-xs text-muted-foreground"
                       />
                     ) : (
@@ -612,17 +592,21 @@ export default function ChatPage() {
             />
           </div>
 
-          <div className="sticky bottom-0 bg-background border-t p-4">
-            <div className="max-w-4xl mx-auto space-y-3">
-              <ArchestraPromptInput
-                onSubmit={handleSubmit}
-                status={status}
-                selectedModel={conversation?.selectedModel ?? ""}
-                onModelChange={handleModelChange}
-                messageCount={messages.length}
-              />
+          {conversation?.agent.id && conversation?.id && (
+            <div className="sticky bottom-0 bg-background border-t p-4">
+              <div className="max-w-4xl mx-auto space-y-3">
+                <ArchestraPromptInput
+                  onSubmit={handleSubmit}
+                  status={status}
+                  selectedModel={conversation?.selectedModel ?? ""}
+                  onModelChange={handleModelChange}
+                  messageCount={messages.length}
+                  agentId={conversation?.agent.id}
+                  conversationId={conversation?.id}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -635,15 +619,6 @@ export default function ChatPage() {
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
       />
-      {conversationId && currentProfileId && (
-        <ManageChatToolsDialog
-          open={isManageToolsDialogOpen}
-          onOpenChange={setIsManageToolsDialogOpen}
-          conversationId={conversationId}
-          agentId={currentProfileId}
-          initialDisabledToolIds={initialDisabledToolIds}
-        />
-      )}
     </div>
   );
 }

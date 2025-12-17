@@ -4,12 +4,11 @@ import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
   CopyIcon,
-  GlobeIcon,
   RefreshCcwIcon,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
@@ -18,7 +17,6 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   Reasoning,
   ReasoningContent,
@@ -42,17 +40,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Divider from "./divider";
 
-const models = [
-  {
-    name: "GPT 4o",
-    value: "openai/gpt-4o",
-  },
-  {
-    name: "Deepseek R1",
-    value: "deepseek/deepseek-r1",
-  },
-];
-
 const ChatBotDemo = ({
   messages,
   reload,
@@ -68,40 +55,6 @@ const ChatBotDemo = ({
   topPart?: React.ReactNode;
   hideDivider?: boolean;
 }) => {
-  const [input, setInput] = useState("");
-  const [model, setModel] = useState<string>(models[0].value);
-  const [webSearch, setWebSearch] = useState(false);
-  // const { messages, reload, isEnded } = useMockedMessages({ isMitigated });
-  // We are mocking those parts
-  // const { messages, sendMessage, status } = useChat({
-  //   transport: new DefaultChatTransport({
-  //     api: "/api/chat-demo",
-  //   }),
-  // });
-  // sendMessage(
-  //   {
-  //     text: message.text || "Sent with attachments",
-  //     files: message.files,
-  //   },
-  //   {
-  //     body: {
-  //       model: model,
-  //       webSearch: webSearch,
-  //     },
-  //   },
-  // );
-
-  const handleSubmit = (message: PromptInputMessage) => {
-    const hasText = Boolean(message.text);
-    const hasAttachments = Boolean(message.files?.length);
-
-    if (!(hasText || hasAttachments)) {
-      return;
-    }
-
-    setInput("");
-  };
-
   const status: ChatStatus = "streaming" as ChatStatus;
 
   return (

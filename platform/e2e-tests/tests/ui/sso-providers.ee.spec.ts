@@ -9,10 +9,6 @@ import { clickButton, loginViaApi } from "../../utils";
 // Also skip webkit and firefox for these tests since they share the same backend
 // and running in parallel causes SSO provider conflicts.
 test.describe.configure({ mode: "serial" });
-test.skip(
-  ({ browserName }) => browserName !== "chromium",
-  "SSO tests only run on chromium to avoid cross-browser conflicts with shared backend state",
-);
 
 // =============================================================================
 // Keycloak Configuration
@@ -297,225 +293,6 @@ function extractCertFromMetadata(metadata: string): string {
   return match[1];
 }
 
-test.describe("SSO OIDC E2E Flow with Keycloak", () => {
-  test("should configure OIDC provider, login via SSO, update, and delete", async ({
-    page,
-    browser,
-    goToPage,
-  }) => {
-    test.slow();
-    const providerName = `KeycloakOIDC${Date.now()}`;
-
-    // STEP 1: Authenticate and clean up any existing provider
-    await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
-
-    // STEP 2: Fill in OIDC provider form and submit
-    await fillOidcProviderForm(page, providerName);
-    await clickButton({ page, options: { name: "Create Provider" } });
-
-    // Wait for dialog to close and provider to be created
-    await expect(page.getByRole("dialog")).not.toBeVisible({
-      timeout: 10000,
-    });
-
-    // Verify the provider is now shown as "Enabled"
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-
-    // STEP 3: Verify SSO button appears on login page and test SSO login
-    // Use a fresh browser context (not logged in) to test the SSO flow
-    const ssoContext = await browser.newContext({
-      storageState: undefined,
-    });
-    const ssoPage = await ssoContext.newPage();
-
-    try {
-      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
-
-      // Verify SSO button for our provider appears
-      await expect(
-        ssoPage.getByRole("button", { name: new RegExp(providerName, "i") }),
-      ).toBeVisible({ timeout: 5000 });
-
-      // STEP 4: Click SSO button and login via Keycloak
-      await clickButton({
-        page: ssoPage,
-        options: { name: new RegExp(providerName, "i") },
-      });
-
-      // Login via Keycloak and wait for redirect back to Archestra
-      const loginSucceeded = await loginViaKeycloak(ssoPage);
-      expect(loginSucceeded).toBe(true);
-
-      // Verify we're logged in by checking for authenticated UI elements
-      // Use text locator as fallback since getByRole can be flaky with complex UIs
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
-        timeout: 15000,
-      });
-
-      // SSO login successful - user is now logged in
-    } finally {
-      await ssoContext.close();
-    }
-
-    // STEP 5: Use the original admin page context to update the provider
-    // (the original page context is still logged in as admin)
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-
-    // Click on Generic OIDC card to edit (our provider)
-    await page.getByText("Generic OIDC", { exact: true }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Update the domain (use a subdomain to keep it valid for the same email domain)
-    await page.getByLabel("Domain").clear();
-    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
-
-    // Save changes
-    await clickButton({ page, options: { name: "Update Provider" } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({
-      timeout: 10000,
-    });
-
-    // STEP 6: Delete the provider
-    await page.getByText("Generic OIDC", { exact: true }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await deleteProviderViaDialog(page);
-
-    // STEP 7: Verify SSO button no longer appears on login page
-    // Use a fresh context to check the sign-in page
-    const verifyContext = await browser.newContext({
-      storageState: undefined,
-    });
-    const verifyPage = await verifyContext.newPage();
-
-    try {
-      await verifyPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await verifyPage.waitForLoadState("networkidle");
-
-      // SSO button for our provider should no longer be visible
-      await expect(
-        verifyPage.getByRole("button", {
-          name: new RegExp(providerName, "i"),
-        }),
-      ).not.toBeVisible({ timeout: 5000 });
-    } finally {
-      await verifyContext.close();
-    }
-  });
-});
-
-test.describe("SSO Role Mapping E2E", () => {
-  test("should map admin group to admin role via OIDC", async ({
-    page,
-    browser,
-    goToPage,
-  }) => {
-    test.slow();
-    const providerName = `RoleMappingOIDC${Date.now()}`;
-
-    // STEP 1: Authenticate and clean up any existing provider
-    await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
-
-    // STEP 2: Fill in OIDC provider form
-    await fillOidcProviderForm(page, providerName);
-
-    // STEP 2: Configure Role Mapping
-    // Expand the Role Mapping accordion
-    await page.getByText("Role Mapping (Optional)").click();
-
-    // Wait for accordion to expand - look for the Add Rule button
-    const addRuleButton = page.getByTestId(E2eTestId.SsoRoleMappingAddRule);
-    await expect(addRuleButton).toBeVisible();
-
-    // Add a rule to map archestra-admins group to admin role
-    await addRuleButton.click();
-
-    // Fill in the Handlebars template using data-testid
-    // Keycloak sends groups as an array, so we check if 'archestra-admins' is in it
-    await page
-      .getByTestId(E2eTestId.SsoRoleMappingRuleTemplate)
-      .fill('{{#includes groups "archestra-admins"}}true{{/includes}}');
-
-    // Select admin role using data-testid
-    const roleSelect = page.getByTestId(E2eTestId.SsoRoleMappingRuleRole);
-    await roleSelect.click();
-    await page.getByRole("option", { name: "Admin" }).click();
-
-    // Set default role to member (so we can verify role mapping works)
-    const defaultRoleSelect = page.getByTestId(
-      E2eTestId.SsoRoleMappingDefaultRole,
-    );
-    if (await defaultRoleSelect.isVisible()) {
-      await defaultRoleSelect.click();
-      await page.getByRole("option", { name: "Member" }).click();
-    }
-
-    // Submit the form
-    await clickButton({ page, options: { name: "Create Provider" } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-
-    // STEP 3: Test SSO login with admin user (in archestra-admins group)
-    // The admin user is configured in Keycloak with the archestra-admins group
-    const ssoContext = await browser.newContext({
-      storageState: undefined,
-    });
-    const ssoPage = await ssoContext.newPage();
-
-    try {
-      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
-
-      // Wait for SSO button to appear (provider was just created)
-      const ssoButton = ssoPage.getByRole("button", {
-        name: new RegExp(providerName, "i"),
-      });
-      await expect(ssoButton).toBeVisible({ timeout: 10000 });
-
-      // Click SSO button and login via Keycloak
-      await clickButton({
-        page: ssoPage,
-        options: { name: new RegExp(providerName, "i") },
-      });
-
-      // Login via Keycloak (admin user is in archestra-admins group)
-      const loginSucceeded = await loginViaKeycloak(ssoPage);
-      expect(loginSucceeded).toBe(true);
-
-      // Verify we're logged in
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
-        timeout: 15000,
-      });
-
-      // Verify the user has admin role by checking they can access admin-only pages
-      // The Roles settings page is only accessible to admins
-      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
-      await ssoPage.waitForLoadState("networkidle");
-
-      // If user has admin role, they should see the Roles page
-      // If not, they would be redirected or see an error
-      await expect(
-        ssoPage.getByText("Roles", { exact: true }).first(),
-      ).toBeVisible({ timeout: 10000 });
-
-      // Success! The admin user was mapped to admin role via Handlebars template
-      // Note: The syncSsoRole function (for subsequent logins) is covered by unit tests
-    } finally {
-      await ssoContext.close();
-    }
-
-    // STEP 4: Cleanup - delete the provider
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-    await page.getByText("Generic OIDC", { exact: true }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await deleteProviderViaDialog(page);
-  });
-});
-
 test.describe("SSO Team Sync E2E", () => {
   test("should sync user to team based on SSO group membership", async ({
     page,
@@ -753,6 +530,225 @@ test.describe("SSO Team Sync E2E", () => {
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
 
     // Delete the SSO provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await deleteProviderViaDialog(page);
+  });
+});
+
+test.describe("SSO OIDC E2E Flow with Keycloak", () => {
+  test("should configure OIDC provider, login via SSO, update, and delete", async ({
+    page,
+    browser,
+    goToPage,
+  }) => {
+    test.slow();
+    const providerName = `KeycloakOIDC${Date.now()}`;
+
+    // STEP 1: Authenticate and clean up any existing provider
+    await ensureAdminAuthenticated(page);
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+
+    // STEP 2: Fill in OIDC provider form and submit
+    await fillOidcProviderForm(page, providerName);
+    await clickButton({ page, options: { name: "Create Provider" } });
+
+    // Wait for dialog to close and provider to be created
+    await expect(page.getByRole("dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify the provider is now shown as "Enabled"
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+
+    // STEP 3: Verify SSO button appears on login page and test SSO login
+    // Use a fresh browser context (not logged in) to test the SSO flow
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Verify SSO button for our provider appears
+      await expect(
+        ssoPage.getByRole("button", { name: new RegExp(providerName, "i") }),
+      ).toBeVisible({ timeout: 5000 });
+
+      // STEP 4: Click SSO button and login via Keycloak
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
+
+      // Login via Keycloak and wait for redirect back to Archestra
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
+
+      // Verify we're logged in by checking for authenticated UI elements
+      // Use text locator as fallback since getByRole can be flaky with complex UIs
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // SSO login successful - user is now logged in
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 5: Use the original admin page context to update the provider
+    // (the original page context is still logged in as admin)
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    // Click on Generic OIDC card to edit (our provider)
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    // Update the domain (use a subdomain to keep it valid for the same email domain)
+    await page.getByLabel("Domain").clear();
+    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
+
+    // Save changes
+    await clickButton({ page, options: { name: "Update Provider" } });
+    await expect(page.getByRole("dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    // STEP 6: Delete the provider
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await deleteProviderViaDialog(page);
+
+    // STEP 7: Verify SSO button no longer appears on login page
+    // Use a fresh context to check the sign-in page
+    const verifyContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const verifyPage = await verifyContext.newPage();
+
+    try {
+      await verifyPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await verifyPage.waitForLoadState("networkidle");
+
+      // SSO button for our provider should no longer be visible
+      await expect(
+        verifyPage.getByRole("button", {
+          name: new RegExp(providerName, "i"),
+        }),
+      ).not.toBeVisible({ timeout: 5000 });
+    } finally {
+      await verifyContext.close();
+    }
+  });
+});
+
+test.describe("SSO Role Mapping E2E", () => {
+  test("should map admin group to admin role via OIDC", async ({
+    page,
+    browser,
+    goToPage,
+  }) => {
+    test.slow();
+    const providerName = `RoleMappingOIDC${Date.now()}`;
+
+    // STEP 1: Authenticate and clean up any existing provider
+    await ensureAdminAuthenticated(page);
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+
+    // STEP 2: Fill in OIDC provider form
+    await fillOidcProviderForm(page, providerName);
+
+    // STEP 2: Configure Role Mapping
+    // Expand the Role Mapping accordion
+    await page.getByText("Role Mapping (Optional)").click();
+
+    // Wait for accordion to expand - look for the Add Rule button
+    const addRuleButton = page.getByTestId(E2eTestId.SsoRoleMappingAddRule);
+    await expect(addRuleButton).toBeVisible();
+
+    // Add a rule to map archestra-admins group to admin role
+    await addRuleButton.click();
+
+    // Fill in the Handlebars template using data-testid
+    // Keycloak sends groups as an array, so we check if 'archestra-admins' is in it
+    await page
+      .getByTestId(E2eTestId.SsoRoleMappingRuleTemplate)
+      .fill('{{#includes groups "archestra-admins"}}true{{/includes}}');
+
+    // Select admin role using data-testid
+    const roleSelect = page.getByTestId(E2eTestId.SsoRoleMappingRuleRole);
+    await roleSelect.click();
+    await page.getByRole("option", { name: "Admin" }).click();
+
+    // Set default role to member (so we can verify role mapping works)
+    const defaultRoleSelect = page.getByTestId(
+      E2eTestId.SsoRoleMappingDefaultRole,
+    );
+    if (await defaultRoleSelect.isVisible()) {
+      await defaultRoleSelect.click();
+      await page.getByRole("option", { name: "Member" }).click();
+    }
+
+    // Submit the form
+    await clickButton({ page, options: { name: "Create Provider" } });
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 3: Test SSO login with admin user (in archestra-admins group)
+    // The admin user is configured in Keycloak with the archestra-admins group
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Wait for SSO button to appear (provider was just created)
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
+
+      // Click SSO button and login via Keycloak
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
+
+      // Login via Keycloak (admin user is in archestra-admins group)
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // Verify the user has admin role by checking they can access admin-only pages
+      // The Roles settings page is only accessible to admins
+      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // If user has admin role, they should see the Roles page
+      // If not, they would be redirected or see an error
+      await expect(
+        ssoPage.getByText("Roles", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Success! The admin user was mapped to admin role via Handlebars template
+      // Note: The syncSsoRole function (for subsequent logins) is covered by unit tests
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 4: Cleanup - delete the provider
     await goToPage(page, "/settings/sso-providers");
     await page.waitForLoadState("networkidle");
     await page.getByText("Generic OIDC", { exact: true }).click();

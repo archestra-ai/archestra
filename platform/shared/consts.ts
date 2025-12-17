@@ -105,6 +105,13 @@ export const MCP_CATALOG_API_BASE_URL =
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 
 /**
+ * Header name for user ID.
+ * Clients can pass this header to associate interactions with a specific user (by their Archestra user UUID).
+ * Particularly useful for identifying which user was using the Archestra Chat.
+ */
+export const USER_ID_HEADER = "X-Archestra-User-Id";
+
+/**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
  * - Account linking (trustedProviders)
  * - Provider registration

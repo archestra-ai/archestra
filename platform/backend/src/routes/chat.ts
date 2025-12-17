@@ -1,7 +1,12 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId, SupportedProviders } from "@shared";
+import {
+  EXTERNAL_AGENT_ID_HEADER,
+  RouteId,
+  SupportedProviders,
+  USER_ID_HEADER,
+} from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -294,12 +299,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create provider client pointing to LLM Proxy
-      // Forward external agent ID header if present
-      const clientHeaders = externalAgentId
-        ? {
-            [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
-          }
-        : undefined;
+      // Forward external agent ID and user ID headers to LLM Proxy
+      // so interactions can be properly associated with the user
+      const clientHeaders: Record<string, string> = {};
+      if (externalAgentId) {
+        clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
+      }
+      // Always include user ID header so interactions are saved with user association
+      clientHeaders[USER_ID_HEADER] = user.id;
 
       let llmClient:
         | ReturnType<typeof createAnthropic>
@@ -311,7 +318,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createAnthropic({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else if (provider === "gemini") {
         // URL format: /v1/gemini/:agentId/v1beta/models
@@ -319,14 +327,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createGoogleGenerativeAI({
           apiKey: providerApiKey || "vertex-ai-mode",
           baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else if (provider === "openai") {
         // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
         llmClient = createOpenAI({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else {
         throw new ApiError(400, `Unsupported provider: ${provider}`);

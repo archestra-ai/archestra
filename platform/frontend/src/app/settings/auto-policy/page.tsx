@@ -19,7 +19,10 @@ import { usePolicyConfigSubagentPrompt } from "@/lib/policy-config-subagent.quer
 export default function AutoPolicySettingsPage() {
   const { data: chatApiKeys, isLoading } = useChatApiKeys();
   const { data: organization } = useOrganization();
-  const updateOrgMutation = useUpdateOrganization();
+  const updateOrgMutation = useUpdateOrganization(
+    "Policy Configuration Subagent setting updated",
+    "Failed to update subagent setting",
+  );
   const { data: promptTemplate } = usePolicyConfigSubagentPrompt();
 
   // Find default Anthropic API key
@@ -28,18 +31,9 @@ export default function AutoPolicySettingsPage() {
   );
 
   const handleToggleAutoConfigureNewTools = async (checked: boolean) => {
-    try {
-      await updateOrgMutation.mutateAsync({
-        autoConfigureNewTools: checked,
-      });
-      toast.success(
-        checked
-          ? "Policy Configuration Subagent enabled for new tool assignments"
-          : "Policy Configuration Subagent disabled for new tool assignments",
-      );
-    } catch (error) {
-      toast.error("Failed to update subagent setting");
-    }
+    await updateOrgMutation.mutateAsync({
+      autoConfigureNewTools: checked,
+    });
   };
 
   return (

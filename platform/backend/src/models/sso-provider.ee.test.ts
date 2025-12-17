@@ -6,7 +6,7 @@ import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AccountModel from "./account";
-import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
+import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider.ee";
 
 // Mock the logger to avoid console output during tests
 vi.mock("@/logging", () => ({

@@ -1,6 +1,6 @@
 "use client";
 
-import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
+import { OrganizationMembersCard } from "@archestra/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";

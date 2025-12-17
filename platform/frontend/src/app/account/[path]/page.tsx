@@ -1,5 +1,5 @@
-import { AccountView } from "@daveyplate/better-auth-ui";
-import { accountViewPaths } from "@daveyplate/better-auth-ui/server";
+import { AccountView } from "@archestra/better-auth-ui";
+import { accountViewPaths } from "@archestra/better-auth-ui/server";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";

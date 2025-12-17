@@ -1,4 +1,4 @@
-import { authViewPaths } from "@daveyplate/better-auth-ui/server";
+import { authViewPaths } from "@archestra/better-auth-ui/server";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthPageWithInvitationCheck } from "@/app/auth/[path]/auth-page-with-invitation-check";

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@daveyplate/better-auth-ui/css";
+@import "@archestra/better-auth-ui/css";
 @import "./themes.css";
 
 @custom-variant dark (&:is(.dark *));

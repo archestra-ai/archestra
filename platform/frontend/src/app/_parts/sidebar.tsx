@@ -1,5 +1,5 @@
 "use client";
-import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
+import { SignedIn, SignedOut, UserButton } from "@archestra/better-auth-ui";
 import { E2eTestId } from "@shared";
 import {
   BookOpen,

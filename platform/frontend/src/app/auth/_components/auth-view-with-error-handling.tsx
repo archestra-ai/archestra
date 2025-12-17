@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthView } from "@daveyplate/better-auth-ui";
+import { AuthView } from "@archestra/better-auth-ui";
 import { AlertCircle, ExternalLink, KeyRound, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";

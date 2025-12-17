@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiKeysCard, SecuritySettingsCards } from "@daveyplate/better-auth-ui";
+import { ApiKeysCard, SecuritySettingsCards } from "@archestra/better-auth-ui";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";

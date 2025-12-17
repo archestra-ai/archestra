@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthUIProvider } from "@daveyplate/better-auth-ui";
+import { AuthUIProvider } from "@archestra/better-auth-ui";
 import {
   EDITOR_ROLE_NAME,
   EMAIL_PLACEHOLDER,

@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
+import type { Invitation } from "better-auth/plugins/organization";
 import { Copy, Mail, Trash2 } from "lucide-react";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -51,7 +52,7 @@ function InvitationsListContent({
 
         {invitations.length > 0 && (
           <div className="space-y-3">
-            {invitations.map((inv) => (
+            {invitations.map((inv: Invitation) => (
               <div
                 key={inv.id}
                 className="flex items-start gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors"

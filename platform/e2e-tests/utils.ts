@@ -109,10 +109,19 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
 }) {
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
+
+  // Poll for manage-tools button to appear (MCP tool discovery is async)
+  // After installing, the server needs to: start → connect → discover tools → save to DB
   const manageToolsButton = page.getByTestId(
     `${E2eTestId.ManageToolsButton}-${catalogItemName}`,
   );
-  await manageToolsButton.waitFor({ state: "visible", timeout: 20_000 });
+
+  await expect(async () => {
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
+  }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
+
   await manageToolsButton.click();
   await page
     .getByRole("button", { name: "Assign Tool to Profiles" })

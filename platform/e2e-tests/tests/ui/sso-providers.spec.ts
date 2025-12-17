@@ -591,7 +591,13 @@ test.describe("SSO Team Sync E2E", () => {
     await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);
     await clickButton({ page, options: { name: "Add" } });
 
-    // Wait for the group to be added
+    // Wait for the success toast to confirm the API call completed
+    // This is critical - the group must be saved to the database before SSO login
+    await expect(page.getByText("External group mapping added")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Also verify the group appears in the current mappings list (not just the input)
     await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
       { timeout: 5000 },
     );
@@ -630,12 +636,12 @@ test.describe("SSO Team Sync E2E", () => {
       });
 
       // STEP 5: Verify user was automatically added to the team
-      // Team sync is async, so poll for member count change
+      // Team sync is async and can take significant time in CI environments
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("networkidle");
 
-      // Poll for team member count to increase (max 30 seconds)
-      // In CI with parallel workers, SSO team sync can take longer due to resource contention
+      // Poll for team member count to increase (max 60 seconds)
+      // SSO team sync is an async background operation that can take variable time
       const teamMemberLocator = ssoPage
         .locator(".rounded-lg.border.p-4")
         .filter({ hasText: teamName })
@@ -643,10 +649,11 @@ test.describe("SSO Team Sync E2E", () => {
 
       await expect(async () => {
         await ssoPage.reload();
+        await ssoPage.waitForLoadState("networkidle");
         const memberText = await teamMemberLocator.textContent();
         // Team should have at least 1 member after sync
         expect(memberText).not.toBe("0 members");
-      }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 4000, 5000] });
+      }).toPass({ timeout: 60_000, intervals: [2000, 3000, 5000, 5000, 5000] });
 
       // Verify the SSO user is in the team members list
       // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
@@ -683,7 +690,10 @@ test.describe("SSO Team Sync E2E", () => {
         }
 
         await expect(emailLocator).toBeVisible();
-      }).toPass({ timeout: 45_000, intervals: [3000, 5000, 7000, 10000] });
+      }).toPass({
+        timeout: 60_000,
+        intervals: [3000, 5000, 7000, 10000, 10000],
+      });
 
       // Success! The SSO user was automatically synced to the team
     } finally {

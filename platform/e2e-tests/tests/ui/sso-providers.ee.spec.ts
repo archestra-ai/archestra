@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, type Page, test } from "../../fixtures";

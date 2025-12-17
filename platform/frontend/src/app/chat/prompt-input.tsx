@@ -201,7 +201,7 @@ const ArchestraPromptInput = ({
           </PromptInputHeader>
           <PromptInputBody>
             <PromptInputTextarea
-              placeholder="Plan, search, build anything"
+              placeholder="Type a message..."
               ref={textareaRef}
             />
           </PromptInputBody>

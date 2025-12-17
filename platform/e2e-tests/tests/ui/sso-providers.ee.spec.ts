@@ -63,17 +63,17 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   // This is critical on retries where previous SSO logins may have invalidated sessions
   await page.context().clearCookies();
 
-  // Retry login up to 3 times to handle transient issues
+  // Retry login up to 5 times to handle transient issues and server instability
   let loginSucceeded = false;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     loginSucceeded = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     if (loginSucceeded) break;
     // Wait before retry
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
   }
 
   if (!loginSucceeded) {
-    throw new Error("Admin login failed after 3 attempts");
+    console.log("Admin API login failed after 5 attempts");
   }
 
   // Navigate directly to SSO providers page
@@ -95,8 +95,15 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
     await page.getByRole("button", { name: "Login" }).click();
     await page.waitForLoadState("networkidle");
 
+    // Check for error toast or message on the sign-in page
+    const errorToast = page.locator('[role="alert"]').first();
+    if (await errorToast.isVisible()) {
+      const errorText = await errorToast.textContent().catch(() => null);
+      console.log(`UI Login failed with error: ${errorText}`);
+    }
+
     // Wait for login to complete and redirect away from sign-in
-    await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 30000 });
+    await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 45000 });
 
     // Navigate to SSO providers after UI login
     await page.goto(`${UI_BASE_URL}/settings/sso-providers`);

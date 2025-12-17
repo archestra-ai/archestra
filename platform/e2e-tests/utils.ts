@@ -363,11 +363,23 @@ export async function loginViaApi(
       return true;
     }
 
-    // If rate limited and we have retries left, wait and retry
-    if (response.status() === 429 && attempt < maxRetries) {
+    // If rate limited or server error, wait and retry
+    if (
+      (response.status() === 429 || response.status() >= 500) &&
+      attempt < maxRetries
+    ) {
+      console.log(
+        `API Login retry ${attempt + 1}/${maxRetries} due to status ${response.status()}`,
+      );
       await page.waitForTimeout(delay);
       delay *= 2; // Exponential backoff
       continue;
+    }
+
+    if (!response.ok()) {
+      console.log(
+        `API Login failed: ${response.status()} ${await response.text().catch(() => "No body")}`,
+      );
     }
 
     return false;

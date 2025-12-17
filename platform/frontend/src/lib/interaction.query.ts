@@ -1,15 +1,15 @@
 "use client";
 
-import {
-  archestraApiClient,
-  archestraApiSdk,
-  type archestraApiTypes,
-} from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
-const { getInteraction, getInteractions, getUniqueExternalAgentIds } =
-  archestraApiSdk;
+const {
+  getInteraction,
+  getInteractions,
+  getUniqueExternalAgentIds,
+  getUniqueUserIds,
+} = archestraApiSdk;
 
 export function useInteractions({
   profileId,
@@ -102,20 +102,12 @@ export function useUniqueExternalAgentIds() {
   });
 }
 
-export interface UserInfo {
-  id: string;
-  name: string;
-}
-
 export function useUniqueUserIds() {
   return useSuspenseQuery({
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
-      // Using archestraApiClient directly since the SDK may not have this method yet
-      const response = await archestraApiClient.get<UserInfo[]>({
-        url: "/api/interactions/user-ids",
-      });
-      return response.data ?? [];
+      const response = await getUniqueUserIds();
+      return response.data;
     },
   });
 }

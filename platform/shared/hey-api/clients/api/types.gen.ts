@@ -8168,9 +8168,13 @@ export type GetInteractionsData = {
          * Filter by external agent ID (from X-Archestra-Agent-Id header)
          */
         externalAgentId?: string;
+        /**
+         * Filter by user ID (from X-Archestra-User-Id header)
+         */
+        userId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -8244,6 +8248,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -8261,6 +8266,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -8278,6 +8284,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -8380,6 +8387,84 @@ export type GetUniqueExternalAgentIdsResponses = {
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
 
+export type GetUniqueUserIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/user-ids';
+};
+
+export type GetUniqueUserIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueUserIdsError = GetUniqueUserIdsErrors[keyof GetUniqueUserIdsErrors];
+
+export type GetUniqueUserIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+    }>;
+};
+
+export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+
 export type GetInteractionData = {
     body?: never;
     path: {
@@ -8456,6 +8541,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -8473,6 +8559,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -8490,6 +8577,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;

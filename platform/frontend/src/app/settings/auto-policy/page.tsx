@@ -14,11 +14,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useOrganization, useUpdateOrganization } from "@/lib/organization.query";
+import { usePolicyConfigSubagentPrompt } from "@/lib/policy-config-subagent.query";
 
 export default function AutoPolicySettingsPage() {
   const { data: chatApiKeys, isLoading } = useChatApiKeys();
   const { data: organization } = useOrganization();
   const updateOrgMutation = useUpdateOrganization();
+  const { data: promptTemplate } = usePolicyConfigSubagentPrompt();
 
   // Find default Anthropic API key
   const hasAnthropicKey = chatApiKeys?.some(
@@ -39,33 +41,6 @@ export default function AutoPolicySettingsPage() {
       toast.error("Failed to update subagent setting");
     }
   };
-
-  const prompt = `Analyze this MCP tool and determine security policies:
-
-Tool: {tool.name}
-Description: {tool.description}
-MCP Server: {mcpServerName}
-Parameters: {tool.parameters}
-
-Determine:
-
-1. allowUsageWhenUntrustedDataIsPresent (boolean)
-   - TRUE: Read-only, doesn't leak sensitive data
-   - FALSE: Writes data, executes code, sends data externally
-
-2. toolResultTreatment (enum)
-   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
-   - "untrusted": External/filesystem data where exact values are safe to use directly
-   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
-
-Examples:
-- Internal dev tools: allowUsage=true, treatment="trusted"
-- Database queries: allowUsage=true, treatment="trusted"
-- File reads (code/config): allowUsage=true, treatment="untrusted"
-- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
-- File writes: allowUsage=false, treatment="trusted"
-- External APIs (raw data): allowUsage=false, treatment="untrusted"
-- Code execution: allowUsage=false, treatment="untrusted"`;
 
   return (
     <div className="space-y-6">
@@ -152,7 +127,7 @@ Examples:
         </CardHeader>
         <CardContent>
           <div className="bg-muted rounded-md p-4 font-mono text-xs whitespace-pre-wrap break-words overflow-x-auto">
-            {prompt}
+            {promptTemplate}
           </div>
         </CardContent>
       </Card>

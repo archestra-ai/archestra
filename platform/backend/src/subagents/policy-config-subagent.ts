@@ -45,6 +45,34 @@ export class PolicyConfigSubagent {
   static readonly SUBAGENT_ID = "policy-configuration-subagent";
   static readonly SUBAGENT_NAME = "Policy Configuration Subagent";
 
+  // Analysis prompt template (exposed for UI display)
+  static readonly ANALYSIS_PROMPT_TEMPLATE = `Analyze this MCP tool and determine security policies:
+
+Tool: {tool.name}
+Description: {tool.description}
+MCP Server: {mcpServerName}
+Parameters: {tool.parameters}
+
+Determine:
+
+1. allowUsageWhenUntrustedDataIsPresent (boolean)
+   - TRUE: Read-only, doesn't leak sensitive data
+   - FALSE: Writes data, executes code, sends data externally
+
+2. toolResultTreatment (enum)
+   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
+   - "untrusted": External/filesystem data where exact values are safe to use directly
+   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
+
+Examples:
+- Internal dev tools: allowUsage=true, treatment="trusted"
+- Database queries: allowUsage=true, treatment="trusted"
+- File reads (code/config): allowUsage=true, treatment="untrusted"
+- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
+- File writes: allowUsage=false, treatment="trusted"
+- External APIs (raw data): allowUsage=false, treatment="untrusted"
+- Code execution: allowUsage=false, treatment="untrusted"`;
+
   // Virtual agent representing the subagent for observability
   private static readonly VIRTUAL_AGENT: Agent = {
     id: PolicyConfigSubagent.SUBAGENT_ID,
@@ -170,38 +198,22 @@ export class PolicyConfigSubagent {
   }
 
   /**
-   * Build the analysis prompt for the LLM
+   * Build the analysis prompt for the LLM using actual tool values
    */
   private buildPrompt(
     tool: Pick<Tool, "name" | "description" | "parameters">,
     mcpServerName: string | null,
   ): string {
-    return `Analyze this MCP tool and determine security policies:
-
-Tool: ${tool.name}
-Description: ${tool.description || "No description provided"}
-MCP Server: ${mcpServerName || "Unknown"}
-Parameters: ${JSON.stringify(tool.parameters, null, 2)}
-
-Determine:
-
-1. allowUsageWhenUntrustedDataIsPresent (boolean)
-   - TRUE: Read-only, doesn't leak sensitive data
-   - FALSE: Writes data, executes code, sends data externally
-
-2. toolResultTreatment (enum)
-   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
-   - "untrusted": External/filesystem data where exact values are safe to use directly
-   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
-
-Examples:
-- Internal dev tools: allowUsage=true, treatment="trusted"
-- Database queries: allowUsage=true, treatment="trusted"
-- File reads (code/config): allowUsage=true, treatment="untrusted"
-- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
-- File writes: allowUsage=false, treatment="trusted"
-- External APIs (raw data): allowUsage=false, treatment="untrusted"
-- Code execution: allowUsage=false, treatment="untrusted"`;
+    return PolicyConfigSubagent.ANALYSIS_PROMPT_TEMPLATE.replace(
+      "{tool.name}",
+      tool.name,
+    )
+      .replace(
+        "{tool.description}",
+        tool.description || "No description provided",
+      )
+      .replace("{mcpServerName}", mcpServerName || "Unknown")
+      .replace("{tool.parameters}", JSON.stringify(tool.parameters, null, 2));
   }
 
   /**

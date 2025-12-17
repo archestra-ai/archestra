@@ -687,7 +687,6 @@ export async function assignToolToAgent(
   }
 
   // Create or update the assignment with credentials
-  // Auto-configure happens automatically in AgentToolModel.create() if enabled
   const result = await AgentToolModel.createOrUpdateCredentials(
     agentId,
     toolId,

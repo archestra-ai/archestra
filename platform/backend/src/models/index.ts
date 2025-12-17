@@ -19,6 +19,7 @@ export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
+export { policyConfigSubagent } from "./policy-config-subagent";
 export { default as PromptModel } from "./prompt";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";

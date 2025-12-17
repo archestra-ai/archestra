@@ -1,38 +1,15 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { generateObject } from "ai";
-import { z } from "zod";
-import config from "@/config";
 import logger from "@/logging";
 import { secretManager } from "@/secretsmanager";
-import type { Tool } from "@/types";
 import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
 import McpServerModel from "./mcp-server";
+import { policyConfigSubagent } from "./policy-config-subagent";
 
-const PolicyConfigSchema = z.object({
-  allowUsageWhenUntrustedDataIsPresent: z
-    .boolean()
-    .describe(
-      "Should this tool be allowed when untrusted data is present in the context? " +
-        "Set to true for tools that handle sensitive operations safely (e.g., read-only operations, search tools, informational tools). " +
-        "Set to false for tools that could leak sensitive data or modify state based on untrusted input.",
-    ),
-  toolResultTreatment: z
-    .enum(["trusted", "sanitize_with_dual_llm", "untrusted"])
-    .describe(
-      "How should the tool's results be treated? " +
-        "'trusted' - Results can be used directly in subsequent operations without restrictions (internal data sources). " +
-        "'untrusted' - Results are marked as untrusted and will restrict what other tools can be used (external sources, user-controlled data). " +
-        "'sanitize_with_dual_llm' - Results are processed through dual LLM security pattern before being used (mixed content).",
-    ),
-  reasoning: z
-    .string()
-    .describe(
-      "Brief explanation of why these settings were chosen for this tool.",
-    ),
-});
-
-type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
+type PolicyConfig = {
+  allowUsageWhenUntrustedDataIsPresent: boolean;
+  toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+  reasoning: string;
+};
 
 interface AutoPolicyResult {
   success: boolean;
@@ -111,83 +88,51 @@ export class AgentToolAutoPolicyService {
   }
 
   /**
-   * Analyze a tool and determine appropriate security policies using LLM
+   * Analyze a tool and determine appropriate security policies using the PolicyConfigSubagent
    */
   private async analyzeTool(
-    tool: Tool,
+    tool: Parameters<typeof policyConfigSubagent.analyze>[0]["tool"],
     mcpServerName: string | null,
     anthropicApiKey: string,
+    organizationId: string,
   ): Promise<PolicyConfig> {
     logger.info(
       {
         toolName: tool.name,
         mcpServerName,
-        model: config.chat.defaultModel,
-        baseURL: config.chat.anthropic.baseUrl,
-        hasApiKey: !!anthropicApiKey,
+        subagent: "PolicyConfigSubagent",
       },
-      "analyzeTool: starting LLM analysis",
+      "analyzeTool: delegating to PolicyConfigSubagent",
     );
-    const anthropic = createAnthropic({
-      apiKey: anthropicApiKey,
-      baseURL: `${config.chat.anthropic.baseUrl}/v1`,
-    });
-
-    const prompt = `Analyze this MCP tool and determine security policies:
-
-Tool: ${tool.name}
-Description: ${tool.description || "No description provided"}
-MCP Server: ${mcpServerName || "Unknown"}
-Parameters: ${JSON.stringify(tool.parameters, null, 2)}
-
-Determine:
-
-1. allowUsageWhenUntrustedDataIsPresent (boolean)
-   - TRUE: Read-only, doesn't leak sensitive data
-   - FALSE: Writes data, executes code, sends data externally
-
-2. toolResultTreatment (enum)
-   - "trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
-   - "untrusted": External/filesystem data where exact values are safe to use directly
-   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
-
-Examples:
-- Internal dev tools: allowUsage=true, treatment="trusted"
-- Database queries: allowUsage=true, treatment="trusted"
-- File reads (code/config): allowUsage=true, treatment="untrusted"
-- Web search/scraping: allowUsage=true, treatment="sanitize_with_dual_llm"
-- File writes: allowUsage=false, treatment="trusted"
-- External APIs (raw data): allowUsage=false, treatment="untrusted"
-- Code execution: allowUsage=false, treatment="untrusted"`;
 
     try {
-      const result = await generateObject({
-        model: anthropic(config.chat.defaultModel),
-        schema: PolicyConfigSchema,
-        prompt,
+      // Delegate to the PolicyConfigSubagent
+      const result = await policyConfigSubagent.analyze({
+        tool,
+        mcpServerName,
+        anthropicApiKey,
+        organizationId,
       });
 
       logger.info(
         {
           toolName: tool.name,
           mcpServerName,
-          config: result.object,
+          config: result,
         },
-        "analyzeTool: LLM analysis completed",
+        "analyzeTool: PolicyConfigSubagent analysis completed",
       );
 
-      return result.object;
+      return result;
     } catch (error) {
       logger.error(
         {
           toolName: tool.name,
           mcpServerName,
-          model: config.chat.defaultModel,
-          baseURL: config.chat.anthropic.baseUrl,
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
         },
-        "analyzeTool: LLM API call failed",
+        "analyzeTool: PolicyConfigSubagent analysis failed",
       );
       throw error;
     }
@@ -249,21 +194,15 @@ Examples:
         "configurePoliciesForAgentTool: fetched tool details",
       );
 
-      // Analyze tool and get policy configuration
+      // Analyze tool and get policy configuration using PolicyConfigSubagent
       const policyConfig = await this.analyzeTool(
         {
-          id: assignment.tool.id,
-          name: assignment.tool.name,
-          description: assignment.tool.description,
-          parameters: assignment.tool.parameters,
-          catalogId: assignment.tool.catalogId,
-          mcpServerId: assignment.tool.mcpServerId,
-          agentId: null,
-          createdAt: assignment.tool.createdAt,
-          updatedAt: assignment.tool.updatedAt,
+          ...assignment.tool,
+          agentId: null, // Tools from agent assignments don't have agentId field
         },
         mcpServerName,
         anthropicApiKey,
+        organizationId,
       );
 
       // Update agent-tool with new configuration including reasoning

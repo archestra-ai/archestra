@@ -740,12 +740,12 @@ export const getMcpServerInstallationStatus = <ThrowOnError extends boolean = fa
 export const getMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerToolsData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerToolsResponses, GetMcpServerToolsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/tools', ...options });
 
 /**
- * Get logs for a specific MCP server pod
+ * Get logs for a specific MCP server deployment
  */
 export const getMcpServerLogs = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerLogsData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerLogsResponses, GetMcpServerLogsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/logs', ...options });
 
 /**
- * Restart a single MCP server pod
+ * Restart a single MCP server deployment
  */
 export const restartMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestartMcpServerData, ThrowOnError>) => (options.client ?? client).post<RestartMcpServerResponses, RestartMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/restart', ...options });
 

@@ -125,6 +125,18 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     // Re-navigate in case the page got stale
     await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
     await page.waitForLoadState("networkidle");
+
+    // Fail fast if error message is present
+    const errorElement = page.getByTestId(
+      `${E2eTestId.McpServerError}-${catalogItemName}`,
+    );
+    if (await errorElement.isVisible()) {
+      const errorText = await errorElement.innerText();
+      throw new Error(
+        `MCP Server installation failed with error: ${errorText}`,
+      );
+    }
+
     await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 

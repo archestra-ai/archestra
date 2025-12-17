@@ -26,6 +26,7 @@ export const E2eTestId = {
   SsoRoleMappingRuleRole: "sso-role-mapping-rule-role",
   SsoRoleMappingRuleTemplate: "sso-role-mapping-rule-template",
   SsoRoleMappingAddRule: "sso-role-mapping-add-rule",
+  McpServerError: "mcp-server-error",
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",

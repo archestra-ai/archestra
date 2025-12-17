@@ -380,7 +380,10 @@ export function McpServerCard({
         </div>
       </WithPermissions>
       {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
+        <div
+          className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+          data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+        >
           {errorMessage}
         </div>
       )}
@@ -446,7 +449,10 @@ export function McpServerCard({
         </div>
       </WithPermissions>
       {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
+        <div
+          className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+          data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+        >
           {errorMessage}
         </div>
       )}

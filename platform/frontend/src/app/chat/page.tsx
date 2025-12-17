@@ -4,24 +4,11 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
+import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ManageChatToolsDialog } from "@/components/chat/manage-chat-tools-dialog";
@@ -61,6 +48,7 @@ import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -397,29 +385,27 @@ export default function ChatPage() {
     messages,
   ]);
 
-  const handleSubmit = useCallback(
-    (
-      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
-      message: { text?: string; files?: any[] },
-      e: FormEvent<HTMLFormElement>,
-    ) => {
-      e.preventDefault();
-      if (
-        !sendMessage ||
-        !message.text?.trim() ||
-        status === "submitted" ||
-        status === "streaming"
-      ) {
-        return;
-      }
+  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
+    e.preventDefault();
+    console.log("status", status);
+    if (status === "submitted" || status === "streaming") {
+      stop?.();
+    }
 
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: message.text }],
-      });
-    },
-    [sendMessage, status],
-  );
+    if (
+      !sendMessage ||
+      !message.text?.trim() ||
+      status === "submitted" ||
+      status === "streaming"
+    ) {
+      return;
+    }
+
+    sendMessage?.({
+      role: "user",
+      parts: [{ type: "text", text: message.text }],
+    });
+  };
 
   // If API key is not configured, show setup message
   // Only show after loading completes to avoid flash of incorrect content
@@ -616,7 +602,7 @@ export default function ChatPage() {
           </div>
 
           <div className="sticky bottom-0 bg-background border-t p-4">
-            <div className="max-w-3xl mx-auto space-y-3">
+            <div className="max-w-4xl mx-auto space-y-3">
               {currentProfileId && (
                 <WithPermissions
                   permissions={{ profile: ["read"] }}
@@ -642,18 +628,7 @@ export default function ChatPage() {
                   }}
                 </WithPermissions>
               )}
-              <PromptInput onSubmit={handleSubmit}>
-                <PromptInputBody>
-                  <PromptInputTextarea placeholder="Type a message..." />
-                </PromptInputBody>
-                <PromptInputToolbar>
-                  <PromptInputTools />
-                  <PromptInputSubmit
-                    status={status === "error" ? "ready" : status}
-                    onStop={stop}
-                  />
-                </PromptInputToolbar>
-              </PromptInput>
+              <ArchestraPromptInput onSubmit={handleSubmit} status={status} />
             </div>
           </div>
         </div>

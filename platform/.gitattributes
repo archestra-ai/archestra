@@ -37,11 +37,3 @@ backend/src/database/migrations/meta/** linguist-generated=true
 backend/src/database/migrations/meta/** -diff
 backend/src/database/migrations/meta/*.json linguist-generated=true
 backend/src/database/migrations/meta/*.json -diff
-
-# API client codegen
-shared/hey-api/**/*.gen.ts linguist-generated=true
-shared/hey-api/**/*.gen.ts -diff
-
-# Lock files
-pnpm-lock.yaml linguist-generated=true
-pnpm-lock.yaml -diff

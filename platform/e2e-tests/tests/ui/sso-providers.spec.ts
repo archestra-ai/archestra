@@ -443,6 +443,12 @@ test.describe("SSO Role Mapping E2E", () => {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
       await ssoPage.waitForLoadState("networkidle");
 
+      // Wait for SSO button to appear (provider was just created)
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
+
       // Click SSO button and login via Keycloak
       await clickButton({
         page: ssoPage,
@@ -619,6 +625,12 @@ test.describe("SSO Team Sync E2E", () => {
     try {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
       await ssoPage.waitForLoadState("networkidle");
+
+      // Wait for SSO button to appear (provider was just created)
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
 
       // Click SSO button and login via Keycloak
       await clickButton({

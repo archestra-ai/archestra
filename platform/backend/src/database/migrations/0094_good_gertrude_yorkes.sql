@@ -1,1 +1,0 @@
-ALTER TABLE "agent_tools" ADD COLUMN "policies_auto_configured_reasoning" text;

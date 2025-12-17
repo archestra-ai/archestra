@@ -15,7 +15,7 @@ import {
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { DateRange } from "react-day-picker";
 
@@ -32,7 +32,7 @@ ChartJS.register(
 
 import type { archestraApiTypes } from "@shared";
 import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
-import { LoadingSpinner } from "@/components/loading";
+
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -148,14 +148,12 @@ function createVisibilitySyncPlugin<T>(
 export function StatisticsPageClient({
   initialData,
 }: {
-  initialData?: StatisticsInitialData;
+  initialData: StatisticsInitialData;
 }) {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
-          <StatisticsContent initialData={initialData} />
-        </Suspense>
+        <StatisticsContent initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
@@ -164,12 +162,12 @@ export function StatisticsPageClient({
 function StatisticsContent({
   initialData,
 }: {
-  initialData?: StatisticsInitialData;
+  initialData: StatisticsInitialData;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
+  const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>(initialData.timeframe);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [fromTime, setFromTime] = useState("00:00");
   const [toTime, setToTime] = useState("23:59");
@@ -184,19 +182,19 @@ function StatisticsContent({
   const currentTimeframe = timeframe.startsWith("custom:") ? "all" : timeframe;
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe: currentTimeframe,
-    initialData: initialData?.teamStatistics,
+    initialData: initialData.teamStatistics,
   });
   const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe: currentTimeframe,
-    initialData: initialData?.agentStatistics,
+    initialData: initialData.agentStatistics,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
     timeframe: currentTimeframe,
-    initialData: initialData?.modelStatistics,
+    initialData: initialData.modelStatistics,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe: currentTimeframe,
-    initialData: initialData?.costSavingsStatistics,
+    initialData: initialData.costSavingsStatistics,
   });
 
   /**
@@ -391,74 +389,74 @@ function StatisticsContent({
   const teamChartData =
     teamStatistics.length > 0
       ? convertStatsToChartData<TeamStatisticsData>(
-          teamStatistics,
-          "teamName",
-          colors,
-          hiddenTeams,
-          (stat) => stat.teamId,
-        )
+        teamStatistics,
+        "teamName",
+        colors,
+        hiddenTeams,
+        (stat) => stat.teamId,
+      )
       : {
-          labels: ["No Data"],
-          datasets: [
-            {
-              label: "No teams found",
-              data: [0],
-              borderColor: "#9ca3af",
-              backgroundColor: "rgba(156, 163, 175, 0.1)",
-              borderWidth: 3,
-              fill: false,
-              tension: 0.4,
-            },
-          ],
-        };
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No teams found",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
 
   const agentChartData =
     agentStatistics.length > 0
       ? convertStatsToChartData<ProfileStatisticsData>(
-          agentStatistics,
-          "agentName",
-          colors,
-          hiddenProfiles,
-          (stat) => stat.agentId,
-        )
+        agentStatistics,
+        "agentName",
+        colors,
+        hiddenProfiles,
+        (stat) => stat.agentId,
+      )
       : {
-          labels: ["No Data"],
-          datasets: [
-            {
-              label: "No profiles found",
-              data: [0],
-              borderColor: "#9ca3af",
-              backgroundColor: "rgba(156, 163, 175, 0.1)",
-              borderWidth: 3,
-              fill: false,
-              tension: 0.4,
-            },
-          ],
-        };
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No profiles found",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
 
   const modelChartData =
     modelStatistics.length > 0
       ? convertStatsToChartData<ModelStatisticsData>(
-          modelStatistics,
-          "model",
-          colors,
-          hiddenModels,
-          (stat) => stat.model,
-        )
+        modelStatistics,
+        "model",
+        colors,
+        hiddenModels,
+        (stat) => stat.model,
+      )
       : {
-          labels: ["No Data"],
-          datasets: [
-            {
-              label: "No models found",
-              data: [0],
-              borderColor: "#9ca3af",
-              backgroundColor: "rgba(156, 163, 175, 0.1)",
-              borderWidth: 3,
-              fill: false,
-              tension: 0.4,
-            },
-          ],
-        };
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No models found",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
 
   // Chart keys to force remount when data changes
   const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;

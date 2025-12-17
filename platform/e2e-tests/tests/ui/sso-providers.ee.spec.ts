@@ -287,10 +287,7 @@ async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
     // Check for error toast or message on the sign-in page
     const errorToast = ssoPage.locator('[role="alert"]').first();
     const errorText = await errorToast.textContent().catch(() => null);
-    if (
-      errorText &&
-      !errorText.includes("Default Admin Credentials Enabled")
-    ) {
+    if (errorText && !errorText.includes("Default Admin Credentials Enabled")) {
       console.log(`SSO login failed with error: ${errorText}`);
     }
   }

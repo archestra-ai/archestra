@@ -149,12 +149,12 @@ type ServerWebSocketMessage =
 // All message types that can be received
 type IncomingWebSocketMessage = ClientWebSocketMessage | ServerWebSocketMessage;
 
-// biome-ignore lint/suspicious/noExplicitAny: Generic message handler needs to accept any message type
-type MessageHandler<T = any> = (message: T) => void;
+type MessageHandler = (message: IncomingWebSocketMessage) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
-  private handlers: Map<string, Set<MessageHandler>> = new Map();
+  private handlers: Map<IncomingWebSocketMessage["type"], Set<MessageHandler>> =
+    new Map();
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = Infinity;
@@ -242,19 +242,20 @@ class WebSocketService {
    */
   subscribe<T extends IncomingWebSocketMessage["type"]>(
     type: T,
-    handler: MessageHandler<Extract<IncomingWebSocketMessage, { type: T }>>,
+    handler: (message: Extract<IncomingWebSocketMessage, { type: T }>) => void,
   ): () => void {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set());
     }
 
-    this.handlers.get(type)?.add(handler);
+    const wrappedHandler = handler as unknown as MessageHandler;
+    this.handlers.get(type)?.add(wrappedHandler);
 
     // Return unsubscribe function
     return () => {
       const handlers = this.handlers.get(type);
       if (handlers) {
-        handlers.delete(handler);
+        handlers.delete(wrappedHandler);
         if (handlers.size === 0) {
           this.handlers.delete(type);
         }

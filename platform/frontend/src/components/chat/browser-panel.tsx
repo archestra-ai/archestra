@@ -326,6 +326,68 @@ export function BrowserPanel({
     [conversationId],
   );
 
+  // Handle click on browser screenshot
+  const handleImageClick = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (!isConnected || isInteracting || !conversationId) return;
+
+      const img = imageRef.current;
+      if (!img) return;
+
+      // Get the actual rendered position of the image (accounting for object-contain)
+      const imgRect = img.getBoundingClientRect();
+      const naturalRatio = img.naturalWidth / img.naturalHeight;
+      const containerRatio = imgRect.width / imgRect.height;
+
+      let renderedWidth: number;
+      let renderedHeight: number;
+      let offsetX: number;
+      let offsetY: number;
+
+      if (naturalRatio > containerRatio) {
+        // Image is wider - letterboxed top/bottom
+        renderedWidth = imgRect.width;
+        renderedHeight = imgRect.width / naturalRatio;
+        offsetX = 0;
+        offsetY = (imgRect.height - renderedHeight) / 2;
+      } else {
+        // Image is taller - letterboxed left/right
+        renderedHeight = imgRect.height;
+        renderedWidth = imgRect.height * naturalRatio;
+        offsetX = (imgRect.width - renderedWidth) / 2;
+        offsetY = 0;
+      }
+
+      const clickX = e.clientX - imgRect.left - offsetX;
+      const clickY = e.clientY - imgRect.top - offsetY;
+
+      // Check if click is within the actual image area
+      if (
+        clickX < 0 ||
+        clickX > renderedWidth ||
+        clickY < 0 ||
+        clickY > renderedHeight
+      ) {
+        return; // Click was on letterbox area
+      }
+
+      // Scale coordinates from displayed size to original image size
+      const scaleX = img.naturalWidth / renderedWidth;
+      const scaleY = img.naturalHeight / renderedHeight;
+      const x = clickX * scaleX;
+      const y = clickY * scaleY;
+
+      setIsInteracting(true);
+      setError(null);
+
+      websocketService.send({
+        type: "browser_click",
+        payload: { conversationId, x, y },
+      });
+    },
+    [isConnected, isInteracting, conversationId],
+  );
+
   // Handle dragging for floating panel position
   const handleDragStart = useCallback(
     (e: ReactMouseEvent) => {
@@ -662,7 +724,7 @@ export function BrowserPanel({
       {/* Content - Screenshot with clickable overlay - hidden when minimized */}
       {!isMinimized && (
         <div className="flex-1 overflow-auto bg-black">
-          {isConnecting ? (
+          {isConnecting && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-2">
                 <div className="animate-pulse">
@@ -671,7 +733,8 @@ export function BrowserPanel({
                 <p className="text-sm text-muted-foreground">Connecting...</p>
               </div>
             </div>
-          ) : screenshot ? (
+          )}
+          {!isConnecting && screenshot && (
             <div className="relative w-full h-full flex items-start justify-start">
               <img
                 ref={imageRef}
@@ -683,63 +746,7 @@ export function BrowserPanel({
               {/* biome-ignore lint/a11y/useSemanticElements: Need div for absolute positioning overlay */}
               <div
                 className="absolute inset-0 cursor-pointer"
-                onClick={(e) => {
-                  if (!isConnected || isInteracting || !conversationId) return;
-
-                  const img = imageRef.current;
-                  if (!img) return;
-
-                  // Get the actual rendered position of the image (accounting for object-contain)
-                  const imgRect = img.getBoundingClientRect();
-                  const naturalRatio = img.naturalWidth / img.naturalHeight;
-                  const containerRatio = imgRect.width / imgRect.height;
-
-                  let renderedWidth: number;
-                  let renderedHeight: number;
-                  let offsetX: number;
-                  let offsetY: number;
-
-                  if (naturalRatio > containerRatio) {
-                    // Image is wider - letterboxed top/bottom
-                    renderedWidth = imgRect.width;
-                    renderedHeight = imgRect.width / naturalRatio;
-                    offsetX = 0;
-                    offsetY = (imgRect.height - renderedHeight) / 2;
-                  } else {
-                    // Image is taller - letterboxed left/right
-                    renderedHeight = imgRect.height;
-                    renderedWidth = imgRect.height * naturalRatio;
-                    offsetX = (imgRect.width - renderedWidth) / 2;
-                    offsetY = 0;
-                  }
-
-                  const clickX = e.clientX - imgRect.left - offsetX;
-                  const clickY = e.clientY - imgRect.top - offsetY;
-
-                  // Check if click is within the actual image area
-                  if (
-                    clickX < 0 ||
-                    clickX > renderedWidth ||
-                    clickY < 0 ||
-                    clickY > renderedHeight
-                  ) {
-                    return; // Click was on letterbox area
-                  }
-
-                  // Scale coordinates from displayed size to original image size
-                  const scaleX = img.naturalWidth / renderedWidth;
-                  const scaleY = img.naturalHeight / renderedHeight;
-                  const x = clickX * scaleX;
-                  const y = clickY * scaleY;
-
-                  setIsInteracting(true);
-                  setError(null);
-
-                  websocketService.send({
-                    type: "browser_click",
-                    payload: { conversationId, x, y },
-                  });
-                }}
+                onClick={handleImageClick}
                 onKeyDown={(e) => {
                   // Handle keyboard navigation
                   if (e.key === "Enter" || e.key === " ") {
@@ -752,7 +759,8 @@ export function BrowserPanel({
                 aria-label="Click to interact with browser"
               />
             </div>
-          ) : (
+          )}
+          {!isConnecting && !screenshot && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-2">
                 <Globe className="h-12 w-12 text-muted-foreground mx-auto" />

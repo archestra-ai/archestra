@@ -225,7 +225,7 @@ export class McpServerRuntimeManager {
     try {
       logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
 
-      // Try to list pods in the namespace to verify connectivity
+      // Try to list pods in the namespace to verify K8s API connectivity
       await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
 
       logger.info("K8s connection verified successfully");
@@ -287,7 +287,7 @@ export class McpServerRuntimeManager {
         if (secret?.secret && typeof secret.secret === "object") {
           const secretData: Record<string, string> = {};
 
-          // Convert secret.secret (Record<string, unknown>) to Record<string, string>
+          // Convert secret.secret to Record<string, string>
           for (const [key, value] of Object.entries(secret.secret)) {
             secretData[key] = String(value);
           }

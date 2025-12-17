@@ -294,7 +294,7 @@ export default class K8sDeployment {
    *
    * @param dockerImage - The Docker image to use for the container
    * @param localConfig - The local configuration for the MCP server
-   * @param needsHttp - Whether the pod needs HTTP port exposure
+   * @param needsHttp - Whether the deployment's pod needs HTTP port exposure
    * @param httpPort - The HTTP port to expose (if needsHttp is true)
    * @returns The Kubernetes deployment specification
    */
@@ -314,7 +314,7 @@ export default class K8sDeployment {
     const podSpec: k8s.V1PodSpec = {
       // Fast shutdown for stateless MCP servers (default is 30s)
       terminationGracePeriodSeconds: 5,
-      // Use dedicated service account if serviceAccount is enabled in localConfig
+      // Use dedicated service account if requested
       ...(localConfig.serviceAccount
         ? {
             serviceAccountName:
@@ -396,7 +396,7 @@ export default class K8sDeployment {
 
   /**
    * Rewrite localhost URLs to host.docker.internal for Docker Desktop Kubernetes.
-   * This allows pods to access services running on the host machine.
+   * This allows deployment pods to access services running on the host machine.
    *
    * Note: This assumes Docker Desktop. Other local K8s environments may need different
    * hostnames (e.g., host.minikube.internal for Minikube, or host-gateway for kind).
@@ -593,16 +593,8 @@ export default class K8sDeployment {
             name: this.deploymentName,
             namespace: this.namespace,
           });
-          // Wait a bit for deletion to propagate? Or just proceed and hope k8s handles it?
-          // K8s might reject deployment creation if name conflicts, but deployment name == pod name might be tricky if they share namespace/name space?
-          // Actually, Pods and Deployments have separate namespaces for names.
-          // Deployment name: mcp-foo
-          // Pod name (created by deployment): mcp-foo-xyz12
-          // Bare pod name: mcp-foo
-          // Wait, if I named the Deployment "mcp-foo", it creates ReplicaSet "mcp-foo-xyz", which creates Pod "mcp-foo-xyz-abc".
-          // So there shouldn't be a name conflict between the Deployment object and the Pod object.
-          // BUT, we want to clean up the bare pod so it doesn't conflict with resource usage or logic.
         }
+        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
         // Ignore 404, propagate others
         if (error?.code !== 404 && error?.statusCode !== 404) {
@@ -637,7 +629,7 @@ export default class K8sDeployment {
             const httpPort = catalogItem?.localConfig?.httpPort || 8080;
             const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
 
-            // Use service DNS for in-cluster, localhost with NodePort for local dev
+            // Use service DNS for in-cluster, NodePort for local dev
             let baseUrl: string | undefined;
             if (
               config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
@@ -674,10 +666,13 @@ export default class K8sDeployment {
           return;
         }
 
-        // If deployment exists but no available replicas... wait? Or delete/recreate?
-        // We'll assume it's starting or failed, proceed to update logic if we were doing updates.
-        // For now, if it exists but failed, we might want to restart it.
-        // Let's rely on k8s to reconcile if spec matches.
+        // If deployment exists but is not ready, return to let waitForDeploymentReady handle it
+        logger.info(
+          `Deployment ${this.deploymentName} exists but is not yet ready`,
+        );
+        this.state = "pending";
+        return;
+        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
         // Deployment doesn't exist, we'll create it below
         if (error?.code !== 404 && error?.statusCode !== 404) {
@@ -702,7 +697,7 @@ export default class K8sDeployment {
 
       this.state = "pending";
 
-      // Use custom Docker image if provided, otherwise use the base image
+      // Use custom Docker image if provided
       const dockerImage =
         catalogItem.localConfig.dockerImage || mcpServerBaseImage;
       logger.info(`Using Docker image: ${dockerImage}`);
@@ -711,7 +706,7 @@ export default class K8sDeployment {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
-      // Normalize localConfig to ensure required and description have defaults
+      // Normalize localConfig to ensure fields have defaults
       const normalizedLocalConfig = {
         ...catalogItem.localConfig,
         environment: catalogItem.localConfig.environment?.map((env) => ({
@@ -731,9 +726,7 @@ export default class K8sDeployment {
         ),
       });
 
-      logger.info(
-        `Deployment ${this.deploymentName} created, will check status asynchronously`,
-      );
+      logger.info(`Deployment ${this.deploymentName} created`);
 
       // For HTTP servers, create a K8s Service and set endpoint URL
       if (needsHttp) {
@@ -742,7 +735,7 @@ export default class K8sDeployment {
         // Get HTTP path from config (default to /mcp)
         const httpPath = catalogItem.localConfig.httpPath || "/mcp";
 
-        // Use service DNS for in-cluster, localhost with NodePort for local dev
+        // Use service DNS for in-cluster, NodePort for local dev
         let baseUrl: string;
         if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
           // In-cluster: use service DNS name
@@ -772,10 +765,7 @@ export default class K8sDeployment {
         );
       }
 
-      // Wait for a pod to be created and assign port
-      // We can't immediately assign port since pod might not exist yet
-      // assignment happens in findPodForDeployment which is called during checks
-
+      // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       this.state = "running";
       logger.info(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {

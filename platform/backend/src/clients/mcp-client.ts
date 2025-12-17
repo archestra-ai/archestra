@@ -279,7 +279,7 @@ class McpClient {
   }
 
   // Determines the target MCP server ID for a local catalog item
-  // Since there are multiple pods for a single catalog item that can receive request
+  // Since there are multiple deployments for a single catalog item that can receive request
   private async determineTargetMcpServerIdForCatalogItem({
     tool,
     tokenAuth,

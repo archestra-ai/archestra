@@ -238,7 +238,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // For LOCAL servers: validate env vars and create secrets (no connection validation, since pod will be started later)
+      // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
@@ -411,7 +411,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 );
 
                 // Wait for deployment to be ready (with timeout)
-                // This will throw an error if the deployment fails or times out
                 await k8sDeployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
 
                 fastify.log.info(
@@ -498,14 +497,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             await McpServerModel.update(mcpServer.id, {
               localInstallationStatus: "error",
-              localInstallationError: `Failed to start pod: ${errorMessage}`,
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
 
             // Return the server with error status instead of throwing 500
             return reply.send({
               ...mcpServer,
               localInstallationStatus: "error",
-              localInstallationError: `Failed to start pod: ${errorMessage}`,
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
           }
         }
@@ -594,12 +593,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await McpServerRuntimeManager.stopServer(mcpServerId);
           logger.info(
             { mcpServerId },
-            "Stopped K8s pod and deleted K8s Secret for local MCP server",
+            "Stopped K8s deployment and deleted K8s Secret for local MCP server",
           );
         } catch (error) {
           logger.error(
             { err: error, mcpServerId },
-            "Failed to stop local MCP server pod",
+            "Failed to stop local MCP server deployment",
           );
           // Continue with deletion even if pod stop fails
         }
@@ -717,7 +716,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMcpServerLogs,
-        description: "Get logs for a specific MCP server pod",
+        description: "Get logs for a specific MCP server deployment",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -784,7 +783,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.RestartMcpServer,
-        description: "Restart a single MCP server pod",
+        description: "Restart a single MCP server deployment",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,

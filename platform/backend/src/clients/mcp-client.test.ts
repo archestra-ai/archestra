@@ -653,7 +653,7 @@ describe("McpClient", () => {
         const mockK8sDeployment = {
           k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
           k8sNamespace: "default",
-          k8sPodName: "mcp-test-deployment",
+          deploymentName: "mcp-test-deployment",
           getRunningPodName: vi.fn().mockResolvedValue("mcp-test-pod-actual"),
         };
         mockGetDeployment.mockReturnValue(mockK8sDeployment);

@@ -79,10 +79,6 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Setup environment variables
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: cp .env.example .env
-
       - name: Type checking, linting, formatting checks
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
@@ -126,13 +122,6 @@ jobs:
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
-
-      - name: Setup environment variables
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
-        run: |
-          cp .env.example .env
-          sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
 
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

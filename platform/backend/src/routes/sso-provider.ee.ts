@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { auth } from "@/auth/better-auth";
 import { SSO_PROVIDERS_API_PREFIX } from "@/constants";
 import SsoProviderModel from "@/models/sso-provider.ee";
 import {
@@ -11,7 +12,6 @@ import {
   SelectSsoProviderSchema,
   UpdateSsoProviderSchema,
 } from "@/types";
-import { auth } from "@/auth/better-auth";
 
 const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**

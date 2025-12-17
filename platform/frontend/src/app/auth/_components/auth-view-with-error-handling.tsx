@@ -17,10 +17,10 @@ import config from "@/lib/config";
 
 const { SsoProviderSelector } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
-  await import("@/components/sso-provider-selector.ee")
+    await import("@/components/sso-provider-selector.ee")
   : {
-    SsoProviderSelector: () => null,
-  };
+      SsoProviderSelector: () => null,
+    };
 
 const { usePublicSsoProviders } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
@@ -32,8 +32,7 @@ const { usePublicSsoProviders } = config.enterpriseLicenseActivated
         isError: false,
         error: null,
       }),
-  };
-
+    };
 
 /**
  * Map of SSO error codes to user-friendly messages.
@@ -272,7 +271,12 @@ export function AuthViewWithErrorHandling({
   );
 
   // When basic auth is disabled but SSO providers exist, show SSO in a card
-  if (isBasicAuthDisabled && hasSsoProviders && isSignInPage && config.enterpriseLicenseActivated) {
+  if (
+    isBasicAuthDisabled &&
+    hasSsoProviders &&
+    isSignInPage &&
+    config.enterpriseLicenseActivated
+  ) {
     return (
       <div className="w-full max-w-md space-y-4">
         {ssoErrorAlert}

@@ -4,6 +4,7 @@ import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
+import type { BetterAuth } from "@/auth/better-auth";
 import {
   cacheSsoGroups,
   extractGroupsFromClaims,
@@ -11,7 +12,6 @@ import {
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
-
 import type {
   InsertSsoProvider,
   PublicSsoProvider,
@@ -19,7 +19,6 @@ import type {
   UpdateSsoProvider,
 } from "@/types";
 import MemberModel from "./member";
-import type { BetterAuth } from '@/auth/better-auth';
 
 interface RoleMappingContext {
   token?: Record<string, unknown>;

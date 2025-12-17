@@ -3,6 +3,7 @@ import {
   type PredefinedRoleName,
   testMcpServerCommand,
 } from "@shared";
+import { auth } from "@/auth/better-auth";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -18,7 +19,6 @@ import {
   UserModel,
 } from "@/models";
 import type { InsertDualLlmConfig } from "@/types";
-import { auth } from "@/auth/better-auth";
 
 /**
  * Seeds admin user
@@ -31,7 +31,10 @@ export async function seedDefaultUserAndOrg(
     name?: string;
   } = {},
 ) {
-  const user = await UserModel.createOrGetExistingDefaultAdminUser(auth, config);
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(
+    auth,
+    config,
+  );
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   if (!user || !org) {
     throw new Error("Failed to seed admin user and default organization");

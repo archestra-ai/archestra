@@ -15,8 +15,6 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 
-export type BetterAuth = ReturnType<typeof betterAuth>;
-
 const { ssoConfig, syncSsoRole, syncSsoTeams } =
   config.enterpriseLicenseActivated
     ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
@@ -63,7 +61,7 @@ const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
 // biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
-export const auth: BetterAuth = betterAuth({
+export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
@@ -250,6 +248,8 @@ export const auth: BetterAuth = betterAuth({
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
 });
+
+export type BetterAuth = ReturnType<typeof betterAuth>;
 
 /**
  * Validates requests before they are processed by better-auth.

@@ -80,7 +80,7 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
 export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
-export const DEFAULT_PROFILE_NAME = "Default Profile with Archestra";
+export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 /**
  * Separator used to construct fully-qualified MCP tool names

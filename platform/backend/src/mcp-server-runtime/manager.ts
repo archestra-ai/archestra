@@ -86,7 +86,7 @@ export class McpServerRuntimeManager {
   private k8sAttach?: Attach;
   private k8sLog?: k8s.Log;
   private namespace: string = "default";
-  private mcpServerIdToPodMap: Map<string, K8sDeployment> = new Map();
+  private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
   // Callbacks for initialization events
@@ -249,7 +249,7 @@ export class McpServerRuntimeManager {
     }
 
     const { id, name } = mcpServer;
-    logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
+    logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
 
     try {
       // Fetch catalog item (needed for conditional env var logic)
@@ -276,9 +276,9 @@ export class McpServerRuntimeManager {
         environmentValues,
       );
 
-      // Register the pod BEFORE starting it
-      this.mcpServerIdToPodMap.set(id, k8sDeployment);
-      logger.info(`Registered MCP server pod ${id} in map`);
+      // Register the deployment BEFORE starting it
+      this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
+      logger.info(`Registered MCP server deployment ${id} in map`);
 
       // If MCP server has a secretId, fetch secret and create K8s Secret
       if (mcpServer.secretId) {
@@ -302,16 +302,16 @@ export class McpServerRuntimeManager {
       }
 
       await k8sDeployment.startOrCreateDeployment();
-      logger.info(`Successfully started MCP server pod ${id} (${name})`);
+      logger.info(`Successfully started MCP server deployment ${id} (${name})`);
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to start MCP server pod ${id} (${name}):`,
+        `Failed to start MCP server deployment ${id} (${name}):`,
       );
       // Keep the pod in the map even if it failed to start
       // This ensures it appears in status updates with error state
       logger.warn(
-        `MCP server pod ${id} failed to start but remains registered for error display`,
+        `MCP server deployment ${id} failed to start but remains registered for error display`,
       );
       throw error;
     }
@@ -321,49 +321,49 @@ export class McpServerRuntimeManager {
    * Stop a single MCP server pod
    */
   async stopServer(mcpServerId: string): Promise<void> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
 
-    if (k8sPod) {
-      // Delete pod first
-      await k8sPod.stopPod();
+    if (k8sDeployment) {
+      // Delete deployment first
+      await k8sDeployment.stopDeployment();
 
       // Delete K8s Secret (if it exists)
-      await k8sPod.deleteK8sSecret();
+      await k8sDeployment.deleteK8sSecret();
 
-      this.mcpServerIdToPodMap.delete(mcpServerId);
+      this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
   }
 
   /**
-   * Get a pod by MCP server ID
+   * Get a deployment by MCP server ID
    */
-  getPod(mcpServerId: string): K8sDeployment | undefined {
-    return this.mcpServerIdToPodMap.get(mcpServerId);
+  getDeployment(mcpServerId: string): K8sDeployment | undefined {
+    return this.mcpServerIdToDeploymentMap.get(mcpServerId);
   }
 
   /**
    * Remove an MCP server pod completely
    */
   async removeMcpServer(mcpServerId: string): Promise<void> {
-    logger.info(`Removing MCP server pod for: ${mcpServerId}`);
+    logger.info(`Removing MCP server deployment for: ${mcpServerId}`);
 
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      logger.warn(`No pod found for MCP server ${mcpServerId}`);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      logger.warn(`No deployment found for MCP server ${mcpServerId}`);
       return;
     }
 
     try {
-      await k8sPod.removePod();
-      logger.info(`Successfully removed MCP server pod ${mcpServerId}`);
+      await k8sDeployment.removeDeployment();
+      logger.info(`Successfully removed MCP server deployment ${mcpServerId}`);
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to remove MCP server pod ${mcpServerId}:`,
+        `Failed to remove MCP server deployment ${mcpServerId}:`,
       );
       throw error;
     } finally {
-      this.mcpServerIdToPodMap.delete(mcpServerId);
+      this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
   }
 
@@ -371,7 +371,7 @@ export class McpServerRuntimeManager {
    * Restart a single MCP server pod
    */
   async restartServer(mcpServerId: string): Promise<void> {
-    logger.info(`Restarting MCP server pod: ${mcpServerId}`);
+    logger.info(`Restarting MCP server deployment: ${mcpServerId}`);
 
     try {
       // Get the MCP server from database
@@ -390,11 +390,13 @@ export class McpServerRuntimeManager {
       // Start the pod again
       await this.startServer(mcpServer);
 
-      logger.info(`MCP server pod ${mcpServerId} restarted successfully`);
+      logger.info(
+        `MCP server deployment ${mcpServerId} restarted successfully`,
+      );
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to restart MCP server pod ${mcpServerId}:`,
+        `Failed to restart MCP server deployment ${mcpServerId}:`,
       );
       throw error;
     }
@@ -404,22 +406,22 @@ export class McpServerRuntimeManager {
    * Check if an MCP server uses streamable HTTP transport
    */
   async usesStreamableHttp(mcpServerId: string): Promise<boolean> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
       return false;
     }
-    return await k8sPod.usesStreamableHttp();
+    return await k8sDeployment.usesStreamableHttp();
   }
 
   /**
    * Get the HTTP endpoint URL for a streamable-http server
    */
   getHttpEndpointUrl(mcpServerId: string): string | undefined {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
       return undefined;
     }
-    return k8sPod.getHttpEndpointUrl();
+    return k8sDeployment.getHttpEndpointUrl();
   }
 
   /**
@@ -429,14 +431,14 @@ export class McpServerRuntimeManager {
     mcpServerId: string,
     lines: number = 100,
   ): Promise<McpServerContainerLogs> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
     }
 
-    const containerName = k8sPod.containerName;
+    const containerName = k8sDeployment.containerName;
     return {
-      logs: await k8sPod.getRecentLogs(lines),
+      logs: await k8sDeployment.getRecentLogs(lines),
       containerName,
       // Construct the kubectl command for the user to manually get the logs if they'd like
       command: `kubectl logs -n ${this.namespace} -l mcp-server-id=${mcpServerId} --tail=${lines}`,
@@ -452,12 +454,12 @@ export class McpServerRuntimeManager {
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
   ): Promise<void> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
     }
 
-    await k8sPod.streamLogs(responseStream, lines);
+    await k8sDeployment.streamLogs(responseStream, lines);
   }
 
   /**
@@ -474,8 +476,11 @@ export class McpServerRuntimeManager {
     return {
       status: this.status,
       mcpServers: Object.fromEntries(
-        Array.from(this.mcpServerIdToPodMap.entries()).map(
-          ([mcpServerId, k8sPod]) => [mcpServerId, k8sPod.statusSummary],
+        Array.from(this.mcpServerIdToDeploymentMap.entries()).map(
+          ([mcpServerId, k8sDeployment]) => [
+            mcpServerId,
+            k8sDeployment.statusSummary,
+          ],
         ),
       ),
     };
@@ -488,15 +493,15 @@ export class McpServerRuntimeManager {
     logger.info("Shutting down MCP Server Runtime...");
     this.status = "stopped";
 
-    // Stop all pods
-    const stopPromises = Array.from(this.mcpServerIdToPodMap.keys()).map(
+    // Stop all deployments
+    const stopPromises = Array.from(this.mcpServerIdToDeploymentMap.keys()).map(
       async (serverId) => {
         try {
           await this.stopServer(serverId);
         } catch (error) {
           logger.error(
             { err: error },
-            `Failed to stop MCP server pod ${serverId} during shutdown:`,
+            `Failed to stop MCP server deployment ${serverId} during shutdown:`,
           );
         }
       },

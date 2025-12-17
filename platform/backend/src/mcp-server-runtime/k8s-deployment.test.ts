@@ -56,7 +56,7 @@ function createK8sDeploymentInstance(
   );
 }
 
-describe("K8sDeployment.createPodEnvFromConfig", () => {
+describe("K8sDeployment.createContainerEnvFromConfig", () => {
   test.each([
     {
       testName: "returns empty array when no environment config is provided",
@@ -270,7 +270,7 @@ describe("K8sDeployment.createPodEnvFromConfig", () => {
       : undefined;
 
     const instance = createK8sDeploymentInstance(environmentValues);
-    const result = instance.createPodEnvFromConfig();
+    const result = instance.createContainerEnvFromConfig();
     expect(result).toEqual(expected);
   });
 });
@@ -326,9 +326,9 @@ describe("K8sDeployment.ensureStringIsRfc1123Compliant", () => {
   });
 });
 
-describe("K8sDeployment.constructPodName", () => {
+describe("K8sDeployment.constructDeploymentName", () => {
   test.each([
-    // [server name, server id, expected pod name]
+    // [server name, server id, expected deployment name]
     // Basic conversions
     {
       name: "MY-SERVER",
@@ -448,14 +448,14 @@ describe("K8sDeployment.constructPodName", () => {
       id: "123e4567-e89b-12d3-a456-426614174000",
       expected: "mcp-server.name",
     },
-  ])("converts server name '$name' with id '$id' to pod name '$expected'", ({
+  ])("converts server name '$name' with id '$id' to deployment name '$expected'", ({
     name,
     id,
     expected,
   }) => {
     // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     const mockServer = { name, id } as any;
-    const result = K8sDeployment.constructPodName(mockServer);
+    const result = K8sDeployment.constructDeploymentName(mockServer);
     expect(result).toBe(expected);
 
     // Verify all results are valid Kubernetes DNS subdomain names
@@ -473,7 +473,7 @@ describe("K8sDeployment.constructPodName", () => {
     // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     const mockServer = { name: longName, id: serverId } as any;
 
-    const result = K8sDeployment.constructPodName(mockServer);
+    const result = K8sDeployment.constructDeploymentName(mockServer);
 
     expect(result.length).toBeLessThanOrEqual(253);
     expect(result).toMatch(/^mcp-a+$/); // Should be mcp- followed by many a's
@@ -487,8 +487,8 @@ describe("K8sDeployment.constructPodName", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     } as any;
 
-    const result1 = K8sDeployment.constructPodName(mockServer);
-    const result2 = K8sDeployment.constructPodName(mockServer);
+    const result1 = K8sDeployment.constructDeploymentName(mockServer);
+    const result2 = K8sDeployment.constructDeploymentName(mockServer);
 
     expect(result1).toBe(result2);
     expect(result1).toBe("mcp-firecrawl-joey");
@@ -1279,7 +1279,8 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       8080,
     );
 
-    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
+    const envVars =
+      deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
 
     // Find the rewritten URLs
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
@@ -1331,7 +1332,8 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       8080,
     );
 
-    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
+    const envVars =
+      deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
 
     // Should NOT be rewritten
@@ -1397,7 +1399,8 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       8080,
     );
 
-    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
+    const envVars =
+      deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
 
     const databaseUrl = envVars.find((env) => env.name === "DATABASE_URL");
     const mongodbUrl = envVars.find((env) => env.name === "MONGODB_URL");
@@ -1465,7 +1468,8 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       8080,
     );
 
-    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
+    const envVars =
+      deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
 
     // Find the URLs
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");

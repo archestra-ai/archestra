@@ -399,18 +399,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (async () => {
               try {
                 // Wait for the pod to be fully ready before fetching tools
-                const podManager = McpServerRuntimeManager.getPod(mcpServer.id);
-                if (!podManager) {
-                  throw new Error("Pod manager not found");
+                const k8sDeployment = McpServerRuntimeManager.getDeployment(
+                  mcpServer.id,
+                );
+                if (!k8sDeployment) {
+                  throw new Error("Deployment manager not found");
                 }
 
                 fastify.log.info(
-                  `Waiting for pod to be ready: ${mcpServer.name}`,
+                  `Waiting for deployment to be ready: ${mcpServer.name}`,
                 );
 
-                // Wait for pod to be ready (with timeout)
-                // This will throw an error if the pod fails or times out
-                await podManager.waitForPodReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+                // Wait for deployment to be ready (with timeout)
+                // This will throw an error if the deployment fails or times out
+                await k8sDeployment.waitForPodReady(60, 2000); // 60 attempts * 2s = 2 minutes max
 
                 fastify.log.info(
                   `Pod is ready, updating status to discovering-tools: ${mcpServer.name}`,

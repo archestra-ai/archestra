@@ -42,6 +42,7 @@ vi.mock("@kubernetes/client-node", () => {
   return {
     KubeConfig: MockKubeConfig,
     CoreV1Api: vi.fn(),
+    AppsV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
   };
@@ -72,7 +73,7 @@ vi.mock("@/models/mcp-server", () => ({
   default: {},
 }));
 
-vi.mock("./k8s-pod", () => ({
+vi.mock("./k8s-deployment", () => ({
   default: vi.fn(),
 }));
 

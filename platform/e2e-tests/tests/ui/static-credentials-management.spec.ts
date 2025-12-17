@@ -180,17 +180,25 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await clickButton({ page, options: { name: "Revoke" }, first: true });
         await page.waitForLoadState("networkidle");
         await clickButton({ page, options: { name: "Close" }, nth: 1 });
+
         // And we check that the credential is revoked
+        // Use polling to handle async credential revocation in CI
         const expectedCredentialsAfterRevoke = {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
         };
-        await goToPage(page, "/mcp-catalog/registry");
-        await openManageCredentialsDialog(page, catalogItemName);
-        const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
-        await expect(visibleCredentialsAfterRevoke).toHaveLength(
-          expectedCredentialsAfterRevoke[user].length - 1,
-        );
+        const expectedLengthAfterRevoke =
+          expectedCredentialsAfterRevoke[user].length - 1;
+
+        await expect(async () => {
+          await goToPage(page, "/mcp-catalog/registry");
+          await openManageCredentialsDialog(page, catalogItemName);
+          const visibleCredentialsAfterRevoke =
+            await getVisibleCredentials(page);
+          expect(visibleCredentialsAfterRevoke).toHaveLength(
+            expectedLengthAfterRevoke,
+          );
+        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
       }
 
       // CLEANUP: Delete created catalog items and mcp servers

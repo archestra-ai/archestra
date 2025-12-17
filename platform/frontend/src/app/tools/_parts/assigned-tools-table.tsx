@@ -744,7 +744,7 @@ export function AssignedToolsTable({
                       <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Auto-configuring with AI...</p>
+                      <p>Policy Configuration Subagent is analyzing...</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -755,7 +755,7 @@ export function AssignedToolsTable({
                       <Sparkles className="h-3 w-3 text-purple-500" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">Auto-configured by AI</p>
+                      <p className="font-semibold mb-1">Configured by Policy Configuration Subagent</p>
                       {row.original.policiesAutoConfiguredReasoning && (
                         <p className="text-xs text-muted-foreground">
                           {row.original.policiesAutoConfiguredReasoning}
@@ -840,7 +840,7 @@ export function AssignedToolsTable({
                       <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Auto-configuring with AI...</p>
+                      <p>Policy Configuration Subagent is analyzing...</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -851,7 +851,7 @@ export function AssignedToolsTable({
                       <Sparkles className="h-3 w-3 text-purple-500" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">Auto-configured by AI</p>
+                      <p className="font-semibold mb-1">Configured by Policy Configuration Subagent</p>
                       {row.original.policiesAutoConfiguredReasoning && (
                         <p className="text-xs text-muted-foreground">
                           {row.original.policiesAutoConfiguredReasoning}
@@ -1093,7 +1093,7 @@ export function AssignedToolsTable({
                 ) : (
                   <>
                     <Wand2 className="h-4 w-4" />
-                    Auto-Configure
+                    Configure with Subagent
                   </>
                 )}
               </PermissionButton>

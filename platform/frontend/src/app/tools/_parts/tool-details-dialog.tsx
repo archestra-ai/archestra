@@ -135,7 +135,7 @@ export function ToolDetailsDialog({
                     <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1 space-y-2">
                       <div className="font-semibold text-purple-900 dark:text-purple-100">
-                        Auto-configured by AI
+                        Configured by Policy Configuration Subagent
                       </div>
                       <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed">
                         {agentTool.policiesAutoConfiguredReasoning}

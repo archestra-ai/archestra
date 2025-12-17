@@ -328,7 +328,7 @@ function LogsTable({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="font-mono text-xs text-purple-700 dark:text-purple-300 cursor-default">
-                    Policy Configuration Agent
+                    Policy Configuration Subagent
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>

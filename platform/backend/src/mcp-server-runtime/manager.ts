@@ -6,7 +6,7 @@ import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import { secretManager } from "@/secretsmanager";
 import type { McpServer } from "@/types";
-import K8sPod from "./k8s-pod";
+import K8sDeployment from "./k8s-deployment";
 import type {
   AvailableTool,
   K8sRuntimeStatus,
@@ -82,10 +82,11 @@ export function validateKubeconfig(path?: string) {
 export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
+  private k8sAppsApi?: k8s.AppsV1Api;
   private k8sAttach?: Attach;
   private k8sLog?: k8s.Log;
   private namespace: string = "default";
-  private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
+  private mcpServerIdToPodMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
   // Callbacks for initialization events
@@ -116,6 +117,7 @@ export class McpServerRuntimeManager {
       }
 
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
+      this.k8sAppsApi = this.k8sConfig.makeApiClient(k8s.AppsV1Api);
       this.k8sAttach = new Attach(this.k8sConfig);
       this.k8sLog = new k8s.Log(this.k8sConfig);
       this.namespace = namespace || this.namespace;
@@ -123,6 +125,7 @@ export class McpServerRuntimeManager {
       logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
       this.k8sApi = undefined;
+      this.k8sAppsApi = undefined;
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
@@ -143,7 +146,7 @@ export class McpServerRuntimeManager {
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
-    if (!this.k8sApi) {
+    if (!this.k8sApi || !this.k8sAppsApi) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -241,7 +244,7 @@ export class McpServerRuntimeManager {
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ): Promise<void> {
-    if (!this.k8sApi) {
+    if (!this.k8sApi || !this.k8sAppsApi) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -261,9 +264,10 @@ export class McpServerRuntimeManager {
         throw new Error("Kubernetes clients not initialized");
       }
 
-      const k8sPod = new K8sPod(
+      const k8sDeployment = new K8sDeployment(
         mcpServer,
         this.k8sApi,
+        this.k8sAppsApi,
         this.k8sAttach,
         this.k8sLog,
         this.namespace,
@@ -273,7 +277,7 @@ export class McpServerRuntimeManager {
       );
 
       // Register the pod BEFORE starting it
-      this.mcpServerIdToPodMap.set(id, k8sPod);
+      this.mcpServerIdToPodMap.set(id, k8sDeployment);
       logger.info(`Registered MCP server pod ${id} in map`);
 
       // If MCP server has a secretId, fetch secret and create K8s Secret
@@ -289,7 +293,7 @@ export class McpServerRuntimeManager {
           }
 
           // Create K8s Secret
-          await k8sPod.createK8sSecret(secretData);
+          await k8sDeployment.createK8sSecret(secretData);
           logger.info(
             { mcpServerId: id, secretId: mcpServer.secretId },
             "Created K8s Secret from secret manager",
@@ -297,7 +301,7 @@ export class McpServerRuntimeManager {
         }
       }
 
-      await k8sPod.startOrCreatePod();
+      await k8sDeployment.startOrCreateDeployment();
       logger.info(`Successfully started MCP server pod ${id} (${name})`);
     } catch (error) {
       logger.error(
@@ -333,7 +337,7 @@ export class McpServerRuntimeManager {
   /**
    * Get a pod by MCP server ID
    */
-  getPod(mcpServerId: string): K8sPod | undefined {
+  getPod(mcpServerId: string): K8sDeployment | undefined {
     return this.mcpServerIdToPodMap.get(mcpServerId);
   }
 
@@ -435,7 +439,7 @@ export class McpServerRuntimeManager {
       logs: await k8sPod.getRecentLogs(lines),
       containerName,
       // Construct the kubectl command for the user to manually get the logs if they'd like
-      command: `kubectl logs -n ${this.namespace} ${containerName} --tail=${lines}`,
+      command: `kubectl logs -n ${this.namespace} -l mcp-server-id=${mcpServerId} --tail=${lines}`,
       namespace: this.namespace,
     };
   }

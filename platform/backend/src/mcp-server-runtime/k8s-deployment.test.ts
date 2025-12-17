@@ -6,13 +6,13 @@ import type { z } from "zod";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
-import K8sPod from "./k8s-pod";
+import K8sDeployment from "./k8s-deployment";
 
-// Helper function to create a K8sPod instance with mocked dependencies
-function createK8sPodInstance(
+// Helper function to create a K8sDeployment instance with mocked dependencies
+function createK8sDeploymentInstance(
   environmentValues?: Record<string, string | number | boolean>,
   userConfigValues?: Record<string, string>,
-): K8sPod {
+): K8sDeployment {
   // Create mock McpServer
   const mockMcpServer = {
     id: "test-server-id",
@@ -29,6 +29,7 @@ function createK8sPodInstance(
 
   // Create mock K8s API objects
   const mockK8sApi = {} as k8s.CoreV1Api;
+  const mockK8sAppsApi = {} as k8s.AppsV1Api;
   const mockK8sAttach = {} as Attach;
   const mockK8sLog = {} as Log;
 
@@ -42,9 +43,10 @@ function createK8sPodInstance(
       )
     : undefined;
 
-  return new K8sPod(
+  return new K8sDeployment(
     mockMcpServer,
     mockK8sApi,
+    mockK8sAppsApi,
     mockK8sAttach,
     mockK8sLog,
     "default",
@@ -54,7 +56,7 @@ function createK8sPodInstance(
   );
 }
 
-describe("K8sPod.createPodEnvFromConfig", () => {
+describe("K8sDeployment.createPodEnvFromConfig", () => {
   test.each([
     {
       testName: "returns empty array when no environment config is provided",
@@ -267,13 +269,13 @@ describe("K8sPod.createPodEnvFromConfig", () => {
         ) as Record<string, string | number | boolean>)
       : undefined;
 
-    const instance = createK8sPodInstance(environmentValues);
+    const instance = createK8sDeploymentInstance(environmentValues);
     const result = instance.createPodEnvFromConfig();
     expect(result).toEqual(expected);
   });
 });
 
-describe("K8sPod.ensureStringIsRfc1123Compliant", () => {
+describe("K8sDeployment.ensureStringIsRfc1123Compliant", () => {
   test.each([
     // [input, expected output]
     // Basic conversions
@@ -316,7 +318,7 @@ describe("K8sPod.ensureStringIsRfc1123Compliant", () => {
     ["Server---Name", "server-name"],
     ["Server...Name", "server.name"],
   ])("converts '%s' to '%s'", (input, expected) => {
-    const result = K8sPod.ensureStringIsRfc1123Compliant(input);
+    const result = K8sDeployment.ensureStringIsRfc1123Compliant(input);
     expect(result).toBe(expected);
 
     // Verify all results are valid Kubernetes DNS subdomain names
@@ -324,7 +326,7 @@ describe("K8sPod.ensureStringIsRfc1123Compliant", () => {
   });
 });
 
-describe("K8sPod.constructPodName", () => {
+describe("K8sDeployment.constructPodName", () => {
   test.each([
     // [server name, server id, expected pod name]
     // Basic conversions
@@ -453,7 +455,7 @@ describe("K8sPod.constructPodName", () => {
   }) => {
     // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     const mockServer = { name, id } as any;
-    const result = K8sPod.constructPodName(mockServer);
+    const result = K8sDeployment.constructPodName(mockServer);
     expect(result).toBe(expected);
 
     // Verify all results are valid Kubernetes DNS subdomain names
@@ -471,7 +473,7 @@ describe("K8sPod.constructPodName", () => {
     // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     const mockServer = { name: longName, id: serverId } as any;
 
-    const result = K8sPod.constructPodName(mockServer);
+    const result = K8sDeployment.constructPodName(mockServer);
 
     expect(result.length).toBeLessThanOrEqual(253);
     expect(result).toMatch(/^mcp-a+$/); // Should be mcp- followed by many a's
@@ -485,15 +487,15 @@ describe("K8sPod.constructPodName", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     } as any;
 
-    const result1 = K8sPod.constructPodName(mockServer);
-    const result2 = K8sPod.constructPodName(mockServer);
+    const result1 = K8sDeployment.constructPodName(mockServer);
+    const result2 = K8sDeployment.constructPodName(mockServer);
 
     expect(result1).toBe(result2);
     expect(result1).toBe("mcp-firecrawl-joey");
   });
 });
 
-describe("K8sPod.sanitizeMetadataLabels", () => {
+describe("K8sDeployment.sanitizeMetadataLabels", () => {
   test.each([
     {
       name: "sanitizes basic labels",
@@ -568,7 +570,7 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
       },
     },
   ])("$name", ({ input, expected }) => {
-    const result = K8sPod.sanitizeMetadataLabels(
+    const result = K8sDeployment.sanitizeMetadataLabels(
       input as Record<string, string>,
     );
     expect(result).toEqual(expected);
@@ -581,21 +583,23 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
   });
 });
 
-describe("K8sPod.generatePodSpec", () => {
-  // Helper function to create a mock K8sPod instance
-  function createMockK8sPod(
+describe("K8sDeployment.generateDeploymentSpec", () => {
+  // Helper function to create a mock K8sDeployment instance
+  function createMockK8sDeployment(
     mcpServer: McpServer,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
-  ): K8sPod {
+  ): K8sDeployment {
     const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
     const namespace = "default";
 
-    return new K8sPod(
+    return new K8sDeployment(
       mcpServer,
       mockK8sApi,
+      mockK8sAppsApi,
       mockK8sAttach,
       mockK8sLog,
       namespace,
@@ -605,7 +609,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
   }
 
-  test("generates basic podSpec for stdio-based MCP server without HTTP port", () => {
+  test("generates basic deploymentSpec for stdio-based MCP server without HTTP port", () => {
     const mcpServer: McpServer = {
       id: "test-server-id",
       name: "test-server",
@@ -613,7 +617,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "my-docker-image:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -623,7 +627,7 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
@@ -631,16 +635,25 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Verify metadata
-    expect(podSpec.metadata?.name).toBe("mcp-test-server");
-    expect(podSpec.metadata?.labels).toEqual({
+    expect(deploymentSpec.metadata?.name).toBe("mcp-test-server");
+    expect(deploymentSpec.metadata?.labels).toEqual({
       app: "mcp-server",
       "mcp-server-id": "test-server-id",
       "mcp-server-name": "test-server",
     });
 
-    // Verify spec
-    expect(podSpec.spec?.containers).toHaveLength(1);
-    const container = podSpec.spec?.containers[0];
+    // Verify deployment spec
+    expect(deploymentSpec.spec?.replicas).toBe(1);
+    expect(deploymentSpec.spec?.selector.matchLabels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+      "mcp-server-name": "test-server",
+    });
+
+    // Verify pod template spec
+    const templateSpec = deploymentSpec.spec?.template.spec;
+    expect(templateSpec?.containers).toHaveLength(1);
+    const container = templateSpec?.containers[0];
     expect(container?.name).toBe("mcp-server");
     expect(container?.image).toBe(dockerImage);
     expect(container?.command).toEqual(["node"]);
@@ -648,10 +661,10 @@ describe("K8sPod.generatePodSpec", () => {
     expect(container?.stdin).toBe(true);
     expect(container?.tty).toBe(false);
     expect(container?.ports).toBeUndefined();
-    expect(podSpec.spec?.restartPolicy).toBe("Always");
+    expect(templateSpec?.restartPolicy).toBe("Always");
   });
 
-  test("generates podSpec for HTTP-based MCP server with exposed port", () => {
+  test("generates deploymentSpec for HTTP-based MCP server with exposed port", () => {
     const mcpServer: McpServer = {
       id: "http-server-id",
       name: "http-server",
@@ -659,7 +672,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "my-http-server:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -671,14 +684,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = true;
     const httpPort = 3000;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.ports).toEqual([
       {
         containerPort: 3000,
@@ -687,7 +700,7 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates podSpec without command when no command is provided", () => {
+  test("generates deploymentSpec without command when no command is provided", () => {
     const mcpServer: McpServer = {
       id: "no-cmd-server-id",
       name: "no-cmd-server",
@@ -695,7 +708,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "default-cmd-image:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -705,19 +718,19 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.command).toBeUndefined();
     expect(container?.args).toEqual(["--verbose"]);
   });
 
-  test("generates podSpec with environment variables", () => {
+  test("generates deploymentSpec with environment variables", () => {
     const mcpServer: McpServer = {
       id: "env-server-id",
       name: "env-server",
@@ -761,14 +774,17 @@ describe("K8sPod.generatePodSpec", () => {
     };
 
     const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
-    const k8sPod = new K8sPod(
+    const k8sDeployment = new K8sDeployment(
       mcpServer,
       mockK8sApi,
+      mockK8sAppsApi,
       mockK8sAttach,
       mockK8sLog,
       "default",
+      undefined,
       undefined,
       environmentValues,
     );
@@ -776,14 +792,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.env).toEqual([
       { name: "API_KEY", value: "secret123" },
       { name: "PORT", value: "3000" },
@@ -791,7 +807,7 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates podSpec with sanitized metadata labels", () => {
+  test("generates deploymentSpec with sanitized metadata labels", () => {
     const mcpServer: McpServer = {
       id: "special-chars-123!@#",
       name: "Server With Spaces & Special!",
@@ -799,7 +815,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "test:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -808,7 +824,7 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
@@ -816,7 +832,7 @@ describe("K8sPod.generatePodSpec", () => {
     );
 
     // Verify that labels are RFC 1123 compliant
-    const labels = podSpec.metadata?.labels;
+    const labels = deploymentSpec.metadata?.labels;
     expect(labels?.app).toBe("mcp-server");
     expect(labels?.["mcp-server-id"]).toBe("special-chars-123");
     expect(labels?.["mcp-server-name"]).toBe("server-with-spaces-special");
@@ -828,7 +844,7 @@ describe("K8sPod.generatePodSpec", () => {
     }
   });
 
-  test("generates podSpec with custom Docker image", () => {
+  test("generates deploymentSpec with custom Docker image", () => {
     const mcpServer: McpServer = {
       id: "custom-image-id",
       name: "custom-image-server",
@@ -836,7 +852,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "ghcr.io/my-org/custom-mcp-server:v2.1.0";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -846,18 +862,18 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.image).toBe("ghcr.io/my-org/custom-mcp-server:v2.1.0");
   });
 
-  test("generates podSpec with empty arguments array when not provided", () => {
+  test("generates deploymentSpec with empty arguments array when not provided", () => {
     const mcpServer: McpServer = {
       id: "no-args-id",
       name: "no-args-server",
@@ -865,7 +881,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "test:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -875,18 +891,18 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.args).toEqual([]);
   });
 
-  test("generates podSpec with interpolated user_config values in arguments", () => {
+  test("generates deploymentSpec with interpolated user_config values in arguments", () => {
     const mcpServer: McpServer = {
       id: "args-interpolation-id",
       name: "args-interpolation-server",
@@ -899,7 +915,7 @@ describe("K8sPod.generatePodSpec", () => {
       output_dir: "/output",
     };
 
-    const k8sPod = createMockK8sPod(mcpServer, userConfigValues);
+    const k8sDeployment = createMockK8sDeployment(mcpServer, userConfigValues);
 
     const dockerImage = "test:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -918,14 +934,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.args).toEqual([
       "-y",
       "mcp-typescribe@latest",
@@ -936,7 +952,7 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates podSpec with arguments without interpolation when no user config values provided", () => {
+  test("generates deploymentSpec with arguments without interpolation when no user config values provided", () => {
     const mcpServer: McpServer = {
       id: "no-interpolation-id",
       name: "no-interpolation-server",
@@ -945,7 +961,7 @@ describe("K8sPod.generatePodSpec", () => {
     } as any;
 
     // No userConfigValues provided
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "test:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -960,14 +976,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     // Should keep placeholder as-is when no user config values
     expect(container?.args).toEqual([
       "index.js",
@@ -977,7 +993,7 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates podSpec with interpolated environment values in arguments (filesystem server case)", () => {
+  test("generates deploymentSpec with interpolated environment values in arguments (filesystem server case)", () => {
     const mcpServer: McpServer = {
       id: "env-interpolation-id",
       name: "env-interpolation-server",
@@ -991,7 +1007,11 @@ describe("K8sPod.generatePodSpec", () => {
       read_only: "false",
     };
 
-    const k8sPod = createMockK8sPod(mcpServer, undefined, environmentValues);
+    const k8sDeployment = createMockK8sDeployment(
+      mcpServer,
+      undefined,
+      environmentValues,
+    );
 
     const dockerImage = "test:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -1006,14 +1026,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.args).toEqual([
       "-y",
       "@modelcontextprotocol/server-filesystem",
@@ -1021,7 +1041,7 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates podSpec with environmentValues taking precedence over userConfigValues in arguments", () => {
+  test("generates deploymentSpec with environmentValues taking precedence over userConfigValues in arguments", () => {
     const mcpServer: McpServer = {
       id: "precedence-id",
       name: "precedence-server",
@@ -1037,7 +1057,7 @@ describe("K8sPod.generatePodSpec", () => {
       path: "/new/path",
     };
 
-    const k8sPod = createMockK8sPod(
+    const k8sDeployment = createMockK8sDeployment(
       mcpServer,
       userConfigValues,
       environmentValues,
@@ -1054,19 +1074,19 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = false;
     const httpPort = 8080;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     // environmentValues should take precedence
     expect(container?.args).toEqual(["/new/path"]);
   });
 
-  test("generates podSpec with custom HTTP port", () => {
+  test("generates deploymentSpec with custom HTTP port", () => {
     const mcpServer: McpServer = {
       id: "custom-port-id",
       name: "custom-port-server",
@@ -1074,7 +1094,7 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
 
     const dockerImage = "custom-port:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
@@ -1086,14 +1106,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = true;
     const httpPort = 9000;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.ports).toEqual([
       {
         containerPort: 9000,
@@ -1102,7 +1122,7 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates podSpec with complex environment configuration", () => {
+  test("generates deploymentSpec with complex environment configuration", () => {
     const mcpServer: McpServer = {
       id: "complex-env-id",
       name: "complex-env-server",
@@ -1155,14 +1175,17 @@ describe("K8sPod.generatePodSpec", () => {
     };
 
     const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAppsApi = {} as k8s.AppsV1Api;
     const mockK8sAttach = {} as k8s.Attach;
     const mockK8sLog = {} as k8s.Log;
-    const k8sPod = new K8sPod(
+    const k8sDeployment = new K8sDeployment(
       mcpServer,
       mockK8sApi,
+      mockK8sAppsApi,
       mockK8sAttach,
       mockK8sLog,
       "default",
+      undefined,
       undefined,
       environmentValues,
     );
@@ -1170,14 +1193,14 @@ describe("K8sPod.generatePodSpec", () => {
     const needsHttp = true;
     const httpPort = 8000;
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       dockerImage,
       localConfig,
       needsHttp,
       httpPort,
     );
 
-    const container = podSpec.spec?.containers[0];
+    const container = deploymentSpec.spec?.template.spec?.containers[0];
 
     // Verify environment variables (quotes should be stripped by createPodEnvFromConfig)
     expect(container?.env).toEqual([
@@ -1222,6 +1245,7 @@ describe("K8sPod.generatePodSpec", () => {
             required: true,
             description: "Grafana URL",
             promptOnInstallation: true,
+            prompt: false,
           },
           {
             key: "API_ENDPOINT",
@@ -1230,12 +1254,13 @@ describe("K8sPod.generatePodSpec", () => {
             required: false,
             description: "API endpoint",
             promptOnInstallation: true,
+            prompt: false,
           },
         ],
       },
     };
 
-    const pod = createK8sPodInstance(
+    const deployment = createK8sDeploymentInstance(
       {
         GRAFANA_URL: "http://localhost:3002/",
         API_ENDPOINT: "http://127.0.0.1:8080/api",
@@ -1245,16 +1270,16 @@ describe("K8sPod.generatePodSpec", () => {
 
     // Use reflection to set the catalog item
     // @ts-expect-error - accessing private property for testing
-    pod.catalogItem = mockCatalogItem;
+    deployment.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const deploymentSpec = deployment.generateDeploymentSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
 
     // Find the rewritten URLs
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
@@ -1282,12 +1307,13 @@ describe("K8sPod.generatePodSpec", () => {
             required: true,
             description: "Grafana URL",
             promptOnInstallation: true,
+            prompt: false,
           },
         ],
       },
     };
 
-    const pod = createK8sPodInstance(
+    const deployment = createK8sDeploymentInstance(
       {
         GRAFANA_URL: "https://grafana.example.com:3000/",
       },
@@ -1296,16 +1322,16 @@ describe("K8sPod.generatePodSpec", () => {
 
     // Use reflection to set the catalog item
     // @ts-expect-error - accessing private property for testing
-    pod.catalogItem = mockCatalogItem;
+    deployment.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const deploymentSpec = deployment.generateDeploymentSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
 
     // Should NOT be rewritten
@@ -1327,6 +1353,7 @@ describe("K8sPod.generatePodSpec", () => {
             required: true,
             description: "Database URL",
             promptOnInstallation: true,
+            prompt: false,
           },
           {
             key: "MONGODB_URL",
@@ -1335,6 +1362,7 @@ describe("K8sPod.generatePodSpec", () => {
             required: false,
             description: "MongoDB URL",
             promptOnInstallation: true,
+            prompt: false,
           },
           {
             key: "REDIS_URL",
@@ -1343,12 +1371,13 @@ describe("K8sPod.generatePodSpec", () => {
             required: false,
             description: "Redis URL",
             promptOnInstallation: true,
+            prompt: false,
           },
         ],
       },
     };
 
-    const pod = createK8sPodInstance(
+    const deployment = createK8sDeploymentInstance(
       {
         DATABASE_URL: "postgresql://localhost:5432/mydb",
         MONGODB_URL: "mongodb://127.0.0.1:27017/mydb",
@@ -1359,16 +1388,16 @@ describe("K8sPod.generatePodSpec", () => {
 
     // Use reflection to set the catalog item
     // @ts-expect-error - accessing private property for testing
-    pod.catalogItem = mockCatalogItem;
+    deployment.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const deploymentSpec = deployment.generateDeploymentSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
 
     const databaseUrl = envVars.find((env) => env.name === "DATABASE_URL");
     const mongodbUrl = envVars.find((env) => env.name === "MONGODB_URL");
@@ -1402,6 +1431,7 @@ describe("K8sPod.generatePodSpec", () => {
             required: true,
             description: "Grafana URL",
             promptOnInstallation: true,
+            prompt: false,
           },
           {
             key: "API_ENDPOINT",
@@ -1410,12 +1440,13 @@ describe("K8sPod.generatePodSpec", () => {
             required: false,
             description: "API endpoint",
             promptOnInstallation: true,
+            prompt: false,
           },
         ],
       },
     };
 
-    const pod = createK8sPodInstance(
+    const deployment = createK8sDeploymentInstance(
       {
         GRAFANA_URL: "http://localhost:3002/",
         API_ENDPOINT: "http://127.0.0.1:8080/api",
@@ -1425,16 +1456,16 @@ describe("K8sPod.generatePodSpec", () => {
 
     // Use reflection to set the catalog item
     // @ts-expect-error - accessing private property for testing
-    pod.catalogItem = mockCatalogItem;
+    deployment.catalogItem = mockCatalogItem;
 
-    const podSpec = pod.generatePodSpec(
+    const deploymentSpec = deployment.generateDeploymentSpec(
       "test-image",
       mockCatalogItem.localConfig as z.infer<typeof LocalConfigSchema>,
       false,
       8080,
     );
 
-    const envVars = podSpec.spec?.containers[0]?.env || [];
+    const envVars = deploymentSpec.spec?.template.spec?.containers[0]?.env || [];
 
     // Find the URLs
     const grafanaUrl = envVars.find((env) => env.name === "GRAFANA_URL");
@@ -1450,12 +1481,12 @@ describe("K8sPod.generatePodSpec", () => {
   });
 });
 
-describe("K8sPod.createK8sSecret", () => {
-  // Helper function to create a K8sPod instance with mocked K8s API
-  function createK8sPodWithMockedApi(
+describe("K8sDeployment.createK8sSecret", () => {
+  // Helper function to create a K8sDeployment instance with mocked K8s API
+  function createK8sDeploymentWithMockedApi(
     mockK8sApi: Partial<k8s.CoreV1Api>,
     secretData?: Record<string, string>,
-  ): K8sPod {
+  ): K8sDeployment {
     const mockMcpServer = {
       id: "test-server-id",
       name: "test-server",
@@ -1469,9 +1500,10 @@ describe("K8sPod.createK8sSecret", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    return new K8sPod(
+    return new K8sDeployment(
       mockMcpServer,
       mockK8sApi as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as Attach,
       {} as Log,
       "default",
@@ -1492,8 +1524,11 @@ describe("K8sPod.createK8sSecret", () => {
       DATABASE_URL: "postgresql://localhost:5432/db",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
-    await k8sPod.createK8sSecret(secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
+    await k8sDeployment.createK8sSecret(secretData);
 
     expect(mockCreateSecret).toHaveBeenCalledWith({
       namespace: "default",
@@ -1523,8 +1558,8 @@ describe("K8sPod.createK8sSecret", () => {
       createNamespacedSecret: mockCreateSecret,
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi);
-    await k8sPod.createK8sSecret({});
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await k8sDeployment.createK8sSecret({});
 
     expect(mockCreateSecret).not.toHaveBeenCalled();
   });
@@ -1547,8 +1582,11 @@ describe("K8sPod.createK8sSecret", () => {
       API_KEY: "updated-secret-456",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
-    await k8sPod.createK8sSecret(secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
+    await k8sDeployment.createK8sSecret(secretData);
 
     expect(mockCreateSecret).toHaveBeenCalledTimes(1);
     expect(mockReplaceSecret).toHaveBeenCalledWith({
@@ -1589,8 +1627,11 @@ describe("K8sPod.createK8sSecret", () => {
       DATABASE_PASSWORD: "new-password",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
-    await k8sPod.createK8sSecret(secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
+    await k8sDeployment.createK8sSecret(secretData);
 
     expect(mockCreateSecret).toHaveBeenCalledTimes(1);
     expect(mockReplaceSecret).toHaveBeenCalledTimes(1);
@@ -1614,9 +1655,12 @@ describe("K8sPod.createK8sSecret", () => {
       API_KEY: "secret-123",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
 
-    await expect(k8sPod.createK8sSecret(secretData)).rejects.toEqual(
+    await expect(k8sDeployment.createK8sSecret(secretData)).rejects.toEqual(
       networkError,
     );
     expect(mockCreateSecret).toHaveBeenCalledTimes(1);
@@ -1646,9 +1690,12 @@ describe("K8sPod.createK8sSecret", () => {
       API_KEY: "secret-123",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
 
-    await expect(k8sPod.createK8sSecret(secretData)).rejects.toEqual(
+    await expect(k8sDeployment.createK8sSecret(secretData)).rejects.toEqual(
       replaceError,
     );
     expect(mockCreateSecret).toHaveBeenCalledTimes(1);
@@ -1668,8 +1715,11 @@ describe("K8sPod.createK8sSecret", () => {
       PASSWORD: "password123",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
-    await k8sPod.createK8sSecret(secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
+    await k8sDeployment.createK8sSecret(secretData);
 
     const expectedData = {
       API_KEY: Buffer.from("key-123").toString("base64"),
@@ -1707,8 +1757,11 @@ describe("K8sPod.createK8sSecret", () => {
       EMPTY_SECRET: "",
     };
 
-    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
-    await k8sPod.createK8sSecret(secretData);
+    const k8sDeployment = createK8sDeploymentWithMockedApi(
+      mockK8sApi,
+      secretData,
+    );
+    await k8sDeployment.createK8sSecret(secretData);
 
     const expectedData = {
       API_KEY: Buffer.from("").toString("base64"),
@@ -1726,7 +1779,7 @@ describe("K8sPod.createK8sSecret", () => {
   });
 });
 
-describe("K8sPod.constructK8sSecretName", () => {
+describe("K8sDeployment.constructK8sSecretName", () => {
   test.each([
     {
       testName: "constructs secret name with valid UUID",
@@ -1749,13 +1802,13 @@ describe("K8sPod.constructK8sSecretName", () => {
       expected: "mcp-server-abc123def456-secrets",
     },
   ])("$testName", ({ mcpServerId, expected }) => {
-    const result = K8sPod.constructK8sSecretName(mcpServerId);
+    const result = K8sDeployment.constructK8sSecretName(mcpServerId);
     expect(result).toBe(expected);
     expect(result).toMatch(/^mcp-server-.+-secrets$/);
   });
 });
 
-describe("K8sPod.generatePodSpec - serviceAccountName", () => {
+describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
   test("does not set serviceAccountName when not provided in localConfig", () => {
     const mockMcpServer = {
       id: "test-server",
@@ -1772,9 +1825,10 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    const k8sPod = new K8sPod(
+    const k8sDeployment = new K8sDeployment(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1788,14 +1842,16 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       arguments: ["server.js"],
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       "test-image:latest",
       localConfig,
       false,
       8080,
     );
 
-    expect(podSpec.spec?.serviceAccountName).toBeUndefined();
+    expect(
+      deploymentSpec.spec?.template.spec?.serviceAccountName,
+    ).toBeUndefined();
   });
 
   test("uses configured service account name", () => {
@@ -1825,9 +1881,10 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    const k8sPod = new K8sPod(
+    const k8sDeployment = new K8sDeployment(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1842,7 +1899,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       serviceAccount: "operator",
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       "kubernetes-mcp:latest",
       localConfig,
       false,
@@ -1850,7 +1907,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     );
 
     // Should use the configured service account name directly
-    expect(podSpec.spec?.serviceAccountName).toBe(
+    expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
     );
 
@@ -1885,9 +1942,10 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       updatedAt: new Date(),
     } as McpServer;
 
-    const k8sPod = new K8sPod(
+    const k8sDeployment = new K8sDeployment(
       mockMcpServer,
       {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
       {} as k8s.Attach,
       {} as k8s.Log,
       "default",
@@ -1902,7 +1960,7 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
       serviceAccount: "operator",
     };
 
-    const podSpec = k8sPod.generatePodSpec(
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
       "kubernetes-mcp:latest",
       localConfig,
       false,
@@ -1910,7 +1968,9 @@ describe("K8sPod.generatePodSpec - serviceAccountName", () => {
     );
 
     // Should use the custom configured name
-    expect(podSpec.spec?.serviceAccountName).toBe("custom-mcp-service-account");
+    expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
+      "custom-mcp-service-account",
+    );
 
     // Restore original config value
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;

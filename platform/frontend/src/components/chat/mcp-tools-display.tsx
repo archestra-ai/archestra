@@ -1,6 +1,9 @@
 "use client";
 
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  isArchestraMcpServerTool,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AssignToolsDialog } from "@/app/profiles/assign-tools-dialog";
@@ -200,7 +203,7 @@ export function McpToolsDisplay({
                   <span className="text-muted-foreground text-xs">
                     ({tools.length} {tools.length === 1 ? "tool" : "tools"})
                   </span>
-                  {onOpenManageDialog && (
+                  {onOpenManageDialog && serverName !== "archestra" && (
                     <Button
                       className="ml-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                       onClick={(e) => handleDisableServer(serverName, e)}
@@ -241,15 +244,16 @@ export function McpToolsDisplay({
                             </div>
                           )}
                         </div>
-                        {onOpenManageDialog && (
-                          <Button
-                            className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
-                            onClick={(e) => handleDisableTool(tool.name, e)}
-                            title={`Disable ${toolName} for this chat`}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
+                        {onOpenManageDialog &&
+                          !isArchestraMcpServerTool(tool.name) && (
+                            <Button
+                              className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
+                              onClick={(e) => handleDisableTool(tool.name, e)}
+                              title={`Disable ${toolName} for this chat`}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
                       </div>
                     );
                   })}

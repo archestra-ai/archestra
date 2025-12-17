@@ -1,6 +1,9 @@
 "use client";
 
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  isArchestraMcpServerTool,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -129,10 +132,19 @@ export function ManageChatToolsDialog({
     }
   }, [open]);
 
+  // Filter out Archestra tools (they cannot be disabled)
+  const manageableTools = useMemo(
+    () =>
+      (profileTools as ToolWithId[]).filter(
+        (tool) => !isArchestraMcpServerTool(tool.name),
+      ),
+    [profileTools],
+  );
+
   // Group tools by server
   const groupedTools = useMemo(
-    () => groupToolsByServer(profileTools as ToolWithId[]),
-    [profileTools],
+    () => groupToolsByServer(manageableTools),
+    [manageableTools],
   );
 
   // Handle individual tool toggle

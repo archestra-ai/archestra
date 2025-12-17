@@ -40,6 +40,9 @@ export interface TestFixtures {
   createTokenPrice: typeof createTokenPrice;
   deleteTokenPrice: typeof deleteTokenPrice;
   getTokenPrices: typeof getTokenPrices;
+  getOrganization: typeof getOrganization;
+  updateOrganization: typeof updateOrganization;
+  getInteractions: typeof getInteractions;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -539,6 +542,64 @@ const getTokenPrices = async (request: APIRequestContext) =>
     urlSuffix: "/api/token-prices",
   });
 
+/**
+ * Get organization details
+ * (authnz is handled by the authenticated session)
+ */
+const getOrganization = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/organization",
+  });
+
+/**
+ * Update organization settings
+ * (authnz is handled by the authenticated session)
+ */
+const updateOrganization = async (
+  request: APIRequestContext,
+  updates: {
+    convertToolResultsToToon?: boolean;
+    compressionScope?: "organization" | "team";
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization",
+    data: updates,
+  });
+
+/**
+ * Get interactions with optional filtering by profileId
+ * (authnz is handled by the authenticated session)
+ */
+const getInteractions = async (
+  request: APIRequestContext,
+  options?: {
+    profileId?: string;
+    limit?: number;
+    offset?: number;
+    sortBy?: string;
+    sortDirection?: "asc" | "desc";
+  },
+) => {
+  const params = new URLSearchParams();
+  if (options?.profileId) params.append("profileId", options.profileId);
+  if (options?.limit) params.append("limit", String(options.limit));
+  if (options?.offset) params.append("offset", String(options.offset));
+  if (options?.sortBy) params.append("sortBy", options.sortBy);
+  if (options?.sortDirection)
+    params.append("sortDirection", options.sortDirection);
+  const queryString = params.toString();
+  return makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/interactions${queryString ? `?${queryString}` : ""}`,
+  });
+};
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -615,6 +676,15 @@ export const test = base.extend<TestFixtures>({
   },
   getTokenPrices: async ({}, use) => {
     await use(getTokenPrices);
+  },
+  getOrganization: async ({}, use) => {
+    await use(getOrganization);
+  },
+  updateOrganization: async ({}, use) => {
+    await use(updateOrganization);
+  },
+  getInteractions: async ({}, use) => {
+    await use(getInteractions);
   },
   /**
    * Admin request - same auth as default `request` fixture

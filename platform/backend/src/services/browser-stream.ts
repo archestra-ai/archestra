@@ -2,6 +2,14 @@ import { getChatMcpClient } from "@/clients/chat-mcp-client";
 import logger from "@/logging";
 import { ToolModel } from "@/models";
 
+/**
+ * User context required for MCP client authentication
+ */
+export interface BrowserUserContext {
+  userId: string;
+  userIsProfileAdmin: boolean;
+}
+
 interface AvailabilityResult {
   available: boolean;
   tools?: string[];
@@ -125,6 +133,7 @@ export class BrowserStreamService {
   async selectOrCreateTab(
     agentId: string,
     tabIndex: number,
+    userContext: BrowserUserContext,
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
@@ -135,7 +144,11 @@ export class BrowserStreamService {
       return { success: true, tabIndex: 0 };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -268,6 +281,7 @@ export class BrowserStreamService {
     agentId: string,
     _conversationId: string,
     url: string,
+    userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -280,7 +294,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -323,6 +341,7 @@ export class BrowserStreamService {
   async navigateBack(
     agentId: string,
     _conversationId: string,
+    userContext: BrowserUserContext,
   ): Promise<NavigateResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -335,7 +354,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -378,6 +401,7 @@ export class BrowserStreamService {
   async activateTab(
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
@@ -387,7 +411,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -486,7 +514,10 @@ export class BrowserStreamService {
   /**
    * List all browser tabs
    */
-  async listTabs(agentId: string): Promise<TabResult> {
+  async listTabs(
+    agentId: string,
+    userContext: BrowserUserContext,
+  ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       return {
@@ -495,7 +526,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -533,7 +568,11 @@ export class BrowserStreamService {
   /**
    * Close a conversation's browser tab
    */
-  async closeTab(agentId: string, conversationId: string): Promise<TabResult> {
+  async closeTab(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+  ): Promise<TabResult> {
     const tabIndex = conversationTabMap.get(conversationId);
     if (tabIndex === undefined) {
       return { success: true }; // No tab to close
@@ -545,7 +584,11 @@ export class BrowserStreamService {
       return { success: true };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       conversationTabMap.delete(conversationId);
       return { success: true };
@@ -616,6 +659,7 @@ export class BrowserStreamService {
   async takeScreenshot(
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
   ): Promise<ScreenshotResult> {
     const toolName = await this.findScreenshotTool(agentId);
     if (!toolName) {
@@ -624,7 +668,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         error: "Failed to connect to MCP Gateway",
@@ -733,13 +781,20 @@ export class BrowserStreamService {
   /**
    * Get current page URL using browser_evaluate
    */
-  async getCurrentUrl(agentId: string): Promise<string | undefined> {
+  async getCurrentUrl(
+    agentId: string,
+    userContext: BrowserUserContext,
+  ): Promise<string | undefined> {
     const evaluateTool = await this.findEvaluateTool(agentId);
     if (!evaluateTool) {
       return undefined;
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return undefined;
     }
@@ -795,6 +850,7 @@ export class BrowserStreamService {
    * Falls back to browser_evaluate for JavaScript-based click simulation
    * @param agentId - Agent ID
    * @param conversationId - Conversation ID
+   * @param userContext - User context for MCP authentication
    * @param element - Element reference (e.g., "e123") or selector
    * @param x - X coordinate for click (optional)
    * @param y - Y coordinate for click (optional)
@@ -802,6 +858,7 @@ export class BrowserStreamService {
   async click(
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
     element?: string,
     x?: number,
     y?: number,
@@ -809,7 +866,11 @@ export class BrowserStreamService {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -951,19 +1012,25 @@ export class BrowserStreamService {
    * Type text into the currently focused element or specified element
    * @param agentId - Agent ID
    * @param conversationId - Conversation ID
+   * @param userContext - User context for MCP authentication
    * @param text - Text to type
    * @param element - Optional element reference to focus first
    */
   async type(
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
     text: string,
     element?: string,
   ): Promise<TypeResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -1052,11 +1119,13 @@ export class BrowserStreamService {
    * Press a key (for scrolling, enter, tab, etc.)
    * @param agentId - Agent ID
    * @param conversationId - Conversation ID
+   * @param userContext - User context for MCP authentication
    * @param key - Key to press (e.g., "Enter", "Tab", "ArrowDown", "PageDown")
    */
   async pressKey(
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
     key: string,
   ): Promise<ScrollResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
@@ -1070,7 +1139,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         success: false,
@@ -1108,10 +1181,12 @@ export class BrowserStreamService {
    * Get accessibility snapshot of the page (shows clickable elements with refs)
    * @param agentId - Agent ID
    * @param conversationId - Conversation ID
+   * @param userContext - User context for MCP authentication
    */
   async getSnapshot(
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
   ): Promise<SnapshotResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -1123,7 +1198,11 @@ export class BrowserStreamService {
       };
     }
 
-    const client = await getChatMcpClient(agentId);
+    const client = await getChatMcpClient(
+      agentId,
+      userContext.userId,
+      userContext.userIsProfileAdmin,
+    );
     if (!client) {
       return {
         error: "Failed to connect to MCP Gateway",

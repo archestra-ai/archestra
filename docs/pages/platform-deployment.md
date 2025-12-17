@@ -51,7 +51,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
-## Helm Deployment (Recommended for Production)
+## Helm Deployment
 
 Helm deployment is our recommended approach for deploying Archestra Platform to production environments.
 
@@ -70,7 +70,6 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
-  --set archestra.image="archestra/platform:0.6.27" \
   --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
@@ -84,7 +83,7 @@ This command will:
 
 ### Configuration
 
-The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/values.yaml).
+The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/archestra/values.yaml).
 
 #### Core Configuration
 
@@ -129,12 +128,17 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.kubeconfig.secretName` - Name of secret containing kubeconfig file
 - `archestra.orchestrator.kubernetes.kubeconfig.mountPath` - Path where kubeconfig will be mounted
 - `archestra.orchestrator.kubernetes.serviceAccount.create` - Create a service account (default: true)
-- `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations to add to the service account
+- `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations for cloud integrations (e.g., [GKE Workload Identity](/docs/platform-supported-llm-providers#gke-with-workload-identity-recommended), AWS IRSA)
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
 
-#### Service & Ingress Configuration
+#### Service, Deployment, & Ingress Configuration
+
+**Deployment Settings**:
+
+- `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
+- `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
 
@@ -387,6 +391,20 @@ Then visit:
 - **Admin UI**: <http://localhost:3000>
 - **API**: <http://localhost:9000>
 
+### Production Recommendations
+
+#### PostgreSQL Infrastructure
+
+For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the bundled PostgreSQL instance. Cloud-managed databases provide:
+
+- **High availability** with automatic failover
+- **Automated backups** and point-in-time recovery
+- **Scaling** without downtime
+- **Security** with encryption at rest and in transit
+- **Monitoring** and alerting out of the box
+
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
+
 ## Infrastructure as Code
 
 ### Terraform
@@ -473,7 +491,7 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
-  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
+  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/docs/platform-single-sign-on) for SSO configuration.
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
 
@@ -481,6 +499,47 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
+- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
+
+  - Default: `https://api.openai.com/v1`
+  - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_ANTHROPIC_BASE_URL`** - Override the Anthropic API base URL.
+
+  - Default: `https://api.anthropic.com`
+  - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
+
+  - Default: `https://generativelanguage.googleapis.com`
+  - Use this to point to your own proxy or other custom endpoints
+  - Note: This is only used when Vertex AI mode is disabled
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
+
+  - Default: `false`
+  - Set to `true` to use Vertex AI instead of the Google AI Studio API
+  - When enabled, uses Application Default Credentials (ADC) for authentication instead of API keys
+  - Requires `ARCHESTRA_GEMINI_VERTEX_AI_PROJECT` to be set
+  - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`** - Google Cloud project ID for Vertex AI.
+
+  - Required when: `ARCHESTRA_GEMINI_VERTEX_AI_ENABLED=true`
+  - Example: `my-gcp-project-123`
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
+
+  - Default: `us-central1`
+  - Example: `us-central1`, `europe-west1`, `asia-northeast1`
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
+
+  - Optional: Only needed when running outside of GCP or without Workload Identity
+  - Example: `/path/to/service-account-key.json`
+  - When not set, uses [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
+  - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
@@ -501,6 +560,13 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME`** - Kubernetes ServiceAccount name for MCP server pods that need K8s API access.
+
+  - Default: `archestra-platform-mcp-k8s-operator`
+  - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-mcp-k8s-operator`
+    So, default value matches it when using `archestra-platform` as the release name.
+  - Customize if using a different Helm release name or managing ServiceAccounts manually
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
 
@@ -552,6 +618,12 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
+
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`
+  - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
   - Please reach out to sales@archestra.ai to learn more about the license.

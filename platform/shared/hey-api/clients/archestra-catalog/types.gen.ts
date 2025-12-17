@@ -31,6 +31,7 @@ export type ArchestraMcpServerManifest = {
             provider: 'whatsapp';
         }>;
         docker_image?: string;
+        service_account?: string;
     } | {
         type: 'remote';
         url: string;

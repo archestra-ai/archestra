@@ -37,14 +37,12 @@ import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
-import { AgentLabelModel } from "@/models";
+import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,
   Gemini,
   OpenAi,
-  SupportedProvidersDiscriminatorSchema,
-  SupportedProvidersSchema,
   WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -72,12 +70,6 @@ const {
  * This enables proper $ref generation in the OpenAPI spec.
  */
 export function registerOpenApiSchemas() {
-  z.globalRegistry.add(SupportedProvidersSchema, {
-    id: "SupportedProviders",
-  });
-  z.globalRegistry.add(SupportedProvidersDiscriminatorSchema, {
-    id: "SupportedProvidersDiscriminator",
-  });
   z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
     id: "OpenAiChatCompletionRequest",
   });

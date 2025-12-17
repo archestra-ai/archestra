@@ -70,7 +70,7 @@ graph TB
 
 ## External Agent Identification
 
-When multiple applications share the same [Profile](platform-profiles.md), you can use the `X-Archestra-Agent-Id` header to identify which application each request originates from. This allows you to:
+When multiple applications share the same [Profile](/docs/platform-profiles), you can use the `X-Archestra-Agent-Id` header to identify which application each request originates from. This allows you to:
 
 - **Reuse a single Profile** across multiple applications while maintaining distinct tracking
 - **Filter logs** by application in the LLM Proxy Logs viewer

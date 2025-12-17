@@ -79,7 +79,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Store as { client_secret: "path#key" } format
         const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
-        const secret = await secretManager.createSecret(
+        const secret = await secretManager().createSecret(
           { client_secret: vaultReference },
           `${restBody.name}-oauth-client-secret-vault`,
         );
@@ -100,7 +100,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         // Direct client_secret value
         const clientSecret = restBody.oauthConfig.client_secret;
-        const secret = await secretManager.createSecret(
+        const secret = await secretManager().createSecret(
           { client_secret: clientSecret },
           `${restBody.name}-oauth-client-secret`,
         );
@@ -124,7 +124,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store as { vaultKey: "path#vaultKey" } format
         // The vault key becomes both the Archestra key and references itself in the vault
         const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
-        const secret = await secretManager.createSecret(
+        const secret = await secretManager().createSecret(
           { [localConfigVaultKey]: vaultReference },
           `${restBody.name}-local-config-env-vault`,
         );
@@ -159,7 +159,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Store secret env vars if any exist
         if (Object.keys(secretEnvVars).length > 0) {
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             secretEnvVars,
             `${restBody.name}-local-config-env`,
           );
@@ -252,12 +252,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Delete existing secret if any
         if (clientSecretId) {
-          await secretManager.deleteSecret(clientSecretId);
+          await secretManager().deleteSecret(clientSecretId);
         }
 
         // Store as { client_secret: "path#key" } format
         const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
-        const secret = await secretManager.createSecret(
+        const secret = await secretManager().createSecret(
           { client_secret: vaultReference },
           `${originalCatalogItem.name}-oauth-client-secret-vault`,
         );
@@ -280,12 +280,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const clientSecret = restBody.oauthConfig.client_secret;
         if (clientSecretId) {
           // Update existing secret
-          await secretManager.updateSecret(clientSecretId, {
+          await secretManager().updateSecret(clientSecretId, {
             client_secret: clientSecret,
           });
         } else {
           // Create new secret
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             { client_secret: clientSecret },
             `${originalCatalogItem.name}-oauth-client-secret`,
           );
@@ -309,12 +309,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Delete existing secret if any
         if (localConfigSecretId) {
-          await secretManager.deleteSecret(localConfigSecretId);
+          await secretManager().deleteSecret(localConfigSecretId);
         }
 
         // Store as { vaultKey: "path#vaultKey" } format
         const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
-        const secret = await secretManager.createSecret(
+        const secret = await secretManager().createSecret(
           { [localConfigVaultKey]: vaultReference },
           `${originalCatalogItem.name}-local-config-env-vault`,
         );
@@ -352,13 +352,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (Object.keys(secretEnvVars).length > 0) {
           if (localConfigSecretId) {
             // Update existing secret
-            await secretManager.updateSecret(
+            await secretManager().updateSecret(
               localConfigSecretId,
               secretEnvVars,
             );
           } else {
             // Create new secret
-            const secret = await secretManager.createSecret(
+            const secret = await secretManager().createSecret(
               secretEnvVars,
               `${originalCatalogItem.name}-local-config-env`,
             );
@@ -414,16 +414,53 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (catalogItem?.clientSecretId) {
         // Delete the associated OAuth secret
-        await secretManager.deleteSecret(catalogItem.clientSecretId);
+        await secretManager().deleteSecret(catalogItem.clientSecretId);
       }
 
       if (catalogItem?.localConfigSecretId) {
         // Delete the associated local config secret
-        await secretManager.deleteSecret(catalogItem.localConfigSecretId);
+        await secretManager().deleteSecret(catalogItem.localConfigSecretId);
       }
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(id),
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/internal_mcp_catalog/by-name/:name",
+    {
+      schema: {
+        operationId: RouteId.DeleteInternalMcpCatalogItemByName,
+        description: "Delete an Internal MCP catalog item by name",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          name: z.string().min(1),
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { name } }, reply) => {
+      // Find the catalog item by name
+      const catalogItem = await InternalMcpCatalogModel.findByName(name);
+
+      if (!catalogItem) {
+        throw new ApiError(404, `Catalog item with name "${name}" not found`);
+      }
+
+      if (catalogItem?.clientSecretId) {
+        // Delete the associated OAuth secret
+        await secretManager().deleteSecret(catalogItem.clientSecretId);
+      }
+
+      if (catalogItem?.localConfigSecretId) {
+        // Delete the associated local config secret
+        await secretManager().deleteSecret(catalogItem.localConfigSecretId);
+      }
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.delete(catalogItem.id),
       });
     },
   );

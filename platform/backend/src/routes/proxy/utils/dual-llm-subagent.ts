@@ -1,10 +1,10 @@
+import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type {
   CommonDualLlmParams,
   DualLlmConfig,
   DualLlmMessage,
-  SupportedProvider,
 } from "@/types";
 import { createDualLlmClient, type DualLlmClient } from "./dual-llm-client";
 
@@ -44,7 +44,7 @@ export class DualLlmSubagent {
   static async create(
     params: CommonDualLlmParams,
     agentId: string,
-    apiKey: string,
+    apiKey: string | undefined,
     provider: SupportedProvider,
   ): Promise<DualLlmSubagent> {
     logger.debug(

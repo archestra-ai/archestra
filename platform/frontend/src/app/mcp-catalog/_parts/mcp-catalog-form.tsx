@@ -3,10 +3,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Info } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
-import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -30,11 +29,18 @@ import {
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { useGetSecret } from "@/lib/secrets.query";
 import {
   formSchema,
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -53,10 +59,15 @@ export function McpCatalogForm({
   serverType = "remote",
   footer,
 }: McpCatalogFormProps) {
+  // Fetch local config secret if it exists
+  const { data: localConfigSecret } = useGetSecret(
+    initialValues?.localConfigSecretId ?? null,
+  );
+
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialValues
-      ? transformCatalogItemToFormValues(initialValues)
+      ? transformCatalogItemToFormValues(initialValues, undefined)
       : {
           name: "",
           serverType: serverType,
@@ -118,9 +129,13 @@ export function McpCatalogForm({
   }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
 
   // Reset form when initial values change (for edit mode)
+  // Also reset when localConfigSecret loads (if it exists)
   useEffect(() => {
     if (initialValues) {
-      const transformedValues = transformCatalogItemToFormValues(initialValues);
+      const transformedValues = transformCatalogItemToFormValues(
+        initialValues,
+        localConfigSecret ?? undefined,
+      );
       form.reset(transformedValues);
       // Initialize OAuth BYOS state from transformed values (parsed vault references)
       // Note: teamId cannot be derived from path, so we leave it null (user can reselect if needed)
@@ -132,7 +147,7 @@ export function McpCatalogForm({
         transformedValues.oauthClientSecretVaultKey || null,
       );
     }
-  }, [initialValues, form]);
+  }, [initialValues, localConfigSecret, form]);
 
   return (
     <Form {...form}>

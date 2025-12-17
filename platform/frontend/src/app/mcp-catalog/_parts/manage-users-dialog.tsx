@@ -22,6 +22,21 @@ import {
 } from "@/components/ui/table";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
+function formatSecretStorageType(
+  storageType: "vault" | "external_vault" | "database" | "none" | undefined,
+): string {
+  switch (storageType) {
+    case "vault":
+      return "Vault";
+    case "external_vault":
+      return "External Vault";
+    case "database":
+      return "Database";
+    default:
+      return "No secret";
+  }
+}
+
 interface ManageUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -54,6 +69,13 @@ export function ManageUsersDialog({
     return null;
   }
 
+  const getCredentialOwnerName = (
+    mcpServer: (typeof allServers)[number],
+  ): string =>
+    mcpServer.teamId
+      ? mcpServer.teamDetails?.name || "Team"
+      : mcpServer.ownerEmail || "Unknown";
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
@@ -84,6 +106,7 @@ export function ManageUsersDialog({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Owner</TableHead>
+                    <TableHead>Secret Storage</TableHead>
                     <TableHead>Created At</TableHead>
                     <TableHead className="w-[120px]">Action</TableHead>
                   </TableRow>
@@ -96,11 +119,17 @@ export function ManageUsersDialog({
                       data-server-id={mcpServer.id}
                     >
                       <TableCell className="font-medium">
-                        <span data-testid={E2eTestId.CredentialOwnerEmail}>
-                          {mcpServer.teamId
-                            ? mcpServer.teamDetails?.name || "Team"
-                            : mcpServer.ownerEmail || "Unknown"}
+                        <span data-testid={E2eTestId.CredentialOwner}>
+                          {getCredentialOwnerName(mcpServer)}
                         </span>
+                        {mcpServer.teamId && (
+                          <span className="text-muted-foreground text-xs block">
+                            Created by: {mcpServer.ownerEmail}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatSecretStorageType(mcpServer.secretStorageType)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {format(new Date(mcpServer.createdAt), "PPp")}
@@ -112,6 +141,7 @@ export function ManageUsersDialog({
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"
+                          data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
                         >
                           <Trash className="mr-1 h-3 w-3" />
                           Revoke

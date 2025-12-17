@@ -5,7 +5,10 @@ import { betterAuth } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { ConversationModel, UserModel } from "@/models";
-import { BrowserStreamService } from "@/services/browser-stream";
+import {
+  BrowserStreamService,
+  type BrowserUserContext,
+} from "@/services/browser-stream";
 import {
   type ServerWebSocketMessage,
   type WebSocketMessage,
@@ -19,6 +22,7 @@ interface BrowserStreamSubscription {
   agentId: string;
   tabIndex: number;
   intervalId: NodeJS.Timeout;
+  userContext: BrowserUserContext;
 }
 
 interface WebSocketClientContext {
@@ -245,10 +249,20 @@ class WebSocketService {
       "Browser stream client subscribed",
     );
 
+    // Determine user permissions for MCP client
+    // Note: WebSocket connections don't have request headers for hasPermission,
+    // so we default to false for userIsProfileAdmin (non-admin access)
+    // This is safer and follows principle of least privilege
+    const userContext: BrowserUserContext = {
+      userId: clientContext.userId,
+      userIsProfileAdmin: false,
+    };
+
     // Select or create the tab for this chat index
     const tabResult = await this.browserService.selectOrCreateTab(
       agentId,
       tabIndex,
+      userContext,
     );
     if (!tabResult.success) {
       logger.warn(
@@ -259,12 +273,12 @@ class WebSocketService {
     }
 
     // Send initial screenshot
-    this.sendScreenshot(ws, agentId, conversationId);
+    this.sendScreenshot(ws, agentId, conversationId, userContext);
 
     // Set up interval for continuous streaming
     const intervalId = setInterval(() => {
       if (ws.readyState === WS.OPEN) {
-        this.sendScreenshot(ws, agentId, conversationId);
+        this.sendScreenshot(ws, agentId, conversationId, userContext);
       } else {
         this.unsubscribeBrowserStream(ws);
       }
@@ -276,6 +290,7 @@ class WebSocketService {
       agentId,
       tabIndex,
       intervalId,
+      userContext,
     });
   }
 
@@ -320,6 +335,7 @@ class WebSocketService {
         subscription.agentId,
         conversationId,
         url,
+        subscription.userContext,
       );
       this.sendToClient(ws, {
         type: "browser_navigate_result",
@@ -367,6 +383,7 @@ class WebSocketService {
       const result = await this.browserService.navigateBack(
         subscription.agentId,
         conversationId,
+        subscription.userContext,
       );
       this.sendToClient(ws, {
         type: "browser_navigate_back_result",
@@ -417,6 +434,7 @@ class WebSocketService {
       const result = await this.browserService.click(
         subscription.agentId,
         conversationId,
+        subscription.userContext,
         element,
         x,
         y,
@@ -471,6 +489,7 @@ class WebSocketService {
       const result = await this.browserService.type(
         subscription.agentId,
         conversationId,
+        subscription.userContext,
         text,
         element,
       );
@@ -520,6 +539,7 @@ class WebSocketService {
       const result = await this.browserService.pressKey(
         subscription.agentId,
         conversationId,
+        subscription.userContext,
         key,
       );
       this.sendToClient(ws, {
@@ -566,6 +586,7 @@ class WebSocketService {
       const result = await this.browserService.getSnapshot(
         subscription.agentId,
         conversationId,
+        subscription.userContext,
       );
       this.sendToClient(ws, {
         type: "browser_snapshot",
@@ -594,6 +615,7 @@ class WebSocketService {
     ws: WebSocket,
     agentId: string,
     conversationId: string,
+    userContext: BrowserUserContext,
   ): Promise<void> {
     if (ws.readyState !== WS.OPEN) {
       return;
@@ -603,6 +625,7 @@ class WebSocketService {
       const result = await this.browserService.takeScreenshot(
         agentId,
         conversationId,
+        userContext,
       );
 
       if (result.screenshot) {

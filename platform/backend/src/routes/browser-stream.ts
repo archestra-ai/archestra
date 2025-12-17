@@ -1,9 +1,14 @@
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
-import { BrowserStreamService } from "@/services/browser-stream";
-import { constructResponseSchema } from "@/types";
+import {
+  BrowserStreamService,
+  type BrowserUserContext,
+} from "@/services/browser-stream";
+import { ApiError, constructResponseSchema } from "@/types";
 
 const ConversationParamsSchema = z.object({
   conversationId: z.string().uuid(),
@@ -31,6 +36,22 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     );
   }
 
+  /**
+   * Helper to get user context for MCP client authentication
+   */
+  async function getUserContext(
+    request: FastifyRequest,
+  ): Promise<BrowserUserContext> {
+    const { success: userIsProfileAdmin } = await hasPermission(
+      { profile: ["admin"] },
+      request.headers,
+    );
+    return {
+      userId: request.user.id,
+      userIsProfileAdmin,
+    };
+  }
+
   // Check if Playwright MCP is available for a conversation's agent
   fastify.get(
     "/api/browser-stream/:conversationId/available",
@@ -55,10 +76,7 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        return reply.send({
-          available: false,
-          error: "Conversation not found",
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       try {
@@ -69,13 +87,10 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { error, conversationId },
           "Failed to check browser availability",
         );
-        return reply.send({
-          available: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Availability check failed",
-        });
+        throw new ApiError(
+          500,
+          error instanceof Error ? error.message : "Availability check failed",
+        );
       }
     },
   );
@@ -106,17 +121,16 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        return reply.send({
-          success: false,
-          error: "Conversation not found",
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       try {
+        const userContext = await getUserContext(request);
         const result = await browserStreamService.navigate(
           agentId,
           conversationId,
           url,
+          userContext,
         );
         return reply.send(result);
       } catch (error) {
@@ -124,10 +138,10 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { error, conversationId, url },
           "Failed to navigate browser",
         );
-        return reply.send({
-          success: false,
-          error: error instanceof Error ? error.message : "Navigation failed",
-        });
+        throw new ApiError(
+          500,
+          error instanceof Error ? error.message : "Navigation failed",
+        );
       }
     },
   );
@@ -156,22 +170,23 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        return reply.send({
-          error: "Conversation not found",
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       try {
+        const userContext = await getUserContext(request);
         const result = await browserStreamService.takeScreenshot(
           agentId,
           conversationId,
+          userContext,
         );
         return reply.send(result);
       } catch (error) {
         logger.error({ error, conversationId }, "Failed to take screenshot");
-        return reply.send({
-          error: error instanceof Error ? error.message : "Screenshot failed",
-        });
+        throw new ApiError(
+          500,
+          error instanceof Error ? error.message : "Screenshot failed",
+        );
       }
     },
   );
@@ -200,16 +215,15 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        return reply.send({
-          success: false,
-          error: "Conversation not found",
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       try {
+        const userContext = await getUserContext(request);
         const result = await browserStreamService.activateTab(
           agentId,
           conversationId,
+          userContext,
         );
         return reply.send(result);
       } catch (error) {
@@ -217,11 +231,10 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { error, conversationId },
           "Failed to activate browser tab",
         );
-        return reply.send({
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Tab activation failed",
-        });
+        throw new ApiError(
+          500,
+          error instanceof Error ? error.message : "Tab activation failed",
+        );
       }
     },
   );
@@ -254,17 +267,19 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       try {
+        const userContext = await getUserContext(request);
         const result = await browserStreamService.closeTab(
           agentId,
           conversationId,
+          userContext,
         );
         return reply.send(result);
       } catch (error) {
         logger.error({ error, conversationId }, "Failed to close browser tab");
-        return reply.send({
-          success: false,
-          error: error instanceof Error ? error.message : "Tab close failed",
-        });
+        throw new ApiError(
+          500,
+          error instanceof Error ? error.message : "Tab close failed",
+        );
       }
     },
   );

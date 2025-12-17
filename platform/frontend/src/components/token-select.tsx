@@ -59,9 +59,9 @@ export function TokenSelect({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && !value) {
-      // Default to dynamic credential
-      onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+    if (shouldSetDefaultValue && !value && mcpServers.length > 0) {
+      // Default to the first credential
+      onValueChange(mcpServers[0].id);
     }
   }, []);
 
@@ -102,6 +102,7 @@ export function TokenSelect({
             key={server.id}
             value={server.id}
             className="cursor-pointer"
+            data-testid={E2eTestId.StaticCredentialToUse}
           >
             <div className="flex flex-col gap-1">
               <div className="flex gap-1 flex-wrap text-xs">

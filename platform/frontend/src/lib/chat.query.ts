@@ -51,12 +51,14 @@ export function useCreateConversation() {
     mutationFn: async ({
       agentId,
       promptId,
+      selectedModel,
     }: {
       agentId: string;
       promptId?: string;
+      selectedModel?: string;
     }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId, promptId },
+        body: { agentId, promptId, selectedModel },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;
@@ -74,13 +76,15 @@ export function useUpdateConversation() {
     mutationFn: async ({
       id,
       title,
+      selectedModel,
     }: {
       id: string;
       title?: string | null;
+      selectedModel?: string;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title },
+        body: { title, selectedModel },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;

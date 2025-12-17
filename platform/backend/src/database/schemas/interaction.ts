@@ -1,3 +1,4 @@
+import type { SupportedProviderDiscriminator } from "@shared";
 import {
   index,
   integer,
@@ -8,11 +9,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type {
-  InteractionRequest,
-  InteractionResponse,
-  SupportedProviderDiscriminator,
-} from "@/types";
+import type { InteractionRequest, InteractionResponse } from "@/types";
 import agentsTable from "./agent";
 
 const interactionsTable = pgTable(

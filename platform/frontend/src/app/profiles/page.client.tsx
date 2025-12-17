@@ -61,17 +61,34 @@ import {
   useProfilesPaginated,
   useUpdateProfile,
 } from "@/lib/agent.query";
-import { formatDate } from "@/lib/utils";
+import { useHasPermissions } from "@/lib/auth.query";
+import {
+  DEFAULT_AGENTS_PAGE_SIZE,
+  DEFAULT_SORT_BY,
+  DEFAULT_SORT_DIRECTION,
+  formatDate,
+} from "@/lib/utils";
 import { ProfileActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
-export default function ProfilesPage() {
+import type { archestraApiTypes } from "@shared";
+
+type ProfilesInitialData = {
+  agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+  teams: archestraApiTypes.GetTeamsResponses["200"];
+};
+
+export default function ProfilesPage({
+  initialData,
+}: {
+  initialData?: ProfilesInitialData;
+}) {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Profiles />
+          <Profiles initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -144,7 +161,7 @@ function ProfileTeamsBadges({
   );
 }
 
-function Profiles() {
+function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -165,14 +182,15 @@ function Profiles() {
     | null;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || "20");
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
   const offset = pageIndex * pageSize;
 
   // Default sorting
-  const sortBy = sortByFromUrl || "createdAt";
-  const sortDirection = sortDirectionFromUrl || "desc";
+  const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
+  const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
   const { data: agentsResponse } = useProfilesPaginated({
+    initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
     sortBy,
@@ -182,6 +200,15 @@ function Profiles() {
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
+
+  const { data: _teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getTeams();
+      return data || [];
+    },
+    initialData: initialData?.teams,
+  });
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
@@ -199,7 +226,7 @@ function Profiles() {
     name: string;
   } | null>(null);
   const [assigningToolsProfile, setAssigningToolsProfile] = useState<
-    (typeof agents)[number] | null
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number] | null
   >(null);
   const [editingProfile, setEditingProfile] = useState<{
     id: string;
@@ -212,7 +239,8 @@ function Profiles() {
     null,
   );
 
-  type ProfileData = (typeof agents)[number];
+  type ProfileData =
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -566,6 +594,11 @@ function CreateProfileDialog({
   } | null>(null);
   const createProfile = useCreateProfile();
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
+  const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
+
+  // Non-admin users must select at least one team
+  const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
+  const hasNoAvailableTeams = !teams || teams.length === 0;
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -604,6 +637,12 @@ function CreateProfileDialog({
         return;
       }
 
+      // Non-admin users must select at least one team
+      if (!isProfileAdmin && assignedTeamIds.length === 0) {
+        toast.error("Please select at least one team");
+        return;
+      }
+
       // Save any unsaved label before submitting
       const updatedLabels =
         agentLabelsRef.current?.saveUnsavedLabel() || labels;
@@ -624,7 +663,14 @@ function CreateProfileDialog({
         toast.error("Failed to create profile");
       }
     },
-    [name, assignedTeamIds, labels, considerContextUntrusted, createProfile],
+    [
+      name,
+      assignedTeamIds,
+      labels,
+      considerContextUntrusted,
+      createProfile,
+      isProfileAdmin,
+    ],
   );
 
   const handleClose = useCallback(() => {
@@ -672,7 +718,12 @@ function CreateProfileDialog({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Team Access</Label>
+                  <Label>
+                    Team Access
+                    {!isProfileAdmin && (
+                      <span className="text-destructive ml-1">(required)</span>
+                    )}
+                  </Label>
                   <p className="text-sm text-muted-foreground">
                     Assign teams to grant their members access to this profile.
                   </p>
@@ -722,7 +773,11 @@ function CreateProfileDialog({
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No teams assigned yet. Admins have access to all profiles.
+                      {isProfileAdmin
+                        ? "No teams assigned yet. Admins have access to all profiles."
+                        : hasNoAvailableTeams
+                          ? "You are not a member of any team. Contact an admin to be added to a team."
+                          : "No teams assigned yet."}
                     </p>
                   )}
                 </div>
@@ -760,7 +815,14 @@ function CreateProfileDialog({
                 <Button type="button" variant="outline" onClick={handleClose}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createProfile.isPending}>
+                <Button
+                  type="submit"
+                  disabled={
+                    createProfile.isPending ||
+                    requiresTeamSelection ||
+                    (!isProfileAdmin && hasNoAvailableTeams)
+                  }
+                >
                   {createProfile.isPending ? "Creating..." : "Create profile"}
                 </Button>
               </DialogFooter>
@@ -826,6 +888,10 @@ function EditProfileDialog({
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateProfile = useUpdateProfile();
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
+  const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
+
+  // Non-admin users must have at least one team assigned
+  const requiresTeamSelection = !isProfileAdmin && assignedTeamIds.length === 0;
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -849,6 +915,12 @@ function EditProfileDialog({
       e.preventDefault();
       if (!name.trim()) {
         toast.error("Please enter a profile name");
+        return;
+      }
+
+      // Non-admin users must have at least one team assigned
+      if (!isProfileAdmin && assignedTeamIds.length === 0) {
+        toast.error("Please select at least one team");
         return;
       }
 
@@ -880,6 +952,7 @@ function EditProfileDialog({
       updateProfile,
       onOpenChange,
       considerContextUntrusted,
+      isProfileAdmin,
     ],
   );
 
@@ -924,7 +997,12 @@ function EditProfileDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label>Team Access</Label>
+              <Label>
+                Team Access
+                {!isProfileAdmin && (
+                  <span className="text-destructive ml-1">(required)</span>
+                )}
+              </Label>
               <p className="text-sm text-muted-foreground">
                 Assign teams to grant their members access to this profile.
               </p>
@@ -975,7 +1053,9 @@ function EditProfileDialog({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No teams assigned yet. Admins have access to all profiles.
+                  {isProfileAdmin
+                    ? "No teams assigned yet. Admins have access to all profiles."
+                    : "No teams assigned yet."}
                 </p>
               )}
             </div>
@@ -1017,7 +1097,10 @@ function EditProfileDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={updateProfile.isPending}>
+            <Button
+              type="submit"
+              disabled={updateProfile.isPending || requiresTeamSelection}
+            >
               {updateProfile.isPending ? "Updating..." : "Update profile"}
             </Button>
           </DialogFooter>

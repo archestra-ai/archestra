@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import {
@@ -25,6 +26,7 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
+import { ModelSelector } from "@/components/chat/model-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
@@ -54,9 +56,11 @@ import {
   useConversations,
   useCreateConversation,
   useHasPlaywrightMcpTools,
+  useUpdateConversation,
 } from "@/lib/chat.query";
-import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
+import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -66,7 +70,9 @@ export default function ChatPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [conversationId, setConversationId] = useState<string>();
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
+  );
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -112,8 +118,14 @@ export default function ChatPage() {
     ? allConversations.findIndex((c) => c.id === conversationId)
     : 0;
 
-  // Check if API key is configured
-  const { data: chatSettings } = useChatSettingsOptional();
+  // Check if API key is configured for any provider
+  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
+    useChatApiKeys();
+  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  // Vertex AI Gemini mode doesn't require an API key (uses ADC)
+  const hasAnyApiKey =
+    chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
+  const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -137,7 +149,33 @@ export default function ChatPage() {
   );
 
   // Fetch conversation with messages
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation, isLoading: isLoadingConversation } =
+    useConversation(conversationId);
+
+  // Mutation for updating conversation model
+  const updateConversationMutation = useUpdateConversation();
+
+  // Handle model change with error handling
+  const handleModelChange = useCallback(
+    (model: string) => {
+      if (!conversation) return;
+
+      updateConversationMutation.mutate(
+        {
+          id: conversation.id,
+          selectedModel: model,
+        },
+        {
+          onError: (error) => {
+            toast.error(
+              `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          },
+        },
+      );
+    },
+    [conversation, updateConversationMutation],
+  );
 
   // Find the specific prompt for this conversation (if any)
   const conversationPrompt = conversation?.promptId
@@ -378,19 +416,20 @@ export default function ChatPage() {
   );
 
   // If API key is not configured, show setup message
-  if (chatSettings && !chatSettings.anthropicApiKeySecretId) {
+  // Only show after loading completes to avoid flash of incorrect content
+  if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
     return (
-      <div className="flex h-screen items-center justify-center p-8">
+      <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Anthropic API Key Required</CardTitle>
+            <CardTitle>LLM Provider API Key Required</CardTitle>
             <CardDescription>
-              The chat feature requires an Anthropic API key to function.
+              The chat feature requires an LLM provider API key to function.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure your Anthropic API key in Chat Settings to start
+              Please configure an LLM provider API key in Chat Settings to start
               using the chat feature.
             </p>
             <Button asChild>
@@ -521,7 +560,16 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex-1" />
+            <div className="flex-1 flex items-center gap-2">
+              {conversation && (
+                <ModelSelector
+                  selectedModel={conversation.selectedModel}
+                  onModelChange={handleModelChange}
+                  disabled={status === "streaming" || status === "submitted"}
+                  messageCount={messages.length}
+                />
+              )}
+            </div>
             {conversation?.agent?.name && (
               <div className="flex-1 text-center">
                 <span className="text-sm font-medium text-muted-foreground">
@@ -568,6 +616,7 @@ export default function ChatPage() {
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
+              isLoadingConversation={isLoadingConversation}
             />
           </div>
 

@@ -271,7 +271,7 @@ setup("authenticate as editor", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tools/i })).toBeVisible({
+  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
     timeout: 30000,
   });
 
@@ -333,7 +333,7 @@ setup("authenticate as member", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tools/i })).toBeVisible({
+  await expect(page.getByRole("link", { name: /Tool Policies/i })).toBeVisible({
     timeout: 30000,
   });
 

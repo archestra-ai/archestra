@@ -7,6 +7,7 @@ import {
   E2eTestId,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  UI_BASE_URL,
 } from "./consts";
 import { goToPage } from "./fixtures";
 import {
@@ -325,4 +326,48 @@ export async function clickButton({
   }
 
   return await button.click();
+}
+
+/**
+ * Login via API (bypasses UI form for reliability).
+ * Handles rate limiting with exponential backoff retry.
+ *
+ * @param page - Playwright page (uses page.request for API calls)
+ * @param email - User email
+ * @param password - User password
+ * @param maxRetries - Maximum number of retries (default 3)
+ * @returns true if login succeeded
+ */
+export async function loginViaApi(
+  page: Page,
+  email: string,
+  password: string,
+  maxRetries = 3,
+): Promise<boolean> {
+  let delay = 1000;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await page.request.post(
+      `${UI_BASE_URL}/api/auth/sign-in/email`,
+      {
+        data: { email, password },
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+
+    if (response.ok()) {
+      return true;
+    }
+
+    // If rate limited and we have retries left, wait and retry
+    if (response.status() === 429 && attempt < maxRetries) {
+      await page.waitForTimeout(delay);
+      delay *= 2; // Exponential backoff
+      continue;
+    }
+
+    return false;
+  }
+
+  return false;
 }

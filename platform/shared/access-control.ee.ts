@@ -461,6 +461,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatApiKeyProfiles]: {
     chatSettings: ["update"],
   },
+  [RouteId.BulkAssignChatApiKeysToProfiles]: {
+    chatSettings: ["update"],
+  },
   [RouteId.GetPrompts]: {
     prompt: ["read"],
   },

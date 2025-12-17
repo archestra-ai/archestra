@@ -278,9 +278,11 @@ jobs:
       # This eliminates the need for manual Playwright browser installation and caching
       # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
       - name: Run E2E tests
+        id: e2e
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
         run: |
+          set -o pipefail
           docker run --rm \
             --network host \
             --ipc=host \
@@ -289,18 +291,29 @@ jobs:
             -e CI=true \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e"
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e" \
+            2>&1 | tee playwright-output.txt
+
+      - name: Check for flaky tests
+        id: check-flaky
+        if: success()
+        run: |
+          # Playwright outputs "X flaky" in its summary when tests pass on retry
+          if grep -qE "[0-9]+ flaky" platform/playwright-output.txt 2>/dev/null; then
+            echo "⚠️ Flaky tests detected"
+            echo "has_flaky_tests=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload Playwright report
-        if: failure()
+        if: failure() || steps.check-flaky.outputs.has_flaky_tests == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           retention-days: 30
 
-      - name: Show logs on failure
-        if: failure()
+      - name: Show logs on failure or flaky tests
+        if: failure() || steps.check-flaky.outputs.has_flaky_tests == 'true'
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide

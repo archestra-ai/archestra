@@ -7,7 +7,8 @@ services:
     ports:
       - "9091:8080"
     volumes:
-      - ./wiremock-mappings.json:/home/wiremock/mappings/mappings.json:ro
+      # Mount the e2e test mappings for LLM proxy tests
+      - ../../helm/e2e-tests/mappings:/home/wiremock/mappings:ro
     entrypoint:
       [
         "/docker-entrypoint.sh",

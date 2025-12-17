@@ -317,6 +317,11 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
 /**
  * Wait for an agent-tool to be registered with retry/polling logic.
  * This helps avoid race conditions when a tool is registered asynchronously.
+ * In CI with parallel workers, tool registration can take longer due to resource contention.
+ *
+ * IMPORTANT: Uses server-side filtering by agentId to avoid pagination issues.
+ * The default API limit is 20 items, so without filtering, the tool might not
+ * appear in results if there are many agent-tools in the database.
  */
 const waitForAgentTool = async (
   request: APIRequestContext,
@@ -327,19 +332,23 @@ const waitForAgentTool = async (
     delayMs?: number;
   },
 ): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
-  const maxAttempts = options?.maxAttempts ?? 10;
-  const delayMs = options?.delayMs ?? 500;
+  // Increased defaults for CI stability: 20 attempts × 1000ms = 20 seconds total wait
+  const maxAttempts = options?.maxAttempts ?? 20;
+  const delayMs = options?.delayMs ?? 1000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Use server-side filtering by agentId and increase limit to avoid pagination issues
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/agent-tools",
+      urlSuffix: `/api/agent-tools?agentId=${agentId}&limit=100`,
       ignoreStatusCheck: true,
     });
 
     if (agentToolsResponse.ok()) {
       const agentTools = await agentToolsResponse.json();
+      // Defense-in-depth: validate both agentId AND toolName client-side
+      // in case the API silently ignores unknown query params
       const foundTool = agentTools.data.find(
         (at: { agent: { id: string }; tool: { name: string } }) =>
           at.agent.id === agentId && at.tool.name === toolName,

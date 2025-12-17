@@ -1,67 +1,16 @@
-import {
-  type APIRequestContext,
-  expect,
-  test as setup,
-} from "@playwright/test";
+import { expect, test as setup } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   adminAuthFile,
   UI_BASE_URL,
 } from "./consts";
-
-/**
- * Sleep for a given number of milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Sign in a user via API and return true if successful
- * Handles rate limiting (429) with exponential backoff retry
- */
-async function signInAdmin(
-  request: APIRequestContext,
-  email: string,
-  password: string,
-): Promise<boolean> {
-  const maxRetries = 3;
-  let delay = 1000; // Start with 1 second delay
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await request.post(
-      `${UI_BASE_URL}/api/auth/sign-in/email`,
-      {
-        data: { email, password },
-        headers: {
-          Origin: UI_BASE_URL,
-        },
-      },
-    );
-
-    if (response.ok()) {
-      return true;
-    }
-
-    // If rate limited and we have retries left, wait and retry
-    if (response.status() === 429 && attempt < maxRetries) {
-      await sleep(delay);
-      delay *= 2; // Exponential backoff
-      continue;
-    }
-
-    // For other errors or final retry, return false
-    return false;
-  }
-
-  return false;
-}
+import { loginViaApi } from "./utils";
 
 // Setup admin authentication - must run first before other users
 setup("authenticate as admin", async ({ page }) => {
   // Sign in admin via API
-  const signedIn = await signInAdmin(page.request, ADMIN_EMAIL, ADMIN_PASSWORD);
+  const signedIn = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
   expect(signedIn, "Admin sign-in failed").toBe(true);
 
   // Navigate to trigger cookie storage

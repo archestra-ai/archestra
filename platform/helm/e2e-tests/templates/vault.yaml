@@ -1,0 +1,117 @@
+{{- if .Values.vault.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+spec:
+  type: {{ .Values.vault.service.type }}
+  selector:
+    app: vault
+  ports:
+    - port: {{ .Values.vault.service.port }}
+      targetPort: vault
+      protocol: TCP
+      name: vault
+      {{- if and (eq .Values.vault.service.type "NodePort") .Values.vault.service.nodePort }}
+      nodePort: {{ .Values.vault.service.nodePort }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vault
+  labels:
+    app: vault
+spec:
+  {{- if .Values.vault.k8sAuth.enabled }}
+  serviceAccountName: {{ .Values.vault.k8sAuth.serviceAccountName }}
+  {{- end }}
+  containers:
+    - name: vault
+      image: "{{ .Values.vault.image.repository }}:{{ .Values.vault.image.tag }}"
+      imagePullPolicy: {{ .Values.vault.image.pullPolicy }}
+      env:
+        - name: VAULT_DEV_ROOT_TOKEN_ID
+          value: {{ .Values.vault.devRootToken | quote }}
+        - name: VAULT_DEV_LISTEN_ADDRESS
+          value: "0.0.0.0:8200"
+      ports:
+        - containerPort: 8200
+          name: vault
+      securityContext:
+        capabilities:
+          add:
+            - IPC_LOCK
+      {{- with .Values.vault.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.vault.readinessProbe.enabled }}
+      readinessProbe:
+        httpGet:
+          path: /v1/sys/health
+          port: vault
+        initialDelaySeconds: {{ .Values.vault.readinessProbe.initialDelaySeconds }}
+        periodSeconds: {{ .Values.vault.readinessProbe.periodSeconds }}
+        timeoutSeconds: {{ .Values.vault.readinessProbe.timeoutSeconds }}
+      {{- end }}
+      {{- if .Values.vault.k8sAuth.enabled }}
+      # Post-start hook to configure K8s auth after vault is ready
+      lifecycle:
+        postStart:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - |
+                # Wait for Vault to be ready
+                for i in $(seq 1 30); do
+                  if vault status 2>/dev/null | grep -q "Initialized.*true"; then
+                    break
+                  fi
+                  sleep 1
+                done
+
+                {{- if eq (int .Values.vault.k8sAuth.kvVersion) 1 }}
+                # Enable KV v1 secrets engine
+                vault secrets enable -path=kv -version=1 kv 2>/dev/null || true
+
+                # Create policy for KV v1
+                vault policy write archestra-secrets - <<EOF
+                path "kv/archestra" {
+                  capabilities = ["list"]
+                }
+                path "kv/archestra/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                EOF
+                {{- else }}
+                # Enable KV v2 secrets engine
+                vault secrets enable -path=secret kv-v2 2>/dev/null || true
+
+                # Create policy for KV v2
+                vault policy write archestra-secrets - <<EOF
+                path "secret/data/archestra/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "secret/metadata/archestra/*" {
+                  capabilities = ["read", "delete", "list"]
+                }
+                EOF
+                {{- end }}
+
+                # Enable Kubernetes auth method
+                vault auth enable kubernetes 2>/dev/null || true
+
+                # Configure K8s auth to use the in-cluster API
+                vault write auth/kubernetes/config \
+                  kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+
+                # Create a role bound to the configured service account
+                vault write auth/kubernetes/role/archestra \
+                  bound_service_account_names="{{ .Values.vault.k8sAuth.boundServiceAccountName }}" \
+                  bound_service_account_namespaces="{{ .Values.vault.k8sAuth.boundServiceAccountNamespace }}" \
+                  policies="archestra-secrets" \
+                  ttl="{{ .Values.vault.k8sAuth.ttl }}"
+      {{- end }}
+{{- end }}

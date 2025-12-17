@@ -172,13 +172,17 @@ export default defineConfig({
     },
     // SSO tests run AFTER all other UI tests complete to avoid parallel execution issues
     // These tests manipulate shared backend state (SSO providers, Keycloak) and need isolation
+    // IMPORTANT: SSO tests do NOT use storageState because:
+    // 1. SSO logins can invalidate the admin session stored in adminAuthFile
+    // 2. Each SSO test needs to authenticate fresh to avoid session conflicts
+    // 3. The ensureAdminAuthenticated() helper handles login at the start of each test
     {
       name: projectNames.sso,
       testDir: "./tests/ui",
       testMatch: testPatterns.ssoProviders,
       use: {
         ...devices["Desktop Chrome"],
-        storageState: adminAuthFile,
+        // No storageState - SSO tests authenticate fresh via ensureAdminAuthenticated()
       },
       // Run after all browser UI tests complete - ensures exclusive access to SSO resources
       dependencies: dependencies.ssoProject,

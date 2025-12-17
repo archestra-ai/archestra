@@ -47,35 +47,42 @@ const KEYCLOAK_TEST_PASSWORD = ADMIN_PASSWORD;
 const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
 /**
- * Ensure the admin is authenticated. If the session is invalid (e.g., from a previous
- * SSO login that invalidated the storage state session), re-authenticate.
+ * Authenticate as admin and navigate to SSO providers page.
  *
- * This is necessary because SSO tests can invalidate the shared admin session:
- * - Each SSO test creates an SSO provider, does SSO login, then deletes the provider
- * - SSO login may create a new session that invalidates the storage state session
- * - On retry or subsequent tests, the storage state session might be invalid
+ * SSO tests do NOT use storage state because:
+ * 1. SSO logins can invalidate pre-existing sessions
+ * 2. Each test needs a fresh session to avoid conflicts
+ * 3. This ensures each test starts in a known good state
  *
- * @param page - The Playwright page (from storage state)
+ * @param page - The Playwright page (without storage state)
  */
 async function ensureAdminAuthenticated(page: Page): Promise<void> {
-  // Navigate to a protected page
+  // Go to sign-in page
+  await page.goto(`${UI_BASE_URL}/auth/sign-in`);
+  await page.waitForLoadState("networkidle");
+
+  // If already authenticated (shouldn't happen without storage state, but handle it)
+  if (!page.url().includes("/auth/sign-in")) {
+    await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
+    await page.waitForLoadState("networkidle");
+    return;
+  }
+
+  // Authenticate using admin credentials
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Login" }).click();
+
+  // Wait for successful login - redirects to "/" then navigate to SSO providers
+  await page.waitForURL(/^(?!.*\/auth\/sign-in).*$/, { timeout: 15000 });
+  await page.waitForLoadState("networkidle");
+
+  // Navigate to SSO providers page
   await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
   await page.waitForLoadState("networkidle");
 
-  // Check if we were redirected to sign-in (session invalid)
-  if (page.url().includes("/auth/sign-in")) {
-    // Re-authenticate using admin credentials
-    await page.getByLabel("Email").fill(ADMIN_EMAIL);
-    await page.getByLabel("Password").fill(ADMIN_PASSWORD);
-    await page.getByRole("button", { name: "Login" }).click();
-
-    // Wait for successful login and navigation to the original page
-    await page.waitForURL(/\/settings\/sso-providers/, { timeout: 15000 });
-    await page.waitForLoadState("networkidle");
-  }
-
-  // Verify we're authenticated and on the correct page
-  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 5000 });
+  // Verify we're on the correct page
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 10000 });
 }
 
 /**

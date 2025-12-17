@@ -76,21 +76,27 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        throw new ApiError(404, "Conversation not found");
+        return reply.send({
+          available: false,
+          error: "Conversation not found",
+        });
       }
 
       try {
         const result = await browserStreamService.checkAvailability(agentId);
         return reply.send(result);
       } catch (error) {
+        if (error instanceof ApiError) {
+          return reply.send({ available: false, error: error.message });
+        }
         logger.error(
           { error, conversationId },
           "Failed to check browser availability",
         );
-        throw new ApiError(
-          500,
-          error instanceof Error ? error.message : "Availability check failed",
-        );
+        return reply.send({
+          available: false,
+          error: "Availability check failed",
+        });
       }
     },
   );
@@ -121,7 +127,7 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        throw new ApiError(404, "Conversation not found");
+        return reply.send({ success: false, error: "Conversation not found" });
       }
 
       try {
@@ -134,14 +140,14 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         return reply.send(result);
       } catch (error) {
+        if (error instanceof ApiError) {
+          return reply.send({ success: false, error: error.message });
+        }
         logger.error(
           { error, conversationId, url },
           "Failed to navigate browser",
         );
-        throw new ApiError(
-          500,
-          error instanceof Error ? error.message : "Navigation failed",
-        );
+        return reply.send({ success: false, error: "Navigation failed" });
       }
     },
   );
@@ -170,7 +176,7 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        throw new ApiError(404, "Conversation not found");
+        return reply.send({ error: "Conversation not found" });
       }
 
       try {
@@ -182,11 +188,11 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         return reply.send(result);
       } catch (error) {
+        if (error instanceof ApiError) {
+          return reply.send({ error: error.message });
+        }
         logger.error({ error, conversationId }, "Failed to take screenshot");
-        throw new ApiError(
-          500,
-          error instanceof Error ? error.message : "Screenshot failed",
-        );
+        return reply.send({ error: "Screenshot failed" });
       }
     },
   );
@@ -215,7 +221,7 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
       );
       if (!agentId) {
-        throw new ApiError(404, "Conversation not found");
+        return reply.send({ success: false, error: "Conversation not found" });
       }
 
       try {
@@ -227,14 +233,14 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         return reply.send(result);
       } catch (error) {
+        if (error instanceof ApiError) {
+          return reply.send({ success: false, error: error.message });
+        }
         logger.error(
           { error, conversationId },
           "Failed to activate browser tab",
         );
-        throw new ApiError(
-          500,
-          error instanceof Error ? error.message : "Tab activation failed",
-        );
+        return reply.send({ success: false, error: "Tab activation failed" });
       }
     },
   );
@@ -275,11 +281,11 @@ const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         return reply.send(result);
       } catch (error) {
+        if (error instanceof ApiError) {
+          return reply.send({ success: false, error: error.message });
+        }
         logger.error({ error, conversationId }, "Failed to close browser tab");
-        throw new ApiError(
-          500,
-          error instanceof Error ? error.message : "Tab close failed",
-        );
+        return reply.send({ success: false, error: "Tab close failed" });
       }
     },
   );

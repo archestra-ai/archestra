@@ -67,19 +67,39 @@ const conversationTabMap = new Map<string, number>();
  * Calls Playwright MCP tools directly through the MCP Gateway
  */
 export class BrowserStreamService {
+  private async findToolName(
+    agentId: string,
+    matches: (toolName: string) => boolean,
+  ): Promise<string | null> {
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    for (const tool of tools) {
+      const toolName = tool.name;
+      if (typeof toolName === "string" && matches(toolName)) {
+        return toolName;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Check if Playwright MCP browser tools are available for an agent
    */
   async checkAvailability(agentId: string): Promise<AvailabilityResult> {
     const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const browserTools = tools.filter(
-      (t: { name: string }) =>
-        t.name.includes("playwright") || t.name.startsWith("browser_"),
-    );
+    const browserToolNames = tools.flatMap((tool) => {
+      const toolName = tool.name;
+      if (typeof toolName !== "string") return [];
+      if (toolName.includes("playwright") || toolName.startsWith("browser_")) {
+        return [toolName];
+      }
+      return [];
+    });
 
     return {
-      available: browserTools.length > 0,
-      tools: browserTools.map((t: { name: string }) => t.name),
+      available: browserToolNames.length > 0,
+      tools: browserToolNames,
     };
   }
 
@@ -87,44 +107,40 @@ export class BrowserStreamService {
    * Find the Playwright browser navigate tool for an agent
    */
   private async findNavigateTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const navigateTool = tools.find(
-      (t: { name: string }) =>
-        t.name.includes("browser_navigate") ||
-        t.name.endsWith("__navigate") ||
-        (t.name.includes("playwright") && t.name.includes("navigate")),
+    return this.findToolName(
+      agentId,
+      (toolName) =>
+        toolName.includes("browser_navigate") ||
+        toolName.endsWith("__navigate") ||
+        (toolName.includes("playwright") && toolName.includes("navigate")),
     );
-    return navigateTool?.name ?? null;
   }
 
   /**
    * Find the Playwright browser screenshot tool for an agent
    */
   private async findScreenshotTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
     // Prefer browser_take_screenshot, fallback to browser_snapshot
-    const screenshotTool = tools.find(
-      (t: { name: string }) =>
-        t.name.includes("browser_take_screenshot") ||
-        t.name.includes("browser_screenshot"),
+    const screenshotTool = await this.findToolName(
+      agentId,
+      (toolName) =>
+        toolName.includes("browser_take_screenshot") ||
+        toolName.includes("browser_screenshot"),
     );
-    if (screenshotTool) return screenshotTool.name;
+    if (screenshotTool) return screenshotTool;
 
-    const snapshotTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_snapshot"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_snapshot"),
     );
-    return snapshotTool?.name ?? null;
   }
 
   /**
    * Find the Playwright browser tabs tool for an agent
    */
   private async findTabsTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const tabsTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_tabs"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_tabs"),
     );
-    return tabsTool?.name ?? null;
   }
 
   /**
@@ -221,55 +237,45 @@ export class BrowserStreamService {
    * Find the Playwright browser click tool for an agent
    */
   private async findClickTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const clickTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_click"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_click"),
     );
-    return clickTool?.name ?? null;
   }
 
   /**
    * Find the Playwright browser type tool for an agent
    */
   private async findTypeTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const typeTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_type"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_type"),
     );
-    return typeTool?.name ?? null;
   }
 
   /**
    * Find the Playwright browser press key tool for an agent
    */
   private async findPressKeyTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const pressKeyTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_press_key"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_press_key"),
     );
-    return pressKeyTool?.name ?? null;
   }
 
   /**
    * Find the Playwright browser navigate back tool for an agent
    */
   private async findNavigateBackTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const navigateBackTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_navigate_back"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_navigate_back"),
     );
-    return navigateBackTool?.name ?? null;
   }
 
   /**
    * Find the Playwright browser snapshot tool for an agent
    */
   private async findSnapshotTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const snapshotTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_snapshot"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_snapshot"),
     );
-    return snapshotTool?.name ?? null;
   }
 
   /**
@@ -753,11 +759,9 @@ export class BrowserStreamService {
    * This tool allows running arbitrary Playwright code including mouse operations
    */
   private async findRunCodeTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const runCodeTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_run_code"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_run_code"),
     );
-    return runCodeTool?.name ?? null;
   }
 
   /**
@@ -765,11 +769,9 @@ export class BrowserStreamService {
    * This tool allows running JavaScript in the browser context
    */
   private async findEvaluateTool(agentId: string): Promise<string | null> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    const evaluateTool = tools.find((t: { name: string }) =>
-      t.name.includes("browser_evaluate"),
+    return this.findToolName(agentId, (toolName) =>
+      toolName.includes("browser_evaluate"),
     );
-    return evaluateTool?.name ?? null;
   }
 
   /**

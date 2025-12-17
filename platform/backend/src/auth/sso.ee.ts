@@ -5,20 +5,22 @@ import { extractGroupsFromClaims } from "@/auth/sso-team-sync-cache.ee";
 import config from "@/config";
 import logger from "@/logging";
 // Direct imports to avoid circular dependencies when importing from barrel files
-import TeamModel from "@/models/team";
 import AccountModel from "@/models/account";
 import MemberModel from "@/models/member";
-import SsoProviderModel from "@/models/sso-provider.ee";
+import SsoProviderModel, {
+  type SsoGetRoleData,
+} from "@/models/sso-provider.ee";
+import TeamModel from "@/models/team";
 
 export const ssoConfig = {
   organizationProvisioning: {
     disabled: false,
-    defaultRole: MEMBER_ROLE_NAME,
+    defaultRole: MEMBER_ROLE_NAME as "member",
     // IMPORTANT: This callback is ONLY invoked when creating NEW organization memberships
     // (i.e., first-time SSO logins for a user). For existing users who already have memberships,
     // this callback is NOT called. To sync roles on every SSO login, we use the `syncSsoRole`
     // function in `handleAfterHook` which runs on every `/sso/callback/*` request.
-    getRole: async (data) => {
+    getRole: async (data: SsoGetRoleData) => {
       logger.debug(
         {
           providerId: data.provider?.providerId,

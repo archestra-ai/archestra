@@ -18,8 +18,8 @@ const { ssoConfig, syncSsoRole, syncSsoTeams } =
       await import("./sso.ee")
     : {
         ssoConfig: undefined,
-        syncSsoRole: (..._args: any) => {},
-        syncSsoTeams: (..._args: any) => {},
+        syncSsoRole: () => {},
+        syncSsoTeams: () => {},
       };
 
 const APP_NAME = "Archestra";

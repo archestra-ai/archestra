@@ -6,7 +6,6 @@ import { Key, Link2, Plus, Settings, Trash2, Users, Vault } from "lucide-react";
 
 import { lazy, useState } from "react";
 import { toast } from "sonner";
-import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -51,9 +50,7 @@ const { TeamExternalGroupsDialog } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
     await import("./team-external-groups-dialog.ee")
   : {
-      TeamExternalGroupsDialog: () => (
-        <EnterpriseLicenseRequired featureName="SSO" />
-      ),
+      TeamExternalGroupsDialog: () => null,
     };
 
 export function TeamsList() {

@@ -20,7 +20,16 @@ test(
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.locator("[type=submit]").click();
 
-    // Wait for dialog to close (profile creation completes)
+    // After profile creation, dialog transitions to "How to connect" view
+    // Wait for the success dialog to appear with connection instructions
+    await expect(
+      page.getByText(new RegExp(`How to connect "${AGENT_NAME}"`, "i")),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Click Close button to dismiss the dialog
+    await page
+      .getByTestId(E2eTestId.CreateAgentCloseHowToConnectButton)
+      .click();
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
     await page.waitForLoadState("networkidle");
 

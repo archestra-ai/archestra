@@ -515,8 +515,38 @@ test.describe("SSO Team Sync E2E", () => {
     const teamName = makeRandomString(8, "SyncTeam");
     const externalGroup = "archestra-admins"; // Matches Keycloak admin user's group
 
-    // STEP 1: Authenticate and create OIDC provider
+    // STEP 0: Clean up orphan SyncTeam teams from previous failed test runs
+    // These teams can have the same external group mapping, causing SSO sync to add
+    // users to the wrong team
     await ensureAdminAuthenticated(page);
+    await goToPage(page, "/settings/teams");
+    await page.waitForLoadState("networkidle");
+
+    // Find and delete any existing SyncTeam-* teams
+    const orphanTeams = page.locator(".rounded-lg.border.p-4").filter({
+      has: page.locator('h3:text-matches("SyncTeam-.*")'),
+    });
+    const orphanCount = await orphanTeams.count();
+
+    for (let i = orphanCount - 1; i >= 0; i--) {
+      // Re-locate since DOM changes after each delete
+      const team = page
+        .locator(".rounded-lg.border.p-4")
+        .filter({ has: page.locator('h3:text-matches("SyncTeam-.*")') })
+        .first();
+      if ((await team.count()) === 0) break;
+
+      // Find and click the delete button (trash icon)
+      await team.getByRole("button").filter({ has: page.locator("svg") }).last().click();
+      await expect(page.getByText(/Are you sure/i)).toBeVisible({ timeout: 5000 });
+      await clickButton({ page, options: { name: "Delete", exact: true } });
+      await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+      await page.waitForLoadState("networkidle");
+    }
+
+    // STEP 1: Authenticate and create OIDC provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
     await deleteExistingProviderIfExists(page, "Generic OIDC");
     await fillOidcProviderForm(page, providerName);
     await clickButton({ page, options: { name: "Create Provider" } });
@@ -620,64 +650,53 @@ test.describe("SSO Team Sync E2E", () => {
       });
 
       // STEP 5: Verify user was automatically added to the team
-      // Team sync is async and can take significant time in CI environments
+      // Team sync is an async background operation during SSO callback
+      // Give it a moment to complete before navigating
+      await ssoPage.waitForTimeout(2000);
+
+      // Navigate to teams page
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("networkidle");
 
-      // Poll for team member count to increase (max 60 seconds)
-      // SSO team sync is an async background operation that can take variable time
-      const teamMemberLocator = ssoPage
-        .locator(".rounded-lg.border.p-4")
-        .filter({ hasText: teamName })
-        .locator("text=/\\d+ member/");
-
-      await expect(async () => {
-        await ssoPage.reload();
-        await ssoPage.waitForLoadState("networkidle");
-        const memberText = await teamMemberLocator.textContent();
-        // Team should have at least 1 member after sync
-        expect(memberText).not.toBe("0 members");
-      }).toPass({ timeout: 60_000, intervals: [2000, 3000, 5000, 5000, 5000] });
-
-      // Verify the SSO user is in the team members list
-      // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
-      // Use polling with reload to handle async team sync in CI
-      // Helper function to get fresh locator after potential page reload
+      // Find the team row helper
       const getTeamRow = () =>
         ssoPage.locator(".rounded-lg.border.p-4").filter({ hasText: teamName });
 
+      // Poll until the team card shows at least 1 member
       await expect(async () => {
-        // Open the manage members dialog (re-locate after potential reload)
+        // Force a fresh page load by navigating away and back
+        await ssoPage.goto(`${UI_BASE_URL}/`);
+        await ssoPage.waitForLoadState("networkidle");
+        await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
+        await ssoPage.waitForLoadState("networkidle");
+
         const teamRow = getTeamRow();
-        const manageButton = teamRow.getByTestId(
-          `${E2eTestId.ManageMembersButton}-${teamName}`,
-        );
-        await manageButton.click();
-        await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
+        await expect(teamRow).toBeVisible({ timeout: 5000 });
 
-        // Check if the email is visible in the dialog
-        const emailLocator = ssoPage
-          .getByRole("dialog")
-          .getByText(new RegExp(ADMIN_EMAIL, "i"));
-        const isVisible = await emailLocator.isVisible().catch(() => false);
-
-        if (!isVisible) {
-          // Close dialog and reload for next attempt
-          await ssoPage.keyboard.press("Escape");
-          await ssoPage
-            .getByRole("dialog")
-            .waitFor({ state: "hidden", timeout: 5000 })
-            .catch(() => {}); // Ignore if already hidden
-          await ssoPage.reload();
-          await ssoPage.waitForLoadState("networkidle");
-          throw new Error("Email not visible yet, retrying...");
+        // Get the member count text
+        const memberText = await teamRow
+          .locator("text=/\\d+ member/")
+          .textContent();
+        // Team should have at least 1 member after sync
+        if (memberText === "0 members") {
+          throw new Error(`Team still shows 0 members, got: ${memberText}`);
         }
+      }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
 
-        await expect(emailLocator).toBeVisible();
-      }).toPass({
-        timeout: 60_000,
-        intervals: [3000, 5000, 7000, 10000, 10000],
-      });
+      // Verify the SSO user is in the team members list by opening the dialog
+      // Open manage members dialog
+      const teamRow = getTeamRow();
+      const manageButton = teamRow.getByTestId(
+        `${E2eTestId.ManageMembersButton}-${teamName}`,
+      );
+      await manageButton.click();
+      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
+
+      // The email should now be visible since the member was synced
+      const emailLocator = ssoPage
+        .getByRole("dialog")
+        .getByText(new RegExp(ADMIN_EMAIL, "i"));
+      await expect(emailLocator).toBeVisible({ timeout: 10000 });
 
       // Success! The SSO user was automatically synced to the team
     } finally {

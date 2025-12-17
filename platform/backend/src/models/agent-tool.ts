@@ -386,6 +386,7 @@ class AgentToolModel {
         | "useDynamicTeamCredential"
         | "policiesAutoConfiguredAt"
         | "policiesAutoConfiguringStartedAt"
+        | "policiesAutoConfiguredReasoning"
       >
     >,
   ) {
@@ -415,9 +416,10 @@ class AgentToolModel {
       updatedAt: new Date(),
     };
 
-    // Clear auto-configured timestamp if requested (manual policy change)
+    // Clear auto-configured timestamp and reasoning if requested (manual policy change)
     if (clearAutoConfigured) {
       updateData.policiesAutoConfiguredAt = null;
+      updateData.policiesAutoConfiguredReasoning = null;
     }
 
     const result = await db

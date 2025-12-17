@@ -754,8 +754,13 @@ export function AssignedToolsTable({
                     <TooltipTrigger asChild>
                       <Sparkles className="h-3 w-3 text-purple-500" />
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Auto-configured by AI</p>
+                    <TooltipContent className="max-w-md">
+                      <p className="font-semibold mb-1">Auto-configured by AI</p>
+                      {row.original.policiesAutoConfiguredReasoning && (
+                        <p className="text-xs text-muted-foreground">
+                          {row.original.policiesAutoConfiguredReasoning}
+                        </p>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -845,8 +850,13 @@ export function AssignedToolsTable({
                     <TooltipTrigger asChild>
                       <Sparkles className="h-3 w-3 text-purple-500" />
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Auto-configured by AI</p>
+                    <TooltipContent className="max-w-md">
+                      <p className="font-semibold mb-1">Auto-configured by AI</p>
+                      {row.original.policiesAutoConfiguredReasoning && (
+                        <p className="text-xs text-muted-foreground">
+                          {row.original.policiesAutoConfiguredReasoning}
+                        </p>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

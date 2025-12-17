@@ -13,10 +13,13 @@ class TrustedDataPolicyModel {
       .values(policy)
       .returning();
 
-    // Clear auto-configured timestamp when adding a policy
+    // Clear auto-configured timestamp and reasoning when adding a policy
     await db
       .update(schema.agentToolsTable)
-      .set({ policiesAutoConfiguredAt: null })
+      .set({
+        policiesAutoConfiguredAt: null,
+        policiesAutoConfiguredReasoning: null,
+      })
       .where(eq(schema.agentToolsTable.id, policy.agentToolId));
 
     return createdPolicy;
@@ -49,11 +52,14 @@ class TrustedDataPolicyModel {
       .where(eq(schema.trustedDataPoliciesTable.id, id))
       .returning();
 
-    // Clear auto-configured timestamp when updating a policy
+    // Clear auto-configured timestamp and reasoning when updating a policy
     if (updatedPolicy) {
       await db
         .update(schema.agentToolsTable)
-        .set({ policiesAutoConfiguredAt: null })
+        .set({
+          policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
+        })
         .where(eq(schema.agentToolsTable.id, updatedPolicy.agentToolId));
     }
 
@@ -73,11 +79,14 @@ class TrustedDataPolicyModel {
 
     const deleted = result.rowCount !== null && result.rowCount > 0;
 
-    // Clear auto-configured timestamp when deleting a policy
+    // Clear auto-configured timestamp and reasoning when deleting a policy
     if (deleted) {
       await db
         .update(schema.agentToolsTable)
-        .set({ policiesAutoConfiguredAt: null })
+        .set({
+          policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
+        })
         .where(eq(schema.agentToolsTable.id, policy.agentToolId));
     }
 

@@ -266,12 +266,13 @@ Examples:
         anthropicApiKey,
       );
 
-      // Update agent-tool with new configuration
+      // Update agent-tool with new configuration including reasoning
       await AgentToolModel.update(agentToolId, {
         allowUsageWhenUntrustedDataIsPresent:
           policyConfig.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: policyConfig.toolResultTreatment,
         policiesAutoConfiguredAt: new Date(),
+        policiesAutoConfiguredReasoning: policyConfig.reasoning,
       });
 
       logger.info(
@@ -374,12 +375,13 @@ Examples:
           "configurePoliciesForAgentToolWithTimeout: completed successfully",
         );
       } else {
-        // Failed - clear both timestamps
+        // Failed - clear both timestamps and reasoning
         await db
           .update(schema.agentToolsTable)
           .set({
             policiesAutoConfiguringStartedAt: null,
             policiesAutoConfiguredAt: null,
+            policiesAutoConfiguredReasoning: null,
           })
           .where(eq(schema.agentToolsTable.id, agentToolId));
 
@@ -395,12 +397,13 @@ Examples:
 
       return result;
     } catch (error) {
-      // On error, clear both timestamps
+      // On error, clear both timestamps and reasoning
       await db
         .update(schema.agentToolsTable)
         .set({
           policiesAutoConfiguringStartedAt: null,
           policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
         })
         .where(eq(schema.agentToolsTable.id, agentToolId))
         .catch(() => {

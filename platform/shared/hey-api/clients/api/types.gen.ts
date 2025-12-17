@@ -3845,6 +3845,7 @@ export type GetAllAgentToolsResponses = {
             useDynamicTeamCredential: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -4516,6 +4517,7 @@ export type UpdateAgentToolResponses = {
         useDynamicTeamCredential?: boolean;
         policiesAutoConfiguredAt?: string | null;
         policiesAutoConfiguringStartedAt?: string | null;
+        policiesAutoConfiguredReasoning?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };

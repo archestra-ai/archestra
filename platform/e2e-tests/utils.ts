@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
 import { archestraApiSdk } from "@shared";
 import { testMcpServerCommand } from "@shared/test-mcp-server";

@@ -35,7 +35,6 @@ import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { type TeamToken, useTokens } from "@/lib/team-token.query";
 import { WithPermissions } from "../roles/with-permissions";
-import { TeamExternalGroupsDialog } from "./team-external-groups-dialog";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 
@@ -46,6 +45,13 @@ const TeamVaultFolderDialog = lazy(
 );
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
+
+const { TeamExternalGroupsDialog } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
+    await import("./team-external-groups-dialog.ee")
+  : {
+      TeamExternalGroupsDialog: () => null,
+    };
 
 export function TeamsList() {
   const queryClient = useQueryClient();

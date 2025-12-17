@@ -29,9 +29,9 @@ import {
   useDeleteSsoProvider,
   useSsoProvider,
   useUpdateSsoProvider,
-} from "@/lib/sso-provider.query";
-import { OidcConfigForm } from "./oidc-config-form";
-import { SamlConfigForm } from "./saml-config-form";
+} from "@/lib/sso-provider.query.ee";
+import { OidcConfigForm } from "./oidc-config-form.ee";
+import { SamlConfigForm } from "./saml-config-form.ee";
 
 interface EditSsoProviderDialogProps {
   ssoProviderId: string;

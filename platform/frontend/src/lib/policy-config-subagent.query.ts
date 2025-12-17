@@ -1,13 +1,13 @@
 import { archestraApiSdk } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 
-const { getPolicyConfigSubagentPrompt } = archestraApiSdk;
+const { getApiPolicyConfigSubagentPrompt } = archestraApiSdk;
 
 export function usePolicyConfigSubagentPrompt() {
   return useSuspenseQuery({
     queryKey: ["policy-config-subagent", "prompt"],
     queryFn: async () => {
-      const result = await getPolicyConfigSubagentPrompt();
+      const result = await getApiPolicyConfigSubagentPrompt();
       return result.data?.promptTemplate ?? "";
     },
   });

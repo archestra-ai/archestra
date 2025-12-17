@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  isArchestraMcpServerTool,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Info, ListTodo, Loader2, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
@@ -159,7 +156,7 @@ export function ChatToolsDisplay({
     return (
       <div
         key={tool.id}
-        className={`flex items-center gap-2 border-l-2 ${borderColor} pl-2 py-1`}
+        className={`flex items-center gap-2 border-l-2 ${borderColor} pl-2 ml-1 py-1`}
       >
         <span className="font-medium text-sm">{toolName}</span>
         {tool.description && (
@@ -214,17 +211,15 @@ export function ChatToolsDisplay({
             <Plus className="h-3 w-3" />
           </Button>
         ) : (
-          !isArchestraMcpServerTool(tool.name) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 hover:text-destructive"
-              onClick={(e) => handleDisableTool(tool.id, e)}
-              title={`Disable ${toolName} for this chat`}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          )
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 hover:text-destructive"
+            onClick={(e) => handleDisableTool(tool.id, e)}
+            title={`Disable ${toolName} for this chat`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
         )}
       </div>
     );
@@ -328,8 +323,8 @@ export function ChatToolsDisplay({
                 <TooltipContent
                   side="top"
                   align="center"
-                  className="w-80 max-h-96 p-0"
-                  sideOffset={4}
+                  className="min-w-80 max-h-96 p-0 overflow-y-auto"
+                  sideOffset={10}
                   onWheel={(e) => e.stopPropagation()}
                   onTouchMove={(e) => e.stopPropagation()}
                   onMouseEnter={() => {
@@ -358,7 +353,7 @@ export function ChatToolsDisplay({
                     {enabledTools.length > 0 && (
                       <div>
                         <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
-                          Enabled
+                          Enabled ({enabledTools.length})
                         </div>
                         <div className="space-y-1 px-2 pb-2">
                           {enabledTools.map((tool) =>
@@ -372,7 +367,7 @@ export function ChatToolsDisplay({
                     {disabledTools.length > 0 && (
                       <div>
                         <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
-                          Disabled
+                          Disabled ({disabledTools.length})
                         </div>
                         <div className="space-y-1 px-2 pb-2">
                           {disabledTools.map((tool) =>

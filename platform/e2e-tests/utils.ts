@@ -111,6 +111,9 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   await goToPage(page, "/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
 
+  // Verify we're actually on the registry page (handle redirect issues)
+  await expect(page).toHaveURL(/\/mcp-catalog\/registry/, { timeout: 10000 });
+
   // Poll for manage-tools button to appear (MCP tool discovery is async)
   // After installing, the server needs to: start → connect → discover tools → save to DB
   const manageToolsButton = page.getByTestId(
@@ -118,7 +121,8 @@ export async function goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
   );
 
   await expect(async () => {
-    await page.reload();
+    // Re-navigate in case the page got stale
+    await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
     await page.waitForLoadState("networkidle");
     await expect(manageToolsButton).toBeVisible({ timeout: 5000 });
   }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });

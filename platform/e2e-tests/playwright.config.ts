@@ -26,7 +26,8 @@ const testPatterns = {
   teamsSetup: /auth\.teams\.setup\.ts/,
   // Special test files that need isolated execution
   credentialsWithVault: /credentials-with-vault\.ee\.spec\.ts/,
-  ssoProviders: /sso-providers\.spec\.ts/,
+  // NOTE: File was renamed to .ee.spec.ts in commit f10027e (move SSO logic to .ee files)
+  ssoProviders: /sso-providers\.ee\.spec\.ts/,
 };
 
 /**

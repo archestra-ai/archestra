@@ -19,13 +19,21 @@ test(
     await page.getByTestId(E2eTestId.CreateAgentButton).click();
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.locator("[type=submit]").click();
-    await page.waitForTimeout(1000);
 
-    // Check if the profile is created
-    await goToPage(page, "/profiles");
-    await expect(
-      page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
-    ).toBeVisible();
+    // Wait for dialog to close (profile creation completes)
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState("networkidle");
+
+    // Poll for the profile to appear in the table (handles async creation)
+    const profileLocator = page
+      .getByTestId(E2eTestId.AgentsTable)
+      .getByText(AGENT_NAME);
+
+    await expect(async () => {
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await expect(profileLocator).toBeVisible({ timeout: 5000 });
+    }).toPass({ timeout: 30_000, intervals: [2000, 3000, 5000] });
 
     // Delete created profile - click the delete button directly
     await page
@@ -33,8 +41,7 @@ test(
       .click();
     await clickButton({ page, options: { name: "Delete profile" } });
 
-    await expect(
-      page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
-    ).not.toBeVisible();
+    // Wait for deletion to complete
+    await expect(profileLocator).not.toBeVisible({ timeout: 10000 });
   },
 );

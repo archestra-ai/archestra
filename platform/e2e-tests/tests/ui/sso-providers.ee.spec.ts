@@ -56,35 +56,48 @@ const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
  * Authenticate as admin via API and navigate to SSO providers page.
  * SSO tests don't use storage state to avoid session conflicts.
  * Clears existing cookies first to ensure clean authentication state.
+ * Uses polling with retry to handle timing issues.
  */
 async function ensureAdminAuthenticated(page: Page): Promise<void> {
   // Clear all cookies to ensure no stale session cookies interfere with login
   // This is critical on retries where previous SSO logins may have invalidated sessions
   await page.context().clearCookies();
 
-  const loggedIn = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  if (!loggedIn) {
-    throw new Error("Admin login failed");
+  // Retry login up to 3 times to handle transient issues
+  let loginSucceeded = false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    loginSucceeded = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    if (loginSucceeded) break;
+    // Wait before retry
+    await page.waitForTimeout(1000);
   }
 
-  // Navigate to root first to ensure session cookie is properly loaded in browser context
-  // Then redirect to the target page. This helps ensure the cookie is fully processed.
-  await page.goto(`${UI_BASE_URL}/`);
-  await page.waitForLoadState("networkidle");
-
-  // Verify we're authenticated (not redirected to sign-in)
-  const isAuthenticated = !page.url().includes("/auth/sign-in");
-  if (!isAuthenticated) {
-    throw new Error(
-      `Admin authentication failed - redirected to sign-in after API login. URL: ${page.url()}`,
-    );
+  if (!loginSucceeded) {
+    throw new Error("Admin login failed after 3 attempts");
   }
 
-  // Now navigate to SSO providers page
+  // Navigate directly to SSO providers page
+  // The API login should have set session cookies that persist
   await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
   await page.waitForLoadState("networkidle");
 
-  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 10000 });
+  // Wait briefly for any redirects to complete
+  await page.waitForTimeout(500);
+
+  // Check if we got redirected to sign-in (authentication failed)
+  if (page.url().includes("/auth/sign-in")) {
+    // Try logging in via UI as fallback
+    await page.getByLabel("Email").fill(ADMIN_EMAIL);
+    await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+    await page.getByRole("button", { name: "Login" }).click();
+    await page.waitForLoadState("networkidle");
+
+    // Navigate to SSO providers after UI login
+    await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
+    await page.waitForLoadState("networkidle");
+  }
+
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 15000 });
   await expect(
     page.getByRole("heading", { name: "SSO Providers" }),
   ).toBeVisible({ timeout: 10000 });

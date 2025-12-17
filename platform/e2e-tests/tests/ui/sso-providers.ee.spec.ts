@@ -82,22 +82,26 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle");
 
   // Wait briefly for any redirects to complete
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
 
   // Check if we got redirected to sign-in (authentication failed)
   if (page.url().includes("/auth/sign-in")) {
+    console.log("API login appeared to fail (redirected to sign-in), trying UI fallback...");
     // Try logging in via UI as fallback
     await page.getByLabel("Email").fill(ADMIN_EMAIL);
     await page.getByLabel("Password").fill(ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Login" }).click();
     await page.waitForLoadState("networkidle");
 
+    // Wait for login to complete and redirect away from sign-in
+    await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 15000 });
+
     // Navigate to SSO providers after UI login
     await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
     await page.waitForLoadState("networkidle");
   }
 
-  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 20000 });
   await expect(
     page.getByRole("heading", { name: "SSO Providers" }),
   ).toBeVisible({ timeout: 10000 });

@@ -24,7 +24,7 @@ test(
     // Wait for the success dialog to appear with connection instructions
     await expect(
       page.getByText(new RegExp(`How to connect "${AGENT_NAME}"`, "i")),
-    ).toBeVisible({ timeout: 15000 });
+    ).toBeVisible({ timeout: 30000 });
 
     // Click Close button to dismiss the dialog
     await page

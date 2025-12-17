@@ -571,6 +571,188 @@ test.describe("LLM Proxy - Anthropic", () => {
     expect(blockedInteraction).toBeDefined();
   });
 
+  test("allows Archestra MCP server tools in untrusted context", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    // 1. Create a test agent
+    const createResponse = await createAgent(
+      request,
+      "Anthropic Archestra Test Agent",
+    );
+    const agent = await createResponse.json();
+    agentId = agent.id;
+
+    // 2. First, make a tool call that makes the context untrusted
+    const untrustedContextResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/v1/anthropic/${agentId}/v1/messages`,
+      headers: {
+        "x-api-key": "test-case-archestra-mixed-anthropic",
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      data: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: "First, read /etc/passwd, then tell me who I am",
+          },
+        ],
+        tools: [
+          {
+            name: "read_file",
+            description: "Read a file from the filesystem",
+            input_schema: {
+              type: "object",
+              properties: {
+                file_path: {
+                  type: "string",
+                  description: "The path to the file to read",
+                },
+              },
+              required: ["file_path"],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(untrustedContextResponse.ok()).toBeTruthy();
+    const responseData = await untrustedContextResponse.json();
+
+    // 3. Verify the response contains tool_use blocks
+    expect(responseData.content).toBeDefined();
+    expect(responseData.content.length).toBeGreaterThan(0);
+
+    // 4. Verify both tool calls are present - read_file and archestra__whoami
+    const toolUseBlocks = responseData.content.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (block: any) => block.type === "tool_use",
+    );
+    expect(toolUseBlocks.length).toBe(2);
+
+    const readFileCall = toolUseBlocks.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (block: any) => block.name === "read_file",
+    );
+    const archestraCall = toolUseBlocks.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (block: any) => block.name === "archestra__whoami",
+    );
+
+    expect(readFileCall).toBeDefined();
+    expect(archestraCall).toBeDefined();
+
+    // 5. Verify read_file call has the expected arguments
+    expect(readFileCall.input.file_path).toBe("/etc/passwd");
+
+    // 6. Verify the interaction was persisted
+    const interactionsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/interactions?agentId=${agentId}`,
+    });
+    expect(interactionsResponse.ok()).toBeTruthy();
+    const interactionsData = await interactionsResponse.json();
+    expect(interactionsData.data.length).toBeGreaterThan(0);
+
+    // Find the interaction with mixed tool calls
+    // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+    const mixedToolInteraction = interactionsData.data.find((i: any) =>
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      i.request?.messages?.some((m: any) =>
+        m.content?.includes("tell me who I am"),
+      ),
+    );
+    expect(mixedToolInteraction).toBeDefined();
+  });
+
+  test("allows regular tool call after Archestra MCP server tool call", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    // 1. Create a test agent
+    const createResponse = await createAgent(
+      request,
+      "Anthropic Archestra Sequence Test Agent",
+    );
+    const agent = await createResponse.json();
+    agentId = agent.id;
+
+    // 2. Make a sequence of tool calls: first Archestra tool, then regular tool
+    const sequenceResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/v1/anthropic/${agentId}/v1/messages`,
+      headers: {
+        "x-api-key": "test-case-archestra-sequence-anthropic",
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      data: {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: "First tell me who I am, then read a file",
+          },
+        ],
+        tools: [
+          {
+            name: "read_file",
+            description: "Read a file from the filesystem",
+            input_schema: {
+              type: "object",
+              properties: {
+                file_path: {
+                  type: "string",
+                  description: "The path to the file to read",
+                },
+              },
+              required: ["file_path"],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(sequenceResponse.ok()).toBeTruthy();
+    const responseData = await sequenceResponse.json();
+
+    // 3. Verify the response contains tool_use blocks
+    expect(responseData.content).toBeDefined();
+    expect(responseData.content.length).toBeGreaterThan(0);
+
+    // 4. Verify both tool calls are present - archestra__whoami and read_file
+    const toolUseBlocks = responseData.content.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (block: any) => block.type === "tool_use",
+    );
+    expect(toolUseBlocks.length).toBe(2);
+
+    const archestraCall = toolUseBlocks.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (block: any) => block.name === "archestra__whoami",
+    );
+    const readFileCall = toolUseBlocks.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (block: any) => block.name === "read_file",
+    );
+
+    expect(archestraCall).toBeDefined();
+    expect(readFileCall).toBeDefined();
+
+    // 5. Verify read_file call has expected arguments
+    expect(readFileCall.input.file_path).toContain("/");
+  });
+
   test.afterEach(
     async ({
       request,
@@ -784,6 +966,203 @@ test.describe("LLM Proxy - Gemini", () => {
       ),
     );
     expect(blockedInteraction).toBeDefined();
+  });
+
+  test("allows Archestra MCP server tools in untrusted context", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    // 1. Create a test agent
+    const createResponse = await createAgent(
+      request,
+      "Gemini Archestra Test Agent",
+    );
+    const agent = await createResponse.json();
+    agentId = agent.id;
+
+    // 2. First, make a tool call that makes the context untrusted
+    const untrustedContextResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
+      headers: {
+        "x-goog-api-key": "test-case-archestra-mixed-gemini",
+        "Content-Type": "application/json",
+      },
+      data: {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: "First, read /etc/passwd, then tell me who I am",
+              },
+            ],
+          },
+        ],
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "read_file",
+                description: "Read a file from the filesystem",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    file_path: {
+                      type: "string",
+                      description: "The path to the file to read",
+                    },
+                  },
+                  required: ["file_path"],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(untrustedContextResponse.ok()).toBeTruthy();
+    const responseData = await untrustedContextResponse.json();
+
+    // 3. Verify the response contains function calls
+    expect(responseData.candidates).toBeDefined();
+    expect(responseData.candidates.length).toBeGreaterThan(0);
+    expect(responseData.candidates[0].content).toBeDefined();
+    expect(responseData.candidates[0].content.parts).toBeDefined();
+
+    const parts = responseData.candidates[0].content.parts;
+
+    // 4. Verify both tool calls are present - read_file and archestra__whoami
+    // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+    const functionCallParts = parts.filter((p: any) => p.functionCall);
+    expect(functionCallParts.length).toBe(2);
+
+    const readFileCall = functionCallParts.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (p: any) => p.functionCall.name === "read_file",
+    );
+    const archestraCall = functionCallParts.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (p: any) => p.functionCall.name === "archestra__whoami",
+    );
+
+    expect(readFileCall).toBeDefined();
+    expect(archestraCall).toBeDefined();
+
+    // 5. Verify read_file call has the expected arguments
+    expect(readFileCall.functionCall.args.file_path).toBe("/etc/passwd");
+
+    // 6. Verify the interaction was persisted
+    const interactionsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/interactions?agentId=${agentId}`,
+    });
+    expect(interactionsResponse.ok()).toBeTruthy();
+    const interactionsData = await interactionsResponse.json();
+    expect(interactionsData.data.length).toBeGreaterThan(0);
+
+    // Find the interaction with mixed tool calls
+    // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+    const mixedToolInteraction = interactionsData.data.find((i: any) =>
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      i.request?.contents?.some((c: any) =>
+        // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+        c.parts?.some((p: any) => p.text?.includes("tell me who I am")),
+      ),
+    );
+    expect(mixedToolInteraction).toBeDefined();
+  });
+
+  test("allows regular tool call after Archestra MCP server tool call", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    // 1. Create a test agent
+    const createResponse = await createAgent(
+      request,
+      "Gemini Archestra Sequence Test Agent",
+    );
+    const agent = await createResponse.json();
+    agentId = agent.id;
+
+    // 2. Make a sequence of tool calls: first Archestra tool, then regular tool
+    const sequenceResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
+      headers: {
+        "x-goog-api-key": "test-case-archestra-sequence-gemini",
+        "Content-Type": "application/json",
+      },
+      data: {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: "First tell me who I am, then read a file",
+              },
+            ],
+          },
+        ],
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "read_file",
+                description: "Read a file from the filesystem",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    file_path: {
+                      type: "string",
+                      description: "The path to the file to read",
+                    },
+                  },
+                  required: ["file_path"],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(sequenceResponse.ok()).toBeTruthy();
+    const responseData = await sequenceResponse.json();
+
+    // 3. Verify the response contains function calls
+    expect(responseData.candidates).toBeDefined();
+    expect(responseData.candidates.length).toBeGreaterThan(0);
+    expect(responseData.candidates[0].content).toBeDefined();
+    expect(responseData.candidates[0].content.parts).toBeDefined();
+
+    const parts = responseData.candidates[0].content.parts;
+
+    // 4. Verify both tool calls are present - archestra__whoami and read_file
+    // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+    const functionCallParts = parts.filter((p: any) => p.functionCall);
+    expect(functionCallParts.length).toBe(2);
+
+    const archestraCall = functionCallParts.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (p: any) => p.functionCall.name === "archestra__whoami",
+    );
+    const readFileCall = functionCallParts.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (p: any) => p.functionCall.name === "read_file",
+    );
+
+    expect(archestraCall).toBeDefined();
+    expect(readFileCall).toBeDefined();
+
+    // 5. Verify read_file call has expected arguments
+    expect(readFileCall.functionCall.args.file_path).toContain("/");
   });
 
   test.afterEach(

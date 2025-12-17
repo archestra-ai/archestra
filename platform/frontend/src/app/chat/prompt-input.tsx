@@ -16,6 +16,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ModelSelector } from "@/components/chat/model-selector";
+import Divider from "@/components/divider";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -54,6 +55,7 @@ const ArchestraPromptInput = ({
               />
             )}
           </PromptInputHeader>
+          <Divider className="my-1 w-[calc(100%-2rem)] mx-auto" />
           <PromptInputBody>
             <PromptInputTextarea
               placeholder="Type a message..."

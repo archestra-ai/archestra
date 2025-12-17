@@ -192,7 +192,7 @@ export function ChatToolsDisplay({
                     ...prev,
                     [currentServerName]: false,
                   }));
-                }, 50);
+                }, 30);
               }}
             >
               {tool.description}
@@ -345,7 +345,7 @@ export function ChatToolsDisplay({
                         ...prev,
                         [serverName]: false,
                       }));
-                    }, 100);
+                    }, 30);
                   }}
                 >
                   <ScrollArea className="max-h-96">

@@ -339,60 +339,6 @@ function normalizeJsonSchema(schema: any): any {
 }
 
 /**
- * Filter tools by enabled tool IDs
- * If enabledToolIds is undefined or empty, returns all tools (default = all enabled)
- * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
- *
- * @param tools - All available tools (keyed by tool name)
- * @param enabledToolIds - Optional array of tool IDs to filter by
- * @returns Filtered tools record
- */
-async function filterToolsByEnabledIds(
-  tools: Record<string, Tool>,
-  enabledToolIds?: string[],
-): Promise<Record<string, Tool>> {
-  // Empty array or undefined = all tools enabled (default behavior)
-  if (!enabledToolIds || enabledToolIds.length === 0) {
-    logger.info(
-      {
-        totalTools: Object.keys(tools).length,
-        enabledToolIds: enabledToolIds?.length ?? 0,
-        reason: !enabledToolIds ? "undefined" : "empty array",
-      },
-      "No tool filtering applied - all tools enabled",
-    );
-    return tools;
-  }
-
-  // Fetch tool names for the enabled IDs
-  const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
-
-  // Filter tools to only include enabled ones
-  const filteredTools: Record<string, Tool> = {};
-  const excludedTools: string[] = [];
-  for (const [name, tool] of Object.entries(tools)) {
-    if (enabledToolNames.includes(name)) {
-      filteredTools[name] = tool;
-    } else {
-      excludedTools.push(name);
-    }
-  }
-
-  logger.info(
-    {
-      totalTools: Object.keys(tools).length,
-      enabledToolIds: enabledToolIds.length,
-      enabledToolNames: enabledToolNames.length,
-      filteredTools: Object.keys(filteredTools).length,
-      excludedTools,
-    },
-    "Filtered tools by enabled IDs",
-  );
-
-  return filteredTools;
-}
-
-/**
  * Get all MCP tools for the specified agent and user in AI SDK Tool format
  * Converts MCP JSON Schema to AI SDK Schema using jsonSchema() helper
  *
@@ -647,4 +593,58 @@ export async function getChatMcpTools({
     );
     return {};
   }
+}
+
+/**
+ * Filter tools by enabled tool IDs
+ * If enabledToolIds is undefined or empty, returns all tools (default = all enabled)
+ * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
+ *
+ * @param tools - All available tools (keyed by tool name)
+ * @param enabledToolIds - Optional array of tool IDs to filter by
+ * @returns Filtered tools record
+ */
+async function filterToolsByEnabledIds(
+  tools: Record<string, Tool>,
+  enabledToolIds?: string[],
+): Promise<Record<string, Tool>> {
+  // Empty array or undefined = all tools enabled (default behavior)
+  if (!enabledToolIds || enabledToolIds.length === 0) {
+    logger.info(
+      {
+        totalTools: Object.keys(tools).length,
+        enabledToolIds: enabledToolIds?.length ?? 0,
+        reason: !enabledToolIds ? "undefined" : "empty array",
+      },
+      "No tool filtering applied - all tools enabled",
+    );
+    return tools;
+  }
+
+  // Fetch tool names for the enabled IDs
+  const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
+
+  // Filter tools to only include enabled ones
+  const filteredTools: Record<string, Tool> = {};
+  const excludedTools: string[] = [];
+  for (const [name, tool] of Object.entries(tools)) {
+    if (enabledToolNames.includes(name)) {
+      filteredTools[name] = tool;
+    } else {
+      excludedTools.push(name);
+    }
+  }
+
+  logger.info(
+    {
+      totalTools: Object.keys(tools).length,
+      enabledToolIds: enabledToolIds.length,
+      enabledToolNames: enabledToolNames.length,
+      filteredTools: Object.keys(filteredTools).length,
+      excludedTools,
+    },
+    "Filtered tools by enabled IDs",
+  );
+
+  return filteredTools;
 }

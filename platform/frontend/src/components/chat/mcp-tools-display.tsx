@@ -15,6 +15,7 @@ import {
   useChatProfileMcpTools,
   useProfileToolsWithIds,
 } from "@/lib/chat.query";
+import { Button } from "../ui/button";
 
 interface McpToolsDisplayProps {
   agentId: string;
@@ -29,29 +30,18 @@ interface McpToolsDisplayProps {
 
 function AssignToolsButton({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border bg-background text-foreground text-xs hover:bg-accent hover:text-accent-foreground cursor-pointer"
-      onClick={onClick}
-      title="Add more tools"
-    >
+    <Button onClick={onClick} title="Add more tools">
       <Plus className="h-3 w-3" />
       Assign tools to profile
-    </button>
+    </Button>
   );
 }
 
 function EnableMoreToolsButton({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-dashed bg-background text-foreground text-xs hover:bg-accent hover:text-accent-foreground cursor-pointer"
-      onClick={onClick}
-      title="Enable more tools for this chat"
-    >
-      <Plus className="h-3 w-3" />
-      Enable more tools
-    </button>
+    <Button onClick={onClick} title="Enable more tools for this chat">
+      <Plus className="h-3 w-3" /> Enable more tools
+    </Button>
   );
 }
 
@@ -211,14 +201,13 @@ export function McpToolsDisplay({
                     ({tools.length} {tools.length === 1 ? "tool" : "tools"})
                   </span>
                   {onOpenManageDialog && (
-                    <button
-                      type="button"
+                    <Button
                       className="ml-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                       onClick={(e) => handleDisableServer(serverName, e)}
                       title={`Disable all ${serverName} tools for this chat`}
                     >
                       <X className="h-3 w-3" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </TooltipTrigger>
@@ -253,14 +242,13 @@ export function McpToolsDisplay({
                           )}
                         </div>
                         {onOpenManageDialog && (
-                          <button
-                            type="button"
+                          <Button
                             className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
                             onClick={(e) => handleDisableTool(tool.name, e)}
                             title={`Disable ${toolName} for this chat`}
                           >
                             <X className="h-3 w-3" />
-                          </button>
+                          </Button>
                         )}
                       </div>
                     );

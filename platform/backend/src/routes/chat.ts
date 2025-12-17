@@ -868,7 +868,6 @@ The title should capture the main topic or theme of the conversation. Respond wi
   );
 
   // Enabled Tools Routes
-
   fastify.get(
     "/api/chat/conversations/:id/enabled-tools",
     {

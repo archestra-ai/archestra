@@ -15,29 +15,23 @@ import {
 } from "@/components/ui/card";
 import config from "@/lib/config";
 
-let usePublicSsoProvidersEE: any = null;
-
-function usePublicSsoProviders() {
-  if (config.enterpriseLicenseActivated) {
-    if (!usePublicSsoProvidersEE) {
-      // Dynamic import of EE query
-      usePublicSsoProvidersEE = import("@/lib/sso-provider.query.ee").usePublicSsoProviders;
-    }
-    return usePublicSsoProvidersEE();
-  }
-
-  return {
-    data: [],
-    isLoading: false,
-    error: null,
-  };
-}
-
 const { SsoProviderSelector } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
   await import("@/components/sso-provider-selector.ee")
   : {
     SsoProviderSelector: () => null,
+  };
+
+const { usePublicSsoProviders } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
+    await import("@/lib/sso-provider.query.ee")
+  : {
+      usePublicSsoProviders: () => ({
+        data: [],
+        isLoading: false,
+        isError: false,
+        error: null,
+      }),
   };
 
 

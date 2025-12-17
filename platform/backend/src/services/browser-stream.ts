@@ -1,7 +1,7 @@
-import { getChatMcpClient } from "@/clients/chat-mcp-client";
-import logger from "@/logging";
-import { ToolModel } from "@/models";
-import { ApiError } from "@/types";
+import { getChatMcpClient } from '@/clients/chat-mcp-client';
+import logger from '@/logging';
+import { ToolModel } from '@/models';
+import { ApiError } from '@/types';
 
 /**
  * User context required for MCP client authentication
@@ -69,13 +69,13 @@ const conversationTabMap = new Map<string, number>();
 export class BrowserStreamService {
   private async findToolName(
     agentId: string,
-    matches: (toolName: string) => boolean,
+    matches: (toolName: string) => boolean
   ): Promise<string | null> {
     const tools = await ToolModel.getMcpToolsByAgent(agentId);
 
     for (const tool of tools) {
       const toolName = tool.name;
-      if (typeof toolName === "string" && matches(toolName)) {
+      if (typeof toolName === 'string' && matches(toolName)) {
         return toolName;
       }
     }
@@ -90,8 +90,8 @@ export class BrowserStreamService {
     const tools = await ToolModel.getMcpToolsByAgent(agentId);
     const browserToolNames = tools.flatMap((tool) => {
       const toolName = tool.name;
-      if (typeof toolName !== "string") return [];
-      if (toolName.includes("playwright") || toolName.startsWith("browser_")) {
+      if (typeof toolName !== 'string') return [];
+      if (toolName.includes('playwright') || toolName.startsWith('browser_')) {
         return [toolName];
       }
       return [];
@@ -110,9 +110,9 @@ export class BrowserStreamService {
     return this.findToolName(
       agentId,
       (toolName) =>
-        toolName.includes("browser_navigate") ||
-        toolName.endsWith("__navigate") ||
-        (toolName.includes("playwright") && toolName.includes("navigate")),
+        toolName.includes('browser_navigate') ||
+        toolName.endsWith('__navigate') ||
+        (toolName.includes('playwright') && toolName.includes('navigate'))
     );
   }
 
@@ -124,13 +124,13 @@ export class BrowserStreamService {
     const screenshotTool = await this.findToolName(
       agentId,
       (toolName) =>
-        toolName.includes("browser_take_screenshot") ||
-        toolName.includes("browser_screenshot"),
+        toolName.includes('browser_take_screenshot') ||
+        toolName.includes('browser_screenshot')
     );
     if (screenshotTool) return screenshotTool;
 
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_snapshot"),
+      toolName.includes('browser_snapshot')
     );
   }
 
@@ -139,7 +139,7 @@ export class BrowserStreamService {
    */
   private async findTabsTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_tabs"),
+      toolName.includes('browser_tabs')
     );
   }
 
@@ -150,13 +150,13 @@ export class BrowserStreamService {
   async selectOrCreateTab(
     agentId: string,
     tabIndex: number,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
       logger.info(
         { agentId, tabIndex },
-        "No browser_tabs tool available, using shared browser page",
+        'No browser_tabs tool available, using shared browser page'
       );
       return { success: true, tabIndex: 0 };
     }
@@ -164,26 +164,26 @@ export class BrowserStreamService {
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     try {
-      logger.info({ agentId, tabIndex }, "Selecting/creating browser tab");
+      logger.info({ agentId, tabIndex }, 'Selecting/creating browser tab');
 
       // First, list existing tabs (use "action" param like the old activateTab code)
       const listResult = await client.callTool({
         name: tabsTool,
-        arguments: { action: "list" },
+        arguments: { action: 'list' },
       });
 
       if (listResult.isError) {
         const errorText = this.extractTextContent(listResult.content);
         logger.warn(
           { agentId, error: errorText },
-          "Failed to list tabs, using default page",
+          'Failed to list tabs, using default page'
         );
         return { success: true, tabIndex: 0 };
       }
@@ -191,20 +191,20 @@ export class BrowserStreamService {
       const tabsList = this.parseTabsList(listResult.content);
       const existingCount = tabsList.length;
 
-      logger.info({ agentId, existingCount, tabIndex }, "Current tabs count");
+      logger.info({ agentId, existingCount, tabIndex }, 'Current tabs count');
 
       // Create tabs until we have enough
       for (let i = existingCount; i <= tabIndex; i++) {
         logger.info(
           { agentId, creatingTabIndex: i },
-          "Creating new browser tab",
+          'Creating new browser tab'
         );
         const createResult = await client.callTool({
           name: tabsTool,
-          arguments: { action: "new" },
+          arguments: { action: 'new' },
         });
         if (createResult.isError) {
-          logger.warn({ agentId, i }, "Failed to create tab, stopping");
+          logger.warn({ agentId, i }, 'Failed to create tab, stopping');
           break;
         }
       }
@@ -212,14 +212,14 @@ export class BrowserStreamService {
       // Select the target tab
       const selectResult = await client.callTool({
         name: tabsTool,
-        arguments: { action: "select", index: tabIndex },
+        arguments: { action: 'select', index: tabIndex },
       });
 
       if (selectResult.isError) {
         const errorText = this.extractTextContent(selectResult.content);
         logger.warn(
           { agentId, tabIndex, error: errorText },
-          "Failed to select tab, using default",
+          'Failed to select tab, using default'
         );
         // Don't fail - just use whatever tab is active
         return { success: true, tabIndex: 0 };
@@ -227,7 +227,7 @@ export class BrowserStreamService {
 
       return { success: true, tabIndex };
     } catch (error) {
-      logger.error({ error, agentId, tabIndex }, "Tab select/create failed");
+      logger.error({ error, agentId, tabIndex }, 'Tab select/create failed');
       // Don't fail - just use whatever tab is active
       return { success: true, tabIndex: 0 };
     }
@@ -238,7 +238,7 @@ export class BrowserStreamService {
    */
   private async findClickTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_click"),
+      toolName.includes('browser_click')
     );
   }
 
@@ -247,7 +247,7 @@ export class BrowserStreamService {
    */
   private async findTypeTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_type"),
+      toolName.includes('browser_type')
     );
   }
 
@@ -256,7 +256,7 @@ export class BrowserStreamService {
    */
   private async findPressKeyTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_press_key"),
+      toolName.includes('browser_press_key')
     );
   }
 
@@ -265,7 +265,7 @@ export class BrowserStreamService {
    */
   private async findNavigateBackTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_navigate_back"),
+      toolName.includes('browser_navigate_back')
     );
   }
 
@@ -274,7 +274,7 @@ export class BrowserStreamService {
    */
   private async findSnapshotTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_snapshot"),
+      toolName.includes('browser_snapshot')
     );
   }
 
@@ -285,7 +285,7 @@ export class BrowserStreamService {
     agentId: string,
     _conversationId: string,
     url: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<NavigateResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -294,20 +294,20 @@ export class BrowserStreamService {
     if (!toolName) {
       throw new ApiError(
         400,
-        "No browser navigate tool available for this agent",
+        'No browser navigate tool available for this agent'
       );
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
-    logger.info({ agentId, toolName, url }, "Navigating browser via MCP");
+    logger.info({ agentId, toolName, url }, 'Navigating browser via MCP');
 
     const result = await client.callTool({
       name: toolName,
@@ -316,7 +316,7 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Navigation failed");
+      throw new ApiError(500, errorText || 'Navigation failed');
     }
 
     return {
@@ -331,7 +331,7 @@ export class BrowserStreamService {
   async navigateBack(
     agentId: string,
     _conversationId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<NavigateResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -340,20 +340,20 @@ export class BrowserStreamService {
     if (!toolName) {
       throw new ApiError(
         400,
-        "No browser navigate back tool available for this agent",
+        'No browser navigate back tool available for this agent'
       );
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
-    logger.info({ agentId, toolName }, "Navigating browser back via MCP");
+    logger.info({ agentId, toolName }, 'Navigating browser back via MCP');
 
     const result = await client.callTool({
       name: toolName,
@@ -362,7 +362,7 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Navigate back failed");
+      throw new ApiError(500, errorText || 'Navigate back failed');
     }
 
     return {
@@ -377,20 +377,20 @@ export class BrowserStreamService {
   async activateTab(
     agentId: string,
     conversationId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
-      throw new ApiError(400, "No browser tabs tool available for this agent");
+      throw new ApiError(400, 'No browser tabs tool available for this agent');
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     // Check if this conversation already has a tab
@@ -400,19 +400,19 @@ export class BrowserStreamService {
       // Select existing tab
       logger.info(
         { agentId, conversationId, tabIndex: existingTabIndex },
-        "Selecting existing browser tab for conversation",
+        'Selecting existing browser tab for conversation'
       );
 
       const result = await client.callTool({
         name: tabsTool,
-        arguments: { action: "select", index: existingTabIndex },
+        arguments: { action: 'select', index: existingTabIndex },
       });
 
       if (result.isError) {
         // Tab might have been closed, create a new one
         logger.warn(
           { agentId, conversationId, tabIndex: existingTabIndex },
-          "Failed to select tab, creating new one",
+          'Failed to select tab, creating new one'
         );
         conversationTabMap.delete(conversationId);
         return this.createNewTab(client, tabsTool, agentId, conversationId);
@@ -435,25 +435,25 @@ export class BrowserStreamService {
     client: Awaited<ReturnType<typeof getChatMcpClient>>,
     tabsTool: string,
     agentId: string,
-    conversationId: string,
+    conversationId: string
   ): Promise<TabResult> {
     if (!client) {
-      throw new ApiError(500, "No MCP client");
+      throw new ApiError(500, 'No MCP client');
     }
 
     logger.info(
       { agentId, conversationId },
-      "Creating new browser tab for conversation",
+      'Creating new browser tab for conversation'
     );
 
     const result = await client.callTool({
       name: tabsTool,
-      arguments: { action: "new" },
+      arguments: { action: 'new' },
     });
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Failed to create tab");
+      throw new ApiError(500, errorText || 'Failed to create tab');
     }
 
     // Parse the result to get the new tab index
@@ -475,31 +475,31 @@ export class BrowserStreamService {
    */
   async listTabs(
     agentId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<TabResult> {
     const tabsTool = await this.findTabsTool(agentId);
     if (!tabsTool) {
-      throw new ApiError(400, "No browser tabs tool available");
+      throw new ApiError(400, 'No browser tabs tool available');
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
 
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     const result = await client.callTool({
       name: tabsTool,
-      arguments: { action: "list" },
+      arguments: { action: 'list' },
     });
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Failed to list tabs");
+      throw new ApiError(500, errorText || 'Failed to list tabs');
     }
 
     return {
@@ -514,7 +514,7 @@ export class BrowserStreamService {
   async closeTab(
     agentId: string,
     conversationId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<TabResult> {
     const tabIndex = conversationTabMap.get(conversationId);
     if (tabIndex === undefined) {
@@ -530,7 +530,7 @@ export class BrowserStreamService {
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
       conversationTabMap.delete(conversationId);
@@ -540,14 +540,14 @@ export class BrowserStreamService {
     try {
       await client.callTool({
         name: tabsTool,
-        arguments: { action: "close", index: tabIndex },
+        arguments: { action: 'close', index: tabIndex },
       });
 
       conversationTabMap.delete(conversationId);
 
       return { success: true };
     } catch (error) {
-      logger.error({ error, agentId, conversationId }, "Failed to close tab");
+      logger.error({ error, agentId, conversationId }, 'Failed to close tab');
       conversationTabMap.delete(conversationId);
       return { success: true }; // Consider success even if close fails
     }
@@ -566,7 +566,7 @@ export class BrowserStreamService {
    * Parse tabs list from tool response
    */
   private parseTabsList(
-    content: unknown,
+    content: unknown
   ): Array<{ index: number; title?: string; url?: string }> {
     const textContent = this.extractTextContent(content);
     // This is a simplified parser - actual format depends on Playwright MCP
@@ -580,7 +580,7 @@ export class BrowserStreamService {
       }
     } catch {
       // Not JSON, try line-by-line parsing
-      const lines = textContent.split("\n");
+      const lines = textContent.split('\n');
       for (const line of lines) {
         const match = line.match(/(\d+)[:\s]+(.+)/);
         if (match) {
@@ -602,41 +602,41 @@ export class BrowserStreamService {
   async takeScreenshot(
     agentId: string,
     conversationId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<ScreenshotResult> {
     const toolName = await this.findScreenshotTool(agentId);
     if (!toolName) {
       throw new ApiError(
         400,
-        "No browser screenshot tool available for this agent",
+        'No browser screenshot tool available for this agent'
       );
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
 
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     logger.info(
       { agentId, conversationId, toolName },
-      "Taking browser screenshot via MCP",
+      'Taking browser screenshot via MCP'
     );
 
     const result = await client.callTool({
       name: toolName,
       arguments: {
-        type: "jpeg",
+        type: 'jpeg',
       },
     });
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Screenshot failed");
+      throw new ApiError(500, errorText || 'Screenshot failed');
     }
 
     // Extract screenshot from MCP response
@@ -654,19 +654,19 @@ export class BrowserStreamService {
    * Extract text content from MCP response
    */
   private extractTextContent(content: unknown): string {
-    if (!Array.isArray(content)) return "";
+    if (!Array.isArray(content)) return '';
 
     return content
       .filter(
         (item): item is { type: string; text: string } =>
-          typeof item === "object" &&
+          typeof item === 'object' &&
           item !== null &&
-          "type" in item &&
-          item.type === "text" &&
-          "text" in item,
+          'type' in item &&
+          item.type === 'text' &&
+          'text' in item
       )
       .map((item) => item.text)
-      .join("\n");
+      .join('\n');
   }
 
   /**
@@ -678,22 +678,22 @@ export class BrowserStreamService {
     // Look for image content
     for (const item of content) {
       if (
-        typeof item === "object" &&
+        typeof item === 'object' &&
         item !== null &&
-        "type" in item &&
-        item.type === "image" &&
-        "data" in item
+        'type' in item &&
+        item.type === 'image' &&
+        'data' in item
       ) {
         // Return as data URL
         const mimeType =
-          "mimeType" in item ? (item.mimeType as string) : "image/png";
+          'mimeType' in item ? (item.mimeType as string) : 'image/png';
         return `data:${mimeType};base64,${item.data}`;
       }
     }
 
     // Some tools might return base64 in text content
     const textContent = this.extractTextContent(content);
-    if (textContent.startsWith("data:image")) {
+    if (textContent.startsWith('data:image')) {
       return textContent;
     }
 
@@ -707,7 +707,7 @@ export class BrowserStreamService {
     const textContent = this.extractTextContent(content);
     // Try to find URL in the response - matches http://, https://, or about:
     const urlMatch = textContent.match(
-      /(?:https?|about):\/\/[^\s)]+|about:[^\s)]+/,
+      /(?:https?|about):\/\/[^\s)]+|about:[^\s)]+/
     );
     return urlMatch?.[0];
   }
@@ -717,7 +717,7 @@ export class BrowserStreamService {
    */
   async getCurrentUrl(
     agentId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<string | undefined> {
     const evaluateTool = await this.findEvaluateTool(agentId);
     if (!evaluateTool) {
@@ -727,7 +727,7 @@ export class BrowserStreamService {
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
       return undefined;
@@ -736,7 +736,7 @@ export class BrowserStreamService {
     try {
       const result = await client.callTool({
         name: evaluateTool,
-        arguments: { expression: "window.location.href" },
+        arguments: { expression: 'window.location.href' },
       });
 
       if (result.isError) {
@@ -746,7 +746,7 @@ export class BrowserStreamService {
       const textContent = this.extractTextContent(result.content);
       // The result might be quoted or contain extra text
       const urlMatch = textContent.match(
-        /(?:https?|about):\/\/[^\s"')]+|about:[^\s"')]+/,
+        /(?:https?|about):\/\/[^\s"')]+|about:[^\s"')]+/
       );
       return urlMatch?.[0];
     } catch {
@@ -760,7 +760,7 @@ export class BrowserStreamService {
    */
   private async findRunCodeTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_run_code"),
+      toolName.includes('browser_run_code')
     );
   }
 
@@ -770,14 +770,13 @@ export class BrowserStreamService {
    */
   private async findEvaluateTool(agentId: string): Promise<string | null> {
     return this.findToolName(agentId, (toolName) =>
-      toolName.includes("browser_evaluate"),
+      toolName.includes('browser_evaluate')
     );
   }
 
   /**
    * Click on an element using element ref from snapshot OR coordinates
    * For coordinates, uses browser_run_code to perform Playwright mouse.click()
-   * Falls back to browser_evaluate for JavaScript-based click simulation
    * @param agentId - Agent ID
    * @param conversationId - Conversation ID
    * @param userContext - User context for MCP authentication
@@ -791,7 +790,7 @@ export class BrowserStreamService {
     userContext: BrowserUserContext,
     element?: string,
     x?: number,
-    y?: number,
+    y?: number
   ): Promise<ClickResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -799,109 +798,74 @@ export class BrowserStreamService {
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     if (x !== undefined && y !== undefined) {
-      // Try browser_run_code first (Playwright native mouse click)
+      // Use browser_run_code for native Playwright mouse click
       const runCodeTool = await this.findRunCodeTool(agentId);
       if (runCodeTool) {
         logger.info(
           { agentId, conversationId, x, y },
-          "Clicking at coordinates via browser_run_code (Playwright mouse.click)",
+          'Clicking at coordinates via browser_run_code (Playwright mouse.click)'
         );
 
-        // Use Playwright's page.mouse.click() for native coordinate click
-        const playwrightCode = `await page.mouse.click(${Math.round(
-          x,
-        )}, ${Math.round(y)});`;
+        // Native Playwright mouse click - async function with page argument
+        const code = `async (page) => { await page.mouse.click(${Math.round(
+          x
+        )}, ${Math.round(y)}); }`;
 
-        const result = await client.callTool({
-          name: runCodeTool,
-          arguments: { code: playwrightCode },
-        });
+        try {
+          const result = await client.callTool({
+            name: runCodeTool,
+            arguments: { code },
+          });
 
-        if (!result.isError) {
-          return { success: true };
-        }
+          if (!result.isError) {
+            return { success: true };
+          }
 
-        // Log error but try fallback
-        const errorText = this.extractTextContent(result.content);
-        logger.warn(
-          { agentId, error: errorText },
-          "browser_run_code failed, trying browser_evaluate fallback",
-        );
-      }
-
-      // Fallback: try browser_evaluate for JavaScript-based click
-      const evaluateTool = await this.findEvaluateTool(agentId);
-      if (evaluateTool) {
-        logger.info(
-          { agentId, conversationId, x, y },
-          "Clicking at coordinates via browser_evaluate (JavaScript)",
-        );
-
-        // Use JavaScript to find and click the element at coordinates
-        const script = `
-          (function() {
-            const x = ${Math.round(x)};
-            const y = ${Math.round(y)};
-            const element = document.elementFromPoint(x, y);
-            if (element) {
-              const events = ['mousedown', 'mouseup', 'click'];
-              events.forEach(eventType => {
-                const event = new MouseEvent(eventType, {
-                  view: window,
-                  bubbles: true,
-                  cancelable: true,
-                  clientX: x,
-                  clientY: y
-                });
-                element.dispatchEvent(event);
-              });
-              return { success: true, element: element.tagName };
+          const errorText = this.extractTextContent(result.content);
+          logger.warn(
+            { agentId, error: errorText },
+            'browser_run_code click failed'
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          let errorDetails = '';
+          if (error && typeof error === 'object') {
+            try {
+              errorDetails = JSON.stringify(error);
+            } catch {
+              errorDetails = String(error);
             }
-            return { success: false, error: 'No element at coordinates' };
-          })()
-        `;
-
-        const result = await client.callTool({
-          name: evaluateTool,
-          arguments: { expression: script },
-        });
-
-        if (!result.isError) {
-          return { success: true };
+          }
+          logger.warn(
+            { agentId, error, errorMessage, errorDetails },
+            'browser_run_code threw exception'
+          );
         }
-
-        const errorText = this.extractTextContent(result.content);
-        logger.warn(
-          { agentId, error: errorText },
-          "browser_evaluate also failed",
-        );
       }
 
-      // No tool available or both failed
-      throw new ApiError(
-        400,
-        "No browser_run_code or browser_evaluate tool available for coordinate clicks",
-      );
+      // No tool available or failed
+      throw new ApiError(400, 'browser_run_code failed for coordinate clicks');
     } else if (element) {
       // Element ref-based click using browser_click
       const toolName = await this.findClickTool(agentId);
       if (!toolName) {
         throw new ApiError(
           400,
-          "No browser click tool available for this agent",
+          'No browser click tool available for this agent'
         );
       }
 
       logger.info(
         { agentId, conversationId, element },
-        "Clicking element via MCP",
+        'Clicking element via MCP'
       );
 
       const result = await client.callTool({
@@ -911,12 +875,12 @@ export class BrowserStreamService {
 
       if (result.isError) {
         const errorText = this.extractTextContent(result.content);
-        throw new ApiError(500, errorText || "Click failed");
+        throw new ApiError(500, errorText || 'Click failed');
       }
 
       return { success: true };
     } else {
-      throw new ApiError(400, "Either element ref or coordinates required");
+      throw new ApiError(400, 'Either element ref or coordinates required');
     }
   }
 
@@ -933,7 +897,7 @@ export class BrowserStreamService {
     conversationId: string,
     userContext: BrowserUserContext,
     text: string,
-    element?: string,
+    element?: string
   ): Promise<TypeResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -941,10 +905,10 @@ export class BrowserStreamService {
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     // If no element specified, use page.keyboard.type() to type into focused element
@@ -953,15 +917,16 @@ export class BrowserStreamService {
       if (runCodeTool) {
         logger.info(
           { agentId, conversationId, textLength: text.length },
-          "Typing text into focused element via browser_run_code",
+          'Typing text into focused element via browser_run_code'
         );
 
         // Escape text for JavaScript string
         const escapedText = text
-          .replace(/\\/g, "\\\\")
-          .replace(/`/g, "\\`")
-          .replace(/\$/g, "\\$");
-        const playwrightCode = `await page.keyboard.type(\`${escapedText}\`);`;
+          .replace(/\\/g, '\\\\')
+          .replace(/`/g, '\\`')
+          .replace(/\$/g, '\\$');
+        // Native Playwright keyboard type - async function with page argument
+        const playwrightCode = `async (page) => { await page.keyboard.type(\`${escapedText}\`); }`;
 
         const result = await client.callTool({
           name: runCodeTool,
@@ -975,7 +940,7 @@ export class BrowserStreamService {
         const errorText = this.extractTextContent(result.content);
         logger.warn(
           { agentId, error: errorText },
-          "browser_run_code type failed, trying browser_type",
+          'browser_run_code type failed, trying browser_type'
         );
       }
     }
@@ -983,12 +948,12 @@ export class BrowserStreamService {
     // Fall back to browser_type tool (requires element ref)
     const toolName = await this.findTypeTool(agentId);
     if (!toolName) {
-      throw new ApiError(400, "No browser type tool available for this agent");
+      throw new ApiError(400, 'No browser type tool available for this agent');
     }
 
     logger.info(
       { agentId, conversationId, textLength: text.length, element },
-      "Typing text via browser_type MCP tool",
+      'Typing text via browser_type MCP tool'
     );
 
     const args: Record<string, string> = { text };
@@ -1004,7 +969,7 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Type failed");
+      throw new ApiError(500, errorText || 'Type failed');
     }
 
     return { success: true };
@@ -1021,7 +986,7 @@ export class BrowserStreamService {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
-    key: string,
+    key: string
   ): Promise<ScrollResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -1030,20 +995,20 @@ export class BrowserStreamService {
     if (!toolName) {
       throw new ApiError(
         400,
-        "No browser press key tool available for this agent",
+        'No browser press key tool available for this agent'
       );
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
-    logger.info({ agentId, conversationId, key }, "Pressing key via MCP");
+    logger.info({ agentId, conversationId, key }, 'Pressing key via MCP');
 
     const result = await client.callTool({
       name: toolName,
@@ -1052,7 +1017,7 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Key press failed");
+      throw new ApiError(500, errorText || 'Key press failed');
     }
 
     return { success: true };
@@ -1067,7 +1032,7 @@ export class BrowserStreamService {
   async getSnapshot(
     agentId: string,
     conversationId: string,
-    userContext: BrowserUserContext,
+    userContext: BrowserUserContext
   ): Promise<SnapshotResult> {
     // Note: Tab is already selected during subscription via selectOrCreateTab
     // Do NOT call activateTab here as it creates a new blank tab
@@ -1076,22 +1041,22 @@ export class BrowserStreamService {
     if (!toolName) {
       throw new ApiError(
         400,
-        "No browser snapshot tool available for this agent",
+        'No browser snapshot tool available for this agent'
       );
     }
 
     const client = await getChatMcpClient(
       agentId,
       userContext.userId,
-      userContext.userIsProfileAdmin,
+      userContext.userIsProfileAdmin
     );
     if (!client) {
-      throw new ApiError(500, "Failed to connect to MCP Gateway");
+      throw new ApiError(500, 'Failed to connect to MCP Gateway');
     }
 
     logger.info(
       { agentId, conversationId },
-      "Getting browser snapshot via MCP",
+      'Getting browser snapshot via MCP'
     );
 
     const result = await client.callTool({
@@ -1101,7 +1066,7 @@ export class BrowserStreamService {
 
     if (result.isError) {
       const errorText = this.extractTextContent(result.content);
-      throw new ApiError(500, errorText || "Snapshot failed");
+      throw new ApiError(500, errorText || 'Snapshot failed');
     }
 
     const snapshot = this.extractTextContent(result.content);

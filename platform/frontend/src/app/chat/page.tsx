@@ -387,7 +387,6 @@ export default function ChatPage() {
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
-    console.log("status", status);
     if (status === "submitted" || status === "streaming") {
       stop?.();
     }
@@ -553,13 +552,25 @@ export default function ChatPage() {
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
             <div className="flex-1 flex items-center gap-2">
-              {conversation && (
-                <ModelSelector
-                  selectedModel={conversation.selectedModel}
-                  onModelChange={handleModelChange}
-                  disabled={status === "streaming" || status === "submitted"}
-                  messageCount={messages.length}
-                />
+              {conversation?.agent.id && (
+                <WithPermissions
+                  permissions={{ profile: ["read"] }}
+                  noPermissionHandle="tooltip"
+                >
+                  {({ hasPermission }) => {
+                    return hasPermission ===
+                      undefined ? null : hasPermission ? (
+                      <McpToolsDisplay
+                        agentId={conversation.agent.id}
+                        className="text-xs text-muted-foreground"
+                      />
+                    ) : (
+                      <Badge variant="outline" className="text-xs">
+                        Unable to show the list of tools
+                      </Badge>
+                    );
+                  }}
+                </WithPermissions>
               )}
             </div>
             {conversation?.agent?.name && (
@@ -603,32 +614,13 @@ export default function ChatPage() {
 
           <div className="sticky bottom-0 bg-background border-t p-4">
             <div className="max-w-4xl mx-auto space-y-3">
-              {currentProfileId && (
-                <WithPermissions
-                  permissions={{ profile: ["read"] }}
-                  noPermissionHandle="tooltip"
-                >
-                  {({ hasPermission }) => {
-                    return hasPermission ===
-                      undefined ? null : hasPermission ? (
-                      <McpToolsDisplay
-                        agentId={currentProfileId}
-                        className="text-xs text-muted-foreground"
-                        hasCustomSelection={
-                          enabledToolsData?.hasCustomSelection ?? false
-                        }
-                        enabledToolIds={enabledToolsData?.enabledToolIds ?? []}
-                        onOpenManageDialog={handleOpenManageToolsDialog}
-                      />
-                    ) : (
-                      <Badge variant="outline" className="text-xs my-2">
-                        Unable to show the list of tools
-                      </Badge>
-                    );
-                  }}
-                </WithPermissions>
-              )}
-              <ArchestraPromptInput onSubmit={handleSubmit} status={status} />
+              <ArchestraPromptInput
+                onSubmit={handleSubmit}
+                status={status}
+                selectedModel={conversation?.selectedModel ?? ""}
+                onModelChange={handleModelChange}
+                messageCount={messages.length}
+              />
             </div>
           </div>
         </div>

@@ -196,25 +196,6 @@ export function PromptDialog({
                 );
               }}
             </WithPermissions>
-            {agentId && (
-              <WithPermissions
-                permissions={{ profile: ["read"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => {
-                  return hasPermission === undefined ? null : hasPermission ? (
-                    <McpToolsDisplay
-                      agentId={agentId}
-                      className="text-xs text-muted-foreground"
-                    />
-                  ) : (
-                    <Badge variant="outline" className="text-xs">
-                      Unable to show the list of tools
-                    </Badge>
-                  );
-                }}
-              </WithPermissions>
-            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt</Label>

@@ -1,28 +1,8 @@
 "use client";
 
 import type { ChatStatus } from "ai";
-import {
-  AtSignIcon,
-  CheckIcon,
-  FilesIcon,
-  GlobeIcon,
-  ImageIcon,
-  RulerIcon,
-} from "lucide-react";
-import { type FormEvent, useRef, useState } from "react";
-import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogo,
-  ModelSelectorLogoGroup,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-} from "@/components/ai-elements/model-selector";
+import { AtSignIcon, FilesIcon, GlobeIcon, RulerIcon } from "lucide-react";
+import { type FormEvent, useRef } from "react";
 import {
   PromptInput,
   PromptInputAttachment,
@@ -42,7 +22,6 @@ import {
   PromptInputHoverCardContent,
   PromptInputHoverCardTrigger,
   type PromptInputMessage,
-  type PromptInputProps,
   PromptInputProvider,
   PromptInputSubmit,
   PromptInputTab,
@@ -52,45 +31,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { Button } from "@/components/ui/button";
-
-const models = [
-  {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    chef: "OpenAI",
-    chefSlug: "openai",
-    providers: ["openai", "azure"],
-  },
-  {
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
-    chef: "OpenAI",
-    chefSlug: "openai",
-    providers: ["openai", "azure"],
-  },
-  {
-    id: "claude-opus-4-20250514",
-    name: "Claude 4 Opus",
-    chef: "Anthropic",
-    chefSlug: "anthropic",
-    providers: ["anthropic", "azure", "google", "amazon-bedrock"],
-  },
-  {
-    id: "claude-sonnet-4-20250514",
-    name: "Claude 4 Sonnet",
-    chef: "Anthropic",
-    chefSlug: "anthropic",
-    providers: ["anthropic", "azure", "google", "amazon-bedrock"],
-  },
-  {
-    id: "gemini-2.0-flash-exp",
-    name: "Gemini 2.0 Flash",
-    chef: "Google",
-    chefSlug: "google",
-    providers: ["google"],
-  },
-];
+import { ModelSelector } from "@/components/chat/model-selector";
 
 const sampleFiles = {
   activeTabs: [{ path: "prompt-input.tsx", location: "packages/elements/src" }],
@@ -126,18 +67,20 @@ const sampleTabs = {
 const ArchestraPromptInput = ({
   onSubmit,
   status,
+  selectedModel,
+  onModelChange,
+  messageCount = 0,
 }: {
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
   ) => void;
   status: ChatStatus;
+  selectedModel: string;
+  onModelChange: (model: string) => void;
+  messageCount?: number;
 }) => {
-  const [model, setModel] = useState<string>(models[0].id);
-  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const selectedModelData = models.find((m) => m.id === model);
 
   return (
     <div className="flex size-full flex-col justify-end">
@@ -265,62 +208,10 @@ const ArchestraPromptInput = ({
           <PromptInputFooter>
             <PromptInputTools>
               <ModelSelector
-                onOpenChange={setModelSelectorOpen}
-                open={modelSelectorOpen}
-              >
-                <ModelSelectorTrigger asChild>
-                  <PromptInputButton>
-                    {selectedModelData?.chefSlug && (
-                      <ModelSelectorLogo
-                        provider={selectedModelData.chefSlug}
-                      />
-                    )}
-                    {selectedModelData?.name && (
-                      <ModelSelectorName>
-                        {selectedModelData.name}
-                      </ModelSelectorName>
-                    )}
-                  </PromptInputButton>
-                </ModelSelectorTrigger>
-                <ModelSelectorContent>
-                  <ModelSelectorInput placeholder="Search models..." />
-                  <ModelSelectorList>
-                    <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                    {["OpenAI", "Anthropic", "Google"].map((chef) => (
-                      <ModelSelectorGroup key={chef} heading={chef}>
-                        {models
-                          .filter((m) => m.chef === chef)
-                          .map((m) => (
-                            <ModelSelectorItem
-                              key={m.id}
-                              onSelect={() => {
-                                setModel(m.id);
-                                setModelSelectorOpen(false);
-                              }}
-                              value={m.id}
-                            >
-                              <ModelSelectorLogo provider={m.chefSlug} />
-                              <ModelSelectorName>{m.name}</ModelSelectorName>
-                              <ModelSelectorLogoGroup>
-                                {m.providers.map((provider) => (
-                                  <ModelSelectorLogo
-                                    key={provider}
-                                    provider={provider}
-                                  />
-                                ))}
-                              </ModelSelectorLogoGroup>
-                              {model === m.id ? (
-                                <CheckIcon className="ml-auto size-4" />
-                              ) : (
-                                <div className="ml-auto size-4" />
-                              )}
-                            </ModelSelectorItem>
-                          ))}
-                      </ModelSelectorGroup>
-                    ))}
-                  </ModelSelectorList>
-                </ModelSelectorContent>
-              </ModelSelector>
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
+                messageCount={messageCount}
+              />
             </PromptInputTools>
             <div className="flex items-center gap-2">
               {/* <PromptInputSpeechButton textareaRef={textareaRef} /> fix & enable */}

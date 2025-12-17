@@ -33,7 +33,7 @@ interface McpToolsDisplayProps {
 
 function AssignToolsButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button onClick={onClick} title="Add more tools">
+    <Button onClick={onClick} title="Add more tools" variant="outline">
       <Plus className="h-3 w-3" />
       Assign tools to profile
     </Button>

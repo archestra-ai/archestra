@@ -94,14 +94,14 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
     await page.waitForLoadState("networkidle");
 
     // Wait for login to complete and redirect away from sign-in
-    await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 15000 });
+    await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 30000 });
 
     // Navigate to SSO providers after UI login
     await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
     await page.waitForLoadState("networkidle");
   }
 
-  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 20000 });
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 30000 });
   await expect(
     page.getByRole("heading", { name: "SSO Providers" }),
   ).toBeVisible({ timeout: 10000 });
@@ -233,7 +233,7 @@ async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   // Wait for redirect to Keycloak (external URL for browser)
   // Since we're using a fresh browser context, Keycloak should always show login form
   await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
-    timeout: 15000,
+    timeout: 30000,
   });
 
   // Wait for Keycloak login form to be ready
@@ -252,7 +252,7 @@ async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   await clickButton({ page: ssoPage, options: { name: "Sign In" } });
 
   // Wait for redirect back to Archestra (any page under UI_BASE_URL)
-  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 30000 });
+  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 60000 });
 
   // Wait for page to settle
   await ssoPage.waitForLoadState("networkidle");

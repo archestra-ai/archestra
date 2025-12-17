@@ -15,6 +15,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -73,13 +74,102 @@ class AgentToolModel {
         const organization = await OrganizationModel.getById(organizationId);
 
         if (organization?.autoConfigureNewTools) {
-          return agentToolAutoPolicyService.configurePoliciesForAgentTool(
-            agentTool.id,
-            organizationId,
+          // Set timestamp to show loading state in UI
+          await db
+            .update(schema.agentToolsTable)
+            .set({ policiesAutoConfiguringStartedAt: new Date() })
+            .where(eq(schema.agentToolsTable.id, agentTool.id));
+
+          // Track if we timed out
+          let timedOut = false;
+
+          // Create a timeout promise
+          const timeoutPromise = new Promise<{ success: false; timedOut: true }>(
+            (resolve) => {
+              setTimeout(() => {
+                timedOut = true;
+                resolve({ success: false, timedOut: true });
+              }, 10000); // 10 seconds
+            },
           );
+
+          // Race between auto-configure and timeout
+          const result = await Promise.race([
+            agentToolAutoPolicyService
+              .configurePoliciesForAgentTool(agentTool.id, organizationId)
+              .then((res) => ({ ...res, timedOut: false })),
+            timeoutPromise,
+          ]);
+
+          // If we timed out, just clear the loading timestamp
+          // The operation continues in background, and if it completes,
+          // it will set policiesAutoConfiguredAt (which we'll allow)
+          if (result.timedOut) {
+            await db
+              .update(schema.agentToolsTable)
+              .set({
+                policiesAutoConfiguringStartedAt: null,
+              })
+              .where(eq(schema.agentToolsTable.id, agentTool.id));
+
+            logger.warn(
+              {
+                agentToolId: agentTool.id,
+                agentId,
+                organizationId,
+              },
+              "Auto-configure timed out (>10s) for new agent-tool, continuing in background",
+            );
+          } else if (result.success) {
+            // Success within 10 seconds - just clear the loading timestamp
+            await db
+              .update(schema.agentToolsTable)
+              .set({ policiesAutoConfiguringStartedAt: null })
+              .where(eq(schema.agentToolsTable.id, agentTool.id));
+
+            logger.info(
+              {
+                agentToolId: agentTool.id,
+                agentId,
+                organizationId,
+              },
+              "Auto-configured policies for new agent-tool",
+            );
+          } else {
+            // Failed within 10 seconds - clear both timestamps
+            await db
+              .update(schema.agentToolsTable)
+              .set({
+                policiesAutoConfiguringStartedAt: null,
+                policiesAutoConfiguredAt: null,
+              })
+              .where(eq(schema.agentToolsTable.id, agentTool.id));
+
+            logger.warn(
+              {
+                agentToolId: agentTool.id,
+                agentId,
+                organizationId,
+                error: "error" in result ? result.error : undefined,
+              },
+              "Auto-configure failed for new agent-tool",
+            );
+          }
         }
       })
-      .catch((error) => {
+      .catch(async (error) => {
+        // On error, clear the loading timestamp
+        await db
+          .update(schema.agentToolsTable)
+          .set({
+            policiesAutoConfiguringStartedAt: null,
+            policiesAutoConfiguredAt: null,
+          })
+          .where(eq(schema.agentToolsTable.id, agentTool.id))
+          .catch(() => {
+            /* ignore cleanup errors */
+          });
+
         logger.error(
           {
             agentToolId: agentTool.id,

@@ -16,7 +16,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
@@ -180,7 +180,7 @@ export function AssignedToolsTable({
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
-  const { data: agentToolsData, isLoading } = useAllProfileTools({
+  const { data: agentToolsData, isLoading, refetch } = useAllProfileTools({
     initialData: useInitialData ? initialData?.agentTools : undefined,
     pagination: {
       limit: pageSize,
@@ -200,6 +200,37 @@ export function AssignedToolsTable({
   });
 
   const agentTools = agentToolsData?.data ?? [];
+
+  // Poll for updates when tools are auto-configuring
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Check if any tools are currently auto-configuring
+    const hasAutoConfiguringTools = agentTools.some(
+      (tool) => tool.policiesAutoConfiguringStartedAt,
+    );
+
+    if (hasAutoConfiguringTools) {
+      // Start polling every 2 seconds
+      pollingIntervalRef.current = setInterval(() => {
+        refetch();
+      }, 2000);
+    } else {
+      // Clear polling if no tools are auto-configuring
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [agentTools, refetch]);
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -681,6 +712,8 @@ export function AssignedToolsTable({
           );
 
           const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
+          const isAutoConfiguring =
+            !!row.original.policiesAutoConfiguringStartedAt;
 
           return (
             <div className="flex items-center gap-2">
@@ -704,7 +737,18 @@ export function AssignedToolsTable({
                   ? "Allowed"
                   : "Blocked"}
               </span>
-              {isAutoConfigured && (
+              {isAutoConfiguring ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Auto-configuring with AI...</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : isAutoConfigured ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -715,7 +759,7 @@ export function AssignedToolsTable({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
+              ) : null}
               {isUpdating && (
                 <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
               )}
@@ -749,6 +793,8 @@ export function AssignedToolsTable({
           );
 
           const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
+          const isAutoConfiguring =
+            !!row.original.policiesAutoConfiguringStartedAt;
 
           return (
             <div className="flex items-center gap-2">
@@ -782,7 +828,18 @@ export function AssignedToolsTable({
                   ))}
                 </SelectContent>
               </Select>
-              {isAutoConfigured && (
+              {isAutoConfiguring ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Auto-configuring with AI...</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : isAutoConfigured ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -793,7 +850,7 @@ export function AssignedToolsTable({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
+              ) : null}
               {isUpdating && (
                 <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
               )}

@@ -47,6 +47,12 @@ const agentToolsTable = pgTable(
     policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
       mode: "date",
     }),
+    policiesAutoConfiguringStartedAt: timestamp(
+      "policies_auto_configuring_started_at",
+      {
+        mode: "date",
+      },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

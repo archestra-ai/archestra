@@ -77,7 +77,7 @@ export default defineConfig({
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: IS_CI ? [["html", "line"]] : "line",
+  reporter: IS_CI ? [["html"], ["line"]] : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */

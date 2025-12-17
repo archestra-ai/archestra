@@ -19,6 +19,7 @@ import type {
   SsoProvider,
   UpdateSsoProvider,
 } from "@/types";
+import AccountModel from "./account";
 import MemberModel from "./member";
 
 interface RoleMappingContext {
@@ -721,6 +722,21 @@ class SsoProviderModel {
     );
     if (!existingProvider) {
       return false;
+    }
+
+    /**
+     * Clean up associated SSO accounts to prevent orphaned records
+     * This is important because orphaned accounts can cause issues with future SSO logins
+     * (e.g., the syncSsoRole/syncSsoTeams functions might pick up the wrong account)
+     */
+    const deletedAccounts = await AccountModel.deleteByProviderId(
+      existingProvider.providerId,
+    );
+    if (deletedAccounts > 0) {
+      logger.info(
+        { providerId: existingProvider.providerId, deletedAccounts },
+        "Cleaned up SSO accounts for deleted provider",
+      );
     }
 
     // Delete from database using returning() to verify deletion

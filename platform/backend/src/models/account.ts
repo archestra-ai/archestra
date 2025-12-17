@@ -40,6 +40,29 @@ class AccountModel {
     );
     return accounts;
   }
+
+  /**
+   * Delete all accounts with a specific providerId.
+   * This is used to clean up SSO accounts when an SSO provider is deleted,
+   * preventing orphaned accounts that could cause issues with future SSO logins.
+   *
+   * @returns The number of accounts deleted
+   */
+  static async deleteByProviderId(providerId: string): Promise<number> {
+    logger.debug(
+      { providerId },
+      "AccountModel.deleteByProviderId: deleting accounts",
+    );
+    const deleted = await db
+      .delete(schema.accountsTable)
+      .where(eq(schema.accountsTable.providerId, providerId))
+      .returning({ id: schema.accountsTable.id });
+    logger.debug(
+      { providerId, count: deleted.length },
+      "AccountModel.deleteByProviderId: completed",
+    );
+    return deleted.length;
+  }
 }
 
 export default AccountModel;

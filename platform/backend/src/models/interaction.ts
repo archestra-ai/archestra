@@ -20,14 +20,10 @@ import type {
   Interaction,
   PaginationQuery,
   SortingQuery,
+  UserInfo,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
-
-export interface UserInfo {
-  id: string;
-  name: string;
-}
 
 class InteractionModel {
   static async create(data: InsertInteraction) {

@@ -10,14 +10,9 @@ import {
   createSortingQuerySchema,
   PaginationQuerySchema,
   SelectInteractionSchema,
+  UserInfoSchema,
   UuidIdSchema,
 } from "@/types";
-
-// Schema for user info response
-const UserInfoSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

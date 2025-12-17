@@ -74,14 +74,8 @@ helm_resource(
   ],
   port_forwards=['8200:8200'],
   labels=['integrations'],
+  auto_init=False,
   resource_deps=[],
-)
-
-k8s_resource(
-  'vault',
-  new_name='vault-k8s',
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
 )
 
 # Archestra running in K8s (for testing Vault K8s auth, etc.)

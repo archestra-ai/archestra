@@ -537,10 +537,18 @@ test.describe("SSO Team Sync E2E", () => {
       if ((await team.count()) === 0) break;
 
       // Find and click the delete button (trash icon)
-      await team.getByRole("button").filter({ has: page.locator("svg") }).last().click();
-      await expect(page.getByText(/Are you sure/i)).toBeVisible({ timeout: 5000 });
+      await team
+        .getByRole("button")
+        .filter({ has: page.locator("svg") })
+        .last()
+        .click();
+      await expect(page.getByText(/Are you sure/i)).toBeVisible({
+        timeout: 5000,
+      });
       await clickButton({ page, options: { name: "Delete", exact: true } });
-      await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole("dialog")).not.toBeVisible({
+        timeout: 10000,
+      });
       await page.waitForLoadState("networkidle");
     }
 

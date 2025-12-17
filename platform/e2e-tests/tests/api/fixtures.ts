@@ -34,6 +34,10 @@ export interface TestFixtures {
   getTeamByName: typeof getTeamByName;
   addTeamMember: typeof addTeamMember;
   removeTeamMember: typeof removeTeamMember;
+  getActiveOrganizationId: typeof getActiveOrganizationId;
+  createOptimizationRule: typeof createOptimizationRule;
+  deleteOptimizationRule: typeof deleteOptimizationRule;
+  updateOptimizationRule: typeof updateOptimizationRule;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -432,6 +436,89 @@ export const removeTeamMember = async (
     urlSuffix: `/api/teams/${teamId}/members/${userId}`,
   });
 
+/**
+ * Get the active organization ID from the current session
+ */
+const getActiveOrganizationId = async (
+  request: APIRequestContext,
+): Promise<string> => {
+  const response = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/auth/get-session",
+  });
+  const data = await response.json();
+  const organizationId = data?.session?.activeOrganizationId;
+  if (!organizationId) {
+    throw new Error("Failed to get organization ID from session");
+  }
+  return organizationId;
+};
+
+/**
+ * Optimization rule condition types
+ */
+type OptimizationRuleCondition = { maxLength: number } | { hasTools: boolean };
+
+/**
+ * Create an optimization rule
+ * (authnz is handled by the authenticated session)
+ */
+const createOptimizationRule = async (
+  request: APIRequestContext,
+  rule: {
+    entityType: "organization" | "team" | "agent";
+    entityId: string;
+    provider: "openai" | "anthropic" | "gemini";
+    conditions: OptimizationRuleCondition[];
+    targetModel: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/optimization-rules",
+    data: {
+      ...rule,
+      enabled: rule.enabled ?? true,
+    },
+  });
+
+/**
+ * Update an optimization rule
+ * (authnz is handled by the authenticated session)
+ */
+const updateOptimizationRule = async (
+  request: APIRequestContext,
+  ruleId: string,
+  updates: {
+    conditions?: OptimizationRuleCondition[];
+    targetModel?: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "put",
+    urlSuffix: `/api/optimization-rules/${ruleId}`,
+    data: updates,
+  });
+
+/**
+ * Delete an optimization rule
+ * (authnz is handled by the authenticated session)
+ */
+const deleteOptimizationRule = async (
+  request: APIRequestContext,
+  ruleId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/optimization-rules/${ruleId}`,
+  });
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -490,6 +577,18 @@ export const test = base.extend<TestFixtures>({
   },
   removeTeamMember: async ({}, use) => {
     await use(removeTeamMember);
+  },
+  getActiveOrganizationId: async ({}, use) => {
+    await use(getActiveOrganizationId);
+  },
+  createOptimizationRule: async ({}, use) => {
+    await use(createOptimizationRule);
+  },
+  deleteOptimizationRule: async ({}, use) => {
+    await use(deleteOptimizationRule);
+  },
+  updateOptimizationRule: async ({}, use) => {
+    await use(updateOptimizationRule);
   },
   /**
    * Admin request - same auth as default `request` fixture

@@ -26,6 +26,7 @@ interface ChatMessagesProps {
   messages: UIMessage[];
   hideToolCalls?: boolean;
   status: ChatStatus;
+  isLoadingConversation?: boolean;
 }
 
 // Type guards for tool parts
@@ -52,10 +53,16 @@ export function ChatMessages({
   messages,
   hideToolCalls = false,
   status,
+  isLoadingConversation = false,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
 
   if (messages.length === 0) {
+    // Don't show "start conversation" message while loading - prevents flash of empty state
+    if (isLoadingConversation) {
+      return null;
+    }
+
     return (
       <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
         <p className="text-sm">Start a conversation by sending a message</p>

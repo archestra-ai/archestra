@@ -1,11 +1,12 @@
-import { RouteId } from "@shared";
+import { DEFAULT_VAULT_TOKEN, RouteId, SecretsManagerType } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import SecretModel from "@/models/secret";
 import {
   isByosEnabled,
-  SecretsManagerType,
   secretManager,
+  secretManagerCoordinator,
 } from "@/secretsmanager";
 import {
   ApiError,
@@ -34,7 +35,7 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(secretManager.getUserVisibleDebugInfo());
+      return reply.send(secretManager().getUserVisibleDebugInfo());
     },
   );
 
@@ -92,8 +93,40 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const result = await secretManager.checkConnectivity();
+      const result = await secretManager().checkConnectivity();
       return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/secrets/initialize-secrets-manager",
+    {
+      schema: {
+        operationId: RouteId.InitializeSecretsManager,
+        description:
+          "Initialize the secrets manager with a specific type (DB, Vault, or BYOS_VAULT)",
+        tags: ["Secrets"],
+        body: z.object({
+          type: SecretsManagerTypeSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            type: SecretsManagerTypeSchema,
+            meta: z.record(z.string(), z.string()),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (config.vault.token !== DEFAULT_VAULT_TOKEN) {
+        throw new ApiError(
+          400,
+          "Reinitializing secrets manager is not allowed in production environment",
+        );
+      }
+      const { type } = request.body;
+      const instance = await secretManagerCoordinator.initialize(type);
+      return reply.send(instance.getUserVisibleDebugInfo());
     },
   );
 };

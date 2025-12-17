@@ -706,7 +706,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "OAuth callback: creating secret with payload",
       );
 
-      const secret = await secretManager.createSecret(
+      const secret = await secretManager().createSecret(
         secretPayload,
         `${catalogItem.name}-oauth`,
         isByosEnabled(), // forceDB: store in DB when BYOS is enabled

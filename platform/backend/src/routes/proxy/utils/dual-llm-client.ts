@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { GoogleGenAI } from "@google/genai";
+import type { SupportedProvider } from "@shared";
 import OpenAI from "openai";
 import config from "@/config";
 import logger from "@/logging";
-import type { DualLlmMessage, SupportedProvider } from "@/types";
+import type { DualLlmMessage } from "@/types";
 import { createGoogleGenAIClient } from "./gemini-client";
 
 /**

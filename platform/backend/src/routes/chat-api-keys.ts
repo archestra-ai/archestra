@@ -54,7 +54,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const forceDB = isByosEnabled();
 
       // Create the secret for the API key
-      const secret = await secretManager.createSecret(
+      const secret = await secretManager().createSecret(
         { apiKey: body.apiKey },
         "chatapikey",
         forceDB,
@@ -142,12 +142,12 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Update the secret if a new API key is provided
       if (body.apiKey) {
         if (apiKey.secretId) {
-          await secretManager.updateSecret(apiKey.secretId, {
+          await secretManager().updateSecret(apiKey.secretId, {
             apiKey: body.apiKey,
           });
         } else {
           const forceDB = isByosEnabled();
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             { apiKey: body.apiKey },
             "chatapikey",
             forceDB,
@@ -192,7 +192,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Delete the associated secret
       if (apiKey.secretId) {
-        await secretManager.deleteSecret(apiKey.secretId);
+        await secretManager().deleteSecret(apiKey.secretId);
       }
 
       await ChatApiKeyModel.delete(params.id);
@@ -297,6 +297,64 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         ...apiKey,
         profiles,
+      });
+    },
+  );
+
+  // Bulk assign multiple API keys to profiles
+  fastify.post(
+    "/api/chat-api-keys/bulk-assign",
+    {
+      schema: {
+        operationId: RouteId.BulkAssignChatApiKeysToProfiles,
+        description:
+          "Assign multiple API keys to multiple profiles. Only one key per provider is allowed per profile - existing assignments for the same provider will be replaced.",
+        tags: ["Chat API Keys"],
+        body: z.object({
+          chatApiKeyIds: z
+            .array(z.string().uuid())
+            .min(1, "At least one API key is required"),
+          profileIds: z
+            .array(z.string().uuid())
+            .min(1, "At least one profile is required"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            assignedCount: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId }, reply) => {
+      // Verify all API keys exist and belong to the organization
+      const apiKeys = await Promise.all(
+        body.chatApiKeyIds.map((id) => ChatApiKeyModel.findById(id)),
+      );
+
+      for (const apiKey of apiKeys) {
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "One or more chat API keys not found");
+        }
+      }
+
+      // Assign each API key to each profile
+      // The model method handles the one-key-per-provider-per-profile constraint
+      for (const chatApiKeyId of body.chatApiKeyIds) {
+        await ChatApiKeyModel.bulkAssignProfiles(chatApiKeyId, body.profileIds);
+      }
+
+      // Calculate actual assignment count based on unique providers
+      // Since only one key per provider is allowed per profile, same-provider keys replace each other
+      const validApiKeys = apiKeys.filter(
+        (key): key is NonNullable<typeof key> => key !== null,
+      );
+      const uniqueProviders = new Set(validApiKeys.map((key) => key.provider));
+      const assignedCount = uniqueProviders.size * body.profileIds.length;
+
+      return reply.send({
+        success: true,
+        assignedCount,
       });
     },
   );

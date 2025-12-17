@@ -156,6 +156,7 @@ export const RouteId = {
   SetChatApiKeyDefault: "setChatApiKeyDefault",
   UnsetChatApiKeyDefault: "unsetChatApiKeyDefault",
   UpdateChatApiKeyProfiles: "updateChatApiKeyProfiles",
+  BulkAssignChatApiKeysToProfiles: "bulkAssignChatApiKeysToProfiles",
 
   // Prompt Routes
   GetPrompts: "getPrompts",
@@ -223,6 +224,7 @@ export const RouteId = {
   GetSecretsType: "getSecretsType",
   GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
+  InitializeSecretsManager: "initializeSecretsManager",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

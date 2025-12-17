@@ -3,6 +3,7 @@ import {
   type PredefinedRoleName,
   testMcpServerCommand,
 } from "@shared";
+import { auth } from "@/auth/better-auth";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -30,7 +31,10 @@ export async function seedDefaultUserAndOrg(
     name?: string;
   } = {},
 ) {
-  const user = await UserModel.createOrGetExistingDefaultAdminUser(config);
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(
+    auth,
+    config,
+  );
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   if (!user || !org) {
     throw new Error("Failed to seed admin user and default organization");
@@ -132,7 +136,7 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
  */
 async function seedN8NSystemPrompt(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(auth);
   if (!user) {
     logger.error(
       "Failed to get or create default admin user, skipping n8n prompt seeding",
@@ -344,7 +348,7 @@ return $input.all().map(item => ({
  */
 async function seedDefaultRegularPrompts(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(auth);
   if (!user) {
     logger.error(
       "Failed to get or create default admin user, skipping regular prompts seeding",
@@ -409,7 +413,7 @@ async function seedArchestraTools(): Promise<void> {
  */
 async function seedDefaultTeam(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(auth);
   const defaultAgent = await AgentModel.getAgentOrCreateDefault();
 
   if (!user) {

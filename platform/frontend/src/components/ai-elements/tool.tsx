@@ -222,7 +222,7 @@ export const ToolOutput = ({
                     "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
                     conv.role === "assistant"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-foreground",
+                      : "bg-secondary text-secondary-foreground",
                   )}
                 >
                   {contentStr}

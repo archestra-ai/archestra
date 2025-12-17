@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId, SupportedProviders } from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -70,11 +70,11 @@ async function getSmartDefaultModel(
   agentId: string,
   organizationId: string,
 ): Promise<string> {
-  // Check what API keys are available (profile-specific or org defaults)
-  const providers: SupportedChatProvider[] = ["anthropic", "gemini", "openai"];
-
-  // Try to find an available API key in order of preference
-  for (const provider of providers) {
+  /**
+   * Check what API keys are available (profile-specific or org defaults)
+   * Try to find an available API key in order of preference
+   */
+  for (const provider of SupportedProviders) {
     const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
       agentId,
       provider,
@@ -82,7 +82,7 @@ async function getSmartDefaultModel(
     );
 
     if (profileApiKey?.secretId) {
-      const secret = await secretManager.getSecret(profileApiKey.secretId);
+      const secret = await secretManager().getSecret(profileApiKey.secretId);
       const secretValue =
         secret?.secret?.apiKey ??
         secret?.secret?.anthropicApiKey ??
@@ -226,7 +226,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (profileApiKey?.secretId) {
-        const secret = await secretManager.getSecret(profileApiKey.secretId);
+        const secret = await secretManager().getSecret(profileApiKey.secretId);
         // Support both old format (anthropicApiKey) and new format (apiKey)
         const secretValue =
           secret?.secret?.apiKey ??
@@ -249,7 +249,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           provider,
         );
         if (orgDefault?.secretId) {
-          const secret = await secretManager.getSecret(orgDefault.secretId);
+          const secret = await secretManager().getSecret(orgDefault.secretId);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
             secret?.secret?.apiKey ??
@@ -767,7 +767,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         if (profileApiKey?.secretId) {
-          const secret = await secretManager.getSecret(profileApiKey.secretId);
+          const secret = await secretManager().getSecret(
+            profileApiKey.secretId,
+          );
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
             secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
@@ -784,7 +786,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "anthropic",
         );
         if (orgDefault?.secretId) {
-          const secret = await secretManager.getSecret(orgDefault.secretId);
+          const secret = await secretManager().getSecret(orgDefault.secretId);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
             secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;

@@ -1,10 +1,9 @@
 ---
-title: Chat & LLM Provider API Keys
+title: Chat
 category: Archestra Platform
-subcategory: Features
-order: 8
+order: 7
 description: Managing LLM provider API keys for the built-in Chat feature
-lastUpdated: 2025-12-12
+lastUpdated: 2025-12-15
 ---
 
 <!--
@@ -16,54 +15,33 @@ Archestra includes a built-in Chat interface that allows users to interact with 
 
 ## Multi-Provider API Key Management
 
+![LLM Provider API Keys Settings](/docs/automated_screenshots/platform_llm_api_keys_settings.png)
+
 The platform supports multiple LLM provider API keys with granular control:
 
 - **Multiple keys per provider** - Create as many API keys as needed for each provider
 - **Organization defaults** - Set one key per provider as the organization-wide default
 - **Profile assignments** - Assign specific keys to individual profiles for fine-grained control
+- **Bulk assignment** - Select multiple API keys and assign them to profiles at once
 
-## API Key Resolution Order
+This is useful when different teams or projects need to use different API keys for billing or access control purposes.
+
+> **Note:** Only one API key per provider can be assigned to a given profile. If you assign a new key of the same provider, the previous assignment will be replaced. However, you can assign keys from different providers (e.g., one Anthropic key and one OpenAI key) to the same profile.
+
+### API Key Resolution Order
 
 When a chat request is made, the system determines which API key to use in this order:
 
 1. **Profile-specific key** - If the profile has an API key assigned for the provider, use it
 2. **Organization default** - Fall back to the organization's default key for that provider
-3. **Environment variable** - Final fallback to `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` (for Anthropic)
+3. **Environment variable** - Final fallback to `ARCHESTRA_CHAT_<PROVIDER>_API_KEY`
 
-## Supported Providers
+### Supported Providers
 
-| Provider  | Status    |
-| --------- | --------- |
-| Anthropic | Supported |
-| OpenAI    | Supported |
-| Gemini    | Supported |
-
-The system automatically detects which provider to use based on the model name selected for a conversation.
-
-## Setting Up API Keys
-
-Navigate to **Settings → Chat** to manage API keys:
-
-1. Click **Add API Key**
-2. Enter a descriptive name
-3. Select the provider
-4. Paste your API key
-5. Optionally check "Set as organization default"
-
-## Profile Assignments
-
-To assign an API key to specific profiles:
-
-1. Find the key in the table
-2. Click the actions menu (three dots)
-3. Select **Manage Profiles**
-4. Check the profiles that should use this key
-5. Click **Save**
-
-This is useful when different teams or projects need to use different API keys for billing or access control purposes.
+See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.
 
 ## Security Notes
 
-- API keys are stored encrypted using the configured secrets manager
+- API keys are stored encrypted using the configured [secrets manager](/docs/platform-secrets-management)
 - Keys are never exposed in the UI after creation
 - Profile assignments allow separation of billing/usage across teams

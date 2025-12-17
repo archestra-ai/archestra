@@ -1,7 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
-  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -17,27 +16,11 @@ const {
   setChatApiKeyDefault,
   unsetChatApiKeyDefault,
   updateChatApiKeyProfiles,
+  bulkAssignChatApiKeysToProfiles,
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
   return useSuspenseQuery({
-    queryKey: ["chat-api-keys"],
-    queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
-      if (error) {
-        throw new Error(
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to fetch chat API keys",
-        );
-      }
-      return data ?? [];
-    },
-  });
-}
-
-export function useChatApiKeysOptional() {
-  return useQuery({
     queryKey: ["chat-api-keys"],
     queryFn: async () => {
       const { data, error } = await getChatApiKeys();
@@ -197,6 +180,35 @@ export function useUpdateChatApiKeyProfiles() {
           typeof error.error === "string"
             ? error.error
             : error.error?.message || "Failed to update API key profiles";
+        throw new Error(msg);
+      }
+      return responseData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+    },
+  });
+}
+
+export function useBulkAssignChatApiKeysToProfiles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      chatApiKeyIds,
+      profileIds,
+    }: {
+      chatApiKeyIds: string[];
+      profileIds: string[];
+    }) => {
+      const { data: responseData, error } =
+        await bulkAssignChatApiKeysToProfiles({
+          body: { chatApiKeyIds, profileIds },
+        });
+      if (error) {
+        const msg =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Failed to bulk assign API keys";
         throw new Error(msg);
       }
       return responseData;

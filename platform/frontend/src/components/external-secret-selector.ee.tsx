@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { AlertCircle, CheckCircle2, Key, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
@@ -23,7 +24,7 @@ import {
   useTeamVaultFolderSecrets,
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
-} from "@/lib/team-vault-folder.query";
+} from "@/lib/team-vault-folder.query.ee";
 import Divider from "./divider";
 
 interface ExternalSecretSelectorProps {
@@ -36,7 +37,7 @@ interface ExternalSecretSelectorProps {
   disabled?: boolean;
 }
 
-export function ExternalSecretSelector({
+export default function ExternalSecretSelector({
   selectedTeamId,
   selectedSecretPath,
   selectedSecretKey,
@@ -109,7 +110,10 @@ export function ExternalSecretSelector({
     !selectedTeamId && selectedSecretPath && selectedSecretKey;
 
   return (
-    <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
+    <div
+      className="space-y-4 rounded-lg border p-4 bg-muted/30"
+      data-testid={E2eTestId.ExternalSecretSelector}
+    >
       {/* Show saved vault reference when editing without team selected */}
       {hasSavedVaultReference && (
         <div className="space-y-2 p-3 rounded border bg-muted/50">
@@ -144,7 +148,11 @@ export function ExternalSecretSelector({
           onValueChange={handleTeamChange}
           disabled={disabled || isLoadingTeams}
         >
-          <SelectTrigger id="vault-team" className="w-64">
+          <SelectTrigger
+            id="vault-team"
+            className="w-64"
+            data-testid={E2eTestId.ExternalSecretSelectorTeamTrigger}
+          >
             <SelectValue placeholder="Select a team..." />
           </SelectTrigger>
           <SelectContent>
@@ -219,7 +227,11 @@ export function ExternalSecretSelector({
               onValueChange={handleSecretChange}
               disabled={disabled}
             >
-              <SelectTrigger id="vault-secret" className="w-64">
+              <SelectTrigger
+                id="vault-secret"
+                className="w-64"
+                data-testid={E2eTestId.ExternalSecretSelectorSecretTrigger}
+              >
                 <SelectValue placeholder="Select a secret..." />
               </SelectTrigger>
               <SelectContent>
@@ -269,7 +281,11 @@ export function ExternalSecretSelector({
                 onValueChange={handleKeyChange}
                 disabled={disabled}
               >
-                <SelectTrigger id="vault-key" className="w-64">
+                <SelectTrigger
+                  id="vault-key"
+                  className="w-64"
+                  data-testid={E2eTestId.ExternalSecretSelectorSecretTriggerKey}
+                >
                   <SelectValue placeholder="Select a key..." />
                 </SelectTrigger>
                 <SelectContent>

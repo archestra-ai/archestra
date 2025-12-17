@@ -1,7 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { modelsByProvider, providerDisplayNames } from "@shared";
+import {
+  type archestraApiTypes,
+  modelsByProvider,
+  providerDisplayNames,
+  type SupportedProvider,
+  SupportedProviders,
+} from "@shared";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -48,11 +53,6 @@ import {
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
 
-type Providers = Extract<
-  archestraApiTypes.SupportedProviders,
-  "openai" | "anthropic"
->;
-
 // Type aliases for better readability
 type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
 
@@ -83,7 +83,7 @@ function TokenPriceInlineForm({
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
-    provider: (initialData?.provider as Providers) || ("openai" as const),
+    provider: initialData?.provider || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
@@ -125,7 +125,7 @@ function TokenPriceInlineForm({
                 onValueChange={(value) =>
                   setFormData({
                     ...formData,
-                    provider: value as Providers,
+                    provider: value as SupportedProvider,
                     model: "", // Clear model when provider changes
                   })
                 }
@@ -134,13 +134,11 @@ function TokenPriceInlineForm({
                   <SelectValue placeholder="Select provider" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(providerDisplayNames) as Providers[]).map(
-                    (provider) => (
-                      <SelectItem key={provider} value={provider}>
-                        {providerDisplayNames[provider]}
-                      </SelectItem>
-                    ),
-                  )}
+                  {SupportedProviders.map((provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {providerDisplayNames[provider]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -243,8 +241,7 @@ function TokenPriceRow({
   return (
     <tr className="border-b hover:bg-muted/30">
       <td className="p-4 capitalize">
-        {providerDisplayNames[tokenPrice.provider as Providers] ||
-          tokenPrice.provider}
+        {providerDisplayNames[tokenPrice.provider]}
       </td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">

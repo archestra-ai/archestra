@@ -107,3 +107,52 @@ The external agent ID will be:
 | Per-customer tracking | `multi-tenant-bot` | `customer-123`, `customer-456` |
 
 This approach lets you maintain centralized security policies through Profiles while still having granular visibility into which applications are generating traffic.
+
+## User Identification
+
+You can use the `X-Archestra-User-Id` header to associate LLM requests with a specific Archestra user. This is particularly useful for:
+
+- **Tracking user activity** in the LLM Proxy Logs viewer
+- **Identifying which user** made a request from the Archestra Chat
+- **Auditing and compliance** purposes
+
+### Usage
+
+Include the header in your LLM requests with the Archestra user's UUID:
+
+```bash
+curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "X-Archestra-User-Id: 123e4567-e89b-12d3-a456-426614174000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+The user ID will be:
+
+- **Stored** with each interaction in the database
+- **Displayed** in the LLM Proxy Logs table as the user's name (filterable)
+- **Available** in the interaction detail page
+
+### Archestra Chat Integration
+
+When using the built-in Archestra Chat, the `X-Archestra-User-Id` header is automatically included in all requests, allowing you to see which team member initiated each conversation in the logs.
+
+### Combining Headers
+
+You can use both `X-Archestra-Agent-Id` and `X-Archestra-User-Id` together to track both the application and the user making each request:
+
+```bash
+curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "X-Archestra-Agent-Id: archestra-chat" \
+  -H "X-Archestra-User-Id: 123e4567-e89b-12d3-a456-426614174000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```

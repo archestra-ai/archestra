@@ -63,7 +63,7 @@ export const DEFAULT_TEAM_NAME = "Default Team";
 export const ENGINEERING_TEAM_NAME = "Engineering Team";
 export const MARKETING_TEAM_NAME = "Marketing Team";
 
-export const DEFAULT_PROFILE_NAME = "Default Agent";
+export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 export {
   E2eTestId,

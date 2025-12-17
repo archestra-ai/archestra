@@ -645,6 +645,13 @@
       "when": 1765541084781,
       "tag": "0091_fluffy_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1766004692000,
+      "tag": "0092_rename_default_profile",
+      "breakpoints": true
     }
   ]
 }

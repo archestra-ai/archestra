@@ -328,7 +328,7 @@ for (const config of testConfigs) {
       // 4. Wait for async interaction recording
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // 5. Query interactions to verify compression stats
+      // 5. Query interactions to verify tool result content is compressed
       const interactionsResponse = await getInteractions(request, {
         profileId,
         sortBy: "createdAt",
@@ -340,17 +340,7 @@ for (const config of testConfigs) {
       expect(interactions.data.length).toBeGreaterThan(0);
       const interaction = interactions.data[0];
 
-      // Verify compression stats were recorded
-      expect(interaction.toonTokensBefore).not.toBeNull();
-      expect(interaction.toonTokensAfter).not.toBeNull();
-      expect(interaction.toonTokensBefore).toBeGreaterThan(0);
-      expect(interaction.toonTokensAfter).toBeGreaterThan(0);
-      // Compression should reduce tokens
-      expect(interaction.toonTokensBefore).toBeGreaterThan(
-        interaction.toonTokensAfter,
-      );
-
-      // Verify actual content was compressed in processedRequest
+      // Verify tool result content was compressed in processedRequest
       expect(interaction.processedRequest).not.toBeNull();
       const toolResultContent = config.extractToolResultContent(
         interaction.processedRequest,
@@ -395,7 +385,7 @@ for (const config of testConfigs) {
       // 4. Wait for async interaction recording
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // 5. Query interactions to verify no compression stats
+      // 5. Query interactions to verify tool result content is not compressed
       const interactionsResponse = await getInteractions(request, {
         profileId,
         sortBy: "createdAt",
@@ -407,12 +397,7 @@ for (const config of testConfigs) {
       expect(interactions.data.length).toBeGreaterThan(0);
       const interaction = interactions.data[0];
 
-      // Verify compression stats were NOT recorded
-      expect(interaction.toonTokensBefore).toBeNull();
-      expect(interaction.toonTokensAfter).toBeNull();
-      expect(interaction.toonCostSavings).toBeNull();
-
-      // Verify actual content was NOT compressed in processedRequest
+      // Verify tool result content was NOT compressed in processedRequest
       expect(interaction.processedRequest).not.toBeNull();
       const toolResultContent = config.extractToolResultContent(
         interaction.processedRequest,

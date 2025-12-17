@@ -55,13 +55,32 @@ const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 /**
  * Authenticate as admin via API and navigate to SSO providers page.
  * SSO tests don't use storage state to avoid session conflicts.
+ * Clears existing cookies first to ensure clean authentication state.
  */
 async function ensureAdminAuthenticated(page: Page): Promise<void> {
+  // Clear all cookies to ensure no stale session cookies interfere with login
+  // This is critical on retries where previous SSO logins may have invalidated sessions
+  await page.context().clearCookies();
+
   const loggedIn = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
   if (!loggedIn) {
     throw new Error("Admin login failed");
   }
 
+  // Navigate to root first to ensure session cookie is properly loaded in browser context
+  // Then redirect to the target page. This helps ensure the cookie is fully processed.
+  await page.goto(`${UI_BASE_URL}/`);
+  await page.waitForLoadState("networkidle");
+
+  // Verify we're authenticated (not redirected to sign-in)
+  const isAuthenticated = !page.url().includes("/auth/sign-in");
+  if (!isAuthenticated) {
+    throw new Error(
+      `Admin authentication failed - redirected to sign-in after API login. URL: ${page.url()}`,
+    );
+  }
+
+  // Now navigate to SSO providers page
   await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
   await page.waitForLoadState("networkidle");
 
@@ -195,6 +214,7 @@ async function deleteExistingProviderIfExists(
  */
 async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   // Wait for redirect to Keycloak (external URL for browser)
+  // Since we're using a fresh browser context, Keycloak should always show login form
   await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
     timeout: 15000,
   });
@@ -204,12 +224,12 @@ async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
 
   // Fill in Keycloak login form
   const usernameField = ssoPage.getByLabel("Username or email");
-  await usernameField.waitFor({ state: "visible" });
+  await usernameField.waitFor({ state: "visible", timeout: 10000 });
   await usernameField.fill(KEYCLOAK_TEST_USER);
 
   // Password field - use getByRole which works for type="password" inputs
   const passwordField = ssoPage.getByRole("textbox", { name: "Password" });
-  await passwordField.waitFor({ state: "visible" });
+  await passwordField.waitFor({ state: "visible", timeout: 10000 });
   await passwordField.fill(KEYCLOAK_TEST_PASSWORD);
 
   await clickButton({ page: ssoPage, options: { name: "Sign In" } });
@@ -221,8 +241,20 @@ async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   await ssoPage.waitForLoadState("networkidle");
 
   // Check if we landed on a logged-in page (not sign-in)
-  const currentUrl = ssoPage.url();
-  return !currentUrl.includes("/auth/sign-in");
+  const finalUrl = ssoPage.url();
+  const loginSucceeded = !finalUrl.includes("/auth/sign-in");
+
+  // If login failed, try to capture any error message for debugging
+  if (!loginSucceeded) {
+    // Check for error toast or message on the sign-in page
+    const errorToast = ssoPage.locator('[role="alert"]').first();
+    const errorText = await errorToast.textContent().catch(() => null);
+    if (errorText) {
+      console.log(`SSO login failed with error: ${errorText}`);
+    }
+  }
+
+  return loginSucceeded;
 }
 
 /**

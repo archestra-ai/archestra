@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { E2eTestId } from "@shared";
-import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, IS_CI, UI_BASE_URL } from "../../consts";
 import { expect, type Page, test } from "../../fixtures";
 import { clickButton, loginViaApi } from "../../utils";
 
@@ -15,7 +15,6 @@ test.describe.configure({ mode: "serial" });
 // =============================================================================
 // These match the values in helm/e2e-tests/values.yaml
 const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
-const IS_CI = process.env.CI === "true";
 const KEYCLOAK_BACKEND_URL = IS_CI
   ? "http://e2e-tests-keycloak:8080"
   : "http://localhost:30081";

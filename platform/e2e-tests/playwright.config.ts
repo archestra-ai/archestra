@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { adminAuthFile } from "./consts";
+import { adminAuthFile, IS_CI } from "./consts";
 
 /**
  * Project names for dependency references
@@ -69,15 +69,15 @@ export default defineConfig({
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
-  forbidOnly: !!process.env.CI,
+  forbidOnly: IS_CI,
   /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  retries: IS_CI ? 2 : 0,
   /* Reduce workers in CI to avoid resource contention */
-  workers: process.env.CI ? 3 : 3,
+  workers: IS_CI ? 6 : 3,
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: process.env.CI ? [["html", "line"]] : "line",
+  reporter: IS_CI ? [["html", "line"]] : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */

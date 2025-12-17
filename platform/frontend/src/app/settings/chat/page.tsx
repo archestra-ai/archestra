@@ -1,7 +1,7 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   CheckCircle2,
   Loader2,
@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import {
+  useBulkAssignChatApiKeysToProfiles,
   useChatApiKeys,
   useCreateChatApiKey,
   useDeleteChatApiKey,
@@ -70,13 +71,18 @@ function ChatSettingsContent() {
   const setDefaultMutation = useSetChatApiKeyDefault();
   const unsetDefaultMutation = useUnsetChatApiKeyDefault();
   const updateProfilesMutation = useUpdateChatApiKeyProfiles();
+  const bulkAssignMutation = useBulkAssignChatApiKeysToProfiles();
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isProfilesDialogOpen, setIsProfilesDialogOpen] = useState(false);
+  const [isBulkAssignDialogOpen, setIsBulkAssignDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<ChatApiKey | null>(null);
+
+  // Row selection state
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   // Form states
   const [newKeyName, setNewKeyName] = useState("");
@@ -87,6 +93,17 @@ function ChatSettingsContent() {
   const [editKeyName, setEditKeyName] = useState("");
   const [editKeyValue, setEditKeyValue] = useState("");
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [bulkAssignProfileIds, setBulkAssignProfileIds] = useState<string[]>(
+    [],
+  );
+
+  // Compute selected API keys from row selection
+  // Since we use getRowId, rowSelection keys are the actual API key IDs
+  const selectedApiKeyIds = useMemo(() => {
+    return Object.keys(rowSelection).filter((id) => rowSelection[id]);
+  }, [rowSelection]);
+
+  const hasSelection = selectedApiKeyIds.length > 0;
 
   const resetCreateForm = useCallback(() => {
     setNewKeyName("");
@@ -203,6 +220,38 @@ function ChatSettingsContent() {
     }
   }, [selectedApiKey, updateProfilesMutation, selectedProfileIds]);
 
+  const handleBulkAssign = useCallback(async () => {
+    if (selectedApiKeyIds.length === 0 || bulkAssignProfileIds.length === 0)
+      return;
+    try {
+      await bulkAssignMutation.mutateAsync({
+        chatApiKeyIds: selectedApiKeyIds,
+        profileIds: bulkAssignProfileIds,
+      });
+      toast.success(
+        `Assigned ${selectedApiKeyIds.length} API key(s) to ${bulkAssignProfileIds.length} profile(s)`,
+      );
+      setIsBulkAssignDialogOpen(false);
+      setBulkAssignProfileIds([]);
+      setRowSelection({});
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to bulk assign API keys";
+      toast.error(message);
+    }
+  }, [selectedApiKeyIds, bulkAssignProfileIds, bulkAssignMutation]);
+
+  const openBulkAssignDialog = useCallback(() => {
+    setBulkAssignProfileIds([]);
+    setIsBulkAssignDialogOpen(true);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+  }, []);
+
   const openEditDialog = useCallback((apiKey: ChatApiKey) => {
     setSelectedApiKey(apiKey);
     setEditKeyName(apiKey.name);
@@ -223,6 +272,29 @@ function ChatSettingsContent() {
 
   const columns: ColumnDef<ChatApiKey>[] = useMemo(
     () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label={`Select ${row.original.name}`}
+          />
+        ),
+        size: 30,
+      },
       {
         accessorKey: "name",
         header: "Name",
@@ -427,8 +499,38 @@ function ChatSettingsContent() {
         </Button>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {hasSelection && (
+        <div className="flex items-center gap-4 rounded-md border bg-muted/50 p-3">
+          <span className="text-sm font-medium">
+            {selectedApiKeyIds.length} key(s) selected
+          </span>
+          <div className="flex items-center gap-2">
+            <PermissionButton
+              permissions={{ chatSettings: ["update"] }}
+              size="sm"
+              variant="outline"
+              onClick={openBulkAssignDialog}
+              data-testid={E2eTestId.BulkAssignChatApiKeysButton}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Assign to Profiles
+            </PermissionButton>
+          </div>
+          <Button size="sm" variant="ghost" onClick={clearSelection}>
+            Clear selection
+          </Button>
+        </div>
+      )}
+
       <div data-testid={E2eTestId.ChatApiKeysTable}>
-        <DataTable columns={columns} data={apiKeys} hideSelectedCount />
+        <DataTable
+          columns={columns}
+          data={apiKeys}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.id}
+        />
       </div>
 
       {/* Create Dialog */}
@@ -690,6 +792,88 @@ function ChatSettingsContent() {
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog
+        open={isBulkAssignDialogOpen}
+        onOpenChange={setIsBulkAssignDialogOpen}
+      >
+        <DialogContent
+          className="max-w-md"
+          data-testid={E2eTestId.BulkAssignChatApiKeysDialog}
+        >
+          <DialogHeader>
+            <DialogTitle>Assign to Profiles</DialogTitle>
+            <DialogDescription>
+              Assign {selectedApiKeyIds.length} selected API key(s) to profiles.
+              Note: Only one key per provider is allowed per profile. Existing
+              assignments for the same provider will be replaced.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 max-h-[300px] overflow-y-auto">
+            {allProfiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No profiles available
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {allProfiles.map((profile) => (
+                  <div
+                    key={profile.id}
+                    className="flex items-center space-x-2 p-2 rounded hover:bg-muted"
+                  >
+                    <Checkbox
+                      id={`bulk-profile-${profile.id}`}
+                      checked={bulkAssignProfileIds.includes(profile.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setBulkAssignProfileIds([
+                            ...bulkAssignProfileIds,
+                            profile.id,
+                          ]);
+                        } else {
+                          setBulkAssignProfileIds(
+                            bulkAssignProfileIds.filter(
+                              (id) => id !== profile.id,
+                            ),
+                          );
+                        }
+                      }}
+                    />
+                    <Label
+                      htmlFor={`bulk-profile-${profile.id}`}
+                      className="flex-1 cursor-pointer"
+                    >
+                      {profile.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsBulkAssignDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkAssign}
+              disabled={
+                bulkAssignMutation.isPending ||
+                bulkAssignProfileIds.length === 0 ||
+                selectedApiKeyIds.length === 0
+              }
+            >
+              {bulkAssignMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Assign
             </Button>
           </DialogFooter>
         </DialogContent>

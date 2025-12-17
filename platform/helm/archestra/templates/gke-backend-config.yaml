@@ -13,6 +13,7 @@ apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
   name: {{ include "archestra-platform.fullname" . }}-backend-config
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
 spec:
@@ -38,6 +39,7 @@ apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
   name: {{ include "archestra-platform.fullname" . }}-frontend-config
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
 spec:

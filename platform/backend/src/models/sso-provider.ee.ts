@@ -4,15 +4,14 @@ import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
-import { auth } from "@/auth/better-auth";
+import type { BetterAuth } from "@/auth/better-auth";
 import {
   cacheSsoGroups,
   extractGroupsFromClaims,
-} from "@/auth/sso-team-sync-cache";
+} from "@/auth/sso-team-sync-cache.ee";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
-
 import type {
   InsertSsoProvider,
   PublicSsoProvider,
@@ -531,6 +530,7 @@ class SsoProviderModel {
     data: Omit<InsertSsoProvider, "id">,
     organizationId: string,
     headers: HeadersInit,
+    auth: BetterAuth,
   ): Promise<SsoProvider> {
     // Parse JSON configs if they exist
     const parsedData = {

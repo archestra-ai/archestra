@@ -338,6 +338,277 @@ test.describe("Chat API Keys CRUD", () => {
 
     expect(response.status()).toBe(404);
   });
+
+  test("should enforce single key per provider per profile constraint", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // Create two API keys of the same provider
+    const key1Response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Anthropic Key 1",
+        provider: "anthropic",
+        apiKey: "sk-ant-constraint-test-1",
+      },
+    });
+    const key1 = await key1Response.json();
+
+    const key2Response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Anthropic Key 2",
+        provider: "anthropic",
+        apiKey: "sk-ant-constraint-test-2",
+      },
+    });
+    const key2 = await key2Response.json();
+
+    // Create a profile
+    const agentResponse = await createAgent(request, "Constraint Test Profile");
+    const agent = await agentResponse.json();
+
+    // Assign key1 to profile
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/chat-api-keys/${key1.id}/profiles`,
+      data: {
+        profileIds: [agent.id],
+      },
+    });
+
+    // Verify key1 is assigned
+    const key1GetResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${key1.id}`,
+    });
+    const key1After = await key1GetResponse.json();
+    expect(key1After.profiles).toHaveLength(1);
+    expect(key1After.profiles[0].id).toBe(agent.id);
+
+    // Assign key2 to the same profile - should replace key1
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/chat-api-keys/${key2.id}/profiles`,
+      data: {
+        profileIds: [agent.id],
+      },
+    });
+
+    // Verify key2 is now assigned and key1 is no longer assigned
+    const key2GetResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${key2.id}`,
+    });
+    const key2After = await key2GetResponse.json();
+    expect(key2After.profiles).toHaveLength(1);
+    expect(key2After.profiles[0].id).toBe(agent.id);
+
+    const key1GetResponse2 = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${key1.id}`,
+    });
+    const key1After2 = await key1GetResponse2.json();
+    expect(key1After2.profiles).toHaveLength(0);
+
+    // Cleanup
+    await deleteAgent(request, agent.id);
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${key1.id}`,
+    });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${key2.id}`,
+    });
+  });
+
+  test("should allow different providers on same profile", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // Create API keys of different providers
+    const anthropicKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Anthropic Provider Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-multi-provider-test",
+      },
+    });
+    const anthropicKey = await anthropicKeyResponse.json();
+
+    const openaiKeyResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "OpenAI Provider Key",
+        provider: "openai",
+        apiKey: "sk-openai-multi-provider-test",
+      },
+    });
+    const openaiKey = await openaiKeyResponse.json();
+
+    // Create a profile
+    const agentResponse = await createAgent(
+      request,
+      "Multi Provider Test Profile",
+    );
+    const agent = await agentResponse.json();
+
+    // Assign both keys to the same profile
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/chat-api-keys/${anthropicKey.id}/profiles`,
+      data: {
+        profileIds: [agent.id],
+      },
+    });
+
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/chat-api-keys/${openaiKey.id}/profiles`,
+      data: {
+        profileIds: [agent.id],
+      },
+    });
+
+    // Both keys should be assigned
+    const anthropicKeyGet = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${anthropicKey.id}`,
+    });
+    const anthropicKeyAfter = await anthropicKeyGet.json();
+    expect(anthropicKeyAfter.profiles).toHaveLength(1);
+
+    const openaiKeyGet = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${openaiKey.id}`,
+    });
+    const openaiKeyAfter = await openaiKeyGet.json();
+    expect(openaiKeyAfter.profiles).toHaveLength(1);
+
+    // Cleanup
+    await deleteAgent(request, agent.id);
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${anthropicKey.id}`,
+    });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${openaiKey.id}`,
+    });
+  });
+
+  test("should bulk assign API keys to profiles", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // Create API keys
+    const key1Response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Bulk Assign Key 1",
+        provider: "anthropic",
+        apiKey: "sk-ant-bulk-test-1",
+      },
+    });
+    const key1 = await key1Response.json();
+
+    const key2Response = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys",
+      data: {
+        name: "Bulk Assign Key 2",
+        provider: "openai",
+        apiKey: "sk-openai-bulk-test-2",
+      },
+    });
+    const key2 = await key2Response.json();
+
+    // Create profiles
+    const agent1Response = await createAgent(request, "Bulk Assign Profile 1");
+    const agent1 = await agent1Response.json();
+
+    const agent2Response = await createAgent(request, "Bulk Assign Profile 2");
+    const agent2 = await agent2Response.json();
+
+    // Bulk assign both keys to both profiles
+    const bulkAssignResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/chat-api-keys/bulk-assign",
+      data: {
+        chatApiKeyIds: [key1.id, key2.id],
+        profileIds: [agent1.id, agent2.id],
+      },
+    });
+
+    expect(bulkAssignResponse.ok()).toBe(true);
+    const result = await bulkAssignResponse.json();
+    expect(result.success).toBe(true);
+    expect(result.assignedCount).toBe(4); // 2 keys * 2 profiles
+
+    // Verify assignments
+    const key1Get = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${key1.id}`,
+    });
+    const key1After = await key1Get.json();
+    expect(key1After.profiles).toHaveLength(2);
+
+    const key2Get = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat-api-keys/${key2.id}`,
+    });
+    const key2After = await key2Get.json();
+    expect(key2After.profiles).toHaveLength(2);
+
+    // Cleanup
+    await deleteAgent(request, agent1.id);
+    await deleteAgent(request, agent2.id);
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${key1.id}`,
+    });
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/chat-api-keys/${key2.id}`,
+    });
+  });
 });
 
 test.describe("Chat API Keys Access Control", () => {

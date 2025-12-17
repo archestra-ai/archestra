@@ -92,7 +92,7 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {Object.entries(groupedTools).map(([serverName, tools]) => (
-            <Tooltip key={serverName}>
+            <Tooltip key={serverName} delayDuration={300}>
               <TooltipTrigger asChild>
                 <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-secondary-foreground cursor-default">
                   <span className="font-medium text-xs">{serverName}</span>
@@ -102,8 +102,10 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
                 </div>
               </TooltipTrigger>
               <TooltipContent
-                side="top"
-                className="max-w-sm max-h-64 overflow-y-auto"
+                side="bottom"
+                align="center"
+                avoidCollisions={true}
+                className="max-w-xs max-h-48 overflow-y-auto text-xs"
                 onWheel={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
               >

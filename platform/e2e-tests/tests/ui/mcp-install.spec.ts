@@ -1,5 +1,6 @@
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { goToPage, type Page, test } from "../../fixtures";
+import { clickButton } from "../../utils";
 
 /**
  * To cover:
@@ -26,7 +27,7 @@ test.describe("MCP Install", () => {
     await adminPage.waitForLoadState("networkidle");
 
     // Open "Add MCP Server" dialog
-    await adminPage.getByRole("button", { name: "Add MCP Server" }).click();
+    await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
     await adminPage.waitForLoadState("networkidle");
 
     // Search for context7
@@ -55,7 +56,7 @@ test.describe("MCP Install", () => {
       .fill("fake-api-key");
 
     // install the server
-    await adminPage.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page: adminPage, options: { name: "Install" } });
     await adminPage.waitForLoadState("networkidle");
 
     // Check that tools are discovered
@@ -88,7 +89,10 @@ test.describe("MCP Install", () => {
       await adminPage.waitForLoadState("networkidle");
 
       // Open "Add MCP Server" dialog
-      await adminPage.getByRole("button", { name: "Add MCP Server" }).click();
+      await clickButton({
+        page: adminPage,
+        options: { name: "Add MCP Server" },
+      });
       await adminPage.waitForLoadState("networkidle");
 
       // Open form and fill details
@@ -103,7 +107,7 @@ test.describe("MCP Install", () => {
         .fill(HF_URL);
 
       // add catalog item to the registry
-      await adminPage.getByRole("button", { name: "Add Server" }).click();
+      await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("networkidle");
 
       // connect it
@@ -113,7 +117,7 @@ test.describe("MCP Install", () => {
         .click();
 
       // install the server
-      await adminPage.getByRole("button", { name: "Install" }).click();
+      await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForTimeout(2_000);
 
       // Check that tools are discovered
@@ -140,7 +144,10 @@ test.describe("MCP Install", () => {
       await adminPage.waitForLoadState("networkidle");
 
       // Open "Add MCP Server" dialog
-      await adminPage.getByRole("button", { name: "Add MCP Server" }).click();
+      await clickButton({
+        page: adminPage,
+        options: { name: "Add MCP Server" },
+      });
       await adminPage.waitForLoadState("networkidle");
 
       // Open form and fill details
@@ -158,7 +165,7 @@ test.describe("MCP Install", () => {
         .click();
 
       // add catalog item to the registry
-      await adminPage.getByRole("button", { name: "Add Server" }).click();
+      await clickButton({ page: adminPage, options: { name: "Add Server" } });
       await adminPage.waitForLoadState("networkidle");
 
       // connect it
@@ -174,7 +181,7 @@ test.describe("MCP Install", () => {
         .fill("fake-pat");
 
       // try to install the server
-      await adminPage.getByRole("button", { name: "Install" }).click();
+      await clickButton({ page: adminPage, options: { name: "Install" } });
       await adminPage.waitForLoadState("networkidle");
 
       // It should fail with error message because PAT is invalid and remote hf refuses to install the server

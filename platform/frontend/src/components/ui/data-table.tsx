@@ -45,6 +45,8 @@ interface DataTableProps<TData, TValue> {
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
   /** Hide the "X of Y row(s) selected" text when row selection is not used */
   hideSelectedCount?: boolean;
+  /** Function to get a stable unique ID for each row. When provided, row selection will use these IDs instead of indices. */
+  getRowId?: (row: TData, index: number) => string;
 }
 
 export function DataTable<TData, TValue>({
@@ -60,6 +62,7 @@ export function DataTable<TData, TValue>({
   rowSelection,
   onRowSelectionChange,
   hideSelectedCount = false,
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -70,6 +73,7 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     onSortingChange: (updater) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;

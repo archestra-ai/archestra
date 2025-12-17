@@ -4,6 +4,7 @@ import { goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   assignEngineeringTeamToDefaultProfileViaApi,
+  clickButton,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   openManageCredentialsDialog,
   verifyToolCallResultViaApi,
@@ -59,7 +60,7 @@ test("Verify tool calling using dynamic credentials", async ({
       .getByRole("textbox", { name: "ARCHESTRA_TEST" })
       .fill(`${user}-personal-credential`);
     // Install using personal credential
-    await page.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page, options: { name: "Install" } });
     // Wait for dialog to close and button to be visible again
     const connectButton = page.getByTestId(
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
@@ -71,7 +72,7 @@ test("Verify tool calling using dynamic credentials", async ({
       .getByRole("textbox", { name: "ARCHESTRA_TEST" })
       .fill(`${team}-team-credential`);
     // And this time team credential type should be selected by default for everyone, install using team credential
-    await page.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page, options: { name: "Install" } });
     // Wait for installation to complete and pod to be ready
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(1_000); // Additional wait for pod to be ready

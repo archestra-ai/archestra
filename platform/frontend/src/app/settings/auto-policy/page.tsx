@@ -2,7 +2,6 @@
 
 import { Sparkles, XCircle } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -13,7 +12,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useChatApiKeys } from "@/lib/chat-settings.query";
-import { useOrganization, useUpdateOrganization } from "@/lib/organization.query";
+import {
+  useOrganization,
+  useUpdateOrganization,
+} from "@/lib/organization.query";
 import { usePolicyConfigSubagentPrompt } from "@/lib/policy-config-subagent.query";
 
 export default function AutoPolicySettingsPage() {
@@ -45,7 +47,8 @@ export default function AutoPolicySettingsPage() {
             <CardTitle>Policy Configuration Subagent</CardTitle>
           </div>
           <CardDescription>
-            Analyzes trusted tool metadata with AI to generate deterministic security policies for handling untrusted data
+            Analyzes trusted tool metadata with AI to generate deterministic
+            security policies for handling untrusted data
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -83,7 +86,8 @@ export default function AutoPolicySettingsPage() {
                 On tool assignment
               </Label>
               <p className="text-sm text-muted-foreground">
-                Automatically analyze and configure security policies when tools are assigned
+                Automatically analyze and configure security policies when tools
+                are assigned
               </p>
             </div>
             <Switch
@@ -105,9 +109,7 @@ export default function AutoPolicySettingsPage() {
                 and click "Configure with Subagent"
               </p>
             </div>
-            <div className="text-sm text-muted-foreground">
-              Always enabled
-            </div>
+            <div className="text-sm text-muted-foreground">Always enabled</div>
           </div>
         </CardContent>
       </Card>

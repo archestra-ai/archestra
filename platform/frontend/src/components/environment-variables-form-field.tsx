@@ -15,7 +15,6 @@ import type {
   UseFormWatch,
 } from "react-hook-form";
 import { parseVaultReference } from "@/app/mcp-catalog/_parts/mcp-catalog-form.utils";
-import { BooleanToggle } from "@/components/ui/boolean-toggle";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -337,7 +336,7 @@ export function EnvironmentVariablesFormField<
                         `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
                       }
                       render={({ field }) => {
-                        // Boolean type: render checkbox with label
+                        // Boolean type: render checkbox
                         if (envType === "boolean") {
                           // Normalize empty/undefined values to "false"
                           const normalizedValue =
@@ -350,12 +349,11 @@ export function EnvironmentVariablesFormField<
                             <FormItem>
                               <FormControl>
                                 <div className="flex items-center h-10">
-                                  <BooleanToggle
-                                    value={normalizedValue === "true"}
-                                    onChange={(checked) =>
+                                  <Checkbox
+                                    checked={normalizedValue === "true"}
+                                    onCheckedChange={(checked) =>
                                       field.onChange(checked ? "true" : "false")
                                     }
-                                    variant="secondary"
                                   />
                                 </div>
                               </FormControl>

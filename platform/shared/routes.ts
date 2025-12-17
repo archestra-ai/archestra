@@ -156,6 +156,7 @@ export const RouteId = {
   SetChatApiKeyDefault: "setChatApiKeyDefault",
   UnsetChatApiKeyDefault: "unsetChatApiKeyDefault",
   UpdateChatApiKeyProfiles: "updateChatApiKeyProfiles",
+  BulkAssignChatApiKeysToProfiles: "bulkAssignChatApiKeysToProfiles",
 
   // Prompt Routes
   GetPrompts: "getPrompts",

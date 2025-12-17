@@ -1,50 +1,164 @@
+// biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { E2eTestId } from "@shared";
-import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, IS_CI, UI_BASE_URL } from "../../consts";
 import { expect, type Page, test } from "../../fixtures";
-import { clickButton } from "../../utils";
+import { clickButton, loginViaApi } from "../../utils";
 
 // Run tests in this file serially to avoid conflicts when both tests
 // manipulate SSO providers in the same Keycloak realm.
 // Also skip webkit and firefox for these tests since they share the same backend
 // and running in parallel causes SSO provider conflicts.
 test.describe.configure({ mode: "serial" });
-test.skip(
-  ({ browserName }) => browserName !== "chromium",
-  "SSO tests only run on chromium to avoid cross-browser conflicts with shared backend state",
-);
 
-// Keycloak configuration for e2e tests
+// =============================================================================
+// Keycloak Configuration
+// =============================================================================
 // These match the values in helm/e2e-tests/values.yaml
-// KEYCLOAK_EXTERNAL_URL is used for browser redirects (accessible from host machine)
-// KEYCLOAK_BACKEND_URL is what the backend uses to reach Keycloak:
-//   - In CI: backend runs in K8s, so it uses the internal K8s service name
-//   - In local dev: backend runs on host, so it uses localhost:30081
 const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
-// Detect if we're running in CI (backend is in K8s) or local dev (backend is on host)
-// In CI, the ARCHESTRA_AUTH_ADMIN_EMAIL env var is set via GitHub Actions secrets
-const IS_CI = process.env.CI === "true";
 const KEYCLOAK_BACKEND_URL = IS_CI
   ? "http://e2e-tests-keycloak:8080"
   : "http://localhost:30081";
 const KEYCLOAK_REALM = "archestra";
-const KEYCLOAK_OIDC_CLIENT_ID = "archestra-oidc";
-const KEYCLOAK_OIDC_CLIENT_SECRET = "archestra-oidc-secret";
-const KEYCLOAK_SAML_ENTITY_ID = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`;
-const KEYCLOAK_SAML_SSO_URL = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`;
 
-// Keycloak test user credentials - match the Archestra admin user so SSO can link accounts.
-// Test users are defined in helm/e2e-tests/values.yaml:
-//   - admin@example.com (archestra-admins group) - for admin role mapping
-//   - member@example.com (archestra-users group) - for member role mapping
-// Extract username from email (e.g., "admin@example.com" -> "admin")
+// OIDC client configuration
+const KEYCLOAK_OIDC = {
+  clientId: "archestra-oidc",
+  clientSecret: "archestra-oidc-secret",
+  issuer: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`,
+  discoveryEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+  authorizationEndpoint: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+  tokenEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+  jwksEndpoint: `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+};
+
+// SAML configuration
+const KEYCLOAK_SAML = {
+  entityId: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`,
+  ssoUrl: `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`,
+};
+
+// Test user credentials (match Archestra admin for account linking)
 const KEYCLOAK_TEST_USER = ADMIN_EMAIL.split("@")[0];
 const KEYCLOAK_TEST_PASSWORD = ADMIN_PASSWORD;
 
-// SSO Domain - extracted from admin email for account linking to work.
-// Better Auth's SSO plugin requires the provider's domain to match the user's email domain
-// for non-trusted providers to enable account linking.
-// e.g., "joey@archestra.ai" -> "archestra.ai"
+// SSO domain - extracted from admin email for account linking
 const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
+
+// =============================================================================
+// Shared Test Helpers
+// =============================================================================
+
+/**
+ * Authenticate as admin via API and navigate to SSO providers page.
+ * SSO tests don't use storage state to avoid session conflicts.
+ * Clears existing cookies first to ensure clean authentication state.
+ * Uses polling with retry to handle timing issues.
+ */
+async function ensureAdminAuthenticated(page: Page): Promise<void> {
+  // Clear all cookies to ensure no stale session cookies interfere with login
+  // This is critical on retries where previous SSO logins may have invalidated sessions
+  await page.context().clearCookies();
+
+  // Retry login up to 5 times to handle transient issues and server instability
+  let loginSucceeded = false;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    loginSucceeded = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    if (loginSucceeded) break;
+    // Wait before retry
+    await page.waitForTimeout(2000);
+  }
+
+  if (!loginSucceeded) {
+    console.log("Admin API login failed after 5 attempts");
+  }
+
+  // Navigate directly to SSO providers page
+  // The API login should have set session cookies that persist
+  await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
+  await page.waitForLoadState("networkidle");
+
+  // Wait briefly for any redirects to complete
+  await page.waitForTimeout(1000);
+
+  // Check if we got redirected to sign-in (authentication failed)
+  if (page.url().includes("/auth/sign-in")) {
+    console.log(
+      "API login appeared to fail (redirected to sign-in), trying UI fallback...",
+    );
+    // Try logging in via UI as fallback
+    await page.getByLabel("Email").fill(ADMIN_EMAIL);
+    await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+    await page.getByRole("button", { name: "Login" }).click();
+    await page.waitForLoadState("networkidle");
+
+    // Check for error toast or message on the sign-in page
+    const errorToast = page.locator('[role="alert"]').first();
+    if (await errorToast.isVisible()) {
+      const errorText = await errorToast.textContent().catch(() => null);
+      if (
+        errorText &&
+        !errorText.includes("Default Admin Credentials Enabled")
+      ) {
+        console.log(`UI Login failed with error: ${errorText}`);
+      }
+    }
+
+    // Wait for login to complete and redirect away from sign-in
+    try {
+      await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 45000 });
+    } catch {
+      // If still on sign-in, try a hard reload and check URL again
+      // Sometimes state is stale or cookie needs a nudge
+      console.log(
+        "Still on sign-in after login, attempting reload to check session...",
+      );
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout: 15000 });
+    }
+
+    // Navigate to SSO providers after UI login
+    await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
+    await page.waitForLoadState("networkidle");
+  }
+
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 30000 });
+  await expect(
+    page.getByRole("heading", { name: "SSO Providers" }),
+  ).toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Fill in the standard OIDC provider form fields.
+ */
+async function fillOidcProviderForm(
+  page: Page,
+  providerName: string,
+): Promise<void> {
+  await page.getByLabel("Provider ID").fill(providerName);
+  await page.getByLabel("Issuer").fill(KEYCLOAK_OIDC.issuer);
+  await page.getByLabel("Domain").fill(SSO_DOMAIN);
+  await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC.clientId);
+  await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC.clientSecret);
+  await page
+    .getByLabel("Discovery Endpoint")
+    .fill(KEYCLOAK_OIDC.discoveryEndpoint);
+  await page
+    .getByLabel("Authorization Endpoint")
+    .fill(KEYCLOAK_OIDC.authorizationEndpoint);
+  await page.getByLabel("Token Endpoint").fill(KEYCLOAK_OIDC.tokenEndpoint);
+  await page.getByLabel("JWKS Endpoint").fill(KEYCLOAK_OIDC.jwksEndpoint);
+}
+
+/**
+ * Delete an SSO provider via the UI dialog.
+ */
+async function deleteProviderViaDialog(page: Page): Promise<void> {
+  await clickButton({ page, options: { name: "Delete" } });
+  await expect(page.getByText(/Are you sure/i)).toBeVisible();
+  await clickButton({ page, options: { name: "Delete", exact: true } });
+  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+}
 
 /**
  * Fetch the IdP metadata from Keycloak dynamically.
@@ -81,9 +195,18 @@ async function deleteExistingProviderIfExists(
   page: Page,
   providerType: "Generic OIDC" | "Generic SAML",
 ): Promise<void> {
+  // Verify we're on the SSO providers page before proceeding
+  // This handles cases where previous test left page on a different route
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 10000 });
+
+  // Wait for the SSO providers heading to be visible (page content loaded)
+  await expect(
+    page.getByRole("heading", { name: "SSO Providers" }),
+  ).toBeVisible({ timeout: 15000 });
+
   const providerCard = page.getByText(providerType, { exact: true });
-  // Wait for card to be visible and stable before clicking
-  await providerCard.waitFor({ state: "visible" });
+  // Wait for card to be visible and stable before clicking (increased timeout for CI)
+  await providerCard.waitFor({ state: "visible", timeout: 20000 });
   await providerCard.click();
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
@@ -125,11 +248,13 @@ async function deleteExistingProviderIfExists(
  * Works for both OIDC and SAML flows since Keycloak uses the same login UI.
  *
  * @param ssoPage - The Playwright page that has been redirected to Keycloak
+ * @returns true if login succeeded (landed on non-sign-in page), false if it failed
  */
-async function loginViaKeycloak(ssoPage: Page): Promise<void> {
+async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   // Wait for redirect to Keycloak (external URL for browser)
+  // Since we're using a fresh browser context, Keycloak should always show login form
   await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
-    timeout: 15000,
+    timeout: 30000,
   });
 
   // Wait for Keycloak login form to be ready
@@ -137,18 +262,37 @@ async function loginViaKeycloak(ssoPage: Page): Promise<void> {
 
   // Fill in Keycloak login form
   const usernameField = ssoPage.getByLabel("Username or email");
-  await usernameField.waitFor({ state: "visible" });
+  await usernameField.waitFor({ state: "visible", timeout: 10000 });
   await usernameField.fill(KEYCLOAK_TEST_USER);
 
   // Password field - use getByRole which works for type="password" inputs
   const passwordField = ssoPage.getByRole("textbox", { name: "Password" });
-  await passwordField.waitFor({ state: "visible" });
+  await passwordField.waitFor({ state: "visible", timeout: 10000 });
   await passwordField.fill(KEYCLOAK_TEST_PASSWORD);
 
   await clickButton({ page: ssoPage, options: { name: "Sign In" } });
 
-  // Wait for redirect back to Archestra - should land on a logged-in page (not sign-in)
-  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 15000 });
+  // Wait for redirect back to Archestra (any page under UI_BASE_URL)
+  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 60000 });
+
+  // Wait for page to settle
+  await ssoPage.waitForLoadState("networkidle");
+
+  // Check if we landed on a logged-in page (not sign-in)
+  const finalUrl = ssoPage.url();
+  const loginSucceeded = !finalUrl.includes("/auth/sign-in");
+
+  // If login failed, try to capture any error message for debugging
+  if (!loginSucceeded) {
+    // Check for error toast or message on the sign-in page
+    const errorToast = ssoPage.locator('[role="alert"]').first();
+    const errorText = await errorToast.textContent().catch(() => null);
+    if (errorText && !errorText.includes("Default Admin Credentials Enabled")) {
+      console.log(`SSO login failed with error: ${errorText}`);
+    }
+  }
+
+  return loginSucceeded;
 }
 
 /**
@@ -164,68 +308,266 @@ function extractCertFromMetadata(metadata: string): string {
   return match[1];
 }
 
+test.describe("SSO Team Sync E2E", () => {
+  test("should sync user to team based on SSO group membership", async ({
+    page,
+    browser,
+    goToPage,
+    makeRandomString,
+  }) => {
+    test.slow();
+
+    const providerName = `TeamSyncOIDC${Date.now()}`;
+    const teamName = makeRandomString(8, "SyncTeam");
+    const externalGroup = "archestra-admins"; // Matches Keycloak admin user's group
+
+    // STEP 0: Clean up orphan SyncTeam teams from previous failed test runs
+    // These teams can have the same external group mapping, causing SSO sync to add
+    // users to the wrong team
+    await ensureAdminAuthenticated(page);
+    await goToPage(page, "/settings/teams");
+    await page.waitForLoadState("networkidle");
+
+    // Find and delete any existing SyncTeam-* teams
+    const orphanTeams = page.locator(".rounded-lg.border.p-4").filter({
+      has: page.locator('h3:text-matches("SyncTeam-.*")'),
+    });
+    const orphanCount = await orphanTeams.count();
+
+    for (let i = orphanCount - 1; i >= 0; i--) {
+      // Re-locate since DOM changes after each delete
+      const team = page
+        .locator(".rounded-lg.border.p-4")
+        .filter({ has: page.locator('h3:text-matches("SyncTeam-.*")') })
+        .first();
+      if ((await team.count()) === 0) break;
+
+      // Find and click the delete button (trash icon)
+      await team
+        .getByRole("button")
+        .filter({ has: page.locator("svg") })
+        .last()
+        .click();
+      await expect(page.getByText(/Are you sure/i)).toBeVisible({
+        timeout: 5000,
+      });
+      await clickButton({ page, options: { name: "Delete", exact: true } });
+      await expect(page.getByRole("dialog")).not.toBeVisible({
+        timeout: 10000,
+      });
+      await page.waitForLoadState("networkidle");
+    }
+
+    // STEP 1: Authenticate and create OIDC provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await fillOidcProviderForm(page, providerName);
+    await clickButton({ page, options: { name: "Create Provider" } });
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 2: Navigate to teams page and create a team
+    // Re-authenticate in case session was invalidated during SSO provider creation
+    await ensureAdminAuthenticated(page);
+    await goToPage(page, "/settings/teams");
+    await page.waitForLoadState("networkidle");
+
+    // Wait for page to fully load and Create Team button to be enabled
+    // The button may be disabled while permissions/data are loading
+    const createTeamButton = page.getByRole("button", { name: "Create Team" });
+    await expect(createTeamButton).toBeVisible({ timeout: 15000 });
+    await expect(createTeamButton).toBeEnabled({ timeout: 10000 });
+    await createTeamButton.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    // Fill in team details
+    await page.getByLabel("Team Name").fill(teamName);
+    await page
+      .getByLabel("Description")
+      .fill("Team for testing SSO group sync");
+
+    // Submit
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Create Team" })
+      .click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // Wait for team to appear in the list
+    await expect(page.getByText(teamName)).toBeVisible({ timeout: 5000 });
+
+    // STEP 3: Link external group to the team
+    // First get the team ID from the API since we need it for the testid
+    const teamResponse = await page.request.get(
+      `http://localhost:9000/api/teams`,
+    );
+    const teams = await teamResponse.json();
+    const createdTeam = teams.find(
+      (t: { name: string }) => t.name === teamName,
+    );
+
+    // Click the SSO Team Sync button using data-testid
+    await page
+      .getByTestId(`${E2eTestId.ConfigureSsoTeamSyncButton}-${createdTeam.id}`)
+      .click();
+
+    // Wait for dialog to appear
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByText("External Group Sync")).toBeVisible();
+
+    // Add the external group mapping
+    await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);
+    await clickButton({ page, options: { name: "Add" } });
+
+    // Wait for the success toast to confirm the API call completed
+    // This is critical - the group must be saved to the database before SSO login
+    await expect(page.getByText("External group mapping added")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Also verify the group appears in the current mappings list (not just the input)
+    await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
+      { timeout: 5000 },
+    );
+
+    // Close the dialog - use first() to target the text button, not the X icon
+    await clickButton({
+      page,
+      options: { name: "Close", exact: true },
+      first: true,
+    });
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
+
+    // STEP 4: Test SSO login with admin user (in archestra-admins group)
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Wait for SSO button to appear (provider was just created)
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
+
+      // Click SSO button and login via Keycloak
+      await clickButton({
+        page: ssoPage,
+        options: { name: new RegExp(providerName, "i") },
+      });
+
+      // Login via Keycloak (admin user is in archestra-admins group)
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // STEP 5: Verify user was automatically added to the team
+      // Team sync is an async background operation during SSO callback
+      // Give it a moment to complete before navigating
+      await ssoPage.waitForTimeout(2000);
+
+      // Navigate to teams page
+      await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Find the team row helper
+      const getTeamRow = () =>
+        ssoPage.locator(".rounded-lg.border.p-4").filter({ hasText: teamName });
+
+      // Poll until the team card shows at least 1 member
+      await expect(async () => {
+        // Force a fresh page load by navigating away and back
+        await ssoPage.goto(`${UI_BASE_URL}/`);
+        await ssoPage.waitForLoadState("networkidle");
+        await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
+        await ssoPage.waitForLoadState("networkidle");
+
+        const teamRow = getTeamRow();
+        await expect(teamRow).toBeVisible({ timeout: 5000 });
+
+        // Get the member count text
+        const memberText = await teamRow
+          .locator("text=/\\d+ member/")
+          .textContent();
+        // Team should have at least 1 member after sync
+        if (memberText === "0 members") {
+          throw new Error(`Team still shows 0 members, got: ${memberText}`);
+        }
+      }).toPass({ timeout: 60_000, intervals: [3000, 5000, 7000, 10000] });
+
+      // Verify the SSO user is in the team members list by opening the dialog
+      // Open manage members dialog
+      const teamRow = getTeamRow();
+      const manageButton = teamRow.getByTestId(
+        `${E2eTestId.ManageMembersButton}-${teamName}`,
+      );
+      await manageButton.click();
+      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
+
+      // The email should now be visible since the member was synced
+      const emailLocator = ssoPage
+        .getByRole("dialog")
+        .getByText(new RegExp(ADMIN_EMAIL, "i"));
+      await expect(emailLocator).toBeVisible({ timeout: 10000 });
+
+      // Success! The SSO user was automatically synced to the team
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 6: Cleanup
+    // Delete the team
+    await goToPage(page, "/settings/teams");
+    await page.waitForLoadState("networkidle");
+
+    // Find the team card by name and click the delete button
+    const teamCard = page
+      .locator(".rounded-lg.border.p-4")
+      .filter({ hasText: teamName });
+    await expect(teamCard).toBeVisible({ timeout: 5000 });
+    // The delete button has a Trash icon - find it within the team card
+    await teamCard
+      .getByRole("button")
+      .filter({ has: page.locator("svg") })
+      .last()
+      .click();
+
+    await expect(page.getByText(/Are you sure/i)).toBeVisible();
+    await clickButton({ page, options: { name: "Delete", exact: true } });
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // Delete the SSO provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await deleteProviderViaDialog(page);
+  });
+});
+
 test.describe("SSO OIDC E2E Flow with Keycloak", () => {
   test("should configure OIDC provider, login via SSO, update, and delete", async ({
     page,
     browser,
     goToPage,
   }) => {
-    // OIDC flow involves multiple redirects, so triple the timeout
     test.slow();
-
-    // Use a unique provider name to avoid conflicts with existing providers
     const providerName = `KeycloakOIDC${Date.now()}`;
 
-    // STEP 1: Navigate to SSO providers page
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-
-    // STEP 2: Delete any existing Generic OIDC provider (ensures idempotency)
-    // This opens the dialog - either create (if none exists) or edit (if one exists)
-    // If edit, it deletes the provider and reopens as create dialog
+    // STEP 1: Authenticate and clean up any existing provider
+    await ensureAdminAuthenticated(page);
     await deleteExistingProviderIfExists(page, "Generic OIDC");
 
-    // Now we should have a create dialog
-    // Fill in Keycloak OIDC configuration
-    // IMPORTANT: Issuer must match the token's "iss" claim, which Keycloak sets based on
-    // the URL the user accessed. Since browser goes to external URL, issuer is external.
-    // But backend endpoints must use internal URL (reachable from within K8s).
-    await page.getByLabel("Provider ID").fill(providerName);
-    // Issuer must match token's "iss" claim (external URL since browser accesses that)
-    await page
-      .getByLabel("Issuer")
-      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
-    // Domain must match the admin user's email domain for account linking to work
-    // Better Auth requires domain matching for non-trusted SSO providers
-    await page.getByLabel("Domain").fill(SSO_DOMAIN);
-    await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
-    await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
-    // Discovery endpoint - backend fetches this
-    await page
-      .getByLabel("Discovery Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
-      );
-    // Authorization endpoint - browser redirects here (always external URL)
-    await page
-      .getByLabel("Authorization Endpoint")
-      .fill(
-        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
-      );
-    // Token endpoint - backend calls this
-    await page
-      .getByLabel("Token Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
-      );
-    // JWKS endpoint - backend validates tokens
-    await page
-      .getByLabel("JWKS Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
-      );
-
-    // Submit the form
+    // STEP 2: Fill in OIDC provider form and submit
+    await fillOidcProviderForm(page, providerName);
     await clickButton({ page, options: { name: "Create Provider" } });
 
     // Wait for dialog to close and provider to be created
@@ -260,18 +602,10 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       });
 
       // Login via Keycloak and wait for redirect back to Archestra
-      await loginViaKeycloak(ssoPage);
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in by checking for authenticated UI elements
-      // The sidebar navigation only appears when logged in
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
@@ -304,18 +638,7 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     // STEP 6: Delete the provider
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Click delete button
-    await clickButton({ page, options: { name: "Delete" } });
-
-    // Confirm deletion in the confirmation dialog
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await clickButton({ page, options: { name: "Delete", exact: true } });
-
-    // Wait for dialog to close
-    await expect(page.getByRole("dialog")).not.toBeVisible({
-      timeout: 10000,
-    });
+    await deleteProviderViaDialog(page);
 
     // STEP 7: Verify SSO button no longer appears on login page
     // Use a fresh context to check the sign-in page
@@ -346,47 +669,15 @@ test.describe("SSO Role Mapping E2E", () => {
     browser,
     goToPage,
   }) => {
-    // Role mapping involves SSO flow, so triple the timeout
     test.slow();
-
-    // Use a unique provider name to avoid conflicts
     const providerName = `RoleMappingOIDC${Date.now()}`;
 
-    // STEP 1: Navigate to SSO providers page and create OIDC provider with role mapping
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-
-    // Delete any existing Generic OIDC provider first
+    // STEP 1: Authenticate and clean up any existing provider
+    await ensureAdminAuthenticated(page);
     await deleteExistingProviderIfExists(page, "Generic OIDC");
 
-    // Fill in Keycloak OIDC configuration
-    await page.getByLabel("Provider ID").fill(providerName);
-    await page
-      .getByLabel("Issuer")
-      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
-    await page.getByLabel("Domain").fill(SSO_DOMAIN);
-    await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
-    await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
-    await page
-      .getByLabel("Discovery Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
-      );
-    await page
-      .getByLabel("Authorization Endpoint")
-      .fill(
-        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
-      );
-    await page
-      .getByLabel("Token Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
-      );
-    await page
-      .getByLabel("JWKS Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
-      );
+    // STEP 2: Fill in OIDC provider form
+    await fillOidcProviderForm(page, providerName);
 
     // STEP 2: Configure Role Mapping
     // Expand the Role Mapping accordion
@@ -434,6 +725,12 @@ test.describe("SSO Role Mapping E2E", () => {
       await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
       await ssoPage.waitForLoadState("networkidle");
 
+      // Wait for SSO button to appear (provider was just created)
+      const ssoButton = ssoPage.getByRole("button", {
+        name: new RegExp(providerName, "i"),
+      });
+      await expect(ssoButton).toBeVisible({ timeout: 10000 });
+
       // Click SSO button and login via Keycloak
       await clickButton({
         page: ssoPage,
@@ -441,17 +738,8 @@ test.describe("SSO Role Mapping E2E", () => {
       });
 
       // Login via Keycloak (admin user is in archestra-admins group)
-      await loginViaKeycloak(ssoPage);
-
-      // Wait for redirect back to Archestra
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
@@ -478,239 +766,9 @@ test.describe("SSO Role Mapping E2E", () => {
     // STEP 4: Cleanup - delete the provider
     await goToPage(page, "/settings/sso-providers");
     await page.waitForLoadState("networkidle");
-
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    await clickButton({ page, options: { name: "Delete" } });
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await clickButton({ page, options: { name: "Delete", exact: true } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-  });
-});
-
-test.describe("SSO Team Sync E2E", () => {
-  test("should sync user to team based on SSO group membership", async ({
-    page,
-    browser,
-    goToPage,
-    makeRandomString,
-  }) => {
-    // Team sync involves SSO flow + team operations, so triple the timeout
-    test.slow();
-
-    // Use unique names to avoid conflicts
-    const providerName = `TeamSyncOIDC${Date.now()}`;
-    const teamName = makeRandomString(8, "SyncTeam");
-    // This group matches the Keycloak admin user's group in values.yaml
-    const externalGroup = "archestra-admins";
-
-    // STEP 1: Navigate to SSO providers page and create OIDC provider
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-
-    // Delete any existing Generic OIDC provider first
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
-
-    // Fill in Keycloak OIDC configuration
-    await page.getByLabel("Provider ID").fill(providerName);
-    await page
-      .getByLabel("Issuer")
-      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
-    await page.getByLabel("Domain").fill(SSO_DOMAIN);
-    await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
-    await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
-    await page
-      .getByLabel("Discovery Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
-      );
-    await page
-      .getByLabel("Authorization Endpoint")
-      .fill(
-        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
-      );
-    await page
-      .getByLabel("Token Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
-      );
-    await page
-      .getByLabel("JWKS Endpoint")
-      .fill(
-        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
-      );
-
-    // Submit the form
-    await clickButton({ page, options: { name: "Create Provider" } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-
-    // STEP 2: Navigate to teams page and create a team
-    await goToPage(page, "/settings/teams");
-    await page.waitForLoadState("networkidle");
-
-    // Click Create Team button
-    await clickButton({ page, options: { name: "Create Team" } });
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Fill in team details
-    await page.getByLabel("Team Name").fill(teamName);
-    await page
-      .getByLabel("Description")
-      .fill("Team for testing SSO group sync");
-
-    // Submit
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Create Team" })
-      .click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-
-    // Wait for team to appear in the list
-    await expect(page.getByText(teamName)).toBeVisible({ timeout: 5000 });
-
-    // STEP 3: Link external group to the team
-    // First get the team ID from the API since we need it for the testid
-    const teamResponse = await page.request.get(
-      `http://localhost:9000/api/teams`,
-    );
-    const teams = await teamResponse.json();
-    const createdTeam = teams.find(
-      (t: { name: string }) => t.name === teamName,
-    );
-
-    // Click the SSO Team Sync button using data-testid
-    await page
-      .getByTestId(`${E2eTestId.ConfigureSsoTeamSyncButton}-${createdTeam.id}`)
-      .click();
-
-    // Wait for dialog to appear
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByText("External Group Sync")).toBeVisible();
-
-    // Add the external group mapping
-    await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);
-    await clickButton({ page, options: { name: "Add" } });
-
-    // Wait for the group to be added
-    await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
-      { timeout: 5000 },
-    );
-
-    // Close the dialog - use first() to target the text button, not the X icon
-    await clickButton({
-      page,
-      options: { name: "Close", exact: true },
-      first: true,
-    });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
-
-    // STEP 4: Test SSO login with admin user (in archestra-admins group)
-    const ssoContext = await browser.newContext({
-      storageState: undefined,
-    });
-    const ssoPage = await ssoContext.newPage();
-
-    try {
-      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
-      await ssoPage.waitForLoadState("networkidle");
-
-      // Click SSO button and login via Keycloak
-      await clickButton({
-        page: ssoPage,
-        options: { name: new RegExp(providerName, "i") },
-      });
-
-      // Login via Keycloak (admin user is in archestra-admins group)
-      await loginViaKeycloak(ssoPage);
-
-      // Wait for redirect back to Archestra
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
-
-      // Verify we're logged in
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
-        timeout: 15000,
-      });
-
-      // STEP 5: Verify user was automatically added to the team
-      // Team sync is async, so poll for member count change
-      await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
-      await ssoPage.waitForLoadState("networkidle");
-
-      // Poll for team member count to increase (max 15 seconds)
-      const teamMemberLocator = ssoPage
-        .locator(".rounded-lg.border.p-4")
-        .filter({ hasText: teamName })
-        .locator("text=/\\d+ member/");
-
-      await expect(async () => {
-        await ssoPage.reload();
-        const memberText = await teamMemberLocator.textContent();
-        // Team should have at least 1 member after sync
-        expect(memberText).not.toBe("0 members");
-      }).toPass({ timeout: 15000, intervals: [1000, 2000, 3000] });
-
-      // Click "Manage Members" to verify the specific user
-      const syncedTeamRow = ssoPage
-        .locator(".rounded-lg.border.p-4")
-        .filter({ hasText: teamName });
-
-      await syncedTeamRow
-        .getByTestId(`${E2eTestId.ManageMembersButton}-${teamName}`)
-        .click();
-
-      await ssoPage.getByRole("dialog").waitFor({ state: "visible" });
-
-      // Verify the SSO user is in the team members list
-      // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
-      // Team sync might take a moment, so allow more time
-      await ssoPage
-        .getByRole("dialog")
-        .getByText(new RegExp(ADMIN_EMAIL, "i"))
-        .waitFor({ state: "visible", timeout: 15_000 });
-
-      // Success! The SSO user was automatically synced to the team
-    } finally {
-      await ssoContext.close();
-    }
-
-    // STEP 6: Cleanup
-    // Delete the team
-    await goToPage(page, "/settings/teams");
-    await page.waitForLoadState("networkidle");
-
-    // Find the team card by name and click the delete button
-    const teamCard = page
-      .locator(".rounded-lg.border.p-4")
-      .filter({ hasText: teamName });
-    await expect(teamCard).toBeVisible({ timeout: 5000 });
-    // The delete button has a Trash icon - find it within the team card
-    await teamCard
-      .getByRole("button")
-      .filter({ has: page.locator("svg") })
-      .last()
-      .click();
-
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await clickButton({ page, options: { name: "Delete", exact: true } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
-
-    // Delete the SSO provider
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-
-    await page.getByText("Generic OIDC", { exact: true }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await clickButton({ page, options: { name: "Delete" } });
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await clickButton({ page, options: { name: "Delete", exact: true } });
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await deleteProviderViaDialog(page);
   });
 });
 
@@ -720,39 +778,27 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     browser,
     goToPage,
   }) => {
-    // SAML flow involves more redirects and complex XML processing, so triple the timeout
     test.slow();
 
-    // Fetch the IdP metadata dynamically from Keycloak
-    // This is necessary because Keycloak regenerates certificates on restart
+    // Fetch IdP metadata dynamically (Keycloak regenerates certs on restart)
     const idpMetadata = await fetchKeycloakSamlMetadata();
     const idpCert = extractCertFromMetadata(idpMetadata);
-
-    // Use a unique provider name to avoid conflicts with existing providers
     const providerName = `KeycloakSAML${Date.now()}`;
 
-    // STEP 1: Navigate to SSO providers page
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
-
-    // STEP 2: Delete any existing Generic SAML provider (ensures idempotency)
-    // This opens the dialog - either create (if none exists) or edit (if one exists)
-    // If edit, it deletes the provider and reopens as create dialog
+    // STEP 1: Authenticate and clean up any existing provider
+    await ensureAdminAuthenticated(page);
     await deleteExistingProviderIfExists(page, "Generic SAML");
 
-    // Now we should have a create dialog
-    // Fill in Keycloak SAML configuration
+    // STEP 2: Fill in SAML provider form
     await page.getByLabel("Provider ID").fill(providerName);
     await page
       .getByLabel("Issuer", { exact: true })
-      .fill(KEYCLOAK_SAML_ENTITY_ID);
-    // Domain must match the admin user's email domain for account linking to work
-    // Better Auth requires domain matching for non-trusted SSO providers
+      .fill(KEYCLOAK_SAML.entityId);
     await page.getByLabel("Domain").fill(SSO_DOMAIN);
     await page
       .getByLabel("SAML Issuer / Entity ID")
-      .fill(KEYCLOAK_SAML_ENTITY_ID);
-    await page.getByLabel("SSO Entry Point URL").fill(KEYCLOAK_SAML_SSO_URL);
+      .fill(KEYCLOAK_SAML.entityId);
+    await page.getByLabel("SSO Entry Point URL").fill(KEYCLOAK_SAML.ssoUrl);
     await page.getByLabel("IdP Certificate").fill(idpCert);
 
     // IdP Metadata XML is required to avoid ERR_IDP_METADATA_MISSING_SINGLE_SIGN_ON_SERVICE error
@@ -828,20 +874,11 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       });
 
       // Login via Keycloak and wait for redirect back to Archestra
-      await loginViaKeycloak(ssoPage);
+      // SAML flows can be slower due to XML processing, so we increased timeout in loginViaKeycloak
+      const loginSucceeded = await loginViaKeycloak(ssoPage);
+      expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in by checking for authenticated UI elements
-      // The Keycloak test user matches the Archestra admin user, so SSO should link
-      // to the existing account and log us in successfully.
-      // The sidebar navigation only appears when logged in
-      await ssoPage.waitForLoadState("networkidle");
-      // Wait for URL to be on a logged-in page (not /auth/sign-in)
-      await ssoPage.waitForURL(
-        (url) => !url.pathname.includes("/auth/sign-in"),
-        {
-          timeout: 15000,
-        },
-      );
       // Use text locator as fallback since getByRole can be flaky with complex UIs
       await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
@@ -877,16 +914,7 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await samlCardForDelete.waitFor({ state: "visible" });
     await samlCardForDelete.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
-
-    // Click delete button
-    await clickButton({ page, options: { name: "Delete" } });
-
-    // Confirm deletion in the confirmation dialog
-    await expect(page.getByText(/Are you sure/i)).toBeVisible();
-    await clickButton({ page, options: { name: "Delete", exact: true } });
-
-    // Wait for dialog to close
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await deleteProviderViaDialog(page);
     await page.waitForLoadState("networkidle");
 
     // STEP 7: Verify SSO button no longer appears on login page

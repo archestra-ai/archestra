@@ -302,18 +302,14 @@ export default class K8sPod {
       spec: {
         // Fast shutdown for stateless MCP servers (default is 30s)
         terminationGracePeriodSeconds: 5,
-        // Use specified service account if provided in localConfig
+        // Use dedicated service account if serviceAccount is enabled in localConfig
         // This allows MCP servers that need Kubernetes API access (like the K8s MCP server)
-        // to use a dedicated service account with appropriate permissions
+        // to use a service account with appropriate permissions
         // Other MCP servers will use the default service account (no K8s permissions)
-        // Automatically constructs full service account name: {releaseName}-mcp-k8s-{role}
-        // Example: if role is "operator" and release is "archestra-platform", result is "archestra-platform-mcp-k8s-operator"
         ...(localConfig.serviceAccount
           ? {
-              serviceAccountName: config.orchestrator.kubernetes
-                .mcpK8sServiceAccountName
-                ? `${config.orchestrator.kubernetes.mcpK8sServiceAccountName}-mcp-k8s-${localConfig.serviceAccount}`
-                : localConfig.serviceAccount,
+              serviceAccountName:
+                config.orchestrator.kubernetes.mcpK8sServiceAccountName,
             }
           : {}),
         containers: [

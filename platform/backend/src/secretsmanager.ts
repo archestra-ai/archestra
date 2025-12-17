@@ -21,13 +21,13 @@ export class SecretsManagerConfigurationError extends Error {
 class SecretManager {
   private static initialized = false;
   private currentInstance: ISecretManager | null = null;
-  private managerType: SecretsManagerType =
-    getSecretsManagerTypeBasedOnEnvVars();
+  private managerType: SecretsManagerType;
 
   constructor() {
     if (SecretManager.initialized) {
       throw new Error("SecretManager already initialized");
     }
+    this.managerType = getSecretsManagerTypeBasedOnEnvVars();
     this.initialize();
     SecretManager.initialized = true;
   }

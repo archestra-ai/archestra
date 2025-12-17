@@ -22,7 +22,6 @@ export { default as OrganizationModel } from "./organization";
 export { default as PromptModel } from "./prompt";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
-export { default as SsoProviderModel } from "./sso-provider";
 export { default as StatisticsModel } from "./statistics";
 export { default as TeamModel } from "./team";
 export {

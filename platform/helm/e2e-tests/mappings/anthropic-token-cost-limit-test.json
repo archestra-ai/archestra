@@ -4,7 +4,7 @@
     "urlPath": "/v1/messages",
     "headers": {
       "x-api-key": {
-        "contains": "anthropic-blocks-tool-untrusted-data"
+        "contains": "anthropic-token-cost-limit-test"
       }
     }
   },
@@ -14,21 +14,17 @@
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "id": "msg_test_123",
+      "id": "msg_token_limit_test",
       "type": "message",
       "role": "assistant",
       "model": "claude-3-5-sonnet-20241022",
       "content": [
         {
-          "type": "tool_use",
-          "id": "toolu_test_123",
-          "name": "read_file",
-          "input": {
-            "file_path": "/etc/passwd"
-          }
+          "type": "text",
+          "text": "Hello! I'm here to help."
         }
       ],
-      "stop_reason": "tool_use",
+      "stop_reason": "end_turn",
       "stop_sequence": null,
       "usage": {
         "input_tokens": 100,

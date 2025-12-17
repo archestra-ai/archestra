@@ -419,20 +419,18 @@ for (const config of testConfigs) {
       expect(isValidJson(toolResultContent!)).toBe(true);
     });
 
-    test.afterEach(
-      async ({ request, deleteAgent, updateOrganization }) => {
-        // Restore original compression settings
-        await updateOrganization(request, {
-          convertToolResultsToToon: originalCompressionEnabled,
-          compressionScope: originalCompressionScope,
-        }).catch(() => {});
+    test.afterEach(async ({ request, deleteAgent, updateOrganization }) => {
+      // Restore original compression settings
+      await updateOrganization(request, {
+        convertToolResultsToToon: originalCompressionEnabled,
+        compressionScope: originalCompressionScope,
+      }).catch(() => {});
 
-        // Clean up test profile
-        if (profileId) {
-          await deleteAgent(request, profileId).catch(() => {});
-          profileId = "";
-        }
-      },
-    );
+      // Clean up test profile
+      if (profileId) {
+        await deleteAgent(request, profileId).catch(() => {});
+        profileId = "";
+      }
+    });
   });
 }

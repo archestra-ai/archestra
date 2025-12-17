@@ -10,7 +10,10 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import { InvitationModel, MemberModel, SessionModel } from "@/models";
+// Import directly from files to avoid circular dependency through barrel export
+import InvitationModel from "@/models/invitation";
+import MemberModel from "@/models/member";
+import SessionModel from "@/models/session";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } =
   config.enterpriseLicenseActivated

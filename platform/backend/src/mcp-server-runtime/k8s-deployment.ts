@@ -100,6 +100,16 @@ export default class K8sDeployment {
   }
 
   /**
+   * Sanitizes a single label value to ensure it's RFC 1123 compliant,
+   * no longer than 63 characters, and ends with an alphanumeric character.
+   */
+  static sanitizeLabelValue(value: string): string {
+    return K8sDeployment.ensureStringIsRfc1123Compliant(value)
+      .substring(0, 63)
+      .replace(/[^a-z0-9]+$/, "");
+  }
+
+  /**
    * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
    * Also ensures values are no longer than 63 characters as per Kubernetes label requirements.
    */
@@ -108,13 +118,8 @@ export default class K8sDeployment {
   ): Record<string, string> {
     const sanitized: Record<string, string> = {};
     for (const [key, value] of Object.entries(labels)) {
-      // Labels values must be 63 characters or less and end with alphanumeric
-      const compliantValue = K8sDeployment.ensureStringIsRfc1123Compliant(value)
-        .substring(0, 63)
-        .replace(/[^a-z0-9]+$/, "");
-
       sanitized[K8sDeployment.ensureStringIsRfc1123Compliant(key)] =
-        compliantValue;
+        K8sDeployment.sanitizeLabelValue(value);
     }
     return sanitized;
   }
@@ -790,9 +795,10 @@ export default class K8sDeployment {
    */
   private async findPodForDeployment(): Promise<k8s.V1Pod | undefined> {
     try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
-        labelSelector: `mcp-server-id=${this.mcpServer.id}`,
+        labelSelector: `mcp-server-id=${sanitizedId}`,
       });
 
       // Return the first running pod
@@ -852,16 +858,16 @@ export default class K8sDeployment {
       const serviceSpec: k8s.V1Service = {
         metadata: {
           name: serviceName,
-          labels: {
+          labels: K8sDeployment.sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
-          },
+          }),
         },
         spec: {
-          selector: {
+          selector: K8sDeployment.sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
-          },
+          }),
           ports: [
             {
               protocol: "TCP",
@@ -933,9 +939,10 @@ export default class K8sDeployment {
         }
 
         // Check for failures in latest pods
+        const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
         const pods = await this.k8sApi.listNamespacedPod({
           namespace: this.namespace,
-          labelSelector: `mcp-server-id=${this.mcpServer.id}`,
+          labelSelector: `mcp-server-id=${sanitizedId}`,
         });
 
         for (const pod of pods.items) {

@@ -249,7 +249,7 @@ export const auth: any = betterAuth({
   },
 });
 
-export type BetterAuth = ReturnType<typeof betterAuth>;
+export type BetterAuth = typeof auth;
 
 /**
  * Validates requests before they are processed by better-auth.

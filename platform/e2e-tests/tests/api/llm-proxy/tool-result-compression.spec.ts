@@ -9,6 +9,36 @@ interface CompressionTestConfig {
   endpoint: (profileId: string) => string;
   headers: (wiremockStub: string) => Record<string, string>;
   buildRequestWithToolResult: () => object;
+  // Extract tool result content from the processedRequest for verification
+  extractToolResultContent: (processedRequest: unknown) => string | null;
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Check if a string is valid JSON
+ */
+function isValidJson(str: string): boolean {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if content appears to be TOON-encoded (not valid JSON but contains data)
+ * TOON format is a compact representation that is NOT valid JSON
+ */
+function isToonEncoded(content: string): boolean {
+  // TOON-encoded content:
+  // 1. Should NOT be valid JSON
+  // 2. Should contain some content (not empty)
+  // 3. Should be shorter or similar length to original
+  return content.length > 0 && !isValidJson(content);
 }
 
 // =============================================================================
@@ -24,6 +54,15 @@ const openaiConfig: CompressionTestConfig = {
     Authorization: `Bearer ${wiremockStub}`,
     "Content-Type": "application/json",
   }),
+
+  // OpenAI format: tool results are in "tool" role messages
+  extractToolResultContent: (processedRequest: unknown) => {
+    const req = processedRequest as {
+      messages?: Array<{ role: string; content?: string }>;
+    };
+    const toolMessage = req.messages?.find((m) => m.role === "tool");
+    return toolMessage?.content ?? null;
+  },
 
   // OpenAI format: tool results are sent as separate "tool" role messages
   buildRequestWithToolResult: () => ({
@@ -73,6 +112,26 @@ const anthropicConfig: CompressionTestConfig = {
     "Content-Type": "application/json",
     "anthropic-version": "2023-06-01",
   }),
+
+  // Anthropic format: tool results are in user messages as tool_result blocks
+  extractToolResultContent: (processedRequest: unknown) => {
+    const req = processedRequest as {
+      messages?: Array<{
+        role: string;
+        content?: Array<{ type: string; content?: string }>;
+      }>;
+    };
+    // Find user message with tool_result content
+    for (const msg of req.messages || []) {
+      if (msg.role === "user" && Array.isArray(msg.content)) {
+        const toolResult = msg.content.find((c) => c.type === "tool_result");
+        if (toolResult?.content) {
+          return toolResult.content;
+        }
+      }
+    }
+    return null;
+  },
 
   // Anthropic format: tool results are in user messages as tool_result blocks
   buildRequestWithToolResult: () => ({
@@ -125,6 +184,42 @@ const geminiConfig: CompressionTestConfig = {
     "x-goog-api-key": wiremockStub,
     "Content-Type": "application/json",
   }),
+
+  // Gemini format: tool results are functionResponse parts in user content
+  // When compressed, response becomes { toon: "compressed string" }
+  extractToolResultContent: (processedRequest: unknown) => {
+    const req = processedRequest as {
+      contents?: Array<{
+        role: string;
+        parts?: Array<{
+          functionResponse?: {
+            response?: unknown;
+          };
+        }>;
+      }>;
+    };
+    // Find user content with functionResponse
+    for (const content of req.contents || []) {
+      if (content.role === "user" && content.parts) {
+        for (const part of content.parts) {
+          if (part.functionResponse?.response) {
+            const response = part.functionResponse.response;
+            // When compressed, response is { toon: "..." }
+            if (
+              typeof response === "object" &&
+              response !== null &&
+              "toon" in response
+            ) {
+              return (response as { toon: string }).toon;
+            }
+            // When not compressed, response is the original object
+            return JSON.stringify(response);
+          }
+        }
+      }
+    }
+    return null;
+  },
 
   // Gemini format: tool results are functionResponse parts in user content
   buildRequestWithToolResult: () => ({
@@ -242,7 +337,7 @@ for (const config of testConfigs) {
       expect(interactions.data.length).toBeGreaterThan(0);
       const interaction = interactions.data[0];
 
-      // Verify compression was applied - toonTokensBefore and toonTokensAfter should be populated
+      // Verify compression stats were recorded
       expect(interaction.toonTokensBefore).not.toBeNull();
       expect(interaction.toonTokensAfter).not.toBeNull();
       expect(interaction.toonTokensBefore).toBeGreaterThan(0);
@@ -251,6 +346,15 @@ for (const config of testConfigs) {
       expect(interaction.toonTokensBefore).toBeGreaterThan(
         interaction.toonTokensAfter,
       );
+
+      // Verify actual content was compressed in processedRequest
+      expect(interaction.processedRequest).not.toBeNull();
+      const toolResultContent = config.extractToolResultContent(
+        interaction.processedRequest,
+      );
+      expect(toolResultContent).not.toBeNull();
+      // TOON-encoded content should NOT be valid JSON
+      expect(isToonEncoded(toolResultContent!)).toBe(true);
     });
 
     test("does not compress tool results when compression is disabled", async ({
@@ -300,10 +404,19 @@ for (const config of testConfigs) {
       expect(interactions.data.length).toBeGreaterThan(0);
       const interaction = interactions.data[0];
 
-      // Verify compression was NOT applied - toonTokensBefore and toonTokensAfter should be null
+      // Verify compression stats were NOT recorded
       expect(interaction.toonTokensBefore).toBeNull();
       expect(interaction.toonTokensAfter).toBeNull();
       expect(interaction.toonCostSavings).toBeNull();
+
+      // Verify actual content was NOT compressed in processedRequest
+      expect(interaction.processedRequest).not.toBeNull();
+      const toolResultContent = config.extractToolResultContent(
+        interaction.processedRequest,
+      );
+      expect(toolResultContent).not.toBeNull();
+      // Non-compressed content should be valid JSON
+      expect(isValidJson(toolResultContent!)).toBe(true);
     });
 
     test.afterEach(

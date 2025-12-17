@@ -317,7 +317,9 @@ export function ChatToolsDisplay({
                     size="sm"
                     variant="outline"
                   >
-                    <span className="font-medium text-xs">{serverName}</span>
+                    <span className="font-medium text-xs text-foreground">
+                      {serverName}
+                    </span>
                     <span className="text-muted-foreground text-xs">
                       ({enabledTools.length}/{totalToolsCount})
                     </span>

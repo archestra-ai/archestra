@@ -79,10 +79,6 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Setup environment variables
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: cp .env.example .env
-
       - name: Type checking, linting, formatting checks
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
@@ -127,13 +123,6 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Setup environment variables
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
-        run: |
-          cp .env.example .env
-          sed -i 's/^ARCHESTRA_SECRETS_MANAGER=.*/ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT/' .env
-
       - name: Setup Archestra Platform
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: ./.github/actions/setup-archestra-platform
@@ -147,19 +136,6 @@ jobs:
           platform-context: ./platform
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Deploy HashiCorp Vault in Kubernetes
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          # Deploy Vault as a Kubernetes service
-          kubectl apply -f .github/vault-ci.yaml
-
-          # Wait for Vault pod to be ready
-          kubectl wait --for=condition=Ready pod/vault --timeout=120s
-
-          # Wait for Vault service to be ready (access via kind port mapping: host:8200 -> nodePort:30200)
-          timeout 30 bash -c 'until curl -s http://localhost:8200/v1/sys/health > /dev/null; do sleep 1; done'
-          echo "Vault is ready at localhost:8200 (via kind port mapping to NodePort 30200)"
 
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check

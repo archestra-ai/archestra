@@ -1,9 +1,9 @@
 import logger from "@/logging";
 import { secretManager } from "@/secretsmanager";
+import { policyConfigSubagent } from "@/subagents";
 import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
 import McpServerModel from "./mcp-server";
-import { policyConfigSubagent } from "./policy-config-subagent";
 
 type PolicyConfig = {
   allowUsageWhenUntrustedDataIsPresent: boolean;

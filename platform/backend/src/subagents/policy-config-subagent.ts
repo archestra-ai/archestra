@@ -2,11 +2,11 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import config from "@/config";
-import logger from "@/logging";
 import { getObservableFetch } from "@/llm-metrics";
+import logger from "@/logging";
+import AgentModel from "@/models/agent";
+import InteractionModel from "@/models/interaction";
 import type { Agent, Tool } from "@/types";
-import AgentModel from "./agent";
-import InteractionModel from "./interaction";
 
 const PolicyConfigSchema = z.object({
   allowUsageWhenUntrustedDataIsPresent: z
@@ -69,7 +69,18 @@ export class PolicyConfigSubagent {
    * 4. Returns structured policy configuration
    */
   async analyze(params: {
-    tool: Pick<Tool, "id" | "name" | "description" | "parameters" | "catalogId" | "mcpServerId" | "agentId" | "createdAt" | "updatedAt">;
+    tool: Pick<
+      Tool,
+      | "id"
+      | "name"
+      | "description"
+      | "parameters"
+      | "catalogId"
+      | "mcpServerId"
+      | "agentId"
+      | "createdAt"
+      | "updatedAt"
+    >;
     mcpServerName: string | null;
     anthropicApiKey: string;
     organizationId: string;
@@ -161,7 +172,10 @@ export class PolicyConfigSubagent {
   /**
    * Build the analysis prompt for the LLM
    */
-  private buildPrompt(tool: Pick<Tool, "name" | "description" | "parameters">, mcpServerName: string | null): string {
+  private buildPrompt(
+    tool: Pick<Tool, "name" | "description" | "parameters">,
+    mcpServerName: string | null,
+  ): string {
     return `Analyze this MCP tool and determine security policies:
 
 Tool: ${tool.name}

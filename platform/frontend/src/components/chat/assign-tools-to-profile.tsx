@@ -1,7 +1,7 @@
 "use client";
 
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AssignToolsDialog } from "@/app/profiles/assign-tools-dialog";
 import {
@@ -23,7 +23,6 @@ interface AssignToolsToProfileProps {
 function AssignToolsButton({ onClick }: { onClick: () => void }) {
   return (
     <Button onClick={onClick} title="Add more tools" variant="outline">
-      <Plus className="h-3 w-3" />
       Assign tools to profile
     </Button>
   );

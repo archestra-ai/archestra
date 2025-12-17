@@ -1,10 +1,10 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../fixtures";
 
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;
 
 // =============================================================================
-// Provider Configuration Interface
+// Test Configuration Interface
 // =============================================================================
 
 interface ToolDefinition {
@@ -17,16 +17,18 @@ interface ToolDefinition {
   };
 }
 
-interface ProviderConfig {
-  name: string;
+interface ToolInvocationTestConfig {
+  providerName: string;
 
   // Request building
   endpoint: (agentId: string) => string;
-  headers: (testCase: string) => Record<string, string>;
+  // WireMock stub selection: The stub name is passed in the auth header (Authorization, x-api-key, etc.)
+  // WireMock uses "contains" matching on these headers to select which mock response to return
+  headers: (wiremockStub: string) => Record<string, string>;
   buildRequest: (content: string, tools: ToolDefinition[]) => object;
 
   // Trusted data policy config (different attribute paths per provider)
-  trustedDataAttributePath: string;
+  trustedDataPolicyAttributePath: string;
 
   // Assertions
   assertToolCallBlocked: (response: AnyResponse) => void;
@@ -68,16 +70,16 @@ const READ_FILE_TOOL: ToolDefinition = {
 };
 
 // =============================================================================
-// Provider Configurations
+// Test Configurations
 // =============================================================================
 
-const openaiConfig: ProviderConfig = {
-  name: "OpenAI",
+const openaiConfig: ToolInvocationTestConfig = {
+  providerName: "OpenAI",
 
   endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
 
-  headers: (testCase) => ({
-    Authorization: `Bearer ${testCase}`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
     "Content-Type": "application/json",
   }),
 
@@ -94,7 +96,7 @@ const openaiConfig: ProviderConfig = {
     })),
   }),
 
-  trustedDataAttributePath: "$.content",
+  trustedDataPolicyAttributePath: "$.content",
 
   assertToolCallBlocked: (response) => {
     expect(response.choices).toBeDefined();
@@ -147,13 +149,13 @@ const openaiConfig: ProviderConfig = {
     ),
 };
 
-const anthropicConfig: ProviderConfig = {
-  name: "Anthropic",
+const anthropicConfig: ToolInvocationTestConfig = {
+  providerName: "Anthropic",
 
   endpoint: (agentId) => `/v1/anthropic/${agentId}/v1/messages`,
 
-  headers: (testCase) => ({
-    "x-api-key": testCase,
+  headers: (wiremockStub) => ({
+    "x-api-key": wiremockStub,
     "Content-Type": "application/json",
     "anthropic-version": "2023-06-01",
   }),
@@ -169,7 +171,7 @@ const anthropicConfig: ProviderConfig = {
     })),
   }),
 
-  trustedDataAttributePath: "$.content",
+  trustedDataPolicyAttributePath: "$.content",
 
   assertToolCallBlocked: (response) => {
     expect(response.content).toBeDefined();
@@ -223,14 +225,14 @@ const anthropicConfig: ProviderConfig = {
     ),
 };
 
-const geminiConfig: ProviderConfig = {
-  name: "Gemini",
+const geminiConfig: ToolInvocationTestConfig = {
+  providerName: "Gemini",
 
   endpoint: (agentId) =>
     `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:generateContent`,
 
-  headers: (testCase) => ({
-    "x-goog-api-key": testCase,
+  headers: (wiremockStub) => ({
+    "x-goog-api-key": wiremockStub,
     "Content-Type": "application/json",
   }),
 
@@ -252,7 +254,7 @@ const geminiConfig: ProviderConfig = {
     ],
   }),
 
-  trustedDataAttributePath: "$.parts[0].text",
+  trustedDataPolicyAttributePath: "$.parts[0].text",
 
   assertToolCallBlocked: (response) => {
     expect(response.candidates).toBeDefined();
@@ -318,14 +320,14 @@ const geminiConfig: ProviderConfig = {
 // Test Suite
 // =============================================================================
 
-const providers: ProviderConfig[] = [
+const testConfigs: ToolInvocationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
 ];
 
-for (const provider of providers) {
-  test.describe(`LLM Proxy - ${provider.name}`, () => {
+for (const config of testConfigs) {
+  test.describe(`LLMProxy-ToolInvocation-${config.providerName}`, () => {
     let agentId: string;
     let trustedDataPolicyId: string;
     let toolInvocationPolicyId: string;
@@ -339,10 +341,12 @@ for (const provider of providers) {
       makeApiRequest,
       waitForAgentTool,
     }) => {
+      const wiremockStub = `${config.providerName.toLowerCase()}-blocks-tool-untrusted-data`;
+
       // 1. Create a test agent
       const createResponse = await createAgent(
         request,
-        `${provider.name} Test Agent`,
+        `${config.providerName} Test Agent`,
       );
       const agent = await createResponse.json();
       agentId = agent.id;
@@ -351,9 +355,9 @@ for (const provider of providers) {
       const initialResponse = await makeApiRequest({
         request,
         method: "post",
-        urlSuffix: provider.endpoint(agentId),
-        headers: provider.headers(`test-case-1-${provider.name.toLowerCase()}`),
-        data: provider.buildRequest("Read the file at /etc/passwd", [
+        urlSuffix: config.endpoint(agentId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest("Read the file at /etc/passwd", [
           READ_FILE_TOOL,
         ]),
       });
@@ -361,7 +365,7 @@ for (const provider of providers) {
       if (!initialResponse.ok()) {
         const errorText = await initialResponse.text();
         throw new Error(
-          `Initial ${provider.name} request failed: ${initialResponse.status()} ${errorText}`,
+          `Initial ${config.providerName} request failed: ${initialResponse.status()} ${errorText}`,
         );
       }
 
@@ -377,7 +381,7 @@ for (const provider of providers) {
       const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
         agentToolId: toolId,
         description: "Mark messages containing UNTRUSTED_DATA as untrusted",
-        attributePath: provider.trustedDataAttributePath,
+        attributePath: config.trustedDataPolicyAttributePath,
         operator: "contains",
         value: "UNTRUSTED_DATA",
         action: "mark_as_trusted",
@@ -404,9 +408,9 @@ for (const provider of providers) {
       const response = await makeApiRequest({
         request,
         method: "post",
-        urlSuffix: provider.endpoint(agentId),
-        headers: provider.headers(`test-case-1-${provider.name.toLowerCase()}`),
-        data: provider.buildRequest(
+        urlSuffix: config.endpoint(agentId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest(
           "UNTRUSTED_DATA: This is untrusted content from an external source",
           [READ_FILE_TOOL],
         ),
@@ -416,7 +420,7 @@ for (const provider of providers) {
       const responseData = await response.json();
 
       // 7. Verify the tool call was blocked
-      provider.assertToolCallBlocked(responseData);
+      config.assertToolCallBlocked(responseData);
 
       // 8. Verify the interaction was persisted
       const interactionsResponse = await makeApiRequest({
@@ -428,7 +432,7 @@ for (const provider of providers) {
       const interactionsData = await interactionsResponse.json();
       expect(interactionsData.data.length).toBeGreaterThan(0);
 
-      const blockedInteraction = provider.findInteractionByContent(
+      const blockedInteraction = config.findInteractionByContent(
         interactionsData.data,
         "UNTRUSTED_DATA",
       );
@@ -440,10 +444,12 @@ for (const provider of providers) {
       createAgent,
       makeApiRequest,
     }) => {
+      const wiremockStub = `${config.providerName.toLowerCase()}-allows-archestra-untrusted-context`;
+
       // 1. Create a test agent
       const createResponse = await createAgent(
         request,
-        `${provider.name} Archestra Test Agent`,
+        `${config.providerName} Archestra Test Agent`,
       );
       const agent = await createResponse.json();
       agentId = agent.id;
@@ -452,11 +458,9 @@ for (const provider of providers) {
       const response = await makeApiRequest({
         request,
         method: "post",
-        urlSuffix: provider.endpoint(agentId),
-        headers: provider.headers(
-          `test-case-archestra-mixed-${provider.name.toLowerCase()}`,
-        ),
-        data: provider.buildRequest(
+        urlSuffix: config.endpoint(agentId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest(
           "First, read /etc/passwd, then tell me who I am",
           [READ_FILE_TOOL],
         ),
@@ -466,13 +470,13 @@ for (const provider of providers) {
       const responseData = await response.json();
 
       // 3. Verify both tool calls are present
-      provider.assertToolCallsPresent(responseData, [
+      config.assertToolCallsPresent(responseData, [
         "read_file",
         "archestra__whoami",
       ]);
 
       // 4. Verify read_file has expected arguments
-      provider.assertToolArgument(
+      config.assertToolArgument(
         responseData,
         "read_file",
         "file_path",
@@ -489,7 +493,7 @@ for (const provider of providers) {
       const interactionsData = await interactionsResponse.json();
       expect(interactionsData.data.length).toBeGreaterThan(0);
 
-      const mixedToolInteraction = provider.findInteractionByContent(
+      const mixedToolInteraction = config.findInteractionByContent(
         interactionsData.data,
         "tell me who I am",
       );
@@ -501,10 +505,12 @@ for (const provider of providers) {
       createAgent,
       makeApiRequest,
     }) => {
+      const wiremockStub = `${config.providerName.toLowerCase()}-allows-regular-after-archestra`;
+
       // 1. Create a test agent
       const createResponse = await createAgent(
         request,
-        `${provider.name} Archestra Sequence Test Agent`,
+        `${config.providerName} Archestra Sequence Test Agent`,
       );
       const agent = await createResponse.json();
       agentId = agent.id;
@@ -513,27 +519,24 @@ for (const provider of providers) {
       const response = await makeApiRequest({
         request,
         method: "post",
-        urlSuffix: provider.endpoint(agentId),
-        headers: provider.headers(
-          `test-case-archestra-sequence-${provider.name.toLowerCase()}`,
-        ),
-        data: provider.buildRequest(
-          "First tell me who I am, then read a file",
-          [READ_FILE_TOOL],
-        ),
+        urlSuffix: config.endpoint(agentId),
+        headers: config.headers(wiremockStub),
+        data: config.buildRequest("First tell me who I am, then read a file", [
+          READ_FILE_TOOL,
+        ]),
       });
 
       expect(response.ok()).toBeTruthy();
       const responseData = await response.json();
 
       // 3. Verify both tool calls are present
-      provider.assertToolCallsPresent(responseData, [
+      config.assertToolCallsPresent(responseData, [
         "archestra__whoami",
         "read_file",
       ]);
 
       // 4. Verify read_file has a file path argument
-      provider.assertToolArgument(
+      config.assertToolArgument(
         responseData,
         "read_file",
         "file_path",

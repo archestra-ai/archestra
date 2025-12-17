@@ -4,14 +4,14 @@ import {
   type PredefinedRoleName,
 } from "@shared";
 import { eq, getTableColumns } from "drizzle-orm";
-import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
+import type { BetterAuth } from '@/auth/better-auth';
 
 class UserModel {
-  static async createOrGetExistingDefaultAdminUser({
+  static async createOrGetExistingDefaultAdminUser(auth: BetterAuth, {
     email = config.auth.adminDefaultEmail,
     password = config.auth.adminDefaultPassword,
     role = ADMIN_ROLE_NAME,
@@ -39,7 +39,7 @@ class UserModel {
         return existing[0];
       }
 
-      const result = await betterAuth.api.signUpEmail({
+      const result = await auth.api.signUpEmail({
         body: {
           email,
           password,

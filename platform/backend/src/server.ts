@@ -37,7 +37,7 @@ import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
-import { AgentLabelModel } from "@/models";
+import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,

@@ -383,7 +383,7 @@ export function secretManager(): ISecretManager {
 export function isByosEnabled(): boolean {
   return (
     secretManagerCoordinator.getManagerType() ===
-      SecretsManagerType.BYOS_VAULT && config.enterpriseLicenseActivated
+    SecretsManagerType.BYOS_VAULT && config.enterpriseLicenseActivated
   );
 }
 

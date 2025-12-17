@@ -4,7 +4,6 @@ import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
-import { auth } from "@/auth/better-auth";
 import {
   cacheSsoGroups,
   extractGroupsFromClaims,
@@ -20,6 +19,7 @@ import type {
   UpdateSsoProvider,
 } from "@/types";
 import MemberModel from "./member";
+import type { BetterAuth } from '@/auth/better-auth';
 
 interface RoleMappingContext {
   token?: Record<string, unknown>;
@@ -531,6 +531,7 @@ class SsoProviderModel {
     data: Omit<InsertSsoProvider, "id">,
     organizationId: string,
     headers: HeadersInit,
+    auth: BetterAuth,
   ): Promise<SsoProvider> {
     // Parse JSON configs if they exist
     const parsedData = {

@@ -11,6 +11,7 @@ import {
   SelectSsoProviderSchema,
   UpdateSsoProviderSchema,
 } from "@/types";
+import { auth } from "@/auth/better-auth";
 
 const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -99,6 +100,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           organizationId,
           headers as HeadersInit,
+          auth,
         ),
       );
     },

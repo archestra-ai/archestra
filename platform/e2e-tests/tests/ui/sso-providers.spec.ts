@@ -47,6 +47,38 @@ const KEYCLOAK_TEST_PASSWORD = ADMIN_PASSWORD;
 const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
 /**
+ * Ensure the admin is authenticated. If the session is invalid (e.g., from a previous
+ * SSO login that invalidated the storage state session), re-authenticate.
+ *
+ * This is necessary because SSO tests can invalidate the shared admin session:
+ * - Each SSO test creates an SSO provider, does SSO login, then deletes the provider
+ * - SSO login may create a new session that invalidates the storage state session
+ * - On retry or subsequent tests, the storage state session might be invalid
+ *
+ * @param page - The Playwright page (from storage state)
+ */
+async function ensureAdminAuthenticated(page: Page): Promise<void> {
+  // Navigate to a protected page
+  await page.goto(`${UI_BASE_URL}/settings/sso-providers`);
+  await page.waitForLoadState("networkidle");
+
+  // Check if we were redirected to sign-in (session invalid)
+  if (page.url().includes("/auth/sign-in")) {
+    // Re-authenticate using admin credentials
+    await page.getByLabel("Email").fill(ADMIN_EMAIL);
+    await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+    await page.getByRole("button", { name: "Login" }).click();
+
+    // Wait for successful login and navigation to the original page
+    await page.waitForURL(/\/settings\/sso-providers/, { timeout: 15000 });
+    await page.waitForLoadState("networkidle");
+  }
+
+  // Verify we're authenticated and on the correct page
+  await expect(page).toHaveURL(/\/settings\/sso-providers/, { timeout: 5000 });
+}
+
+/**
  * Fetch the IdP metadata from Keycloak dynamically.
  * This is necessary because Keycloak regenerates certificates on restart,
  * so we can't use hardcoded certificates in tests.
@@ -193,9 +225,8 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     // Use a unique provider name to avoid conflicts with existing providers
     const providerName = `KeycloakOIDC${Date.now()}`;
 
-    // STEP 1: Navigate to SSO providers page
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
+    // STEP 1: Ensure admin is authenticated (handles session invalidation from previous SSO logins)
+    await ensureAdminAuthenticated(page);
 
     // STEP 2: Delete any existing Generic OIDC provider (ensures idempotency)
     // This opens the dialog - either create (if none exists) or edit (if one exists)
@@ -361,9 +392,8 @@ test.describe("SSO Role Mapping E2E", () => {
     // Use a unique provider name to avoid conflicts
     const providerName = `RoleMappingOIDC${Date.now()}`;
 
-    // STEP 1: Navigate to SSO providers page and create OIDC provider with role mapping
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
+    // STEP 1: Ensure admin is authenticated and navigate to SSO providers page
+    await ensureAdminAuthenticated(page);
 
     // Delete any existing Generic OIDC provider first
     await deleteExistingProviderIfExists(page, "Generic OIDC");
@@ -510,9 +540,8 @@ test.describe("SSO Team Sync E2E", () => {
     // This group matches the Keycloak admin user's group in values.yaml
     const externalGroup = "archestra-admins";
 
-    // STEP 1: Navigate to SSO providers page and create OIDC provider
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
+    // STEP 1: Ensure admin is authenticated and navigate to SSO providers page
+    await ensureAdminAuthenticated(page);
 
     // Delete any existing Generic OIDC provider first
     await deleteExistingProviderIfExists(page, "Generic OIDC");
@@ -763,9 +792,8 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     // Use a unique provider name to avoid conflicts with existing providers
     const providerName = `KeycloakSAML${Date.now()}`;
 
-    // STEP 1: Navigate to SSO providers page
-    await goToPage(page, "/settings/sso-providers");
-    await page.waitForLoadState("networkidle");
+    // STEP 1: Ensure admin is authenticated (handles session invalidation from previous SSO logins)
+    await ensureAdminAuthenticated(page);
 
     // STEP 2: Delete any existing Generic SAML provider (ensures idempotency)
     // This opens the dialog - either create (if none exists) or edit (if one exists)

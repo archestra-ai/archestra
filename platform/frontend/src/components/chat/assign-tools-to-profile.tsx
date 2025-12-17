@@ -20,14 +20,6 @@ interface AssignToolsToProfileProps {
   className?: string;
 }
 
-function AssignToolsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button onClick={onClick} title="Add more tools" variant="outline">
-      Assign tools to profile
-    </Button>
-  );
-}
-
 export function AssignToolsToProfile({
   agentId,
   showAssignedToolsList,
@@ -150,5 +142,13 @@ export function AssignToolsToProfile({
         onOpenChange={setIsAssignToolsDialogOpen}
       />
     </div>
+  );
+}
+
+function AssignToolsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button onClick={onClick} title="Add more tools" variant="outline">
+      Assign tools to profile
+    </Button>
   );
 }

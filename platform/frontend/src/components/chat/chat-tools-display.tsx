@@ -4,31 +4,9 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import {
-  GlobeIcon,
-  ListChecks,
-  ListTodo,
-  Loader2,
-  Plus,
-  Wrench,
-  WrenchIcon,
-  X,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import {
-  PromptInputButton,
-  PromptInputCommand,
-  PromptInputCommandEmpty,
-  PromptInputCommandGroup,
-  PromptInputCommandInput,
-  PromptInputCommandItem,
-  PromptInputCommandList,
-  PromptInputCommandSeparator,
-  PromptInputHeader,
-  PromptInputHoverCard,
-  PromptInputHoverCardContent,
-  PromptInputHoverCardTrigger,
-} from "@/components/ai-elements/prompt-input";
+import { Info, ListTodo, Loader2, Plus, X } from "lucide-react";
+import { useState } from "react";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -36,13 +14,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
 import {
   useChatProfileMcpTools,
   useConversationEnabledTools,
   useProfileToolsWithIds,
+  useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
-import Divider from "../divider";
 import { Button } from "../ui/button";
 import { ManageChatToolsDialog } from "./manage-chat-tools-dialog";
 
@@ -72,11 +49,21 @@ export function ChatToolsDisplay({
     string[]
   >([]);
 
+  // State for tooltip open state per server
+  const [openTooltips, setOpenTooltips] = useState<Record<string, boolean>>({});
+  // Track hover state to prevent closing when hovering over nested tooltips
+  const [hoveringTooltip, setHoveringTooltip] = useState<
+    Record<string, boolean>
+  >({});
+
   // Fetch enabled tools for the conversation
   const { data: enabledToolsData } =
     useConversationEnabledTools(conversationId);
   const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
   const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
+
+  // Mutation for updating enabled tools
+  const updateEnabledTools = useUpdateConversationEnabledTools();
 
   // Handler to open manage tools dialog with specific tools to disable
   const handleOpenManageToolsDialog = (toolIdsToDisable: string[]) => {
@@ -85,88 +72,73 @@ export function ChatToolsDisplay({
   };
 
   // Create a map of tool name -> tool ID for quick lookup
-  const toolNameToId = useMemo(
-    () =>
-      profileTools.reduce(
-        (acc, tool) => {
-          acc[tool.name] = tool.id;
-          return acc;
-        },
-        {} as Record<string, string>,
-      ),
-    [profileTools],
-  );
+  const toolNameToId: Record<string, string> = {};
+  for (const tool of profileTools) {
+    toolNameToId[tool.name] = tool.id;
+  }
 
   // Create enabled tool IDs set for quick lookup
-  const enabledToolIdsSet = useMemo(
-    () => new Set(enabledToolIds),
-    [enabledToolIds],
-  );
+  const enabledToolIdsSet = new Set(enabledToolIds);
 
   // Filter tools based on enabled status (only when custom selection exists)
-  const displayedTools = useMemo(() => {
-    if (!hasCustomSelection || enabledToolIds.length === 0) {
-      return mcpTools;
-    }
-    return mcpTools.filter((tool) => {
+  let displayedTools = mcpTools;
+  if (hasCustomSelection && enabledToolIds.length > 0) {
+    displayedTools = mcpTools.filter((tool) => {
       const toolId = toolNameToId[tool.name];
       return toolId && enabledToolIdsSet.has(toolId);
     });
-  }, [
-    mcpTools,
-    hasCustomSelection,
-    enabledToolIds,
-    toolNameToId,
-    enabledToolIdsSet,
-  ]);
+  }
 
   // Check if some tools are disabled
-  const hasDisabledTools = useMemo(
-    () => hasCustomSelection && displayedTools.length < mcpTools.length,
-    [hasCustomSelection, displayedTools.length, mcpTools.length],
-  );
+  const hasDisabledTools =
+    hasCustomSelection && displayedTools.length < mcpTools.length;
 
   // Group tools by MCP server name (everything before the last __)
-  const groupedTools = useMemo(
-    () =>
-      displayedTools.reduce(
-        (acc, tool) => {
-          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-          // Last part is tool name, everything else is server name
-          const serverName =
-            parts.length > 1
-              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-              : "default";
-          if (!acc[serverName]) {
-            acc[serverName] = [];
-          }
-          acc[serverName].push(tool);
-          return acc;
-        },
-        {} as Record<string, typeof displayedTools>,
-      ),
-    [displayedTools],
-  );
-
-  // Handle disabling a single tool
-  const handleDisableTool = (toolName: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    const toolId = toolNameToId[toolName];
-    if (toolId) {
-      handleOpenManageToolsDialog([toolId]);
+  const groupedTools: Record<string, typeof displayedTools> = {};
+  for (const tool of displayedTools) {
+    const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    const serverName =
+      parts.length > 1
+        ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+        : "default";
+    if (!groupedTools[serverName]) {
+      groupedTools[serverName] = [];
     }
+    groupedTools[serverName].push(tool);
+  }
+
+  // Handle enabling a tool
+  const handleEnableTool = (toolId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    let newEnabledToolIds: string[];
+    if (hasCustomSelection) {
+      newEnabledToolIds = [...enabledToolIds, toolId];
+    } else {
+      // If no custom selection, get all tool IDs and add this one
+      newEnabledToolIds = [...profileTools.map((t) => t.id), toolId];
+    }
+    updateEnabledTools.mutateAsync({
+      conversationId,
+      toolIds: newEnabledToolIds,
+    });
   };
 
-  // Handle disabling all tools from a server
-  const handleDisableServer = (serverName: string, event: React.MouseEvent) => {
+  // Handle disabling a tool
+  const handleDisableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    const serverTools = groupedTools[serverName] || [];
-    const toolIds = serverTools
-      .map((tool) => toolNameToId[tool.name])
-      .filter((id): id is string => !!id);
-    if (toolIds.length > 0) {
-      handleOpenManageToolsDialog(toolIds);
+    let newEnabledToolIds: string[];
+    if (hasCustomSelection) {
+      newEnabledToolIds = enabledToolIds.filter((id) => id !== toolId);
+    } else {
+      // If no custom selection, get all tool IDs except this one
+      newEnabledToolIds = profileTools
+        .map((t) => t.id)
+        .filter((id) => id !== toolId);
     }
+    updateEnabledTools.mutateAsync({
+      conversationId,
+      toolIds: newEnabledToolIds,
+    });
   };
 
   // Handle opening manage dialog with no pre-disabled tools
@@ -174,16 +146,89 @@ export function ChatToolsDisplay({
     handleOpenManageToolsDialog([]);
   };
 
-  console.log({
-    mcpTools,
-    profileTools,
-    enabledToolsData,
-    enabledToolIds,
-    hasCustomSelection,
-    displayedTools,
-    groupedTools,
-    hasDisabledTools,
-  });
+  // Render a single tool row
+  const renderToolRow = (
+    tool: { id: string; name: string; description: string | null },
+    isDisabled: boolean,
+    currentServerName: string,
+  ) => {
+    const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    const toolName = parts.length > 1 ? parts[parts.length - 1] : tool.name;
+    const borderColor = isDisabled ? "border-red-500" : "border-green-500";
+
+    return (
+      <div
+        key={tool.id}
+        className={`flex items-center gap-2 border-l-2 ${borderColor} pl-2 py-1`}
+      >
+        <span className="font-medium text-sm">{toolName}</span>
+        {tool.description && (
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-4 w-4 p-0 cursor-help"
+                onMouseEnter={() => {
+                  setHoveringTooltip((prev) => ({
+                    ...prev,
+                    [currentServerName]: true,
+                  }));
+                }}
+              >
+                <Info className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent
+              className="max-w-[300px]"
+              onMouseEnter={() => {
+                setHoveringTooltip((prev) => ({
+                  ...prev,
+                  [currentServerName]: true,
+                }));
+              }}
+              onMouseLeave={() => {
+                // Small delay to allow moving back to main tooltip
+                setTimeout(() => {
+                  setHoveringTooltip((prev) => ({
+                    ...prev,
+                    [currentServerName]: false,
+                  }));
+                }, 50);
+              }}
+            >
+              {tool.description}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <div className="flex-1" />
+        {isDisabled ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 rounded-full"
+            onClick={(e) => handleEnableTool(tool.id, e)}
+            title={`Enable ${toolName} for this chat`}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+        ) : (
+          !isArchestraMcpServerTool(tool.name) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 hover:text-destructive"
+              onClick={(e) => handleDisableTool(tool.id, e)}
+              title={`Disable ${toolName} for this chat`}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )
+        )}
+      </div>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -222,105 +267,123 @@ export function ChatToolsDisplay({
     <div className={className}>
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
-          {Object.entries(groupedTools).map(([serverName, tools]) => (
-            <PromptInputHoverCard key={serverName}>
-              <PromptInputHoverCardTrigger>
-                <PromptInputButton
-                  className="w-[fit-content]"
-                  size="sm"
-                  variant="outline"
-                >
-                  {/* <WrenchIcon className="h-3 w-3" /> */}
-                  <span className="font-medium text-xs">{serverName}</span>
-                  <span className="text-muted-foreground text-xs">
-                    ({tools.length} {tools.length === 1 ? "tool" : "tools"})
-                  </span>
-                </PromptInputButton>
-              </PromptInputHoverCardTrigger>
-              <PromptInputHoverCardContent
-                side="bottom"
-                align="center"
-                avoidCollisions
-                className="w-[300px] max-h-200 overflow-y-auto text-xs"
-                onWheel={(e) => e.stopPropagation()}
-                onTouchMove={(e) => e.stopPropagation()}
+          {Object.entries(groupedTools).map(([serverName]) => {
+            // Get all tools for this server from profileTools
+            const allServerTools = profileTools.filter((tool) => {
+              const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+              const toolServerName =
+                parts.length > 1
+                  ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+                  : "default";
+              return toolServerName === serverName;
+            });
+
+            // Split into enabled and disabled
+            let enabledTools: typeof allServerTools = [];
+            let disabledTools: typeof allServerTools = [];
+
+            if (hasCustomSelection) {
+              for (const tool of allServerTools) {
+                if (enabledToolIdsSet.has(tool.id)) {
+                  enabledTools.push(tool);
+                } else {
+                  disabledTools.push(tool);
+                }
+              }
+            } else {
+              // All tools are enabled when no custom selection
+              enabledTools = allServerTools;
+              disabledTools = [];
+            }
+
+            const totalToolsCount = allServerTools.length;
+            const isOpen = openTooltips[serverName] ?? false;
+
+            return (
+              <Tooltip
+                key={serverName}
+                open={isOpen || hoveringTooltip[serverName]}
+                onOpenChange={(open) => {
+                  // Update openTooltips, but keep tooltip open if hovering
+                  setOpenTooltips((prev) => ({
+                    ...prev,
+                    [serverName]: open,
+                  }));
+                }}
               >
-                <PromptInputCommand>
-                  <PromptInputCommandInput
-                    className="border-none focus-visible:ring-0"
-                    placeholder="Search tools..."
-                  />
-                  <PromptInputCommandList>
-                    <PromptInputCommandEmpty className="p-3 text-muted-foreground text-sm">
-                      No results found.
-                    </PromptInputCommandEmpty>
-                    <PromptInputCommandGroup heading="Enabled">
-                      <div className="space-y-1">
-                        {tools.map((tool) => {
-                          const parts = tool.name.split(
-                            MCP_SERVER_TOOL_NAME_SEPARATOR,
-                          );
-                          const toolName =
-                            parts.length > 1
-                              ? parts[parts.length - 1]
-                              : tool.name;
-                          return (
-                            <PromptInputCommandItem
-                              key={tool.name}
-                              // className="group/tool flex items-start justify-between gap-2 text-xs border-l-2 border-primary/30 py-0.5"
-                            >
-                              <div className="flex-1">
-                                <div className="font-mono font-medium">
-                                  {toolName}
-                                </div>
-                                {/* {tool.description && (
-                                  <div className="text-muted-foreground mt-0.5">
-                                    {tool.description}
-                                  </div>
-                                )} */}
-                              </div>
-                              {!isArchestraMcpServerTool(tool.name) && (
-                                <Button
-                                  className="opacity-0 group-hover/tool:opacity-100 hover:text-destructive transition-opacity shrink-0 mt-0.5"
-                                  onClick={(e) =>
-                                    handleDisableTool(tool.name, e)
-                                  }
-                                  title={`Disable ${toolName} for this chat`}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </PromptInputCommandItem>
-                          );
-                        })}
+                <TooltipTrigger asChild>
+                  <PromptInputButton
+                    className="w-[fit-content]"
+                    size="sm"
+                    variant="outline"
+                  >
+                    <span className="font-medium text-xs">{serverName}</span>
+                    <span className="text-muted-foreground text-xs">
+                      ({enabledTools.length}/{totalToolsCount})
+                    </span>
+                  </PromptInputButton>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="center"
+                  className="w-80 max-h-96 p-0"
+                  sideOffset={4}
+                  onWheel={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onMouseEnter={() => {
+                    setHoveringTooltip((prev) => ({
+                      ...prev,
+                      [serverName]: true,
+                    }));
+                  }}
+                  onMouseLeave={() => {
+                    // Delay to allow moving to nested tooltip
+                    setTimeout(() => {
+                      setHoveringTooltip((prev) => ({
+                        ...prev,
+                        [serverName]: false,
+                      }));
+                      // Also close the tooltip
+                      setOpenTooltips((prev) => ({
+                        ...prev,
+                        [serverName]: false,
+                      }));
+                    }, 100);
+                  }}
+                >
+                  <ScrollArea className="max-h-96">
+                    {/* Enabled section */}
+                    {enabledTools.length > 0 && (
+                      <div>
+                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                          Enabled
+                        </div>
+                        <div className="space-y-1 px-2 pb-2">
+                          {enabledTools.map((tool) =>
+                            renderToolRow(tool, false, serverName),
+                          )}
+                        </div>
                       </div>
-                      {/* <PromptInputCommandItem>
-                        <GlobeIcon />
-                        <span>Active Tabs</span>
-                        <span className="ml-auto text-muted-foreground">✓</span>
-                      </PromptInputCommandItem> */}
-                    </PromptInputCommandGroup>
-                    <PromptInputCommandSeparator />
-                    {/* <PromptInputCommandGroup heading="Other Files">
-                        {tools.map((tool, index) => (
-                          <PromptInputCommandItem key={`${tool.name}-${index}`}>
-                            <GlobeIcon className="text-primary" />
-                            <div className="flex flex-col">
-                              <span className="font-medium text-sm">
-                                {tool.name}
-                              </span>
-                              <span className="text-muted-foreground text-xs">
-                                {tool.description}
-                              </span>
-                            </div>
-                          </PromptInputCommandItem>
-                        ))}
-                      </PromptInputCommandGroup> */}
-                  </PromptInputCommandList>
-                </PromptInputCommand>
-              </PromptInputHoverCardContent>
-            </PromptInputHoverCard>
-          ))}
+                    )}
+
+                    {/* Disabled section */}
+                    {disabledTools.length > 0 && (
+                      <div>
+                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                          Disabled
+                        </div>
+                        <div className="space-y-1 px-2 pb-2">
+                          {disabledTools.map((tool) =>
+                            renderToolRow(tool, true, serverName),
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
           {hasDisabledTools && enableMoreToolsButton}
         </div>
       </TooltipProvider>

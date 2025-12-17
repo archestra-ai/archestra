@@ -9,17 +9,14 @@ import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
-import { AssignToolsToProfile } from "@/components/chat/assign-tools-to-profile";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -530,29 +527,7 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex-1">
-              {conversation?.agent.id && (
-                <WithPermissions
-                  permissions={{ profile: ["read"] }}
-                  noPermissionHandle="tooltip"
-                >
-                  {({ hasPermission }) => {
-                    return hasPermission ===
-                      undefined ? null : hasPermission ? (
-                      <AssignToolsToProfile
-                        agentId={conversation.agent.id}
-                        showAssignedToolsList={false}
-                        className="text-xs text-muted-foreground"
-                      />
-                    ) : (
-                      <Badge variant="outline" className="text-xs">
-                        Unable to show the list of tools
-                      </Badge>
-                    );
-                  }}
-                </WithPermissions>
-              )}
-            </div>
+            <div className="flex-1" />
             {conversation?.agent?.name && (
               <div className="flex-1 text-center">
                 <span className="text-sm font-medium text-muted-foreground">

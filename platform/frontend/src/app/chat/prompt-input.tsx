@@ -46,7 +46,7 @@ const ArchestraPromptInput = ({
     <div className="flex size-full flex-col justify-end">
       <PromptInputProvider>
         <PromptInput globalDrop multiple onSubmit={onSubmit}>
-          <PromptInputHeader>
+          <PromptInputHeader className="pt-3">
             {agentId && conversationId && (
               <ChatToolsDisplay
                 agentId={agentId}

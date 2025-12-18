@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthView } from "@archestra/better-auth-ui";
+import { AuthView } from "@daveyplate/better-auth-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";

@@ -1,5 +1,5 @@
-import { OrganizationView } from "@archestra/better-auth-ui";
-import { organizationViewPaths } from "@archestra/better-auth-ui/server";
+import { OrganizationView } from "@daveyplate/better-auth-ui";
+import { organizationViewPaths } from "@daveyplate/better-auth-ui/server";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";

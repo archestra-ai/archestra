@@ -34,7 +34,6 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const https = require("node:https");
 
 // Load manually verified licenses from external JSON file
 // Edit scripts/license-resolution.json to add/update verified licenses

@@ -12,7 +12,7 @@
       "**/*.ts",
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
-      "scripts/**/*.js",
+      "scripts/**/*.ts",
       "!node_modules",
       "!.next",
       "!**/dist",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "includes": ["scripts/**/*.js"],
+      "includes": ["scripts/**/*.ts"],
       "linter": {
         "rules": {
           "suspicious": {

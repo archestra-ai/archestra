@@ -21,6 +21,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.3.8
         version: 2.3.8
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       turbo:
         specifier: ^2.6.3
         version: 2.6.3
@@ -56,7 +59,7 @@ importers:
         version: 1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0)
       '@better-auth/sso':
         specifier: 1.4.6-beta.3
-        version: 1.4.6-beta.3(better-auth@1.4.6-beta.3(next@16.0.10(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1))
+        version: 1.4.6-beta.3(better-auth@1.4.6-beta.3(next@16.0.10(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1))
       '@fastify/cors':
         specifier: ^11.1.0
         version: 11.2.0
@@ -134,7 +137,7 @@ importers:
         version: 5.0.114(zod@4.2.1)
       better-auth:
         specifier: 1.4.6-beta.3
-        version: 1.4.6-beta.3(next@16.0.10(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
+        version: 1.4.6-beta.3(next@16.0.10(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
       cache-manager:
         specifier: ^7.2.7
         version: 7.2.7
@@ -503,7 +506,7 @@ importers:
     dependencies:
       better-auth:
         specifier: 1.4.6-beta.3
-        version: 1.4.6-beta.3(next@16.0.10(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
+        version: 1.4.6-beta.3(next@16.0.10(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
       zod:
         specifier: ^4.1.13
         version: 4.2.1
@@ -8522,21 +8525,6 @@ snapshots:
       samlify: 2.10.2
       zod: 4.2.1
 
-  '@better-auth/sso@1.4.6-beta.3(better-auth@1.4.6-beta.3(next@16.0.10(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1))':
-    dependencies:
-      '@better-fetch/fetch': 1.1.18
-      better-auth: 1.4.6-beta.3(next@16.0.10(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
-      fast-xml-parser: 5.3.3
-      jose: 6.1.3
-      samlify: 2.10.2
-      zod: 4.2.1
-
-  '@better-auth/telemetry@1.4.6-beta.3(@better-auth/core@1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0))':
-    dependencies:
-      '@better-auth/core': 1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0)
-      '@better-auth/utils': 0.3.0
-      '@better-fetch/fetch': 1.1.18
-
   '@better-auth/telemetry@1.4.6-beta.3(@better-auth/core@1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0))':
     dependencies:
       '@better-auth/core': 1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0)
@@ -12290,26 +12278,6 @@ snapshots:
     dependencies:
       '@better-auth/core': 1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0)
       '@better-auth/telemetry': 1.4.6-beta.3(@better-auth/core@1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0))
-      '@better-auth/utils': 0.3.0
-      '@better-fetch/fetch': 1.1.18
-      '@noble/ciphers': 2.1.1
-      '@noble/hashes': 2.0.1
-      better-call: 1.1.4(zod@4.2.1)
-      defu: 6.1.4
-      jose: 6.1.3
-      kysely: 0.28.9
-      ms: 4.0.0-nightly.202508271359
-      nanostores: 1.1.0
-      zod: 4.2.1
-    optionalDependencies:
-      next: 16.0.10(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
-      react: 19.2.1
-      react-dom: 19.2.1(react@19.2.1)
-
-  better-auth@1.4.6-beta.3(next@16.0.10(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react-dom@19.2.1(react@19.2.1))(react@19.2.1):
-    dependencies:
-      '@better-auth/core': 1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0)
-      '@better-auth/telemetry': 1.4.6-beta.3(@better-auth/core@1.4.6-beta.3(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.4(zod@4.2.1))(jose@6.1.3)(kysely@0.28.9)(nanostores@1.1.0))
       '@better-auth/utils': 0.3.0
       '@better-fetch/fetch': 1.1.18
       '@noble/ciphers': 2.1.1

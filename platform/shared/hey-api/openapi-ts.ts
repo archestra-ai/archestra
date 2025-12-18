@@ -2,8 +2,18 @@ import { pathToFileURL } from "node:url";
 import { createClient, defineConfig } from "@hey-api/openapi-ts";
 import { MCP_CATALOG_API_BASE_URL } from "../consts";
 
+/**
+ * During `pnpm codegen` (CODEGEN=true), use the generated docs/openapi.json file
+ * which includes all enterprise routes regardless of local .env settings.
+ * For manual regeneration with a running dev server, use localhost.
+ */
+const archestraApiInput =
+  process.env.CODEGEN === "true"
+    ? "../../docs/openapi.json"
+    : "http://localhost:9000/openapi.json";
+
 const archestraApiConfig = await defineConfig({
-  input: "http://localhost:9000/openapi.json",
+  input: archestraApiInput,
   output: {
     path: "./hey-api/clients/api",
     clean: false,

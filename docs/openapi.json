@@ -46051,6 +46051,7 @@
     },
     "/api/policy-config-subagent/prompt": {
       "get": {
+        "operationId": "getPolicyConfigSubagentPrompt",
         "summary": "Get analysis prompt template",
         "tags": [
           "policy-config-subagent"

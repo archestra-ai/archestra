@@ -29,7 +29,8 @@ const waitForProcessExit = (
         console.log("Server process did not exit in time, force killing...");
         proc.kill("SIGKILL");
       }
-      resolve();
+      // Give it a moment to die
+      setTimeout(resolve, 100);
     }, timeoutMs);
 
     proc.once("exit", () => {
@@ -54,6 +55,10 @@ const onSuccessHandler: UserConfig["onSuccess"] = async () => {
     console.log("Stopping previous server...");
     currentServerProcess.kill("SIGTERM");
     await waitForProcessExit(currentServerProcess);
+
+    // Add a small delay to ensure OS releases the ports (EADDRINUSE prevention)
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
     console.log("Previous server stopped");
   }
 

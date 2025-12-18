@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
-    "dev": "tsdown --watch",
+    "dev": "rm -rf dist && tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
     "lint": "biome check",

@@ -18,7 +18,7 @@
   "dependencies": {
     "@ai-sdk/react": "^2.0.109",
     "@better-auth/sso": "1.4.6-beta.3",
-    "@daveyplate/better-auth-ui": "^3.2.13",
+    "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#93bd857",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-accordion": "^1.2.12",

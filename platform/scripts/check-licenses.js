@@ -30,9 +30,6 @@
  *   - source: URL to the license file or documentation
  *   - verifiedBy: Who verified it (e.g., "manual inspection")
  *   - verifiedDate: When it was verified (e.g., "2025-12-18")
- *
- * To see why a dependency is present:
- *   pnpm list <package-name> -r --depth=Infinity
  */
 
 const fs = require("node:fs");
@@ -121,44 +118,13 @@ if (ciMode) {
     function scanNodeModules(nodeModulesPath) {
       if (!fs.existsSync(nodeModulesPath)) return;
 
-      // First, scan .pnpm virtual store if it exists
+      // Scan .pnpm virtual store (contains all packages in isolated mode)
+      // Note: In hoisted mode (node-linker=hoisted), .pnpm won't exist and
+      // top-level node_modules scanning would be needed. We only support
+      // pnpm's default isolated mode.
       const pnpmPath = path.join(nodeModulesPath, ".pnpm");
       if (fs.existsSync(pnpmPath)) {
         scanPnpmStore(pnpmPath);
-      }
-
-      const entries = fs.readdirSync(nodeModulesPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue;
-
-        if (entry.name.startsWith("@")) {
-          // Scoped package
-          const scopePath = path.join(nodeModulesPath, entry.name);
-          const scopedEntries = fs.readdirSync(scopePath, {
-            withFileTypes: true,
-          });
-
-          for (const scopedEntry of scopedEntries) {
-            if (scopedEntry.isDirectory()) {
-              const pkgName = `${entry.name}/${scopedEntry.name}`;
-              const pkgPath = path.join(
-                scopePath,
-                scopedEntry.name,
-                "package.json",
-              );
-              readPackageJson(pkgName, pkgPath);
-            }
-          }
-        } else if (entry.isDirectory()) {
-          // Regular package
-          const pkgPath = path.join(
-            nodeModulesPath,
-            entry.name,
-            "package.json",
-          );
-          readPackageJson(entry.name, pkgPath);
-        }
       }
     }
 
@@ -209,34 +175,6 @@ if (ciMode) {
           }
         }
       }
-    }
-
-    // Fetch license from npm registry
-    function _fetchLicenseFromNpm(packageName) {
-      return new Promise((resolve) => {
-        const url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`;
-
-        https
-          .get(url, { timeout: 3000 }, (res) => {
-            let data = "";
-
-            res.on("data", (chunk) => {
-              data += chunk;
-            });
-            res.on("end", () => {
-              try {
-                const pkg = JSON.parse(data);
-                const license =
-                  pkg.license || pkg.licenses?.[0]?.type || pkg.licenses;
-                resolve(license || null);
-              } catch (_e) {
-                resolve(null);
-              }
-            });
-          })
-          .on("error", () => resolve(null))
-          .on("timeout", () => resolve(null));
-      });
     }
 
     // Detect license from LICENSE file content

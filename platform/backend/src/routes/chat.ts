@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
+  type ChatErrorResponse,
   EXTERNAL_AGENT_ID_HEADER,
   RouteId,
   SupportedProviders,
@@ -27,6 +28,7 @@ import {
   MessageModel,
   PromptModel,
 } from "@/models";
+import { mapProviderError } from "@/routes/chat-error-mapper";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {
@@ -387,24 +389,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream error occurred",
           );
 
-          // Return full error as JSON string for debugging
-          try {
-            const fullError = JSON.stringify(error, null, 2);
-            logger.info(
-              { fullError, willBeSentToFrontend: true },
-              "Returning full error to frontend via stream",
-            );
-            return fullError;
-          } catch (stringifyError) {
-            // If stringify fails (circular reference), fall back to error message
-            const fallbackMessage =
-              error instanceof Error ? error.message : String(error);
-            logger.info(
-              { fallbackMessage, stringifyError },
-              "Failed to stringify error, using fallback",
-            );
-            return fallbackMessage;
-          }
+          // Map provider error to user-friendly ChatErrorResponse
+          const mappedError: ChatErrorResponse = mapProviderError(error);
+
+          logger.info(
+            {
+              mappedError,
+              originalErrorType:
+                error instanceof Error ? error.name : typeof error,
+              willBeSentToFrontend: true,
+            },
+            "Returning mapped error to frontend via stream",
+          );
+
+          return JSON.stringify(mappedError);
         },
         onFinish: async ({ messages: finalMessages }) => {
           if (!conversationId) return;

@@ -766,7 +766,7 @@ const cliChatWithAnthropic = async (options: {
     ? `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic/${options.agentId}`
     : `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic`;
 
-const anthropic = new Anthropic({
+  const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
     baseURL,
     defaultHeaders: {

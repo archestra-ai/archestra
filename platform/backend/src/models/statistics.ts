@@ -204,11 +204,14 @@ class StatisticsModel {
   }
 
   /**
-   * Group time series data by custom bucket intervals
+   * Group time series data by custom bucket intervals.
+   * The groupByField parameter specifies which field to include in the bucket key
+   * to preserve grouping dimensions (e.g., model, teamId, agentId).
    */
-  private static groupTimeSeries<T extends StatisticsTimeSeriesData>(
+  static groupTimeSeries<T extends StatisticsTimeSeriesData>(
     timeSeriesData: T[],
     timeframe: StatisticsTimeFrame,
+    groupByField: keyof T,
   ): T[] {
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
 
@@ -217,19 +220,23 @@ class StatisticsModel {
       return timeSeriesData;
     }
 
-    // Group by custom intervals
+    // Group by custom intervals, preserving the groupBy dimension
     const grouped = new Map<string, T>();
 
     for (const row of timeSeriesData) {
-      const bucketKey = StatisticsModel.roundToBucket(
+      const timeBucketKey = StatisticsModel.roundToBucket(
         row.timeBucket,
         intervalMinutes,
       );
 
+      // Include the groupBy field in the key to preserve separate entries per entity
+      const groupValue = String(row[groupByField] ?? "unknown");
+      const bucketKey = `${groupValue}:${timeBucketKey}`;
+
       if (!grouped.has(bucketKey)) {
         grouped.set(bucketKey, {
           ...row,
-          timeBucket: bucketKey,
+          timeBucket: timeBucketKey,
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
@@ -380,6 +387,7 @@ class StatisticsModel {
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
+      "teamId",
     );
 
     if (timeframe === "1h") {
@@ -557,6 +565,7 @@ class StatisticsModel {
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
+      "agentId",
     );
 
     if (timeframe === "1h") {
@@ -682,6 +691,7 @@ class StatisticsModel {
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
+      "model",
     );
 
     // Aggregate data by model

@@ -23,7 +23,7 @@
  *
  * Allowlist:
  *   Packages with Unknown licenses can be manually verified and added to
- *   scripts/license-resolution.json. Include:
+ *   license-resolution.json. Include:
  *   - license: The verified license type (e.g., "Apache-2.0")
  *   - source: URL to the license file or documentation
  *   - verifiedBy: Who verified it (e.g., "manual inspection")
@@ -34,7 +34,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 // Load manually verified licenses from external JSON file
-// Edit scripts/license-resolution.json to add/update verified licenses
+// Edit license-resolution.json to add/update verified licenses
 let VERIFIED_LICENSES = {};
 try {
   const resolutionPath = path.join(__dirname, "license-resolution.json");

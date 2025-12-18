@@ -12,7 +12,7 @@ tsx license-check.ts lookup react  # Check specific package
 
 ## Adding Verified Licenses
 
-Edit `scripts/license-resolution.json` for packages with missing metadata:
+Edit `license-resolution.json` for packages with missing metadata:
 
 ```json
 "package-name": {

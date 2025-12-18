@@ -290,6 +290,57 @@ export default class K8sDeployment {
   }
 
   /**
+   * Delete the Kubernetes Service for this MCP server (used by HTTP-based servers)
+   */
+  async deleteK8sService(): Promise<void> {
+    const serviceName = `${this.deploymentName}-service`;
+
+    try {
+      await this.k8sApi.deleteNamespacedService({
+        name: serviceName,
+        namespace: this.namespace,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          serviceName,
+          namespace: this.namespace,
+        },
+        "Deleted K8s Service for MCP server",
+      );
+    } catch (error: unknown) {
+      // If service doesn't exist (404), that's okay - it may have been deleted already or never created
+      const is404 =
+        error &&
+        typeof error === "object" &&
+        (("statusCode" in error && error.statusCode === 404) ||
+          ("code" in error && error.code === 404));
+
+      if (is404) {
+        logger.debug(
+          {
+            mcpServerId: this.mcpServer.id,
+            serviceName,
+          },
+          "K8s Service not found (already deleted or never created)",
+        );
+        return;
+      }
+
+      logger.error(
+        {
+          err: error,
+          mcpServerId: this.mcpServer.id,
+          serviceName,
+        },
+        "Failed to delete K8s Service",
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Generate the deployment specification for this MCP server
    *
    * @param dockerImage - The Docker image to use for the container
@@ -752,7 +803,8 @@ export default class K8sDeployment {
       await this.ensureHttpServerConfigured();
 
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
-      this.state = "running";
+      // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas
+      this.state = "pending";
       logger.info(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {
       this.state = "failed";
@@ -996,10 +1048,11 @@ export default class K8sDeployment {
   }
 
   /**
-   * Remove the deployment completely
+   * Remove the deployment completely (including associated Service and Secret)
    */
   async removeDeployment(): Promise<void> {
     await this.stopDeployment();
+    await this.deleteK8sService();
     await this.deleteK8sSecret();
   }
 

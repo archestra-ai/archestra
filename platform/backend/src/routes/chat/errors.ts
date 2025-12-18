@@ -185,39 +185,6 @@ function extractErrorType(error: unknown): string | undefined {
 }
 
 /**
- * Detect provider from error structure
- */
-function detectProvider(error: unknown): SupportedProvider | undefined {
-  if (typeof error === "object" && error !== null) {
-    const errorStr = JSON.stringify(error).toLowerCase();
-
-    // Check for provider-specific patterns
-    if (
-      errorStr.includes("anthropic") ||
-      errorStr.includes("claude") ||
-      errorStr.includes("x-api-key")
-    ) {
-      return "anthropic";
-    }
-    if (
-      errorStr.includes("openai") ||
-      errorStr.includes("gpt-") ||
-      errorStr.includes("chatgpt")
-    ) {
-      return "openai";
-    }
-    if (
-      errorStr.includes("google") ||
-      errorStr.includes("gemini") ||
-      errorStr.includes("generativelanguage")
-    ) {
-      return "gemini";
-    }
-  }
-  return undefined;
-}
-
-/**
  * Check if error message matches any patterns in the list
  */
 function matchesPatterns(message: string, patterns: RegExp[]): boolean {
@@ -345,16 +312,19 @@ function createErrorResponse(
  * Handles errors from Vercel AI SDK (APICallError) as well as raw provider errors.
  *
  * @param error - The error to map
+ * @param provider - The provider that generated the error
  * @returns A normalized ChatErrorResponse with user-friendly message and technical details
  */
-export function mapProviderError(error: unknown): ChatErrorResponse {
-  logger.debug({ error }, "[ChatErrorMapper] Mapping provider error");
+export function mapProviderError(
+  error: unknown,
+  provider: SupportedProvider,
+): ChatErrorResponse {
+  logger.debug({ error, provider }, "[ChatErrorMapper] Mapping provider error");
 
   // Handle Vercel AI SDK APICallError
   if (APICallError.isInstance(error)) {
     const apiError = error as InstanceType<typeof APICallError>;
     const errorMessage = extractErrorMessage(apiError);
-    const provider = detectProvider(apiError);
 
     // APICallError has statusCode and isRetryable properties
     const statusCode = apiError.statusCode;
@@ -398,7 +368,6 @@ export function mapProviderError(error: unknown): ChatErrorResponse {
   const errorMessage = extractErrorMessage(error);
   const statusCode = extractStatusCode(error);
   const errorType = extractErrorType(error);
-  const provider = detectProvider(error);
 
   let errorCode: ChatErrorCode;
 

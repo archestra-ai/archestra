@@ -390,7 +390,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           // Map provider error to user-friendly ChatErrorResponse
-          const mappedError: ChatErrorResponse = mapProviderError(error);
+          const mappedError: ChatErrorResponse = mapProviderError(
+            error,
+            provider,
+          );
 
           logger.info(
             {

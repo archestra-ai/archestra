@@ -1,18 +1,33 @@
+/**
+ * IMPORTANT: Set ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true BEFORE any imports
+ * that load config.ts. This ensures OpenAPI codegen ALWAYS includes enterprise
+ * routes, regardless of what's in the developer's .env file.
+ *
+ * Without this, developers without ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED in their
+ * .env would generate an OpenAPI spec missing enterprise routes, causing CI failures.
+ *
+ * NOTE: We use dynamic imports below to ensure this env var is set BEFORE
+ * the config module is loaded. Static imports would be hoisted above this line.
+ */
+process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import logger from "@/logging";
-import {
-  createFastifyInstance,
-  registerApiRoutes,
-  registerHealthEndpoint,
-  registerSwaggerPlugin,
-} from "@/server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function generateOpenApiSpec() {
+  // Dynamic imports to ensure env var is set before config loads
+  const { default: logger } = await import("@/logging");
+  const {
+    createFastifyInstance,
+    registerApiRoutes,
+    registerHealthEndpoint,
+    registerSwaggerPlugin,
+  } = await import("@/server");
+
   const fastify = createFastifyInstance();
 
   logger.info("📄 Generating OpenAPI specification...");
@@ -63,10 +78,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       process.exit(0);
     })
     .catch((error) => {
-      logger.error(
-        { error, stack: error.stack },
-        "❌ Error generating OpenAPI specification",
-      );
+      console.error("❌ Error generating OpenAPI specification", error);
       process.exit(1);
     });
 }

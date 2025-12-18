@@ -109,6 +109,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     _organizationId: string,
     agentId?: string,
     externalAgentId?: string,
+    userId?: string,
   ) => {
     const { tools, stream } = body;
 
@@ -883,6 +884,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await InteractionModel.create({
               profileId: resolvedAgentId,
               externalAgentId,
+              userId,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -1006,6 +1008,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await InteractionModel.create({
               profileId: resolvedAgentId,
               externalAgentId,
+              userId,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -1030,36 +1033,37 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Extract token usage and store the complete interaction
-        const tokenUsage = response.usage
+        const tokenUsageFinal = response.usage
           ? utils.adapters.anthropic.getUsageTokens(response.usage)
           : { input: null, output: null };
 
         // Calculate costs using database pricing (TokenPriceModel)
         // Always calculate costs for proper TOON compression tracking
-        const baselineCost = await utils.costOptimization.calculateCost(
+        const baselineCostFinal = await utils.costOptimization.calculateCost(
           body.model,
-          tokenUsage.input,
-          tokenUsage.output,
+          tokenUsageFinal.input,
+          tokenUsageFinal.output,
         );
 
         // Calculate actual cost (potentially optimized model)
-        const costAfterModelOptimization =
+        const costAfterModelOptimizationFinal =
           await utils.costOptimization.calculateCost(
             model,
-            tokenUsage.input,
-            tokenUsage.output,
+            tokenUsageFinal.input,
+            tokenUsageFinal.output,
           );
         reportLLMCost(
           "anthropic",
           resolvedAgent,
           model,
-          costAfterModelOptimization,
+          costAfterModelOptimizationFinal,
           externalAgentId,
         );
 
         await InteractionModel.create({
           profileId: resolvedAgentId,
           externalAgentId,
+          userId,
           type: "anthropic:messages",
           request: body,
           processedRequest: {
@@ -1068,10 +1072,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           response: response,
           model: model,
-          inputTokens: tokenUsage.input,
-          outputTokens: tokenUsage.output,
-          cost: costAfterModelOptimization?.toFixed(10) ?? null,
-          baselineCost: baselineCost?.toFixed(10) ?? null,
+          inputTokens: tokenUsageFinal.input,
+          outputTokens: tokenUsageFinal.output,
+          cost: costAfterModelOptimizationFinal?.toFixed(10) ?? null,
+          baselineCost: baselineCostFinal?.toFixed(10) ?? null,
           toonTokensBefore,
           toonTokensAfter,
           toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
@@ -1171,6 +1175,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleMessages(
         request.body,
         request.headers,
@@ -1178,6 +1183,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
         undefined,
         externalAgentId,
+        userId,
       );
     },
   );
@@ -1209,6 +1215,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleMessages(
         request.body,
         request.headers,
@@ -1216,6 +1223,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
         request.params.agentId,
         externalAgentId,
+        userId,
       );
     },
   );

@@ -29,6 +29,16 @@ vi.mock("@/models", () => ({
   },
 }));
 
+vi.mock("@shared/access-control", () => ({
+  requiredEndpointPermissionsMap: {
+    createAgent: { profile: ["create"] },
+    getAgents: { profile: ["read"] },
+  },
+  allAvailableActions: {},
+  editorPermissions: {},
+  memberPermissions: {},
+}));
+
 import { betterAuth, hasPermission } from "@/auth";
 import { UserModel } from "@/models";
 

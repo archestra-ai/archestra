@@ -4,21 +4,21 @@ import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
-import { auth } from "@/auth/better-auth";
+import type { BetterAuth } from "@/auth/better-auth";
 import {
   cacheSsoGroups,
   extractGroupsFromClaims,
-} from "@/auth/sso-team-sync-cache";
+} from "@/auth/sso-team-sync-cache.ee";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
-
 import type {
   InsertSsoProvider,
   PublicSsoProvider,
   SsoProvider,
   UpdateSsoProvider,
 } from "@/types";
+import AccountModel from "./account";
 import MemberModel from "./member";
 
 interface RoleMappingContext {
@@ -531,6 +531,7 @@ class SsoProviderModel {
     data: Omit<InsertSsoProvider, "id">,
     organizationId: string,
     headers: HeadersInit,
+    auth: BetterAuth,
   ): Promise<SsoProvider> {
     // Parse JSON configs if they exist
     const parsedData = {
@@ -723,18 +724,42 @@ class SsoProviderModel {
       return false;
     }
 
-    // Delete from database using returning() to verify deletion
-    const deleted = await db
-      .delete(schema.ssoProvidersTable)
-      .where(
-        and(
-          eq(schema.ssoProvidersTable.id, id),
-          eq(schema.ssoProvidersTable.organizationId, organizationId),
-        ),
-      )
-      .returning({ id: schema.ssoProvidersTable.id });
+    // Wrap deletions in a transaction to ensure atomicity
+    await db.transaction(async (tx) => {
+      /**
+       * Clean up associated SSO accounts to prevent orphaned records
+       * This is important because orphaned accounts can cause issues with future SSO logins
+       * (e.g., the syncSsoRole/syncSsoTeams functions might pick up the wrong account)
+       */
+      const deletedAccounts = await AccountModel.deleteByProviderId(
+        existingProvider.providerId,
+        tx,
+      );
+      if (deletedAccounts > 0) {
+        logger.info(
+          { providerId: existingProvider.providerId, deletedAccounts },
+          "Cleaned up SSO accounts for deleted provider",
+        );
+      }
 
-    return deleted.length > 0;
+      // Delete from database
+      const deleted = await tx
+        .delete(schema.ssoProvidersTable)
+        .where(
+          and(
+            eq(schema.ssoProvidersTable.id, id),
+            eq(schema.ssoProvidersTable.organizationId, organizationId),
+          ),
+        )
+        .returning({ id: schema.ssoProvidersTable.id });
+
+      if (deleted.length === 0) {
+        // Rollback if provider wasn't deleted (though it existed in check above)
+        throw new Error("Failed to delete SSO provider");
+      }
+    });
+
+    return true;
   }
 
   /**

@@ -14,6 +14,7 @@ export const RouteId = {
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
+  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -97,6 +98,7 @@ export const RouteId = {
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
+  GetUniqueUserIds: "getUniqueUserIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",

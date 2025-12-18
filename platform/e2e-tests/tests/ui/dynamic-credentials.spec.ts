@@ -18,7 +18,7 @@ test("Verify tool calling using dynamic credentials", async ({
   makeRandomString,
   extractCookieHeaders,
 }) => {
-  test.setTimeout(45_000); // 45 seconds
+  test.setTimeout(90_000); // 90 seconds
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });

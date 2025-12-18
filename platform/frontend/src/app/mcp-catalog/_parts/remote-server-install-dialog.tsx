@@ -6,6 +6,7 @@ import { lazy, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -245,12 +246,33 @@ export function RemoteServerInstallDialog({
             <div className="space-y-4">
               {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
                 <div key={fieldName} className="grid gap-2">
-                  <Label htmlFor={fieldName}>
-                    {fieldConfig.title}
-                    {fieldConfig.required && (
-                      <span className="text-red-500"> *</span>
-                    )}
-                  </Label>
+                  {fieldConfig.type === "boolean" ? (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={fieldName}
+                        checked={configValues[fieldName] === "true"}
+                        onCheckedChange={(checked) =>
+                          setConfigValues((prev) => ({
+                            ...prev,
+                            [fieldName]: checked ? "true" : "false",
+                          }))
+                        }
+                      />
+                      <Label htmlFor={fieldName} className="cursor-pointer">
+                        {fieldConfig.title}
+                        {fieldConfig.required && (
+                          <span className="text-red-500"> *</span>
+                        )}
+                      </Label>
+                    </div>
+                  ) : (
+                    <Label htmlFor={fieldName}>
+                      {fieldConfig.title}
+                      {fieldConfig.required && (
+                        <span className="text-red-500"> *</span>
+                      )}
+                    </Label>
+                  )}
                   {fieldConfig.description && (
                     <p className="text-xs text-muted-foreground">
                       {fieldConfig.description}
@@ -258,7 +280,9 @@ export function RemoteServerInstallDialog({
                   )}
 
                   {/* BYOS mode: vault selector for sensitive fields */}
-                  {fieldConfig.sensitive && useVaultSecrets ? (
+                  {fieldConfig.type ===
+                  "boolean" ? null : fieldConfig.sensitive &&
+                    useVaultSecrets ? (
                     <InlineVaultSecretSelector
                       teamId={selectedTeamId}
                       selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
@@ -271,21 +295,6 @@ export function RemoteServerInstallDialog({
                       }
                       disabled={isInstalling}
                     />
-                  ) : fieldConfig.type === "boolean" ? (
-                    <select
-                      id={fieldName}
-                      value={configValues[fieldName] || "false"}
-                      onChange={(e) =>
-                        setConfigValues((prev) => ({
-                          ...prev,
-                          [fieldName]: e.target.value,
-                        }))
-                      }
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
-                    >
-                      <option value="false">No</option>
-                      <option value="true">Yes</option>
-                    </select>
                   ) : (
                     <Input
                       id={fieldName}

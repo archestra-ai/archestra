@@ -4,7 +4,7 @@
     "urlPath": "/v1/chat/completions",
     "headers": {
       "Authorization": {
-        "contains": "test-case-1-openai-tool-call"
+        "contains": "openai-blocks-tool-untrusted-data"
       }
     }
   },

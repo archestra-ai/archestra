@@ -7,7 +7,7 @@ description: Secure proxy for LLM provider interactions
 lastUpdated: 2025-10-31
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -100,10 +100,37 @@ The external agent ID will be:
 
 ### Example Use Cases
 
-| Scenario | Profile | X-Archestra-Agent-Id |
-|----------|---------|----------------------|
+| Scenario              | Profile            | X-Archestra-Agent-Id                                |
+| --------------------- | ------------------ | --------------------------------------------------- |
 | Multiple environments | `customer-support` | `customer-support-prod`, `customer-support-staging` |
-| Multiple applications | `shared-assistant` | `mobile-app`, `web-app`, `slack-bot` |
-| Per-customer tracking | `multi-tenant-bot` | `customer-123`, `customer-456` |
+| Multiple applications | `shared-assistant` | `mobile-app`, `web-app`, `slack-bot`                |
+| Per-customer tracking | `multi-tenant-bot` | `customer-123`, `customer-456`                      |
 
 This approach lets you maintain centralized security policies through Profiles while still having granular visibility into which applications are generating traffic.
+
+## User Identification
+
+You can use the `X-Archestra-User-Id` header to associate LLM requests with a specific Archestra user. This is particularly useful for:
+
+- **Tracking user activity** in the LLM Proxy Logs viewer
+- **Identifying which user** made a request from the Archestra Chat
+- **Auditing and compliance** purposes
+
+### Usage
+
+Include the header in your LLM requests with the Archestra user's UUID:
+
+```bash
+curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "X-Archestra-User-Id: 123e4567-e89b-12d3-a456-426614174000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+### Archestra Chat Integration
+
+When using the built-in Archestra Chat, the `X-Archestra-User-Id` header is automatically included in all requests, allowing you to see which team member initiated each conversation in the logs.

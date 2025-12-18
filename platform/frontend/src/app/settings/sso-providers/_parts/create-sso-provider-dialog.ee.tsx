@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useCreateSsoProvider } from "@/lib/sso-provider.query";
-import { OidcConfigForm } from "./oidc-config-form";
-import { SamlConfigForm } from "./saml-config-form";
+import { useCreateSsoProvider } from "@/lib/sso-provider.query.ee";
+import { OidcConfigForm } from "./oidc-config-form.ee";
+import { SamlConfigForm } from "./saml-config-form.ee";
 
 interface CreateSsoProviderDialogProps {
   open: boolean;

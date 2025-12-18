@@ -2,9 +2,11 @@ import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
-import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
+import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache.ee";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
+import AccountModel from "./account";
+import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider.ee";
 
 // Mock the logger to avoid console output during tests
 vi.mock("@/logging", () => ({
@@ -426,6 +428,49 @@ describe("SsoProviderModel", () => {
       // Verify it's deleted
       const afterDelete = await SsoProviderModel.findById(inserted.id, org.id);
       expect(afterDelete).toBeNull();
+    });
+
+    test("cleans up associated SSO accounts when provider is deleted", async ({
+      makeOrganization,
+      makeUser,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "CleanupTestProvider",
+      });
+
+      // Create an SSO account for this user with this provider
+      // (simulating what happens after an SSO login)
+      const accountId = crypto.randomUUID();
+      await db.insert(schema.accountsTable).values({
+        id: accountId,
+        accountId: "keycloak-sub-123",
+        providerId: provider.providerId, // "CleanupTestProvider"
+        userId: user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Verify account exists
+      const accountsBefore = await AccountModel.getAllByUserId(user.id);
+      const ssoAccountsBefore = accountsBefore.filter(
+        (a) => a.providerId === provider.providerId,
+      );
+      expect(ssoAccountsBefore.length).toBe(1);
+
+      // Delete the provider
+      const result = await SsoProviderModel.delete(provider.id, org.id);
+      expect(result).toBe(true);
+
+      // Verify the account was also cleaned up
+      const accountsAfter = await AccountModel.getAllByUserId(user.id);
+      const ssoAccountsAfter = accountsAfter.filter(
+        (a) => a.providerId === provider.providerId,
+      );
+      expect(ssoAccountsAfter.length).toBe(0);
     });
   });
 

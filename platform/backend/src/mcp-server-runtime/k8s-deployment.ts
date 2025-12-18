@@ -14,6 +14,19 @@ const {
 } = config;
 
 /**
+ * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
+ * K8s client errors can have either `statusCode` or `code` property set to 404.
+ */
+function isK8s404Error(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    (("statusCode" in error && error.statusCode === 404) ||
+      ("code" in error && error.code === 404))
+  );
+}
+
+/**
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
  */
 export default class K8sDeployment {
@@ -260,13 +273,7 @@ export default class K8sDeployment {
       );
     } catch (error: unknown) {
       // If secret doesn't exist (404), that's okay - it may have been deleted already or never created
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-
-      if (is404) {
+      if (isK8s404Error(error)) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -311,13 +318,7 @@ export default class K8sDeployment {
       );
     } catch (error: unknown) {
       // If service doesn't exist (404), that's okay - it may have been deleted already or never created
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-
-      if (is404) {
+      if (isK8s404Error(error)) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -699,10 +700,9 @@ export default class K8sDeployment {
             namespace: this.namespace,
           });
         }
-        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore 404, propagate others
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!isK8s404Error(error)) {
           logger.warn(
             { err: error },
             `Error checking for legacy pod ${this.deploymentName}`,
@@ -743,10 +743,9 @@ export default class K8sDeployment {
         // Even if pending, ensure HTTP configuration (Service + URL) is set up
         await this.ensureHttpServerConfigured();
         return;
-        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Deployment doesn't exist, we'll create it below
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!isK8s404Error(error)) {
           throw error;
         }
         // 404 means deployment doesn't exist
@@ -868,10 +867,9 @@ export default class K8sDeployment {
         });
         logger.info(`Service ${serviceName} already exists`);
         return;
-        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Service doesn't exist, we'll create it below
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!isK8s404Error(error)) {
           throw error;
         }
       }
@@ -1036,13 +1034,7 @@ export default class K8sDeployment {
       this.state = "not_created";
     } catch (error: unknown) {
       // If deployment doesn't exist (404), that's okay - it may have been deleted already
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-
-      if (is404) {
+      if (isK8s404Error(error)) {
         logger.info(`Deployment ${this.deploymentName} already deleted`);
         this.state = "not_created";
         return;
@@ -1088,13 +1080,7 @@ export default class K8sDeployment {
       );
 
       // If pod doesn't exist (404), return a helpful message
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-
-      if (is404) {
+      if (isK8s404Error(error)) {
         return "Pod not found";
       }
       throw error;

@@ -266,6 +266,12 @@ export default {
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+  /**
+   * Codegen mode is set when running `pnpm codegen` via turbo.
+   * This ensures enterprise routes are always included in generated API specs,
+   * regardless of whether the enterprise license is activated locally.
+   */
+  codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||

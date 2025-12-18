@@ -3,7 +3,9 @@ import { createClient, defineConfig } from "@hey-api/openapi-ts";
 import { MCP_CATALOG_API_BASE_URL } from "../consts";
 
 const archestraApiConfig = await defineConfig({
-  input: "http://localhost:9000/openapi.json",
+  // Use the generated OpenAPI spec file from backend codegen instead of fetching from localhost
+  // The file is generated at /workspace/docs/openapi.json (platform root's parent dir)
+  input: "../../docs/openapi.json",
   output: {
     path: "./hey-api/clients/api",
     clean: false,

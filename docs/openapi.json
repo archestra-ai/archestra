@@ -20395,7 +20395,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 12 hours.",
+        "description": "Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 2 hours.",
         "parameters": [
           {
             "schema": {

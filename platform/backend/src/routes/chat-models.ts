@@ -14,6 +14,10 @@ import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getSecretValueForLlmProviderApiKey } from "@/secretsmanager";
 import { constructResponseSchema, SupportedChatProviderSchema } from "@/types";
 
+/** TTL for caching chat models from provider APIs */
+const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
+const CHAT_MODELS_CACHE_TTL_HOURS = CHAT_MODELS_CACHE_TTL_MS / TimeInMs.Hour;
+
 // Response schema for models
 const ChatModelSchema = z.object({
   id: z.string(),
@@ -256,7 +260,7 @@ async function fetchModelsForProvider(
         models = await modelFetchers[provider](apiKey);
       }
     }
-    await cacheManager.set(cacheKey, models, TimeInMs.Hour * 2);
+    await cacheManager.set(cacheKey, models, CHAT_MODELS_CACHE_TTL_MS);
     return models;
   } catch (error) {
     logger.error(
@@ -274,8 +278,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatModels,
-        description:
-          "Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 12 hours.",
+        description: `Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for ${CHAT_MODELS_CACHE_TTL_HOURS} hours.`,
         tags: ["Chat"],
         querystring: z.object({
           provider: SupportedChatProviderSchema.optional(),

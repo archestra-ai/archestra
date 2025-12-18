@@ -19,11 +19,11 @@ class CacheManager {
     value: T,
     ttl?: number,
   ): Promise<T | undefined> {
-    return await this.cache.set(key, value, ttl);
+    return this.cache.set(key, value, ttl);
   }
 
   async delete(key: AllowedCacheKey): Promise<boolean> {
-    return await this.cache.del(key);
+    return this.cache.del(key);
   }
 
   async wrap<T>(
@@ -31,12 +31,13 @@ class CacheManager {
     fnc: () => Promise<T>,
     { ttl, refreshThreshold }: { ttl?: number; refreshThreshold?: number } = {},
   ): Promise<T> {
-    return await this.cache.wrap(key, fnc, { ttl, refreshThreshold });
+    return this.cache.wrap(key, fnc, { ttl, refreshThreshold });
   }
 }
 
 export const CacheKey = {
   GetChatModels: "get-chat-models",
+  ChatMcpTools: "chat-mcp-tools",
 } as const;
 export type CacheKey = (typeof CacheKey)[keyof typeof CacheKey];
 

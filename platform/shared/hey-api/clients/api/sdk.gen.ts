@@ -346,7 +346,7 @@ export const bulkAssignChatApiKeysToProfiles = <ThrowOnError extends boolean = f
 });
 
 /**
- * Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 12 hours.
+ * Get available LLM models from all configured providers. Models are fetched from provider APIs and cached for 2 hours.
  */
 export const getChatModels = <ThrowOnError extends boolean = false>(options?: Options<GetChatModelsData, ThrowOnError>) => (options?.client ?? client).get<GetChatModelsResponses, GetChatModelsErrors, ThrowOnError>({ url: '/api/chat/models', ...options });
 

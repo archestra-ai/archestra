@@ -144,6 +144,40 @@ export function ChatToolsDisplay({
     });
   };
 
+  // Handle disabling all enabled tools for a server
+  const handleDisableAll = (toolIds: string[], event: React.MouseEvent) => {
+    event.stopPropagation();
+    let newEnabledToolIds: string[];
+    if (hasCustomSelection) {
+      newEnabledToolIds = enabledToolIds.filter((id) => !toolIds.includes(id));
+    } else {
+      // If no custom selection, get all tool IDs except these
+      newEnabledToolIds = profileTools
+        .map((t) => t.id)
+        .filter((id) => !toolIds.includes(id));
+    }
+    updateEnabledTools.mutateAsync({
+      conversationId,
+      toolIds: newEnabledToolIds,
+    });
+  };
+
+  // Handle enabling all disabled tools for a server
+  const handleEnableAll = (toolIds: string[], event: React.MouseEvent) => {
+    event.stopPropagation();
+    let newEnabledToolIds: string[];
+    if (hasCustomSelection) {
+      newEnabledToolIds = [...enabledToolIds, ...toolIds];
+    } else {
+      // If no custom selection, get all tool IDs and add these
+      newEnabledToolIds = [...profileTools.map((t) => t.id), ...toolIds];
+    }
+    updateEnabledTools.mutateAsync({
+      conversationId,
+      toolIds: newEnabledToolIds,
+    });
+  };
+
   // Handle opening manage dialog with no pre-disabled tools
   const handleOpenManageDialog = () => {
     handleOpenManageToolsDialog([]);
@@ -362,8 +396,23 @@ export function ChatToolsDisplay({
                     {/* Enabled section */}
                     {enabledTools.length > 0 && (
                       <div>
-                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
-                          Enabled ({enabledTools.length})
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Enabled ({enabledTools.length})
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={(e) =>
+                              handleDisableAll(
+                                enabledTools.map((t) => t.id),
+                                e,
+                              )
+                            }
+                          >
+                            Disable All
+                          </Button>
                         </div>
                         <div className="space-y-1 px-2 pb-2">
                           {enabledTools.map((tool) =>
@@ -376,8 +425,23 @@ export function ChatToolsDisplay({
                     {/* Disabled section */}
                     {disabledTools.length > 0 && (
                       <div>
-                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
-                          Disabled ({disabledTools.length})
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Disabled ({disabledTools.length})
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={(e) =>
+                              handleEnableAll(
+                                disabledTools.map((t) => t.id),
+                                e,
+                              )
+                            }
+                          >
+                            Enable All
+                          </Button>
                         </div>
                         <div className="space-y-1 px-2 pb-2">
                           {disabledTools.map((tool) =>

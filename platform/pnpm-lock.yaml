@@ -255,7 +255,7 @@ importers:
         specifier: ^2.0.109
         version: 2.0.116(react@19.2.1)(zod@4.2.1)
       '@archestra/better-auth-ui':
-        specifier: 3.3.4
+        specifier: ^3.3.4
         version: 3.3.4(6007f5de156ad903c58e4fc2a9042ad4)
       '@better-auth/sso':
         specifier: 1.4.6-beta.3

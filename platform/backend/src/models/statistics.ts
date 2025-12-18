@@ -208,7 +208,7 @@ class StatisticsModel {
    * The groupByField parameter specifies which field to include in the bucket key
    * to preserve grouping dimensions (e.g., model, teamId, agentId).
    */
-  private static groupTimeSeries<T extends StatisticsTimeSeriesData>(
+  static groupTimeSeries<T extends StatisticsTimeSeriesData>(
     timeSeriesData: T[],
     timeframe: StatisticsTimeFrame,
     groupByField: keyof T,

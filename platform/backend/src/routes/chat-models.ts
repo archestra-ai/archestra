@@ -11,7 +11,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import { secretManager } from "@/secretsmanager";
+import { getSecretValueForLlmProviderApiKey } from "@/secretsmanager";
 import { constructResponseSchema, SupportedChatProviderSchema } from "@/types";
 
 // Response schema for models
@@ -183,12 +183,9 @@ async function getProviderApiKey(
   );
 
   if (orgDefault?.secretId) {
-    const secret = await secretManager().getSecret(orgDefault.secretId);
-    const secretValue =
-      secret?.secret?.apiKey ??
-      secret?.secret?.anthropicApiKey ??
-      secret?.secret?.geminiApiKey ??
-      secret?.secret?.openaiApiKey;
+    const secretValue = await getSecretValueForLlmProviderApiKey(
+      orgDefault.secretId,
+    );
 
     if (secretValue) {
       return secretValue as string;
@@ -207,6 +204,16 @@ async function getProviderApiKey(
       return null;
   }
 }
+
+// We need to make sure that every new provider we support has a model fetcher function
+const modelFetchers: Record<
+  SupportedProvider,
+  (apiKey: string) => Promise<ModelInfo[]>
+> = {
+  anthropic: fetchAnthropicModels,
+  openai: fetchOpenAiModels,
+  gemini: fetchGeminiModels,
+};
 
 /**
  * Fetch models for a single provider (no caching - caching is done at route level)
@@ -229,15 +236,11 @@ async function fetchModelsForProvider(
   try {
     switch (provider) {
       case "anthropic":
-        if (!apiKey) {
-          return [];
-        }
-        return await fetchAnthropicModels(apiKey);
       case "openai":
         if (!apiKey) {
           return [];
         }
-        return await fetchOpenAiModels(apiKey);
+        return await modelFetchers[provider](apiKey);
       case "gemini":
         // For Vertex AI mode without API key, we can't fetch models dynamically
         if (!apiKey) {
@@ -246,7 +249,7 @@ async function fetchModelsForProvider(
           );
           return [];
         }
-        return await fetchGeminiModels(apiKey);
+        return await modelFetchers[provider](apiKey);
       default:
         return [];
     }

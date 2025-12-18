@@ -368,18 +368,12 @@ export async function loginViaApi(
       (response.status() === 429 || response.status() >= 500) &&
       attempt < maxRetries
     ) {
-      console.log(
-        `API Login retry ${attempt + 1}/${maxRetries} due to status ${response.status()}`,
-      );
       await page.waitForTimeout(delay);
       delay *= 2; // Exponential backoff
       continue;
     }
 
     if (!response.ok()) {
-      console.log(
-        `API Login failed: ${response.status()} ${await response.text().catch(() => "No body")}`,
-      );
     }
 
     return false;

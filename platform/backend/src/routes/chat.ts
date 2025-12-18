@@ -29,7 +29,10 @@ import {
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import { secretManager } from "@/secretsmanager";
+import {
+  getSecretValueForLlmProviderApiKey,
+  secretManager,
+} from "@/secretsmanager";
 import type { SupportedChatProvider } from "@/types";
 import {
   ApiError,
@@ -88,12 +91,9 @@ async function getSmartDefaultModel(
     );
 
     if (profileApiKey?.secretId) {
-      const secret = await secretManager().getSecret(profileApiKey.secretId);
-      const secretValue =
-        secret?.secret?.apiKey ??
-        secret?.secret?.anthropicApiKey ??
-        secret?.secret?.geminiApiKey ??
-        secret?.secret?.openaiApiKey;
+      const secretValue = await getSecretValueForLlmProviderApiKey(
+        profileApiKey.secretId,
+      );
 
       if (secretValue) {
         // Found a valid API key for this provider - return appropriate default model

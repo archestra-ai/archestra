@@ -1,7 +1,7 @@
 "use client";
 
-import { AuthView } from "@daveyplate/better-auth-ui";
 import { useRouter, useSearchParams } from "next/navigation";
+import { SignUpForm } from "@/components/auth";
 import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
@@ -38,47 +38,6 @@ export default function SignUpWithInvitationPage() {
     }
   }, [session, invitationId, hasProcessed, acceptMutation.mutateAsync]);
 
-  // Prefill email field (but keep it editable for form validation)
-  useEffect(() => {
-    if (!email) return;
-
-    const prefillEmail = () => {
-      const emailInput = document.querySelector<HTMLInputElement>(
-        'input[name="email"], input[type="email"]',
-      );
-
-      if (emailInput && !emailInput.value) {
-        // Use React's way to set the value
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          "value",
-        )?.set;
-
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(emailInput, email);
-          // Trigger React's onChange event
-          const event = new Event("input", { bubbles: true });
-          emailInput.dispatchEvent(event);
-        } else {
-          // Fallback
-          emailInput.value = email;
-          emailInput.dispatchEvent(new Event("input", { bubbles: true }));
-          emailInput.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-      }
-    };
-
-    // Try multiple times as form might not be rendered immediately
-    const timer1 = setTimeout(prefillEmail, 100);
-    const timer2 = setTimeout(prefillEmail, 300);
-    const timer3 = setTimeout(prefillEmail, 500);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, [email]);
 
   // Show loading while checking if user exists
   if (isCheckingInvitation && invitationId) {
@@ -111,9 +70,8 @@ export default function SignUpWithInvitationPage() {
               </div>
             )}
             <div className="w-full flex flex-col items-center justify-center">
-              <AuthView
-                path="sign-up"
-                classNames={{ footer: "hidden" }}
+              <SignUpForm
+                defaultEmail={email || undefined}
                 callbackURL={
                   invitationId
                     ? `/auth/sign-up-with-invitation?invitationId=${invitationId}${email ? `&email=${encodeURIComponent(email)}` : ""}`

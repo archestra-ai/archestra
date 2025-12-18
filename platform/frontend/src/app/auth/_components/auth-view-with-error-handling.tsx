@@ -1,7 +1,13 @@
 "use client";
 
-import { AuthView } from "@daveyplate/better-auth-ui";
 import { AlertCircle, ExternalLink, KeyRound, XCircle } from "lucide-react";
+import {
+  ForgotPasswordForm,
+  ResetPasswordForm,
+  SignInForm,
+  SignUpForm,
+  VerifyEmail,
+} from "@/components/auth";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -295,6 +301,11 @@ export function AuthViewWithErrorHandling({
     );
   }
 
+  const isSignUpPage = path === "sign-up";
+  const isForgotPasswordPage = path === "forgot-password";
+  const isResetPasswordPage = path === "reset-password";
+  const isVerifyEmailPage = path === "verify-email";
+
   return (
     <>
       {ssoErrorAlert}
@@ -351,15 +362,13 @@ export function AuthViewWithErrorHandling({
       )}
       <div className="space-y-4">
         {(!isBasicAuthDisabled || alwaysShowAuthView) && (
-          <AuthView
-            path={path}
-            callbackURL={callbackURL}
-            classNames={{
-              base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
-              footer: "hidden",
-              form: { forgotPasswordLink: "hidden" },
-            }}
-          />
+          <>
+            {isSignInPage && <SignInForm callbackURL={callbackURL} />}
+            {isSignUpPage && <SignUpForm callbackURL={callbackURL} />}
+            {isForgotPasswordPage && <ForgotPasswordForm />}
+            {isResetPasswordPage && <ResetPasswordForm />}
+            {isVerifyEmailPage && <VerifyEmail />}
+          </>
         )}
         {isSignInPage && config.enterpriseLicenseActivated && (
           <SsoProviderSelector showDivider={!isBasicAuthDisabled} />

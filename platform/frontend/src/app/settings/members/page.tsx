@@ -1,9 +1,8 @@
 "use client";
 
-import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
-import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { OrganizationMembersCard } from "@/components/auth";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner } from "@/components/loading";
@@ -21,14 +20,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import config from "@/lib/config";
-import {
-  organizationKeys,
-  useActiveMemberRole,
-  useActiveOrganization,
-} from "@/lib/organization.query";
+import { useActiveMemberRole, useActiveOrganization } from "@/lib/organization.query";
 
 function MembersSettingsContent() {
-  const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -45,9 +39,7 @@ function MembersSettingsContent() {
           onOpenChange={(open) => {
             setInviteDialogOpen(open);
             if (!open) {
-              queryClient.invalidateQueries({
-                queryKey: organizationKeys.invitations(),
-              });
+              setRefreshKey((prev) => prev + 1);
             }
           }}
         >
@@ -63,10 +55,6 @@ function MembersSettingsContent() {
         </Dialog>
       )}
       <OrganizationMembersCard
-        {...(!invitationsEnabled && {
-          actionLabel: null,
-          instructions: null,
-        })}
         action={
           invitationsEnabled
             ? () => {
@@ -74,6 +62,7 @@ function MembersSettingsContent() {
               }
             : undefined
         }
+        actionLabel={invitationsEnabled ? "Invite Member" : null}
       />
       {invitationsEnabled && (
         <InvitationsList key={refreshKey} organizationId={activeOrg.id} />

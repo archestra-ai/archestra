@@ -1,26 +1,15 @@
 "use client";
 
-import { ApiKeysCard, SecuritySettingsCards } from "@daveyplate/better-auth-ui";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ApiKeysCard, TwoFactorCard } from "@/components/auth";
 import { LoadingSpinner } from "@/components/loading";
 
 function AccountSettingsContent() {
   return (
     <div className="space-y-6">
-      <ApiKeysCard
-        classNames={{
-          base: "w-full",
-        }}
-      />
-      <SecuritySettingsCards
-        classNames={{
-          cards: "w-full",
-          card: {
-            base: "w-full",
-          },
-        }}
-      />
+      <ApiKeysCard />
+      <TwoFactorCard />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
-import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
 import { E2eTestId } from "@shared";
+import { SignedIn, SignedOut, UserButton } from "@/components/auth";
 import {
   BookOpen,
   Bot,

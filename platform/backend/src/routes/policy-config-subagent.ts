@@ -1,8 +1,8 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { PolicyConfigSubagent } from "@/subagents";
 import { constructResponseSchema } from "@/types";
-import { RouteId } from "@shared";
 
 const policyConfigSubagentRoutes: FastifyPluginAsync = async (fastify) => {
   /**

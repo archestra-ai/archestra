@@ -45,10 +45,6 @@
     "codegen": {
       "cache": false
     },
-    "@shared#codegen": {
-      "dependsOn": ["@backend#codegen"],
-      "cache": false
-    },
     "db:generate": {
       "cache": false,
       "persistent": true

@@ -3,9 +3,7 @@ import { createClient, defineConfig } from "@hey-api/openapi-ts";
 import { MCP_CATALOG_API_BASE_URL } from "../consts";
 
 const archestraApiConfig = await defineConfig({
-  // Use the generated OpenAPI spec file from backend codegen instead of fetching from localhost
-  // The file is generated at /workspace/docs/openapi.json (platform root's parent dir)
-  input: "../../docs/openapi.json",
+  input: "http://localhost:9000/openapi.json",
   output: {
     path: "./hey-api/clients/api",
     clean: false,
@@ -20,7 +18,6 @@ const archestraApiConfig = await defineConfig({
   plugins: [
     {
       name: "@hey-api/client-fetch",
-      baseUrl: "http://localhost:9000/openapi.json",
       runtimeConfigPath: "./custom-client",
     },
   ],

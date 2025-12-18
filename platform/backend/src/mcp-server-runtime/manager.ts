@@ -327,6 +327,9 @@ export class McpServerRuntimeManager {
       // Delete deployment first
       await k8sDeployment.stopDeployment();
 
+      // Delete K8s Service (if it exists, for HTTP-based servers)
+      await k8sDeployment.deleteK8sService();
+
       // Delete K8s Secret (if it exists)
       await k8sDeployment.deleteK8sSecret();
 

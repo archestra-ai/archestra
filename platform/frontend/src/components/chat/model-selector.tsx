@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  modelsByProvider,
-  providerDisplayNames,
-  type SupportedProvider,
-} from "@shared";
+import { providerDisplayNames, type SupportedProvider } from "@shared";
 import { CheckIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -30,8 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useChatApiKeys } from "@/lib/chat-settings.query";
-import { useFeatures } from "@/lib/features.query";
+import { useModelsByProvider } from "@/lib/chat-models.query";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -64,38 +59,19 @@ export function ModelSelector({
   disabled = false,
   messageCount = 0,
 }: ModelSelectorProps) {
-  const { data: chatApiKeys = [] } = useChatApiKeys();
-  const { data: features } = useFeatures();
+  const { modelsByProvider } = useModelsByProvider();
   const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  // Build available providers based on configured API keys
+  // Get available providers from the fetched models
   const availableProviders = useMemo(() => {
-    const configuredProviders = new Set<SupportedProvider>();
-
-    // Check API keys for each provider
-    for (const key of chatApiKeys) {
-      if (key.secretId && key.provider) {
-        configuredProviders.add(key.provider);
-      }
-    }
-
-    // Gemini with Vertex AI doesn't require an API key
-    if (features?.geminiVertexAiEnabled) {
-      configuredProviders.add("gemini");
-    }
-
-    return (Object.keys(modelsByProvider) as SupportedProvider[]).filter(
-      (provider) => configuredProviders.has(provider),
-    );
-  }, [chatApiKeys, features?.geminiVertexAiEnabled]);
+    return Object.keys(modelsByProvider) as SupportedProvider[];
+  }, [modelsByProvider]);
 
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
-    for (const provider of Object.keys(
-      modelsByProvider,
-    ) as SupportedProvider[]) {
-      if (modelsByProvider[provider].includes(model)) {
+    for (const provider of availableProviders) {
+      if (modelsByProvider[provider]?.some((m) => m.id === model)) {
         return provider;
       }
     }
@@ -107,6 +83,17 @@ export function ModelSelector({
   const selectedModelLogo = selectedModelProvider
     ? providerToLogoProvider[selectedModelProvider]
     : null;
+
+  // Get display name for selected model
+  const selectedModelDisplayName = useMemo(() => {
+    for (const provider of availableProviders) {
+      const model = modelsByProvider[provider]?.find(
+        (m) => m.id === selectedModel,
+      );
+      if (model) return model.displayName;
+    }
+    return selectedModel; // Fall back to ID if not found
+  }, [selectedModel, availableProviders, modelsByProvider]);
 
   const handleSelectModel = (model: string) => {
     // If selecting the same model, just close the dialog
@@ -136,11 +123,14 @@ export function ModelSelector({
   };
 
   // Check if selectedModel is in the available models
-  const allAvailableModels = useMemo(
-    () => availableProviders.flatMap((provider) => modelsByProvider[provider]),
-    [availableProviders],
+  const allAvailableModelIds = useMemo(
+    () =>
+      availableProviders.flatMap(
+        (provider) => modelsByProvider[provider]?.map((m) => m.id) ?? [],
+      ),
+    [availableProviders, modelsByProvider],
   );
-  const isModelAvailable = allAvailableModels.includes(selectedModel);
+  const isModelAvailable = allAvailableModelIds.includes(selectedModel);
 
   // If no providers configured, show disabled state
   if (availableProviders.length === 0) {
@@ -160,7 +150,7 @@ export function ModelSelector({
               <ModelSelectorLogo provider={selectedModelLogo} />
             )}
             <ModelSelectorName>
-              {selectedModel || "Select model"}
+              {selectedModelDisplayName || "Select model"}
             </ModelSelectorName>
           </PromptInputButton>
         </ModelSelectorTrigger>
@@ -191,17 +181,17 @@ export function ModelSelector({
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {modelsByProvider[provider].map((model) => (
+                {modelsByProvider[provider]?.map((model) => (
                   <ModelSelectorItem
-                    key={model}
-                    value={model}
-                    onSelect={() => handleSelectModel(model)}
+                    key={model.id}
+                    value={model.id}
+                    onSelect={() => handleSelectModel(model.id)}
                   >
                     <ModelSelectorLogo
                       provider={providerToLogoProvider[provider]}
                     />
-                    <ModelSelectorName>{model}</ModelSelectorName>
-                    {selectedModel === model ? (
+                    <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                    {selectedModel === model.id ? (
                       <CheckIcon className="ml-auto size-4" />
                     ) : (
                       <div className="ml-auto size-4" />

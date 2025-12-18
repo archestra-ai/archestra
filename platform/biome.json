@@ -12,6 +12,7 @@
       "**/*.ts",
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
+      "scripts/**/*.js",
       "!node_modules",
       "!.next",
       "!**/dist",
@@ -68,6 +69,16 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/**/*.js"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           }
         }
       }

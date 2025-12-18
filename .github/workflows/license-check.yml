@@ -8,6 +8,14 @@ on:
   # Allow manual trigger
   workflow_dispatch:
 
+concurrency:
+  group: "license-check-${{ github.ref_name }}-${{ github.head_ref }}"
+  cancel-in-progress: true
+
+# Set default permissions to empty to enforce least privilege
+# Each job will explicitly declare the permissions it needs
+permissions: {}
+
 jobs:
   check-licenses:
     name: Check for GPL/AGPL licenses

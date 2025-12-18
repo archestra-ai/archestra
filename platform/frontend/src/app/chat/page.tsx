@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
-import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
@@ -523,7 +522,6 @@ export default function ChatPage() {
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
         <div className="flex flex-col h-full">
-          {error && <ChatError error={error} />}
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
@@ -564,6 +562,7 @@ export default function ChatPage() {
               hideToolCalls={hideToolCalls}
               status={status}
               isLoadingConversation={isLoadingConversation}
+              error={error}
             />
           </div>
 

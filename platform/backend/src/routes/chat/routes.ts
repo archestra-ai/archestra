@@ -28,7 +28,6 @@ import {
   MessageModel,
   PromptModel,
 } from "@/models";
-import { mapProviderError } from "@/routes/chat-error-mapper";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {
@@ -46,6 +45,7 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { mapProviderError } from "./errors";
 
 /**
  * Detect which provider a model belongs to based on its name

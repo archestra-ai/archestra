@@ -26,6 +26,7 @@ import {
 
 import {
   type Agent,
+  ApiError,
   constructResponseSchema,
   ErrorResponsesSchema,
   Gemini,
@@ -966,18 +967,15 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const statusCode =
         error instanceof Error && "status" in error
-          ? (error.status as 200 | 400 | 404 | 403 | 500)
+          ? (error.status as 400 | 404 | 403 | 500)
           : 500;
 
-      return reply.status(statusCode).send({
-        error: {
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred",
-          type: "api_error",
-        },
-      });
+      const message =
+        error instanceof Error ? error.message : "An unexpected error occurred";
+
+      // Throw ApiError to let the central error handler format the response correctly
+      // This ensures the error type matches the expected schema for each status code
+      throw new ApiError(statusCode, message);
     }
   };
 

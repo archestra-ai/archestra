@@ -1,11 +1,12 @@
-import { RouteId, type SupportedProvider, SupportedProviders } from "@shared";
+import {
+  RouteId,
+  type SupportedProvider,
+  SupportedProviders,
+  TimeInMs,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  type CachedModel,
-  cacheModels,
-  getCachedModels,
-} from "@/clients/model-list-cache";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel } from "@/models";
@@ -21,10 +22,17 @@ const ChatModelSchema = z.object({
   createdAt: z.string().optional(),
 });
 
+interface ModelInfo {
+  id: string;
+  displayName: string;
+  provider: SupportedProvider;
+  createdAt?: string;
+}
+
 /**
  * Fetch models from Anthropic API
  */
-async function fetchAnthropicModels(apiKey: string): Promise<CachedModel[]> {
+async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.anthropic.baseUrl;
   const url = `${baseUrl}/v1/models?limit=100`;
 
@@ -64,7 +72,7 @@ async function fetchAnthropicModels(apiKey: string): Promise<CachedModel[]> {
 /**
  * Fetch models from OpenAI API
  */
-async function fetchOpenAiModels(apiKey: string): Promise<CachedModel[]> {
+async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.openai.baseUrl;
   const url = `${baseUrl}/models`;
 
@@ -121,7 +129,7 @@ async function fetchOpenAiModels(apiKey: string): Promise<CachedModel[]> {
 /**
  * Fetch models from Gemini API
  */
-async function fetchGeminiModels(apiKey: string): Promise<CachedModel[]> {
+async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.gemini.baseUrl;
   const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
 
@@ -201,19 +209,12 @@ async function getProviderApiKey(
 }
 
 /**
- * Fetch models for a single provider with caching
+ * Fetch models for a single provider (no caching - caching is done at route level)
  */
 async function fetchModelsForProvider(
   provider: SupportedProvider,
   organizationId: string,
-): Promise<CachedModel[]> {
-  // Check cache first
-  const cached = getCachedModels(provider, organizationId);
-  if (cached) {
-    return cached;
-  }
-
-  // Get API key
+): Promise<ModelInfo[]> {
   const apiKey = await getProviderApiKey(provider, organizationId);
 
   // For Gemini with Vertex AI, we might not have an API key
@@ -226,39 +227,29 @@ async function fetchModelsForProvider(
   }
 
   try {
-    let models: CachedModel[];
-
     switch (provider) {
       case "anthropic":
-        models = await fetchAnthropicModels(apiKey!);
-        break;
+        if (!apiKey) {
+          return [];
+        }
+        return await fetchAnthropicModels(apiKey);
       case "openai":
-        models = await fetchOpenAiModels(apiKey!);
-        break;
+        if (!apiKey) {
+          return [];
+        }
+        return await fetchOpenAiModels(apiKey);
       case "gemini":
         // For Vertex AI mode without API key, we can't fetch models dynamically
-        // The user would need to configure an API key or use hardcoded defaults
         if (!apiKey) {
           logger.debug(
             "Gemini Vertex AI mode enabled but no API key for model listing",
           );
           return [];
         }
-        models = await fetchGeminiModels(apiKey);
-        break;
+        return await fetchGeminiModels(apiKey);
       default:
         return [];
     }
-
-    // Cache the results
-    cacheModels(provider, organizationId, models);
-
-    logger.info(
-      { provider, organizationId, modelCount: models.length },
-      "Fetched and cached models from provider",
-    );
-
-    return models;
   } catch (error) {
     logger.error(
       { provider, organizationId, error },
@@ -287,29 +278,35 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ query, organizationId }, reply) => {
       const { provider } = query;
 
-      // Determine which providers to fetch
-      const providersToFetch = provider ? [provider] : SupportedProviders;
+      const models = await cacheManager.wrap(
+        `${CacheKey.GetChatModels}-${provider}-${organizationId}`,
+        async () => {
+          const providersToFetch = provider ? [provider] : SupportedProviders;
 
-      // Fetch models from all providers in parallel
-      const results = await Promise.all(
-        providersToFetch.map((p) =>
-          fetchModelsForProvider(p as SupportedProvider, organizationId),
-        ),
+          const results = await Promise.all(
+            providersToFetch.map((p) =>
+              fetchModelsForProvider(p as SupportedProvider, organizationId),
+            ),
+          );
+
+          const allModels = results.flat();
+
+          logger.info(
+            { organizationId, provider, modelCount: allModels.length },
+            "Fetched and cached chat models",
+          );
+
+          return allModels;
+        },
+        { ttl: TimeInMs.Hour * 12 },
       );
 
-      // Flatten and return all models
-      const allModels = results.flat();
-
       logger.debug(
-        {
-          organizationId,
-          provider,
-          totalModels: allModels.length,
-        },
+        { organizationId, provider, totalModels: models.length },
         "Returning chat models",
       );
 
-      return reply.send(allModels);
+      return reply.send(models);
     },
   );
 };

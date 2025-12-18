@@ -3,6 +3,7 @@ import {
   ChatErrorMessages,
   type ChatErrorResponse,
   RetryableErrorCodes,
+  type SupportedProvider,
 } from "@shared";
 import { APICallError } from "ai";
 import logger from "@/logging";
@@ -85,7 +86,7 @@ function extractErrorType(error: unknown): string | undefined {
 /**
  * Detect provider from error structure
  */
-function detectProvider(error: unknown): string | undefined {
+function detectProvider(error: unknown): SupportedProvider | undefined {
   if (typeof error === "object" && error !== null) {
     const errorStr = JSON.stringify(error).toLowerCase();
 
@@ -212,7 +213,7 @@ function mapErrorTypeToErrorCode(
  */
 function createErrorResponse(
   code: ChatErrorCode,
-  provider?: string,
+  provider?: SupportedProvider,
   status?: number,
   originalMessage?: string,
   errorType?: string,

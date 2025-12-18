@@ -1,3 +1,5 @@
+import type { SupportedProvider } from "./model-constants";
+
 /**
  * Normalized error codes for chat errors across all LLM providers.
  * These provide a consistent set of error categories regardless of the underlying provider.
@@ -73,7 +75,7 @@ export interface ChatErrorResponse {
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
-    provider?: string;
+    provider?: SupportedProvider;
     /** HTTP status code if applicable */
     status?: number;
     /** Original error message from provider */

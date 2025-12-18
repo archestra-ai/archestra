@@ -381,5 +381,87 @@ describe("mapProviderError", () => {
 
       expect(result.originalError?.message).toBe("Simple string error");
     });
+
+    it("should detect auth errors from message when no status code or type", () => {
+      // Error with auth-related message but no statusCode or type
+      const error = {
+        message: "API key not valid. Please pass a valid API key.",
+      };
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.Authentication],
+      );
+    });
+
+    it("should detect auth errors from invalid API key message pattern", () => {
+      const error = {
+        message: "Invalid API key provided",
+      };
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+
+    it("should detect auth errors from authentication failed message", () => {
+      const error = {
+        message: "Authentication failed for this request",
+      };
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+  });
+
+  describe("circular reference handling", () => {
+    it("should safely serialize errors with circular references", () => {
+      // Create an object with a circular reference
+      const circularError: Record<string, unknown> = {
+        message: "Error with circular reference",
+        statusCode: 500,
+      };
+      circularError.self = circularError; // Create circular reference
+
+      const result = mapProviderError(circularError, "openai");
+
+      // Should not throw and should return a valid response
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.ServerError]);
+
+      // The raw error should be serializable (circular ref replaced)
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
+
+    it("should safely serialize Error objects with cause chains", () => {
+      const rootCause = new Error("Root cause");
+      const middleError = new Error("Middle error", { cause: rootCause });
+      const topError = new Error("Top level error", { cause: middleError });
+
+      const result = mapProviderError(topError, "anthropic");
+
+      // Should not throw and should return a valid response
+      expect(result.originalError?.message).toBe("Top level error");
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
+
+    it("should handle deeply nested circular references", () => {
+      const obj: Record<string, unknown> = {
+        message: "Nested circular",
+        level1: {
+          level2: {
+            level3: {},
+          },
+        },
+      };
+      // Create circular reference deep in the object
+      (obj.level1 as Record<string, unknown>).level2 = {
+        level3: obj,
+      };
+
+      const result = mapProviderError(obj, "gemini");
+
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
   });
 });

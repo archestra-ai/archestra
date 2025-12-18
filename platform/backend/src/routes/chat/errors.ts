@@ -9,6 +9,54 @@ import { APICallError } from "ai";
 import logger from "@/logging";
 
 /**
+ * Safely stringify an object, handling circular references.
+ * Returns a plain object that can be safely JSON.stringify'd later.
+ */
+function safeSerialize(obj: unknown): unknown {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  // For primitive types, return as-is
+  if (typeof obj !== "object") {
+    return obj;
+  }
+
+  // Try to create a safe copy by stringifying with a circular reference handler
+  try {
+    const seen = new WeakSet();
+    const safeStringified = JSON.stringify(obj, (_key, value) => {
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) {
+          return "[Circular]";
+        }
+        seen.add(value);
+      }
+      // Convert Error objects to plain objects
+      if (value instanceof Error) {
+        return {
+          name: value.name,
+          message: value.message,
+          stack: value.stack,
+        };
+      }
+      return value;
+    });
+    return JSON.parse(safeStringified);
+  } catch {
+    // If even safe stringify fails, return a string representation
+    if (obj instanceof Error) {
+      return {
+        name: obj.name,
+        message: obj.message,
+        stack: obj.stack,
+      };
+    }
+    return String(obj);
+  }
+}
+
+/**
  * Patterns to detect context length exceeded errors from provider messages
  */
 const CONTEXT_LENGTH_PATTERNS = [
@@ -283,7 +331,8 @@ function mapErrorTypeToErrorCode(
 }
 
 /**
- * Create a ChatErrorResponse from the determined error code
+ * Create a ChatErrorResponse from the determined error code.
+ * The rawError is safely serialized to handle circular references.
  */
 function createErrorResponse(
   code: ChatErrorCode,
@@ -302,7 +351,7 @@ function createErrorResponse(
       status,
       message: originalMessage,
       type: errorType,
-      raw: rawError,
+      raw: safeSerialize(rawError),
     },
   };
 }
@@ -376,6 +425,8 @@ export function mapProviderError(
     errorCode = mapStatusCodeToErrorCode(statusCode, errorMessage);
   } else if (errorType) {
     errorCode = mapErrorTypeToErrorCode(errorType, errorMessage);
+  } else if (matchesPatterns(errorMessage, AUTH_PATTERNS)) {
+    errorCode = ChatErrorCode.Authentication;
   } else if (matchesPatterns(errorMessage, CONTEXT_LENGTH_PATTERNS)) {
     errorCode = ChatErrorCode.ContextTooLong;
   } else if (matchesPatterns(errorMessage, CONTENT_FILTER_PATTERNS)) {

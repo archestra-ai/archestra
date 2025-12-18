@@ -4,7 +4,7 @@
     "urlPath": "/v1/chat/completions",
     "headers": {
       "Authorization": {
-        "contains": "test-case-archestra-sequence"
+        "contains": "openai-allows-archestra-untrusted-context"
       }
     }
   },
@@ -14,7 +14,7 @@
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "id": "chatcmpl-archestra-sequence-123",
+      "id": "chatcmpl-archestra-mixed-123",
       "object": "chat.completion",
       "created": 1234567890,
       "model": "gpt-4",
@@ -27,19 +27,19 @@
             "refusal": null,
             "tool_calls": [
               {
-                "id": "call_archestra_whoami_456",
+                "id": "call_read_file_123",
+                "type": "function",
+                "function": {
+                  "name": "read_file",
+                  "arguments": "{\"file_path\":\"/etc/passwd\"}"
+                }
+              },
+              {
+                "id": "call_archestra_whoami_123",
                 "type": "function",
                 "function": {
                   "name": "archestra__whoami",
                   "arguments": "{}"
-                }
-              },
-              {
-                "id": "call_read_file_456",
-                "type": "function",
-                "function": {
-                  "name": "read_file",
-                  "arguments": "{\"file_path\":\"/home/user/document.txt\"}"
                 }
               }
             ]
@@ -49,9 +49,9 @@
         }
       ],
       "usage": {
-        "prompt_tokens": 140,
-        "completion_tokens": 25,
-        "total_tokens": 165
+        "prompt_tokens": 150,
+        "completion_tokens": 30,
+        "total_tokens": 180
       }
     }
   }

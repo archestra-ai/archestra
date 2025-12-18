@@ -3843,6 +3843,9 @@ export type GetAllAgentToolsResponses = {
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
             useDynamicTeamCredential: boolean;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -4155,6 +4158,7 @@ export type BulkUpdateAgentToolsData = {
         ids: Array<string>;
         field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
         value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        clearAutoConfigured?: boolean;
     };
     path?: never;
     query?: never;
@@ -4230,6 +4234,95 @@ export type BulkUpdateAgentToolsResponses = {
 };
 
 export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
+
+export type AutoConfigureAgentToolPoliciesData = {
+    body: {
+        agentToolIds: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-tools/auto-configure-policies';
+};
+
+export type AutoConfigureAgentToolPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AutoConfigureAgentToolPoliciesError = AutoConfigureAgentToolPoliciesErrors[keyof AutoConfigureAgentToolPoliciesErrors];
+
+export type AutoConfigureAgentToolPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        results: Array<{
+            agentToolId: string;
+            success: boolean;
+            config?: {
+                allowUsageWhenUntrustedDataIsPresent: boolean;
+                toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+                reasoning: string;
+            };
+            error?: string;
+        }>;
+    };
+};
+
+export type AutoConfigureAgentToolPoliciesResponse = AutoConfigureAgentToolPoliciesResponses[keyof AutoConfigureAgentToolPoliciesResponses];
 
 export type GetAgentToolsData = {
     body?: never;
@@ -4340,6 +4433,7 @@ export type UpdateAgentToolData = {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
+        policiesAutoConfiguredAt?: unknown;
     };
     path: {
         id: string;
@@ -4421,6 +4515,9 @@ export type UpdateAgentToolResponses = {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         useDynamicTeamCredential?: boolean;
+        policiesAutoConfiguredAt?: string | null;
+        policiesAutoConfiguringStartedAt?: string | null;
+        policiesAutoConfiguredReasoning?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -8168,9 +8265,13 @@ export type GetInteractionsData = {
          * Filter by external agent ID (from X-Archestra-Agent-Id header)
          */
         externalAgentId?: string;
+        /**
+         * Filter by user ID (from X-Archestra-User-Id header)
+         */
+        userId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model';
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
@@ -8244,6 +8345,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -8261,6 +8363,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -8278,6 +8381,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string;
             externalAgentId: string | null;
+            userId: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -8380,6 +8484,84 @@ export type GetUniqueExternalAgentIdsResponses = {
 
 export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
 
+export type GetUniqueUserIdsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/interactions/user-ids';
+};
+
+export type GetUniqueUserIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUniqueUserIdsError = GetUniqueUserIdsErrors[keyof GetUniqueUserIdsErrors];
+
+export type GetUniqueUserIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+    }>;
+};
+
+export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+
 export type GetInteractionData = {
     body?: never;
     path: {
@@ -8456,6 +8638,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -8473,6 +8656,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -8490,6 +8674,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string;
         externalAgentId: string | null;
+        userId: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -13101,6 +13286,7 @@ export type GetOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        autoConfigureNewTools: boolean;
     };
 };
 
@@ -13115,6 +13301,7 @@ export type UpdateOrganizationData = {
         logo?: string | null;
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
+        autoConfigureNewTools?: boolean;
     };
     path?: never;
     query?: never;
@@ -13197,6 +13384,7 @@ export type UpdateOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        autoConfigureNewTools: boolean;
     };
 };
 
@@ -13279,6 +13467,83 @@ export type GetOnboardingStatusResponses = {
 };
 
 export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
+
+export type GetApiPolicyConfigSubagentPromptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/policy-config-subagent/prompt';
+};
+
+export type GetApiPolicyConfigSubagentPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetApiPolicyConfigSubagentPromptError = GetApiPolicyConfigSubagentPromptErrors[keyof GetApiPolicyConfigSubagentPromptErrors];
+
+export type GetApiPolicyConfigSubagentPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        promptTemplate: string;
+    };
+};
+
+export type GetApiPolicyConfigSubagentPromptResponse = GetApiPolicyConfigSubagentPromptResponses[keyof GetApiPolicyConfigSubagentPromptResponses];
 
 export type GetPromptsData = {
     body?: never;

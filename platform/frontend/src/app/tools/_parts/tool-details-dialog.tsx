@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { Sparkles } from "lucide-react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -127,6 +128,28 @@ export function ToolDetailsDialog({
 
         <div className="flex-1 overflow-y-auto pr-2 -mr-2">
           <div className="space-y-6">
+            {agentTool.policiesAutoConfiguredAt &&
+              agentTool.policiesAutoConfiguredReasoning && (
+                <div className="rounded-lg border border-purple-200 bg-purple-50 dark:border-purple-900 dark:bg-purple-950/30 p-4">
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 space-y-2">
+                      <div className="font-semibold text-purple-900 dark:text-purple-100">
+                        Configured by Policy Configuration Subagent
+                      </div>
+                      <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed">
+                        {agentTool.policiesAutoConfiguredReasoning}
+                      </p>
+                      <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
+                        Configured on{" "}
+                        {formatDate({
+                          date: agentTool.policiesAutoConfiguredAt,
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             <ToolReadonlyDetails agentTool={agentTool} />
             <div className="grid grid-cols-2 gap-6">
               <ToolCallPolicies agentTool={agentTool} />

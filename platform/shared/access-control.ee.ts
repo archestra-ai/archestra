@@ -166,6 +166,10 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["update"],
     tool: ["update"],
   },
+  [RouteId.AutoConfigureAgentToolPolicies]: {
+    profile: ["update"],
+    tool: ["update"],
+  },
   [RouteId.UnassignToolFromAgent]: {
     profile: ["update"],
   },
@@ -198,6 +202,9 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetUniqueExternalAgentIds]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetUniqueUserIds]: {
     interaction: ["read"],
   },
   [RouteId.GetOperators]: {

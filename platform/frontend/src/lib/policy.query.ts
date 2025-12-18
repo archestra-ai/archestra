@@ -50,6 +50,7 @@ export function useToolInvocationPolicyDeleteMutation() {
       await deleteToolInvocationPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -70,6 +71,7 @@ export function useToolInvocationPolicyCreateMutation() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -89,6 +91,7 @@ export function useToolInvocationPolicyUpdateMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -122,6 +125,7 @@ export function useToolResultPoliciesCreateMutation() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -141,6 +145,7 @@ export function useToolResultPoliciesUpdateMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -152,6 +157,7 @@ export function useToolResultPoliciesDeleteMutation() {
       await deleteTrustedDataPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }

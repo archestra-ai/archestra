@@ -78,7 +78,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       customIsActive: (pathname: string) => pathname.startsWith("/logs"),
     },
     {
-      title: "Tools",
+      title: "Tool Policies",
       url: "/tools",
       icon: Wrench,
       customIsActive: (pathname: string) => pathname.startsWith("/tools"),

@@ -6500,6 +6500,88 @@ export type BulkAssignChatApiKeysToProfilesResponses = {
 
 export type BulkAssignChatApiKeysToProfilesResponse = BulkAssignChatApiKeysToProfilesResponses[keyof BulkAssignChatApiKeysToProfilesResponses];
 
+export type GetChatModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        provider?: 'anthropic' | 'openai' | 'gemini';
+    };
+    url: '/api/chat/models';
+};
+
+export type GetChatModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetChatModelsError = GetChatModelsErrors[keyof GetChatModelsErrors];
+
+export type GetChatModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        displayName: string;
+        provider: 'anthropic' | 'openai' | 'gemini';
+        createdAt?: string;
+    }>;
+};
+
+export type GetChatModelsResponse = GetChatModelsResponses[keyof GetChatModelsResponses];
+
 export type StreamChatData = {
     body: {
         id: string;

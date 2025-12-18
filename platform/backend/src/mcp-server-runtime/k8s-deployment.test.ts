@@ -1980,3 +1980,624 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
     mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 });
+
+describe("K8sDeployment.deleteK8sSecret", () => {
+  function createK8sDeploymentWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("deletes K8s secret successfully", async () => {
+    const mockDeleteSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      deleteNamespacedSecret: mockDeleteSecret,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await k8sDeployment.deleteK8sSecret();
+
+    expect(mockDeleteSecret).toHaveBeenCalledWith({
+      name: "mcp-server-test-server-id-secrets",
+      namespace: "default",
+    });
+  });
+
+  test("handles 404 error gracefully when secret does not exist (statusCode)", async () => {
+    const notFoundError = { statusCode: 404, message: "Secret not found" };
+    const mockDeleteSecret = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sApi = {
+      deleteNamespacedSecret: mockDeleteSecret,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    // Should not throw - 404 is handled gracefully
+    await expect(k8sDeployment.deleteK8sSecret()).resolves.toBeUndefined();
+  });
+
+  test("handles 404 error gracefully when secret does not exist (code)", async () => {
+    const notFoundError = { code: 404, message: "Secret not found" };
+    const mockDeleteSecret = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sApi = {
+      deleteNamespacedSecret: mockDeleteSecret,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    // Should not throw - 404 is handled gracefully
+    await expect(k8sDeployment.deleteK8sSecret()).resolves.toBeUndefined();
+  });
+
+  test("throws error for non-404 errors", async () => {
+    const serverError = { statusCode: 500, message: "Internal server error" };
+    const mockDeleteSecret = vi.fn().mockRejectedValue(serverError);
+    const mockK8sApi = {
+      deleteNamespacedSecret: mockDeleteSecret,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    await expect(k8sDeployment.deleteK8sSecret()).rejects.toEqual(serverError);
+  });
+});
+
+describe("K8sDeployment.deleteK8sService", () => {
+  function createK8sDeploymentWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("deletes K8s service successfully", async () => {
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      deleteNamespacedService: mockDeleteService,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await k8sDeployment.deleteK8sService();
+
+    expect(mockDeleteService).toHaveBeenCalledWith({
+      name: "mcp-test-server-service",
+      namespace: "default",
+    });
+  });
+
+  test("handles 404 error gracefully when service does not exist (statusCode)", async () => {
+    const notFoundError = { statusCode: 404, message: "Service not found" };
+    const mockDeleteService = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sApi = {
+      deleteNamespacedService: mockDeleteService,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    // Should not throw - 404 is handled gracefully
+    await expect(k8sDeployment.deleteK8sService()).resolves.toBeUndefined();
+  });
+
+  test("handles 404 error gracefully when service does not exist (code)", async () => {
+    const notFoundError = { code: 404, message: "Service not found" };
+    const mockDeleteService = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sApi = {
+      deleteNamespacedService: mockDeleteService,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    // Should not throw - 404 is handled gracefully
+    await expect(k8sDeployment.deleteK8sService()).resolves.toBeUndefined();
+  });
+
+  test("throws error for non-404 errors", async () => {
+    const serverError = { statusCode: 500, message: "Internal server error" };
+    const mockDeleteService = vi.fn().mockRejectedValue(serverError);
+    const mockK8sApi = {
+      deleteNamespacedService: mockDeleteService,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    await expect(k8sDeployment.deleteK8sService()).rejects.toEqual(serverError);
+  });
+});
+
+describe("K8sDeployment.stopDeployment", () => {
+  function createK8sDeploymentWithMockedApis(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+    mockK8sAppsApi: Partial<k8s.AppsV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      mockK8sAppsApi as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("stops deployment successfully", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockK8sAppsApi = {
+      deleteNamespacedDeployment: mockDeleteDeployment,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApis({}, mockK8sAppsApi);
+    await k8sDeployment.stopDeployment();
+
+    expect(mockDeleteDeployment).toHaveBeenCalledWith({
+      name: "mcp-test-server",
+      namespace: "default",
+    });
+  });
+
+  test("handles 404 error gracefully when deployment does not exist", async () => {
+    const notFoundError = new Error("404: Deployment not found");
+    const mockDeleteDeployment = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sAppsApi = {
+      deleteNamespacedDeployment: mockDeleteDeployment,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApis({}, mockK8sAppsApi);
+
+    // Should not throw - 404 is handled gracefully
+    await expect(k8sDeployment.stopDeployment()).resolves.toBeUndefined();
+  });
+
+  test("throws error for non-404 errors", async () => {
+    const serverError = new Error("500: Internal server error");
+    const mockDeleteDeployment = vi.fn().mockRejectedValue(serverError);
+    const mockK8sAppsApi = {
+      deleteNamespacedDeployment: mockDeleteDeployment,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApis({}, mockK8sAppsApi);
+
+    await expect(k8sDeployment.stopDeployment()).rejects.toThrow(serverError);
+  });
+});
+
+describe("K8sDeployment.removeDeployment", () => {
+  function createK8sDeploymentWithMockedApis(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+    mockK8sAppsApi: Partial<k8s.AppsV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      mockK8sAppsApi as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("removes deployment, service, and secret", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const mockDeleteSecret = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      deleteNamespacedService: mockDeleteService,
+      deleteNamespacedSecret: mockDeleteSecret,
+    };
+    const mockK8sAppsApi = {
+      deleteNamespacedDeployment: mockDeleteDeployment,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApis(
+      mockK8sApi,
+      mockK8sAppsApi,
+    );
+    await k8sDeployment.removeDeployment();
+
+    // Should call all three delete operations
+    expect(mockDeleteDeployment).toHaveBeenCalledWith({
+      name: "mcp-test-server",
+      namespace: "default",
+    });
+    expect(mockDeleteService).toHaveBeenCalledWith({
+      name: "mcp-test-server-service",
+      namespace: "default",
+    });
+    expect(mockDeleteSecret).toHaveBeenCalledWith({
+      name: "mcp-server-test-server-id-secrets",
+      namespace: "default",
+    });
+  });
+
+  test("handles missing resources gracefully during removal", async () => {
+    const notFoundError = { statusCode: 404, message: "Not found" };
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockRejectedValue(notFoundError);
+    const mockDeleteSecret = vi.fn().mockRejectedValue(notFoundError);
+
+    const mockK8sApi = {
+      deleteNamespacedService: mockDeleteService,
+      deleteNamespacedSecret: mockDeleteSecret,
+    };
+    const mockK8sAppsApi = {
+      deleteNamespacedDeployment: mockDeleteDeployment,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApis(
+      mockK8sApi,
+      mockK8sAppsApi,
+    );
+
+    // Should not throw - 404s are handled gracefully
+    await expect(k8sDeployment.removeDeployment()).resolves.toBeUndefined();
+  });
+});
+
+describe("K8sDeployment.statusSummary", () => {
+  function createK8sDeploymentInstance(): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "test-namespace",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("returns correct status summary for not_created state", () => {
+    const k8sDeployment = createK8sDeploymentInstance();
+
+    const summary = k8sDeployment.statusSummary;
+
+    expect(summary.state).toBe("not_created");
+    expect(summary.message).toBe("Deployment not created");
+    expect(summary.error).toBeNull();
+    expect(summary.deploymentName).toBe("mcp-test-server");
+    expect(summary.namespace).toBe("test-namespace");
+  });
+
+  test("returns correct deployment name and namespace", () => {
+    const k8sDeployment = createK8sDeploymentInstance();
+
+    const summary = k8sDeployment.statusSummary;
+
+    expect(summary.deploymentName).toBe("mcp-test-server");
+    expect(summary.namespace).toBe("test-namespace");
+  });
+});
+
+describe("K8sDeployment.containerName", () => {
+  test("returns the deployment name", () => {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "my-server",
+      catalogId: "test-catalog-id",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    expect(k8sDeployment.containerName).toBe("mcp-my-server");
+  });
+});
+
+describe("K8sDeployment.k8sNamespace", () => {
+  test("returns the configured namespace", () => {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "custom-namespace",
+      null,
+      undefined,
+      undefined,
+    );
+
+    expect(k8sDeployment.k8sNamespace).toBe("custom-namespace");
+  });
+});
+
+describe("K8sDeployment.k8sDeploymentName", () => {
+  test("returns the deployment name", () => {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "my-mcp-server",
+      catalogId: "test-catalog-id",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment(
+      mockMcpServer,
+      {} as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+
+    expect(k8sDeployment.k8sDeploymentName).toBe("mcp-my-mcp-server");
+  });
+});
+
+describe("K8sDeployment.getRecentLogs", () => {
+  function createK8sDeploymentWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      {} as k8s.AppsV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      undefined,
+    );
+  }
+
+  test("returns 'Pod not found or not running' when no pod exists", async () => {
+    const mockListPods = vi.fn().mockResolvedValue({ items: [] });
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    const logs = await k8sDeployment.getRecentLogs();
+
+    expect(logs).toBe("Pod not found or not running");
+  });
+
+  test("returns 'Pod not found or not running' when pod is not in Running phase", async () => {
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "test-pod" },
+          status: { phase: "Pending" },
+        },
+      ],
+    });
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    const logs = await k8sDeployment.getRecentLogs();
+
+    expect(logs).toBe("Pod not found or not running");
+  });
+
+  test("returns logs from running pod", async () => {
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "test-pod-abc123" },
+          status: { phase: "Running" },
+        },
+      ],
+    });
+    const mockReadLogs = vi.fn().mockResolvedValue("Log line 1\nLog line 2\n");
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+      readNamespacedPodLog: mockReadLogs,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    const logs = await k8sDeployment.getRecentLogs(50);
+
+    expect(logs).toBe("Log line 1\nLog line 2\n");
+    expect(mockReadLogs).toHaveBeenCalledWith({
+      name: "test-pod-abc123",
+      namespace: "default",
+      tailLines: 50,
+    });
+  });
+
+  test("returns 'Pod not found' when readNamespacedPodLog returns 404", async () => {
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "test-pod-abc123" },
+          status: { phase: "Running" },
+        },
+      ],
+    });
+    const notFoundError = new Error("404: Pod not found");
+    const mockReadLogs = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+      readNamespacedPodLog: mockReadLogs,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    const logs = await k8sDeployment.getRecentLogs();
+
+    expect(logs).toBe("Pod not found");
+  });
+
+  test("throws error for non-404 errors", async () => {
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "test-pod-abc123" },
+          status: { phase: "Running" },
+        },
+      ],
+    });
+    const serverError = new Error("500: Internal server error");
+    const mockReadLogs = vi.fn().mockRejectedValue(serverError);
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+      readNamespacedPodLog: mockReadLogs,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+
+    await expect(k8sDeployment.getRecentLogs()).rejects.toThrow(serverError);
+  });
+});
+
+describe("K8sDeployment.sanitizeLabelValue", () => {
+  test.each([
+    // Basic sanitization
+    ["My Server", "my-server"],
+    ["TEST-VALUE", "test-value"],
+
+    // Special characters
+    ["value@123", "value123"],
+    ["hello_world", "helloworld"],
+
+    // Truncation to 63 characters
+    ["a".repeat(100), "a".repeat(63)],
+
+    // Trailing non-alphanumeric removal
+    ["value-", "value"],
+    ["value.", "value"],
+    ["value--", "value"],
+
+    // UUID-like values (common for server IDs)
+    [
+      "123e4567-e89b-12d3-a456-426614174000",
+      "123e4567-e89b-12d3-a456-426614174000",
+    ],
+
+    // Emojis and unicode
+    ["Server 🔥", "server"],
+    ["Servér", "servr"],
+  ])("sanitizes '%s' to '%s'", (input, expected) => {
+    const result = K8sDeployment.sanitizeLabelValue(input);
+    expect(result).toBe(expected);
+
+    // Verify result is valid K8s label value (max 63 chars, alphanumeric + hyphen/dot)
+    expect(result.length).toBeLessThanOrEqual(63);
+    if (result.length > 0) {
+      expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+    }
+  });
+});

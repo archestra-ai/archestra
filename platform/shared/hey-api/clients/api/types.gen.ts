@@ -13791,14 +13791,14 @@ export type GetOnboardingStatusResponses = {
 
 export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
 
-export type GetApiPolicyConfigSubagentPromptData = {
+export type GetPolicyConfigSubagentPromptData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/policy-config-subagent/prompt';
 };
 
-export type GetApiPolicyConfigSubagentPromptErrors = {
+export type GetPolicyConfigSubagentPromptErrors = {
     /**
      * Default Response
      */
@@ -13855,9 +13855,9 @@ export type GetApiPolicyConfigSubagentPromptErrors = {
     };
 };
 
-export type GetApiPolicyConfigSubagentPromptError = GetApiPolicyConfigSubagentPromptErrors[keyof GetApiPolicyConfigSubagentPromptErrors];
+export type GetPolicyConfigSubagentPromptError = GetPolicyConfigSubagentPromptErrors[keyof GetPolicyConfigSubagentPromptErrors];
 
-export type GetApiPolicyConfigSubagentPromptResponses = {
+export type GetPolicyConfigSubagentPromptResponses = {
     /**
      * Default Response
      */
@@ -13866,7 +13866,7 @@ export type GetApiPolicyConfigSubagentPromptResponses = {
     };
 };
 
-export type GetApiPolicyConfigSubagentPromptResponse = GetApiPolicyConfigSubagentPromptResponses[keyof GetApiPolicyConfigSubagentPromptResponses];
+export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
 
 export type GetPromptsData = {
     body?: never;

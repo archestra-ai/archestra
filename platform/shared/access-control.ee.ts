@@ -240,6 +240,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteTrustedDataPolicy]: {
     policy: ["delete"],
   },
+  [RouteId.GetPolicyConfigSubagentPrompt]: {
+    organization: ["read"],
+  },
   [RouteId.GetDefaultDualLlmConfig]: {
     dualLlmConfig: ["read"],
   },

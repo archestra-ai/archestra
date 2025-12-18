@@ -1,3 +1,4 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { PolicyConfigSubagent } from "@/subagents";
@@ -15,6 +16,7 @@ const policyConfigSubagentRoutes: FastifyPluginAsync = async (fastify) => {
         summary: "Get analysis prompt template",
         description:
           "Returns the prompt template used by the Policy Configuration Subagent to analyze tools",
+        operationId: RouteId.GetPolicyConfigSubagentPrompt,
         response: constructResponseSchema(
           z.object({
             promptTemplate: z.string(),

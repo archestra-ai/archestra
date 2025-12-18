@@ -116,6 +116,7 @@ export const RouteId = {
   GetTrustedDataPolicy: "getTrustedDataPolicy",
   UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
   DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
+  GetPolicyConfigSubagentPrompt: "getPolicyConfigSubagentPrompt",
 
   // Dual LLM Config Routes
   GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",

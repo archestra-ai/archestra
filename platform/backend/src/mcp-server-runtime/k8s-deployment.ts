@@ -1035,8 +1035,14 @@ export default class K8sDeployment {
       logger.info(`Deployment ${this.deploymentName} deletion initiated`);
       this.state = "not_created";
     } catch (error: unknown) {
-      if (error instanceof Error && error.message.includes("404")) {
-        // Deployment already doesn't exist, that's fine
+      // If deployment doesn't exist (404), that's okay - it may have been deleted already
+      const is404 =
+        error &&
+        typeof error === "object" &&
+        (("statusCode" in error && error.statusCode === 404) ||
+          ("code" in error && error.code === 404));
+
+      if (is404) {
         logger.info(`Deployment ${this.deploymentName} already deleted`);
         this.state = "not_created";
         return;
@@ -1080,7 +1086,15 @@ export default class K8sDeployment {
         { err: error },
         `Failed to get logs for deployment ${this.deploymentName}:`,
       );
-      if (error instanceof Error && error.message.includes("404")) {
+
+      // If pod doesn't exist (404), return a helpful message
+      const is404 =
+        error &&
+        typeof error === "object" &&
+        (("statusCode" in error && error.statusCode === 404) ||
+          ("code" in error && error.code === 404));
+
+      if (is404) {
         return "Pod not found";
       }
       throw error;

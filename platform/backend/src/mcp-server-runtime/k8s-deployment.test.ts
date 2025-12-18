@@ -2195,8 +2195,21 @@ describe("K8sDeployment.stopDeployment", () => {
     });
   });
 
-  test("handles 404 error gracefully when deployment does not exist", async () => {
-    const notFoundError = new Error("404: Deployment not found");
+  test("handles 404 error gracefully when deployment does not exist (statusCode)", async () => {
+    const notFoundError = { statusCode: 404, message: "Deployment not found" };
+    const mockDeleteDeployment = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sAppsApi = {
+      deleteNamespacedDeployment: mockDeleteDeployment,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApis({}, mockK8sAppsApi);
+
+    // Should not throw - 404 is handled gracefully
+    await expect(k8sDeployment.stopDeployment()).resolves.toBeUndefined();
+  });
+
+  test("handles 404 error gracefully when deployment does not exist (code)", async () => {
+    const notFoundError = { code: 404, message: "Deployment not found" };
     const mockDeleteDeployment = vi.fn().mockRejectedValue(notFoundError);
     const mockK8sAppsApi = {
       deleteNamespacedDeployment: mockDeleteDeployment,
@@ -2209,7 +2222,7 @@ describe("K8sDeployment.stopDeployment", () => {
   });
 
   test("throws error for non-404 errors", async () => {
-    const serverError = new Error("500: Internal server error");
+    const serverError = { statusCode: 500, message: "Internal server error" };
     const mockDeleteDeployment = vi.fn().mockRejectedValue(serverError);
     const mockK8sAppsApi = {
       deleteNamespacedDeployment: mockDeleteDeployment,
@@ -2217,7 +2230,7 @@ describe("K8sDeployment.stopDeployment", () => {
 
     const k8sDeployment = createK8sDeploymentWithMockedApis({}, mockK8sAppsApi);
 
-    await expect(k8sDeployment.stopDeployment()).rejects.toThrow(serverError);
+    await expect(k8sDeployment.stopDeployment()).rejects.toEqual(serverError);
   });
 });
 
@@ -2519,7 +2532,7 @@ describe("K8sDeployment.getRecentLogs", () => {
     });
   });
 
-  test("returns 'Pod not found' when readNamespacedPodLog returns 404", async () => {
+  test("returns 'Pod not found' when readNamespacedPodLog returns 404 (statusCode)", async () => {
     const mockListPods = vi.fn().mockResolvedValue({
       items: [
         {
@@ -2528,7 +2541,29 @@ describe("K8sDeployment.getRecentLogs", () => {
         },
       ],
     });
-    const notFoundError = new Error("404: Pod not found");
+    const notFoundError = { statusCode: 404, message: "Pod not found" };
+    const mockReadLogs = vi.fn().mockRejectedValue(notFoundError);
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+      readNamespacedPodLog: mockReadLogs,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    const logs = await k8sDeployment.getRecentLogs();
+
+    expect(logs).toBe("Pod not found");
+  });
+
+  test("returns 'Pod not found' when readNamespacedPodLog returns 404 (code)", async () => {
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "test-pod-abc123" },
+          status: { phase: "Running" },
+        },
+      ],
+    });
+    const notFoundError = { code: 404, message: "Pod not found" };
     const mockReadLogs = vi.fn().mockRejectedValue(notFoundError);
     const mockK8sApi = {
       listNamespacedPod: mockListPods,
@@ -2550,7 +2585,7 @@ describe("K8sDeployment.getRecentLogs", () => {
         },
       ],
     });
-    const serverError = new Error("500: Internal server error");
+    const serverError = { statusCode: 500, message: "Internal server error" };
     const mockReadLogs = vi.fn().mockRejectedValue(serverError);
     const mockK8sApi = {
       listNamespacedPod: mockListPods,
@@ -2559,7 +2594,7 @@ describe("K8sDeployment.getRecentLogs", () => {
 
     const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
 
-    await expect(k8sDeployment.getRecentLogs()).rejects.toThrow(serverError);
+    await expect(k8sDeployment.getRecentLogs()).rejects.toEqual(serverError);
   });
 });
 

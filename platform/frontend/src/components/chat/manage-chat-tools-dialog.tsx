@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  isArchestraMcpServerTool,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Loader2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -136,22 +133,13 @@ export function ManageChatToolsDialog({
     }
   }, [open]);
 
-  // Filter out Archestra tools (they cannot be disabled)
-  const manageableTools = useMemo(
-    () =>
-      (profileTools as ToolWithId[]).filter(
-        (tool) => !isArchestraMcpServerTool(tool.name),
-      ),
-    [profileTools],
-  );
-
   // Filter tools by search query
   const filteredTools = useMemo(() => {
     if (!searchQuery.trim()) {
-      return manageableTools;
+      return profileTools;
     }
     const query = searchQuery.toLowerCase().trim();
-    return manageableTools.filter((tool) => {
+    return profileTools.filter((tool) => {
       const shortName = getToolShortName(tool.name).toLowerCase();
       const description = (tool.description || "").toLowerCase();
       const serverName = getServerName(tool.name).toLowerCase();
@@ -161,7 +149,7 @@ export function ManageChatToolsDialog({
         serverName.includes(query)
       );
     });
-  }, [manageableTools, searchQuery]);
+  }, [profileTools, searchQuery]);
 
   // Group tools by server
   const groupedTools = useMemo(

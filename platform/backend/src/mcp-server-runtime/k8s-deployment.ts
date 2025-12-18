@@ -962,6 +962,8 @@ export default class K8sDeployment {
           const pod = await this.findPodForDeployment();
           if (pod && pod.status?.phase === "Running") {
             await this.assignHttpPortIfNeeded(pod);
+            // Update state to running now that deployment is confirmed ready
+            this.state = "running";
             return;
           }
         }

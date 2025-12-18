@@ -236,9 +236,12 @@ if (ciMode) {
           const pkgDir = path.dirname(pkgPath);
           const licenseFiles = [
             "LICENSE",
+            "license",
             "LICENCE",
+            "licence",
             "LICENSE.md",
             "LICENSE.txt",
+            "license.txt",
             "COPYING",
             "LICENSE-MIT",
             "LICENSE-APACHE",

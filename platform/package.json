@@ -19,7 +19,7 @@
     "test:e2e": "turbo test:e2e",
     "test:e2e:ui": "turbo test:e2e:ui",
     "check:ci": "turbo check:ci",
-    "codegen": "turbo codegen",
+    "codegen": "CODEGEN=true turbo codegen",
     "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*"],
+  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*", "CODEGEN"],
   "globalDependencies": [".env"],
   "tasks": {
     "build": {

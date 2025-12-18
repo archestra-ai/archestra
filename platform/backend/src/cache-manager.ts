@@ -1,13 +1,12 @@
+import { TimeInMs } from "@shared";
 import { createCache } from "cache-manager";
-
-const DEFAULT_TTL = 1_000 * 60 * 60; // 1 hour in ms
 
 class CacheManager {
   private cache: ReturnType<typeof createCache>;
 
   constructor() {
     this.cache = createCache({
-      ttl: DEFAULT_TTL,
+      ttl: TimeInMs.Hour,
     });
   }
 

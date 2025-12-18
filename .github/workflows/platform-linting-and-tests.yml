@@ -317,7 +317,7 @@ jobs:
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write

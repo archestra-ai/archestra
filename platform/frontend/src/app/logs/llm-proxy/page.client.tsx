@@ -307,6 +307,13 @@ function LogsTable({
       },
       cell: ({ row }) => {
         const interaction = new DynamicInteraction(row.original);
+        const externalAgentId = row.original.externalAgentId;
+
+        // Hide profile for subagent interactions
+        if (externalAgentId === "policy-configuration-subagent") {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+
         const agent = agents?.find((a) => a.id === interaction.profileId);
         return (
           <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
@@ -367,6 +374,27 @@ function LogsTable({
         if (!externalAgentId) {
           return <span className="text-xs text-muted-foreground">—</span>;
         }
+
+        // Check if this is a PolicyConfigSubagent interaction
+        if (externalAgentId === "policy-configuration-subagent") {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="font-mono text-xs text-purple-700 dark:text-purple-300 cursor-default">
+                    Policy Configuration Subagent
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs text-muted-foreground">
+                    Automated tool policy analysis subagent
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+
         return (
           <TruncatedText
             message={externalAgentId}

@@ -14,6 +14,7 @@ export const RouteId = {
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
+  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -147,6 +148,9 @@ export const RouteId = {
   DeleteChatConversation: "deleteChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
+  GetConversationEnabledTools: "getConversationEnabledTools",
+  UpdateConversationEnabledTools: "updateConversationEnabledTools",
+  DeleteConversationEnabledTools: "deleteConversationEnabledTools",
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",

@@ -5,8 +5,21 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelector as ModelSelectorRoot,
+  ModelSelectorTrigger,
+} from "@/components/ai-elements/model-selector";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,15 +30,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useFeatures } from "@/lib/features.query";
-import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
   /** Currently selected model */
@@ -36,12 +42,17 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** Number of messages in current conversation (for mid-conversation warning) */
   messageCount?: number;
-  /** Additional className for the trigger */
-  className?: string;
 }
 
+/** Map our provider names to logo provider names */
+const providerToLogoProvider: Record<SupportedProvider, string> = {
+  openai: "openai",
+  anthropic: "anthropic",
+  gemini: "google",
+};
+
 /**
- * Model selector dropdown with:
+ * Model selector dialog with:
  * - Models grouped by provider with provider name headers
  * - Search functionality to filter models
  * - Models filtered by configured API keys
@@ -52,13 +63,11 @@ export function ModelSelector({
   onModelChange,
   disabled = false,
   messageCount = 0,
-  className,
 }: ModelSelectorProps) {
   const { data: chatApiKeys = [] } = useChatApiKeys();
   const { data: features } = useFeatures();
   const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   // Build available providers based on configured API keys
   const availableProviders = useMemo(() => {
@@ -81,31 +90,28 @@ export function ModelSelector({
     );
   }, [chatApiKeys, features?.geminiVertexAiEnabled]);
 
-  // Filter models based on search query
-  const filteredProviderModels = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) {
-      return availableProviders.map((provider) => ({
-        provider,
-        models: modelsByProvider[provider],
-      }));
+  // Find the provider for a given model
+  const getProviderForModel = (model: string): SupportedProvider | null => {
+    for (const provider of Object.keys(
+      modelsByProvider,
+    ) as SupportedProvider[]) {
+      if (modelsByProvider[provider].includes(model)) {
+        return provider;
+      }
     }
+    return null;
+  };
 
-    return availableProviders
-      .map((provider) => ({
-        provider,
-        models: modelsByProvider[provider].filter((model) =>
-          model.toLowerCase().includes(query),
-        ),
-      }))
-      .filter((group) => group.models.length > 0);
-  }, [availableProviders, searchQuery]);
+  // Get selected model's provider for logo
+  const selectedModelProvider = getProviderForModel(selectedModel);
+  const selectedModelLogo = selectedModelProvider
+    ? providerToLogoProvider[selectedModelProvider]
+    : null;
 
   const handleSelectModel = (model: string) => {
-    // If selecting the same model, just close the popover
+    // If selecting the same model, just close the dialog
     if (model === selectedModel) {
       setOpen(false);
-      setSearchQuery("");
       return;
     }
 
@@ -116,7 +122,6 @@ export function ModelSelector({
       onModelChange(model);
     }
     setOpen(false);
-    setSearchQuery("");
   };
 
   const handleConfirmChange = () => {
@@ -140,107 +145,74 @@ export function ModelSelector({
   // If no providers configured, show disabled state
   if (availableProviders.length === 0) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        disabled
-        className={cn("justify-between font-normal", className)}
-      >
-        <span className="truncate">No API keys configured</span>
-        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-      </Button>
+      <PromptInputButton disabled>
+        <ModelSelectorName>No API keys configured</ModelSelectorName>
+      </PromptInputButton>
     );
   }
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            role="combobox"
-            aria-expanded={open}
-            disabled={disabled}
-            className={cn(
-              "w-[200px] justify-between font-normal",
-              !isModelAvailable && "border-yellow-500",
-              className,
+      <ModelSelectorRoot open={open} onOpenChange={setOpen}>
+        <ModelSelectorTrigger asChild>
+          <PromptInputButton disabled={disabled}>
+            {selectedModelLogo && (
+              <ModelSelectorLogo provider={selectedModelLogo} />
             )}
-          >
-            <span className="truncate">{selectedModel || "Select model"}</span>
-            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[250px] p-0" align="start">
-          {/* Search input */}
-          <div className="flex items-center border-b px-3 pb-2 pt-3">
-            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-            <input
-              placeholder="Search models..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
-          </div>
+            <ModelSelectorName>
+              {selectedModel || "Select model"}
+            </ModelSelectorName>
+          </PromptInputButton>
+        </ModelSelectorTrigger>
+        <ModelSelectorContent title="Select Model">
+          <ModelSelectorInput placeholder="Search models..." />
+          <ModelSelectorList>
+            <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
 
-          {/* Scrollable model list */}
-          <div className="max-h-[300px] overflow-y-auto p-1">
             {/* Show current model if not in available list */}
-            {!isModelAvailable && (
-              <>
-                <div className="px-2 py-1.5 text-xs font-semibold text-yellow-600">
-                  Current (API key missing)
-                </div>
-                <button
-                  type="button"
+            {!isModelAvailable && selectedModel && (
+              <ModelSelectorGroup heading="Current (API key missing)">
+                <ModelSelectorItem
                   disabled
-                  className="relative flex w-full cursor-not-allowed select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground"
+                  value={selectedModel}
+                  className="text-yellow-600"
                 >
-                  <Check className="mr-2 h-4 w-4 opacity-100" />
-                  <span className="truncate">{selectedModel}</span>
-                </button>
-                <div className="my-1 h-px bg-border" />
-              </>
+                  {selectedModelLogo && (
+                    <ModelSelectorLogo provider={selectedModelLogo} />
+                  )}
+                  <ModelSelectorName>{selectedModel}</ModelSelectorName>
+                  <CheckIcon className="ml-auto size-4" />
+                </ModelSelectorItem>
+              </ModelSelectorGroup>
             )}
 
-            {filteredProviderModels.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No models found.
-              </div>
-            ) : (
-              filteredProviderModels.map((group, index) => (
-                <div key={group.provider}>
-                  {index > 0 && <div className="my-1 h-px bg-border" />}
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                    {providerDisplayNames[group.provider]}
-                  </div>
-                  {group.models.map((model) => (
-                    <button
-                      type="button"
-                      key={model}
-                      onClick={() => handleSelectModel(model)}
-                      className={cn(
-                        "relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
-                        selectedModel === model &&
-                          "bg-accent text-accent-foreground",
-                      )}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedModel === model ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                      <span className="truncate">{model}</span>
-                    </button>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+            {availableProviders.map((provider) => (
+              <ModelSelectorGroup
+                key={provider}
+                heading={providerDisplayNames[provider]}
+              >
+                {modelsByProvider[provider].map((model) => (
+                  <ModelSelectorItem
+                    key={model}
+                    value={model}
+                    onSelect={() => handleSelectModel(model)}
+                  >
+                    <ModelSelectorLogo
+                      provider={providerToLogoProvider[provider]}
+                    />
+                    <ModelSelectorName>{model}</ModelSelectorName>
+                    {selectedModel === model ? (
+                      <CheckIcon className="ml-auto size-4" />
+                    ) : (
+                      <div className="ml-auto size-4" />
+                    )}
+                  </ModelSelectorItem>
+                ))}
+              </ModelSelectorGroup>
+            ))}
+          </ModelSelectorList>
+        </ModelSelectorContent>
+      </ModelSelectorRoot>
 
       {/* Mid-conversation warning dialog */}
       <AlertDialog

@@ -574,6 +574,9 @@ export function McpServerCard({
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
                 useDynamicTeamCredential: false,
+                policiesAutoConfiguredAt: null,
+                policiesAutoConfiguringStartedAt: null,
+                policiesAutoConfiguredReasoning: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,

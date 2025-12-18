@@ -48,10 +48,13 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 
-const eeRoutes = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-    await import("./routes/index.ee")
-  : ({} as Record<string, never>);
+// Load enterprise routes if license is activated OR if running in codegen mode
+// (codegen mode ensures OpenAPI spec always includes all enterprise routes)
+const eeRoutes =
+  config.enterpriseLicenseActivated || config.codegenMode
+    ? // biome-ignore lint/style/noRestrictedImports: conditional schema
+      await import("./routes/index.ee")
+    : ({} as Record<string, never>);
 
 const {
   api: {

@@ -18,6 +18,7 @@ export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as oauthRoutes } from "./oauth";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
+export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 export { default as promptRoutes } from "./prompts";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";

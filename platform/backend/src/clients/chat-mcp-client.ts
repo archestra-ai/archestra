@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { isArchestraMcpServerTool } from "@shared";
 import { jsonSchema, type Tool } from "ai";
-import {
-  executeArchestraTool,
-  isArchestraMcpServerTool,
-} from "@/archestra-mcp-server";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
+import { AgentTeamModel, TeamModel, TeamTokenModel, ToolModel } from "@/models";
 
 /**
  * MCP Gateway base URL (internal)
@@ -345,6 +343,7 @@ function normalizeJsonSchema(schema: any): any {
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
  * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools({
@@ -352,11 +351,13 @@ export async function getChatMcpTools({
   agentId,
   userId,
   userIsProfileAdmin,
+  enabledToolIds,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
   userIsProfileAdmin: boolean;
+  enabledToolIds?: string[];
 }): Promise<Record<string, Tool>> {
   const cacheKey = getCacheKey(agentId, userId);
 
@@ -370,7 +371,8 @@ export async function getChatMcpTools({
       },
       "Returning cached MCP tools for chat",
     );
-    return cachedTools.tools;
+    // Apply filtering if enabledToolIds provided and non-empty
+    return await filterToolsByEnabledIds(cachedTools.tools, enabledToolIds);
   } else if (cachedTools) {
     toolCache.delete(cacheKey);
   }
@@ -580,7 +582,8 @@ export async function getChatMcpTools({
       expiresAt: Date.now() + TOOL_CACHE_TTL_MS,
     });
 
-    return aiTools;
+    // Apply filtering if enabledToolIds provided and non-empty
+    return await filterToolsByEnabledIds(aiTools, enabledToolIds);
   } catch (error) {
     logger.error(
       { agentId, userId, error },
@@ -588,4 +591,58 @@ export async function getChatMcpTools({
     );
     return {};
   }
+}
+
+/**
+ * Filter tools by enabled tool IDs
+ * If enabledToolIds is undefined or empty, returns all tools (default = all enabled)
+ * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
+ *
+ * @param tools - All available tools (keyed by tool name)
+ * @param enabledToolIds - Optional array of tool IDs to filter by
+ * @returns Filtered tools record
+ */
+async function filterToolsByEnabledIds(
+  tools: Record<string, Tool>,
+  enabledToolIds?: string[],
+): Promise<Record<string, Tool>> {
+  // Empty array or undefined = all tools enabled (default behavior)
+  if (!enabledToolIds || enabledToolIds.length === 0) {
+    logger.info(
+      {
+        totalTools: Object.keys(tools).length,
+        enabledToolIds: enabledToolIds?.length ?? 0,
+        reason: !enabledToolIds ? "undefined" : "empty array",
+      },
+      "No tool filtering applied - all tools enabled",
+    );
+    return tools;
+  }
+
+  // Fetch tool names for the enabled IDs
+  const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
+
+  // Filter tools to only include enabled ones
+  const filteredTools: Record<string, Tool> = {};
+  const excludedTools: string[] = [];
+  for (const [name, tool] of Object.entries(tools)) {
+    if (enabledToolNames.includes(name)) {
+      filteredTools[name] = tool;
+    } else {
+      excludedTools.push(name);
+    }
+  }
+
+  logger.info(
+    {
+      totalTools: Object.keys(tools).length,
+      enabledToolIds: enabledToolIds.length,
+      enabledToolNames: enabledToolNames.length,
+      filteredTools: Object.keys(filteredTools).length,
+      excludedTools,
+    },
+    "Filtered tools by enabled IDs",
+  );
+
+  return filteredTools;
 }

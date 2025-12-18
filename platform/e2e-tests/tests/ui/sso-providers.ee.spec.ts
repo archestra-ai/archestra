@@ -465,7 +465,7 @@ test.describe("SSO Team Sync E2E", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
         timeout: 15000,
       });
 
@@ -607,7 +607,7 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
 
       // Verify we're logged in by checking for authenticated UI elements
       // Use text locator as fallback since getByRole can be flaky with complex UIs
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
         timeout: 15000,
       });
 
@@ -742,7 +742,7 @@ test.describe("SSO Role Mapping E2E", () => {
       expect(loginSucceeded).toBe(true);
 
       // Verify we're logged in
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
         timeout: 15000,
       });
 
@@ -880,7 +880,7 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
 
       // Verify we're logged in by checking for authenticated UI elements
       // Use text locator as fallback since getByRole can be flaky with complex UIs
-      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+      await expect(ssoPage.locator("text=Tool Policies").first()).toBeVisible({
         timeout: 15000,
       });
 

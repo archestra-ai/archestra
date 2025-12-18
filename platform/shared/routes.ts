@@ -151,6 +151,7 @@ export const RouteId = {
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
+  GetChatModels: "getChatModels",
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",

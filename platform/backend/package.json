@@ -64,6 +64,7 @@
     "@toon-format/toon": "^2.1.0",
     "ai": "^5.0.108",
     "better-auth": "1.4.6-beta.3",
+    "cache-manager": "^7.2.7",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.0",

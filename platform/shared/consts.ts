@@ -132,3 +132,10 @@ export type SsoProviderId =
 export const SSO_TRUSTED_PROVIDER_IDS = Object.values(SSO_PROVIDER_ID);
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
+
+export const TimeInMs = {
+  Second: 1_000,
+  Minute: 1_000 * 60,
+  Hour: 1_000 * 60 * 60,
+  Day: 1_000 * 60 * 60 * 24,
+} as const;

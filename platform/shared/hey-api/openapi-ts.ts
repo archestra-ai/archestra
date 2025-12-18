@@ -20,6 +20,7 @@ const archestraApiConfig = await defineConfig({
   plugins: [
     {
       name: "@hey-api/client-fetch",
+      baseUrl: "http://localhost:9000/openapi.json",
       runtimeConfigPath: "./custom-client",
     },
   ],

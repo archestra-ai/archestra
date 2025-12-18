@@ -5,9 +5,9 @@ Scans dependencies for GPL/AGPL licenses incompatible with proprietary software.
 ## Usage
 
 ```bash
-node scripts/check-licenses.js           # Full report
-node scripts/check-licenses.js --ci      # CI mode (fails on GPL/AGPL)
-node scripts/check-licenses.js lookup react  # Check specific package
+tsx license-check.ts           # Full report
+tsx license-check.ts --ci      # CI mode (fails on GPL/AGPL)
+tsx license-check.ts lookup react  # Check specific package
 ```
 
 ## Adding Verified Licenses

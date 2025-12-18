@@ -1,16 +1,14 @@
-#!/usr/bin/env node
-
 /**
  * Recursively check licenses of all dependencies
  *
  * Usage:
- *   node scripts/check-licenses.js [filter] [package-name]
+ *   tsx license-check.ts [filter] [package-name]
  *
  * Examples:
- *   node scripts/check-licenses.js              # Show all packages
- *   node scripts/check-licenses.js gpl          # Show only GPL packages
- *   node scripts/check-licenses.js lookup react # Look up specific package
- *   node scripts/check-licenses.js --ci         # CI mode: fail if GPL/AGPL/Unknown found
+ *   tsx license-check.ts              # Show all packages
+ *   tsx license-check.ts gpl          # Show only GPL packages
+ *   tsx license-check.ts lookup react # Look up specific package
+ *   tsx license-check.ts --ci         # CI mode: fail if GPL/AGPL/Unknown found
  *
  * Filters:
  *   (none)  - Show all packages grouped by license type
@@ -464,7 +462,7 @@ if (ciMode) {
       if (!packageName) {
         console.error("Error: Package name required for lookup mode");
         console.log(
-          "\nUsage: node scripts/check-licenses.js lookup <package-name>",
+          "\nUsage: tsx license-check.ts lookup <package-name>",
         );
         process.exit(1);
       }

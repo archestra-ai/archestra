@@ -17,7 +17,7 @@ concurrency:
 permissions: {}
 
 jobs:
-  check-licenses:
+  license-check:
     name: Check for GPL/AGPL licenses
     runs-on: ubuntu-latest
     defaults:

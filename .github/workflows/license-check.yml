@@ -20,6 +20,9 @@ jobs:
   check-licenses:
     name: Check for GPL/AGPL licenses
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./platform
 
     permissions:
       contents: read

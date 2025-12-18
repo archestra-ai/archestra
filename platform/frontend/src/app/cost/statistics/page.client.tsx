@@ -167,7 +167,9 @@ function StatisticsContent({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>(initialData.timeframe);
+  const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>(
+    initialData.timeframe,
+  );
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [fromTime, setFromTime] = useState("00:00");
   const [toTime, setToTime] = useState("23:59");
@@ -389,74 +391,74 @@ function StatisticsContent({
   const teamChartData =
     teamStatistics.length > 0
       ? convertStatsToChartData<TeamStatisticsData>(
-        teamStatistics,
-        "teamName",
-        colors,
-        hiddenTeams,
-        (stat) => stat.teamId,
-      )
+          teamStatistics,
+          "teamName",
+          colors,
+          hiddenTeams,
+          (stat) => stat.teamId,
+        )
       : {
-        labels: ["No Data"],
-        datasets: [
-          {
-            label: "No teams found",
-            data: [0],
-            borderColor: "#9ca3af",
-            backgroundColor: "rgba(156, 163, 175, 0.1)",
-            borderWidth: 3,
-            fill: false,
-            tension: 0.4,
-          },
-        ],
-      };
+          labels: ["No Data"],
+          datasets: [
+            {
+              label: "No teams found",
+              data: [0],
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156, 163, 175, 0.1)",
+              borderWidth: 3,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        };
 
   const agentChartData =
     agentStatistics.length > 0
       ? convertStatsToChartData<ProfileStatisticsData>(
-        agentStatistics,
-        "agentName",
-        colors,
-        hiddenProfiles,
-        (stat) => stat.agentId,
-      )
+          agentStatistics,
+          "agentName",
+          colors,
+          hiddenProfiles,
+          (stat) => stat.agentId,
+        )
       : {
-        labels: ["No Data"],
-        datasets: [
-          {
-            label: "No profiles found",
-            data: [0],
-            borderColor: "#9ca3af",
-            backgroundColor: "rgba(156, 163, 175, 0.1)",
-            borderWidth: 3,
-            fill: false,
-            tension: 0.4,
-          },
-        ],
-      };
+          labels: ["No Data"],
+          datasets: [
+            {
+              label: "No profiles found",
+              data: [0],
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156, 163, 175, 0.1)",
+              borderWidth: 3,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        };
 
   const modelChartData =
     modelStatistics.length > 0
       ? convertStatsToChartData<ModelStatisticsData>(
-        modelStatistics,
-        "model",
-        colors,
-        hiddenModels,
-        (stat) => stat.model,
-      )
+          modelStatistics,
+          "model",
+          colors,
+          hiddenModels,
+          (stat) => stat.model,
+        )
       : {
-        labels: ["No Data"],
-        datasets: [
-          {
-            label: "No models found",
-            data: [0],
-            borderColor: "#9ca3af",
-            backgroundColor: "rgba(156, 163, 175, 0.1)",
-            borderWidth: 3,
-            fill: false,
-            tension: 0.4,
-          },
-        ],
-      };
+          labels: ["No Data"],
+          datasets: [
+            {
+              label: "No models found",
+              data: [0],
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156, 163, 175, 0.1)",
+              borderWidth: 3,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        };
 
   // Chart keys to force remount when data changes
   const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;

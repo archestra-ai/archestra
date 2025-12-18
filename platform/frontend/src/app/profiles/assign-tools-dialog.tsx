@@ -420,7 +420,7 @@ export function AssignToolsDialog({
               <span className="hidden sm:inline">Assigned</span>
               {showAssignedOnly && (
                 <span className="text-xs bg-primary-foreground text-primary rounded-full px-1.5 py-0.5">
-                  {assignedToolIds.size}
+                  {filteredTools.length}
                 </span>
               )}
             </Button>
@@ -447,16 +447,19 @@ export function AssignToolsDialog({
               <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
               <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
               <p className="mb-4 text-sm text-muted-foreground">
-                {searchQuery || originFilter !== "all"
-                  ? "No tools match your filters. Try adjusting your search or origin filter."
-                  : "No tools available."}
+                {showAssignedOnly && assignedToolIds.size === 0
+                  ? "No tools are currently assigned to this profile."
+                  : searchQuery || originFilter !== "all" || showAssignedOnly
+                    ? "No tools match your filters. Try adjusting your search, origin, or assigned filter."
+                    : "No tools available."}
               </p>
-              {(searchQuery || originFilter !== "all") && (
+              {(searchQuery || originFilter !== "all" || showAssignedOnly) && (
                 <Button
                   variant="outline"
                   onClick={() => {
                     setSearchQuery("");
                     setOriginFilter("all");
+                    setShowAssignedOnly(false);
                   }}
                 >
                   Clear filters

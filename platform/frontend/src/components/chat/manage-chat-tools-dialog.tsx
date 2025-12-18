@@ -4,7 +4,7 @@ import {
   isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,12 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   useConversationEnabledTools,
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
+import { AssignToolsToProfile } from "./assign-tools-to-profile";
 
 interface ManageChatToolsDialogProps {
   open: boolean;
@@ -95,6 +97,7 @@ export function ManageChatToolsDialog({
   // Local state for pending changes (tool IDs that are checked)
   const [checkedToolIds, setCheckedToolIds] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Initialize local state when dialog opens
   useEffect(() => {
@@ -129,6 +132,7 @@ export function ManageChatToolsDialog({
   useEffect(() => {
     if (!open) {
       setIsInitialized(false);
+      setSearchQuery("");
     }
   }, [open]);
 
@@ -141,10 +145,28 @@ export function ManageChatToolsDialog({
     [profileTools],
   );
 
+  // Filter tools by search query
+  const filteredTools = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return manageableTools;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return manageableTools.filter((tool) => {
+      const shortName = getToolShortName(tool.name).toLowerCase();
+      const description = (tool.description || "").toLowerCase();
+      const serverName = getServerName(tool.name).toLowerCase();
+      return (
+        shortName.includes(query) ||
+        description.includes(query) ||
+        serverName.includes(query)
+      );
+    });
+  }, [manageableTools, searchQuery]);
+
   // Group tools by server
   const groupedTools = useMemo(
-    () => groupToolsByServer(manageableTools),
-    [manageableTools],
+    () => groupToolsByServer(filteredTools),
+    [filteredTools],
   );
 
   // Handle individual tool toggle
@@ -160,14 +182,20 @@ export function ManageChatToolsDialog({
     });
   }, []);
 
-  // Handle server-level enable all
-  const handleEnableAllServer = useCallback(
-    (serverName: string) => {
+  // Handle server-level toggle (select/unselect all)
+  const handleToggleServer = useCallback(
+    (serverName: string, checked: boolean) => {
       const serverTools = groupedTools[serverName] || [];
       setCheckedToolIds((prev) => {
         const next = new Set(prev);
-        for (const tool of serverTools) {
-          next.add(tool.id);
+        if (checked) {
+          for (const tool of serverTools) {
+            next.add(tool.id);
+          }
+        } else {
+          for (const tool of serverTools) {
+            next.delete(tool.id);
+          }
         }
         return next;
       });
@@ -201,7 +229,34 @@ export function ManageChatToolsDialog({
           <DialogDescription>
             Select which tools are available in this chat session.
           </DialogDescription>
+          <DialogDescription>
+            Don't see the tools you need?{" "}
+            <div className="inline-block">
+              <AssignToolsToProfile
+                agentId={agentId}
+                showAssignedToolsList={false}
+                assignToolsButtonProps={{
+                  variant: "link",
+                  size: "sm",
+                  className: "text-xs",
+                }}
+              />
+            </div>
+          </DialogDescription>
         </DialogHeader>
+
+        {!isLoading && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search tools..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -209,7 +264,9 @@ export function ManageChatToolsDialog({
           </div>
         ) : Object.keys(groupedTools).length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            No tools assigned to this profile.
+            {searchQuery.trim()
+              ? "No tools found matching your search."
+              : "No tools assigned to this profile."}
           </div>
         ) : (
           <ScrollArea className="max-h-[50vh] pr-4">
@@ -220,19 +277,23 @@ export function ManageChatToolsDialog({
                 return (
                   <div key={serverName} className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium">{serverName}</h4>
-                      {!allChecked && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => handleEnableAllServer(serverName)}
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`server-${serverName}`}
+                          checked={allChecked}
+                          onCheckedChange={(checked) =>
+                            handleToggleServer(serverName, checked === true)
+                          }
+                        />
+                        <label
+                          htmlFor={`server-${serverName}`}
+                          className="text-sm font-medium cursor-pointer"
                         >
-                          Enable All
-                        </Button>
-                      )}
+                          {serverName}
+                        </label>
+                      </div>
                     </div>
-                    <div className="space-y-2 pl-1">
+                    <div className="space-y-2 pl-8">
                       {tools.map((tool) => {
                         const shortName = getToolShortName(tool.name);
                         const isChecked = checkedToolIds.has(tool.id);
@@ -271,7 +332,7 @@ export function ManageChatToolsDialog({
           </ScrollArea>
         )}
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-4">
           <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
             Cancel
           </Button>

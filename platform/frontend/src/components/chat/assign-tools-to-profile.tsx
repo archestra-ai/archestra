@@ -18,12 +18,14 @@ interface AssignToolsToProfileProps {
   agentId: string;
   showAssignedToolsList: boolean;
   className?: string;
+  assignToolsButtonProps?: React.ComponentProps<typeof Button>;
 }
 
 export function AssignToolsToProfile({
   agentId,
   showAssignedToolsList,
   className,
+  assignToolsButtonProps,
 }: AssignToolsToProfileProps) {
   const { data: mcpTools = [], isLoading } = useChatProfileMcpTools(agentId);
   const { data: agent } = useProfile(agentId);
@@ -66,12 +68,21 @@ export function AssignToolsToProfile({
     );
   }
 
+  const assignToolsButton = (
+    <Button
+      onClick={openAssignToolsDialog}
+      title="Add more tools"
+      variant="outline"
+      {...assignToolsButtonProps}
+    >
+      Assign tools to profile
+    </Button>
+  );
+
   if (Object.keys(groupedTools).length === 0) {
     return (
       <div className={className}>
-        <div className="flex flex-wrap gap-2">
-          <AssignToolsButton onClick={openAssignToolsDialog} />
-        </div>
+        <div className="flex flex-wrap gap-2">{assignToolsButton}</div>
         <AssignToolsDialog
           agent={agent}
           open={isAssignToolsDialogOpen}
@@ -133,7 +144,7 @@ export function AssignToolsToProfile({
                 </TooltipContent>
               </Tooltip>
             ))}
-          <AssignToolsButton onClick={openAssignToolsDialog} />
+          {assignToolsButton}
         </div>
       </TooltipProvider>
       <AssignToolsDialog
@@ -142,13 +153,5 @@ export function AssignToolsToProfile({
         onOpenChange={setIsAssignToolsDialogOpen}
       />
     </div>
-  );
-}
-
-function AssignToolsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button onClick={onClick} title="Add more tools" variant="outline">
-      Assign tools to profile
-    </Button>
   );
 }

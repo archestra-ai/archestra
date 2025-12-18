@@ -1,7 +1,10 @@
 "use client";
 
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { Info, ListTodo, Loader2, Plus, X } from "lucide-react";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
+import { Info, Loader2, Plus, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -86,10 +89,6 @@ export function ChatToolsDisplay({
     });
   }
 
-  // Check if some tools are disabled
-  const hasDisabledTools =
-    hasCustomSelection && displayedTools.length < mcpTools.length;
-
   // Group tools by MCP server name (everything before the last __)
   const groupedTools: Record<string, typeof displayedTools> = {};
   for (const tool of displayedTools) {
@@ -103,6 +102,13 @@ export function ChatToolsDisplay({
     }
     groupedTools[serverName].push(tool);
   }
+
+  // Sort server entries to always show Archestra first
+  const sortedServerEntries = Object.entries(groupedTools).sort(([a], [b]) => {
+    if (a === ARCHESTRA_MCP_SERVER_NAME) return -1;
+    if (b === ARCHESTRA_MCP_SERVER_NAME) return 1;
+    return a.localeCompare(b);
+  });
 
   // Handle enabling a tool
   const handleEnableTool = (toolId: string, event: React.MouseEvent) => {
@@ -236,24 +242,28 @@ export function ChatToolsDisplay({
     );
   }
 
-  const enableMoreToolsButton = (
-    <Button
-      onClick={handleOpenManageDialog}
-      title="Enable more tools for this chat"
-      variant="ghost"
-      size="sm"
-      className="text-xs"
-    >
-      <ListTodo className="h-2 w-2" /> Toggle tools
-    </Button>
+  const editToolsButton = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          onClick={handleOpenManageDialog}
+          variant="ghost"
+          size="sm"
+          className="text-xs"
+        >
+          <Settings className="h-2 w-2" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Enable or disable tools for this chat</p>
+      </TooltipContent>
+    </Tooltip>
   );
 
   if (Object.keys(groupedTools).length === 0) {
     return (
       <div className={className}>
-        <div className="flex flex-wrap gap-2">
-          {hasDisabledTools && enableMoreToolsButton}
-        </div>
+        <div className="flex flex-wrap gap-2">{editToolsButton}</div>
       </div>
     );
   }
@@ -262,7 +272,7 @@ export function ChatToolsDisplay({
     <div className={className}>
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
-          {Object.entries(groupedTools).map(([serverName]) => {
+          {sortedServerEntries.map(([serverName]) => {
             // Get all tools for this server from profileTools
             const allServerTools = profileTools.filter((tool) => {
               const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
@@ -381,7 +391,7 @@ export function ChatToolsDisplay({
               </Tooltip>
             );
           })}
-          {hasDisabledTools && enableMoreToolsButton}
+          {editToolsButton}
         </div>
       </TooltipProvider>
       {conversationId && agentId && (

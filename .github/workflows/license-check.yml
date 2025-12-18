@@ -47,7 +47,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run license compliance check
-        run: pnpm licenses --ci
+        run: pnpm license-check --ci
 
       - name: Generate full license report (on failure)
         if: failure()

@@ -102,7 +102,10 @@ export default defineConfig((options: UserConfig) => {
     // Copy SQL migrations and other assets that need to exist at runtime
     copy: ["src/database/migrations"],
 
-    clean: true,
+    // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where
+    // the output directory is deleted while the server process is trying to restart.
+    // In dev mode, we handle cleaning explicitly in the package.json script.
+    clean: !options.watch,
     format: ["esm" as const],
 
     // Generate source maps for better stack traces

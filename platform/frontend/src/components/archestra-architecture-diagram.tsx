@@ -84,8 +84,10 @@ export function ArchestraArchitectureDiagram() {
         page.
       </p>
 
-      <div className="mb-8 max-w-3xl mx-auto">
-        <MermaidDiagram chart={mermaidChart} id="gateway-diagram" />
+      <div className="mb-8 max-w-3xl mx-auto overflow-hidden rounded-lg border border-border bg-card transition-all duration-300">
+        <div className="w-full h-80 flex items-center justify-center p-4">
+          <MermaidDiagram chart={mermaidChart} id="gateway-diagram" />
+        </div>
       </div>
     </>
   );

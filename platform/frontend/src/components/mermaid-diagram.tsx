@@ -70,7 +70,7 @@ export function MermaidDiagram({
   return (
     <div
       ref={ref}
-      className="flex justify-center w-full [&_svg]:!max-w-full [&_svg]:!h-auto"
+      className="flex justify-center w-full animate-in fade-in duration-300 [&_svg]:!max-w-full [&_svg]:!h-auto"
     />
   );
 }

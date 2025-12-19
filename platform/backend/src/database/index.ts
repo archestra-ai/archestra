@@ -2,6 +2,7 @@ import { instrumentDrizzleClient } from "@kubiks/otel-drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
+import logger from "@/logging";
 import * as schema from "./schemas";
 
 /**
@@ -34,6 +35,16 @@ const pool = new pg.Pool({
   // Keepalive configuration to prevent "Connection terminated unexpectedly"
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
+});
+
+/**
+ * Handle errors on idle clients in the pool.
+ * Without this handler, connection errors on idle clients would cause
+ * an unhandled 'error' event and crash the process.
+ * The pool will automatically remove the errored client and create a new one.
+ */
+pool.on("error", (err) => {
+  logger.error({ err }, "Unexpected error on idle database client");
 });
 
 const db = drizzle({

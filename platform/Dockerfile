@@ -330,9 +330,6 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
         echo "Kubernetes orchestrator configured with embedded KinD cluster"
-    else
-        echo "WARNING: Skipping Kubernetes orchestrator configuration due to control plane IP setup failure"
-        echo "The KinD cluster was created but networking setup failed - orchestrator will not be configured"
     fi
 fi
 

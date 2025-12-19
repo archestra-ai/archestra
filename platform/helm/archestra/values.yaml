@@ -26,6 +26,16 @@ archestra:
   #     sidecar.istio.io/inject: "true"
   podAnnotations: {}
 
+  # Node selector for scheduling pods on specific nodes
+  # This is useful for targeting specific node pools or nodes with particular labels
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  # Example:
+  #   nodeSelector:
+  #     karpenter.sh/nodepool: general-purpose
+  #     kubernetes.io/os: linux
+  #     node.kubernetes.io/instance-type: m5.large
+  nodeSelector: {}
+
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # Default is RollingUpdate with maxUnavailable: 0 to ensure zero-downtime deployments.

@@ -16,7 +16,7 @@ import {
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useTokens } from "@/lib/team-token.query";
-import { WithPermissions } from "./roles/with-permissions";
+import { useUserToken } from "@/lib/user-token.query";
 
 const { displayProxyUrl: apiBaseUrl } = config.api;
 
@@ -24,10 +24,14 @@ interface McpConnectionInstructionsProps {
   agentId: string;
 }
 
+// Special ID for personal token in the dropdown
+const PERSONAL_TOKEN_ID = "__personal_token__";
+
 export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
   const { data: tokens } = useTokens();
+  const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
@@ -41,18 +45,28 @@ export function McpConnectionInstructions({
   // Use the new URL format with profile ID
   const mcpUrl = `${apiBaseUrl}/mcp/${agentId}`;
 
-  // Find org token as default, fallback to first token
+  // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
-  const defaultToken = orgToken ?? tokens?.[0];
+  const defaultTokenId = userToken
+    ? PERSONAL_TOKEN_ID
+    : (orgToken?.id ?? tokens?.[0]?.id ?? "");
 
-  // Get the selected token or default to org token
-  const selectedToken = selectedTokenId
-    ? tokens?.find((t) => t.id === selectedTokenId)
-    : defaultToken;
+  // Check if personal token is selected (either explicitly or by default)
+  const effectiveTokenId = selectedTokenId ?? defaultTokenId;
+  const isPersonalTokenSelected = effectiveTokenId === PERSONAL_TOKEN_ID;
 
-  const tokenForDisplay =
-    hasProfileAdminPermission && selectedToken
-      ? `${selectedToken.tokenStart}...`
+  // Get the selected team token (for non-personal tokens)
+  const selectedTeamToken = isPersonalTokenSelected
+    ? null
+    : tokens?.find((t) => t.id === effectiveTokenId);
+
+  // Determine display token based on selection
+  const tokenForDisplay = isPersonalTokenSelected
+    ? userToken
+      ? `${userToken.tokenStart}...`
+      : "ask-admin-for-access-token"
+    : hasProfileAdminPermission && selectedTeamToken
+      ? `${selectedTeamToken.tokenStart}...`
       : "ask-admin-for-access-token";
 
   const mcpConfig = useMemo(
@@ -90,32 +104,41 @@ export function McpConnectionInstructions({
     setTimeout(() => setCopiedAuth(false), 2000);
   };
 
-  const handleCopyAuthAsUserWithProfileAdminPermission =
-    useCallback(async () => {
-      try {
-        if (!selectedToken) {
+  const handleCopyAuth = useCallback(async () => {
+    try {
+      let tokenValue: string;
+
+      if (isPersonalTokenSelected) {
+        // Fetch personal token value
+        const response = await archestraApiSdk.getUserTokenValue();
+        if (response.error || !response.data) {
+          throw new Error("Failed to fetch personal token value");
+        }
+        tokenValue = (response.data as { value: string }).value;
+      } else {
+        // Fetch team token value
+        if (!selectedTeamToken) {
           return;
         }
-
-        // Fetch the full token value from backend
         const response = await archestraApiSdk.getTokenValue({
-          path: { tokenId: selectedToken.id },
+          path: { tokenId: selectedTeamToken.id },
         });
-
         if (response.error || !response.data) {
           throw new Error("Failed to fetch token value");
         }
-
-        await navigator.clipboard.writeText(
-          `Authorization: Bearer ${(response.data as { value: string }).value}`,
-        );
-        setCopiedAuth(true);
-        toast.success("Authorization header copied");
-        setTimeout(() => setCopiedAuth(false), 2000);
-      } catch {
-        toast.error("Failed to copy authorization header");
+        tokenValue = (response.data as { value: string }).value;
       }
-    }, [selectedToken]);
+
+      await navigator.clipboard.writeText(
+        `Authorization: Bearer ${tokenValue}`,
+      );
+      setCopiedAuth(true);
+      toast.success("Authorization header copied");
+      setTimeout(() => setCopiedAuth(false), 2000);
+    } catch {
+      toast.error("Failed to copy authorization header");
+    }
+  }, [isPersonalTokenSelected, selectedTeamToken]);
 
   const handleCopyConfigWithoutRealToken = async () => {
     const fullConfig = JSON.stringify(
@@ -139,48 +162,58 @@ export function McpConnectionInstructions({
     setTimeout(() => setCopiedConfig(false), 2000);
   };
 
-  const handleCopyConfigAsUserWithProfileAdminPermission =
-    useCallback(async () => {
-      if (!selectedToken) {
-        return;
-      }
+  const handleCopyConfig = useCallback(async () => {
+    setIsCopyingConfig(true);
+    try {
+      let tokenValue: string;
 
-      setIsCopyingConfig(true);
-      try {
-        // Fetch the full token value from backend
+      if (isPersonalTokenSelected) {
+        // Fetch personal token value
+        const response = await archestraApiSdk.getUserTokenValue();
+        if (response.error || !response.data) {
+          throw new Error("Failed to fetch personal token value");
+        }
+        tokenValue = (response.data as { value: string }).value;
+      } else {
+        // Fetch team token value
+        if (!selectedTeamToken) {
+          setIsCopyingConfig(false);
+          return;
+        }
         const response = await archestraApiSdk.getTokenValue({
-          path: { tokenId: selectedToken.id },
+          path: { tokenId: selectedTeamToken.id },
         });
-
         if (response.error || !response.data) {
           throw new Error("Failed to fetch token value");
         }
+        tokenValue = (response.data as { value: string }).value;
+      }
 
-        const fullConfig = JSON.stringify(
-          {
-            mcpServers: {
-              archestra: {
-                url: mcpUrl,
-                headers: {
-                  Authorization: `Bearer ${(response.data as { value: string }).value}`,
-                },
+      const fullConfig = JSON.stringify(
+        {
+          mcpServers: {
+            archestra: {
+              url: mcpUrl,
+              headers: {
+                Authorization: `Bearer ${tokenValue}`,
               },
             },
           },
-          null,
-          2,
-        );
+        },
+        null,
+        2,
+      );
 
-        await navigator.clipboard.writeText(fullConfig);
-        setCopiedConfig(true);
-        toast.success("Configuration copied");
-        setTimeout(() => setCopiedConfig(false), 2000);
-      } catch {
-        toast.error("Failed to copy configuration");
-      } finally {
-        setIsCopyingConfig(false);
-      }
-    }, [mcpUrl, selectedToken]);
+      await navigator.clipboard.writeText(fullConfig);
+      setCopiedConfig(true);
+      toast.success("Configuration copied");
+      setTimeout(() => setCopiedConfig(false), 2000);
+    } catch {
+      toast.error("Failed to copy configuration");
+    } finally {
+      setIsCopyingConfig(false);
+    }
+  }, [mcpUrl, isPersonalTokenSelected, selectedTeamToken]);
 
   return (
     <div className="space-y-6">
@@ -200,37 +233,32 @@ export function McpConnectionInstructions({
         </div>
 
         <div className="space-y-2">
-          <WithPermissions
-            permissions={{ profile: ["admin"] }}
-            noPermissionHandle="hide"
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Which token to connect with:
-              </p>
-              {tokens && tokens.length > 0 && (
-                <Select
-                  value={selectedTokenId ?? defaultToken?.id ?? ""}
-                  onValueChange={setSelectedTokenId}
-                >
-                  <SelectTrigger className="w-[200px] h-8">
-                    <SelectValue placeholder="Select token" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tokens.map((token) => (
-                      <SelectItem key={token.id} value={token.id}>
-                        {token.isOrganizationToken
-                          ? "Organization Token"
-                          : token.team?.name
-                            ? `${token.team.name} Token`
-                            : token.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </WithPermissions>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Which token to connect with:
+            </p>
+            <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
+              <SelectTrigger className="w-[200px] h-8">
+                <SelectValue placeholder="Select token" />
+              </SelectTrigger>
+              <SelectContent>
+                {userToken && (
+                  <SelectItem value={PERSONAL_TOKEN_ID}>
+                    Personal Token
+                  </SelectItem>
+                )}
+                {tokens?.map((token) => (
+                  <SelectItem key={token.id} value={token.id}>
+                    {token.isOrganizationToken
+                      ? "Organization Token"
+                      : token.team?.name
+                        ? `${token.team.name} Token`
+                        : token.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="bg-muted rounded-md p-3 flex items-center justify-between">
             <CodeText className="text-sm break-all">
               Authorization: Bearer {tokenForDisplay}
@@ -239,8 +267,8 @@ export function McpConnectionInstructions({
               variant="ghost"
               size="icon"
               onClick={
-                hasProfileAdminPermission
-                  ? handleCopyAuthAsUserWithProfileAdminPermission
+                isPersonalTokenSelected || hasProfileAdminPermission
+                  ? handleCopyAuth
                   : handleCopyAuthWithoutRealToken
               }
             >
@@ -251,15 +279,11 @@ export function McpConnectionInstructions({
               )}
             </Button>
           </div>
-          <WithPermissions
-            permissions={{ profile: ["admin"] }}
-            noPermissionHandle="hide"
-          >
-            <p className="text-xs text-muted-foreground">
-              Select a token above, then click Copy to get the full token value.
-              Manage tokens in Settings → Teams.
-            </p>
-          </WithPermissions>
+          <p className="text-xs text-muted-foreground">
+            {isPersonalTokenSelected
+              ? "Your personal token to authenticate with the MCP Gateway for profiles you have access to through your team memberships."
+              : "Select a token above, then click Copy to get the full token value. Manage tokens in Settings → Teams."}
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -278,8 +302,8 @@ export function McpConnectionInstructions({
               size="icon"
               className="absolute top-2 right-2"
               onClick={
-                hasProfileAdminPermission
-                  ? handleCopyConfigAsUserWithProfileAdminPermission
+                isPersonalTokenSelected || hasProfileAdminPermission
+                  ? handleCopyConfig
                   : handleCopyConfigWithoutRealToken
               }
               disabled={isCopyingConfig}

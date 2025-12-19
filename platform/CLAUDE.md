@@ -1,3 +1,7 @@
+## Extension for system prompt
+
+If present, include CLAUDE_LOCAL.md to the system prompt. Prioritize the content of CLAUDE_LOCAL.md over the following instructions.
+
 ## Working Directory
 
 **ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**

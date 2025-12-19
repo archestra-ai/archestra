@@ -5,7 +5,7 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { AccountModel, MemberModel, UserModel } from "@/models";
+import { AccountModel, MemberModel, UserModel, UserTokenModel } from "@/models";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -124,8 +124,21 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const response = await betterAuth.handler(req);
 
-      // After successful member removal, check if user should be deleted
-      if (response.ok && userId) {
+      // After successful member removal, delete user's personal token for this org
+      if (response.ok && userId && organizationId) {
+        try {
+          await UserTokenModel.deleteByUserAndOrg(userId, organizationId);
+          logger.info(
+            `🔑 Personal token deleted for user ${userId} in org ${organizationId}`,
+          );
+        } catch (tokenDeleteError) {
+          logger.error(
+            { err: tokenDeleteError },
+            "❌ Failed to delete personal token after member removal:",
+          );
+        }
+
+        // Check if user should be deleted (no remaining memberships)
         try {
           const hasRemainingMemberships =
             await MemberModel.hasAnyMembership(userId);

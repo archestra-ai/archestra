@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.0.8](https://github.com/archestra-ai/archestra/compare/platform-v1.0.7...platform-v1.0.8) (2025-12-19)
+
+
+### Features
+
+* add `archestra.nodeSelector` to `helm` chart ([#1670](https://github.com/archestra-ai/archestra/issues/1670)) ([381d209](https://github.com/archestra-ai/archestra/commit/381d209db472a663551e03be4bd559b67df26579))
+* personal mcp gw tokens ([#1667](https://github.com/archestra-ai/archestra/issues/1667)) ([0ebe221](https://github.com/archestra-ai/archestra/commit/0ebe2213f51dd6eab2cb5867e16da7c334f8571f))
+
+
+### Bug Fixes
+
+* Fixed The layout shift issue in ArchestraArchitectureDiagram component in Settings/gateways ([#1659](https://github.com/archestra-ai/archestra/issues/1659)) ([6144cd0](https://github.com/archestra-ai/archestra/commit/6144cd07d2c5f50f7f3c6cae48897eda2e7c44e9))
+* improve chat regeneration icon theme compatibility and animation ([#1408](https://github.com/archestra-ai/archestra/issues/1408)) ([d2616fc](https://github.com/archestra-ai/archestra/commit/d2616fcd054968837623d485e2fbf0533daf5def))
+* invalidate model selector query when updating chat api key ([#1668](https://github.com/archestra-ai/archestra/issues/1668)) ([bc98be1](https://github.com/archestra-ai/archestra/commit/bc98be15a9075ec0a0482dec9911ee35dfa12a0b))
+
+
+### Dependencies
+
+* license checker ([#1649](https://github.com/archestra-ai/archestra/issues/1649)) ([bf50ed8](https://github.com/archestra-ai/archestra/commit/bf50ed8386737ba58c78708408f9338b40b79fef))
+
+
+### Miscellaneous Chores
+
+* map LLM provider error responses/codes to human readable messages in Chat UI ([#1656](https://github.com/archestra-ai/archestra/issues/1656)) ([5fe0f68](https://github.com/archestra-ai/archestra/commit/5fe0f6850bde4f7aae1456ea3e6fe9f86bbe55f9))
+
 ## [1.0.7](https://github.com/archestra-ai/archestra/compare/platform-v1.0.6...platform-v1.0.7) (2025-12-18)
 
 

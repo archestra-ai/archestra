@@ -6,7 +6,11 @@ import type { z } from "zod";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
-import K8sDeployment from "./k8s-deployment";
+import K8sDeployment, {
+  fetchPlatformPodNodeSelector,
+  getCachedPlatformNodeSelector,
+  resetPlatformNodeSelectorCache,
+} from "./k8s-deployment";
 
 // Helper function to create a K8sDeployment instance with mocked dependencies
 function createK8sDeploymentInstance(
@@ -1483,6 +1487,173 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
       originalValue;
   });
+
+  test("generates deploymentSpec with nodeSelector when provided", () => {
+    const mcpServer: McpServer = {
+      id: "node-selector-test-id",
+      name: "node-selector-server",
+      catalogId: "catalog-ns",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const nodeSelector = {
+      "karpenter.sh/nodepool": "general-purpose",
+      "kubernetes.io/os": "linux",
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      nodeSelector,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "general-purpose",
+      "kubernetes.io/os": "linux",
+    });
+  });
+
+  test("generates deploymentSpec without nodeSelector when null is provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-node-selector-id",
+      name: "no-node-selector-server",
+      catalogId: "catalog-no-ns",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      null,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without nodeSelector when undefined is provided", () => {
+    const mcpServer: McpServer = {
+      id: "undefined-node-selector-id",
+      name: "undefined-node-selector-server",
+      catalogId: "catalog-undefined-ns",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      undefined,
+    );
+
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toBeUndefined();
+  });
+
+  test("generates deploymentSpec without nodeSelector when empty object is provided", () => {
+    const mcpServer: McpServer = {
+      id: "empty-node-selector-id",
+      name: "empty-node-selector-server",
+      catalogId: "catalog-empty-ns",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      {},
+    );
+
+    // Empty object should not add nodeSelector
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toBeUndefined();
+  });
+
+  test("combines nodeSelector with serviceAccountName when both are configured", () => {
+    // Mock config with service account name
+    const mockConfig = config as {
+      orchestrator: {
+        kubernetes: { mcpK8sServiceAccountName: string };
+      };
+    };
+    const originalValue =
+      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
+      "archestra-platform-mcp-k8s-operator";
+
+    const mcpServer: McpServer = {
+      id: "combined-config-id",
+      name: "combined-config-server",
+      catalogId: "catalog-combined",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      serviceAccount: "operator",
+    };
+    const nodeSelector = {
+      "karpenter.sh/nodepool": "k8s-operator-pool",
+    };
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      dockerImage,
+      localConfig,
+      false,
+      8080,
+      nodeSelector,
+    );
+
+    // Both should be set
+    expect(deploymentSpec.spec?.template.spec?.nodeSelector).toEqual({
+      "karpenter.sh/nodepool": "k8s-operator-pool",
+    });
+    expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
+      "archestra-platform-mcp-k8s-operator",
+    );
+
+    // Restore original config value
+    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
+  });
 });
 
 describe("K8sDeployment.createK8sSecret", () => {
@@ -2442,6 +2613,284 @@ describe("K8sDeployment.k8sDeploymentName", () => {
     );
 
     expect(k8sDeployment.k8sDeploymentName).toBe("mcp-my-mcp-server");
+  });
+});
+
+describe("fetchPlatformPodNodeSelector", () => {
+  // Reset cache before each test
+  test.beforeEach(() => {
+    resetPlatformNodeSelectorCache();
+  });
+
+  test("returns nodeSelector from pod when POD_NAME env var is set", async () => {
+    // Save and set POD_NAME env var
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-abc123";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: {
+          "karpenter.sh/nodepool": "general-purpose",
+          "kubernetes.io/os": "linux",
+        },
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+
+    expect(result).toEqual({
+      "karpenter.sh/nodepool": "general-purpose",
+      "kubernetes.io/os": "linux",
+    });
+
+    expect(mockReadPod).toHaveBeenCalledWith({
+      name: "archestra-platform-abc123",
+      namespace: "default",
+    });
+
+    // Restore env var
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("returns nodeSelector from pod when HOSTNAME env var is set", async () => {
+    // Save and clear POD_NAME, set HOSTNAME
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.POD_NAME;
+    process.env.HOSTNAME = "archestra-platform-xyz789";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: {
+          "node.kubernetes.io/instance-type": "m5.large",
+        },
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "test-ns");
+
+    expect(result).toEqual({
+      "node.kubernetes.io/instance-type": "m5.large",
+    });
+
+    // Restore env vars
+    process.env.POD_NAME = originalPodName;
+    process.env.HOSTNAME = originalHostname;
+  });
+
+  test("returns null when pod has no nodeSelector", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-no-selector";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        containers: [{ name: "archestra" }],
+        // No nodeSelector
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("falls back to label selector when POD_NAME/HOSTNAME not set", async () => {
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.POD_NAME;
+    delete process.env.HOSTNAME;
+
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [
+        {
+          metadata: { name: "archestra-platform-abc" },
+          status: { phase: "Running" },
+          spec: {
+            nodeSelector: {
+              "karpenter.sh/nodepool": "platform-pool",
+            },
+          },
+        },
+      ],
+    });
+
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "archestra");
+
+    expect(result).toEqual({
+      "karpenter.sh/nodepool": "platform-pool",
+    });
+
+    expect(mockListPods).toHaveBeenCalledWith({
+      namespace: "archestra",
+      labelSelector: "app.kubernetes.io/name=archestra-platform",
+    });
+
+    process.env.POD_NAME = originalPodName;
+    process.env.HOSTNAME = originalHostname;
+  });
+
+  test("returns null when no platform pods found via label selector", async () => {
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.POD_NAME;
+    delete process.env.HOSTNAME;
+
+    const mockListPods = vi.fn().mockResolvedValue({
+      items: [],
+    });
+
+    const mockK8sApi = {
+      listNamespacedPod: mockListPods,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
+    process.env.HOSTNAME = originalHostname;
+  });
+
+  test("caches result after first call", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-cached";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: {
+          cached: "value",
+        },
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    // First call
+    const result1 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(result1).toEqual({ cached: "value" });
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
+
+    // Second call should return cached value without API call
+    const result2 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(result2).toEqual({ cached: "value" });
+    expect(mockReadPod).toHaveBeenCalledTimes(1); // Still only called once
+
+    process.env.POD_NAME = originalPodName;
+  });
+
+  test("returns null and caches on API error", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "archestra-platform-error";
+
+    const mockReadPod = vi
+      .fn()
+      .mockRejectedValue(new Error("API connection failed"));
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+
+    expect(result).toBeNull();
+
+    // Subsequent calls should return cached null without API call
+    const result2 = await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(result2).toBeNull();
+    expect(mockReadPod).toHaveBeenCalledTimes(1);
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+describe("getCachedPlatformNodeSelector", () => {
+  // Reset cache before each test to ensure isolation
+  test.beforeEach(() => {
+    resetPlatformNodeSelectorCache();
+  });
+
+  test("returns null before any fetch", () => {
+    expect(getCachedPlatformNodeSelector()).toBeNull();
+  });
+
+  test("returns cached value after fetch", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: {
+          "test-key": "test-value",
+        },
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+
+    expect(getCachedPlatformNodeSelector()).toEqual({
+      "test-key": "test-value",
+    });
+
+    process.env.POD_NAME = originalPodName;
+  });
+});
+
+describe("resetPlatformNodeSelectorCache", () => {
+  // Reset cache before each test to ensure isolation
+  test.beforeEach(() => {
+    resetPlatformNodeSelectorCache();
+  });
+
+  test("clears the cached nodeSelector", async () => {
+    const originalPodName = process.env.POD_NAME;
+    process.env.POD_NAME = "test-pod";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: {
+          "before-reset": "value",
+        },
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await fetchPlatformPodNodeSelector(mockK8sApi, "default");
+    expect(getCachedPlatformNodeSelector()).toEqual({
+      "before-reset": "value",
+    });
+
+    resetPlatformNodeSelectorCache();
+
+    expect(getCachedPlatformNodeSelector()).toBeNull();
+
+    process.env.POD_NAME = originalPodName;
   });
 });
 

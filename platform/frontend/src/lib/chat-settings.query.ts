@@ -59,6 +59,8 @@ export function useCreateChatApiKey() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+      // Invalidate chat models so the model picker refetches available models
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
 }
@@ -91,6 +93,8 @@ export function useUpdateChatApiKey() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+      // Invalidate chat models so the model picker refetches available models
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
 }
@@ -113,6 +117,8 @@ export function useDeleteChatApiKey() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+      // Invalidate chat models so the model picker refetches available models
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
 }

@@ -16,7 +16,7 @@ import {
   createAgentServer,
   createTransport,
   extractProfileIdAndTokenFromRequest,
-  validateTeamToken,
+  validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
 
 // =============================================================================
@@ -466,6 +466,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 tokenId: z.string(),
                 teamId: z.string().nullable(),
                 isOrganizationToken: z.boolean(),
+                isUserToken: z.boolean().optional(),
+                userId: z.string().optional(),
               })
               .optional(),
           }),
@@ -489,7 +491,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateTeamToken(profileId, token);
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -505,6 +507,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenId: tokenAuth.tokenId,
             teamId: tokenAuth.teamId,
             isOrganizationToken: tokenAuth.isOrganizationToken,
+            ...(tokenAuth.isUserToken && { isUserToken: true }),
+            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
           },
         }),
       };
@@ -541,7 +545,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateTeamToken(profileId, token);
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
       if (!tokenAuth) {
         reply.status(401);
         return {
@@ -558,6 +562,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
         isOrganizationToken: tokenAuth.isOrganizationToken,
+        ...(tokenAuth.isUserToken && { isUserToken: true }),
+        ...(tokenAuth.userId && { userId: tokenAuth.userId }),
       };
 
       return handleMcpPostRequest(

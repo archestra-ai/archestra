@@ -64,6 +64,15 @@ function getConversationDisplayTitle(
   return "New chat";
 }
 
+function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
+  return (
+    <Sparkles
+      className={`h-4 w-4 text-primary ${isAnimating ? "animate-pulse" : ""}`}
+      aria-label="AI generated"
+    />
+  );
+}
+
 export function ChatSidebarSection() {
   const router = useRouter();
   const pathname = usePathname();
@@ -252,12 +261,10 @@ export function ChatSidebarSection() {
                                   disabled={generateTitleMutation.isPending}
                                   className="h-7 w-7 shrink-0"
                                 >
-                                  <Sparkles
-                                    className={`h-4 w-4 text-yellow-400 ${
+                                  <AISparkleIcon
+                                    isAnimating={
                                       generateTitleMutation.isPending
-                                        ? "animate-[spin_800ms_ease_200ms_infinite]"
-                                        : ""
-                                    }`}
+                                    }
                                   />
                                 </Button>
                               </TooltipTrigger>
@@ -275,10 +282,7 @@ export function ChatSidebarSection() {
                             className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
                           >
                             {(hasRecentlyGeneratedTitle || isRegenerating) && (
-                              <Sparkles
-                                className="h-4 w-4 text-yellow-400 animate-[spin_800ms_ease_200ms_infinite]"
-                                aria-label="AI generated"
-                              />
+                              <AISparkleIcon isAnimating />
                             )}
                             {isRegenerating ? (
                               <span className="flex-1 pr-0 text-muted-foreground text-sm">
@@ -294,7 +298,7 @@ export function ChatSidebarSection() {
                                   }
                                   typingSpeed={35}
                                   showCursor
-                                  cursorClassName="bg-yellow-400"
+                                  cursorClassName="bg-primary"
                                 />
                               </span>
                             ) : (

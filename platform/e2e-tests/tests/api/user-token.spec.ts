@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test.describe("User Token API", () => {
+test.describe.serial("User Token API", () => {
   test("should get or create personal token", async ({
     request,
     makeApiRequest,

@@ -222,77 +222,70 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     fi
 fi
 
-# Initialize KinD cluster if quickstart mode is explicitly enabled
-if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
-    echo "Quickstart mode enabled, initializing embedded KinD cluster..."
+# Auto-detect quickstart mode: enable if Docker socket is mounted OR explicitly requested
+if [ -S /var/run/docker.sock ]; then
+    echo "Quickstart mode. Initializing embedded KinD cluster..."
 
-    # Quickstart mode requires Docker socket, no external k8s
-    if [ ! -S /var/run/docker.sock ]; then
-        echo "ERROR: Quickstart mode requires Docker socket to be mounted."
-        echo "Please run with: -v /var/run/docker.sock:/var/run/docker.sock"
+    if ! command -v kind >/dev/null 2>&1; then
+        echo "ERROR: KinD binary not found in this image."
         exit 1
+    fi
+
+    # Quickstart mode always uses embedded KinD cluster
+    CLUSTER_NAME="archestra-mcp"
+    KUBECONFIG_PATH="/app/data/.kubeconfig"
+
+    # Check if cluster already exists
+    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+        echo "KinD cluster '${CLUSTER_NAME}' already exists"
     else
-        if ! command -v kind >/dev/null 2>&1; then
-            echo "ERROR: ARCHESTRA_QUICKSTART=true but KinD binary not found in this image."
-            exit 1
-        fi
+        echo "Creating KinD cluster '${CLUSTER_NAME}'..."
+        kind create cluster --name "${CLUSTER_NAME}" --wait 120s
+        echo "KinD cluster created successfully"
+    fi
 
-        # Quickstart mode always uses embedded KinD cluster
-        CLUSTER_NAME="archestra-mcp"
-        KUBECONFIG_PATH="/app/data/.kubeconfig"
+    # Export kubeconfig
+    kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"
+    chmod 600 "${KUBECONFIG_PATH}"
 
-        # Check if cluster already exists
-        if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
-            echo "KinD cluster '${CLUSTER_NAME}' already exists"
-        else
-            echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-            kind create cluster --name "${CLUSTER_NAME}" --wait 120s
-            echo "KinD cluster created successfully"
-        fi
+    # Get the KinD control plane container IP address
+    CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
+    CONTROL_PLANE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
 
-        # Export kubeconfig
-        kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"
+    if [ -z "$CONTROL_PLANE_IP" ]; then
+        echo "ERROR: Could not get KinD control plane IP address"
+    else
+        echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
+
+        # Update kubeconfig to use control plane IP and skip TLS verification
+        # Use a more robust approach to avoid duplicate entries
+        cat "${KUBECONFIG_PATH}" | \
+            sed "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
+            awk '/^    server:/ {print; print "    insecure-skip-tls-verify: true"; next} {print}' > "${KUBECONFIG_PATH}.tmp"
+        mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
         chmod 600 "${KUBECONFIG_PATH}"
 
-        # Get the KinD control plane container IP address
-        CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
-        CONTROL_PLANE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
-
-        if [ -z "$CONTROL_PLANE_IP" ]; then
-            echo "ERROR: Could not get KinD control plane IP address"
+        # Connect this container to the KinD network for direct communication
+        CONTAINER_ID=$(hostname)
+        if ! docker network inspect kind >/dev/null 2>&1; then
+            echo "WARNING: KinD network not found"
         else
-            echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
-
-            # Update kubeconfig to use control plane IP and skip TLS verification
-            # Use a more robust approach to avoid duplicate entries
-            cat "${KUBECONFIG_PATH}" | \
-                sed "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
-                awk '/^    server:/ {print; print "    insecure-skip-tls-verify: true"; next} {print}' > "${KUBECONFIG_PATH}.tmp"
-            mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
-            chmod 600 "${KUBECONFIG_PATH}"
-
-            # Connect this container to the KinD network for direct communication
-            CONTAINER_ID=$(hostname)
-            if ! docker network inspect kind >/dev/null 2>&1; then
-                echo "WARNING: KinD network not found"
+            # Check if already connected to kind network
+            if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "kind"; then
+                echo "Container already connected to KinD network"
             else
-                # Check if already connected to kind network
-                if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "kind"; then
-                    echo "Container already connected to KinD network"
-                else
-                    echo "Connecting container to KinD network..."
-                    docker network connect kind "$CONTAINER_ID"
-                    echo "Connected to KinD network successfully"
-                fi
+                echo "Connecting container to KinD network..."
+                docker network connect kind "$CONTAINER_ID"
+                echo "Connected to KinD network successfully"
             fi
         fi
-
-        # Export the kubeconfig path for supervisord to inherit
-        export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
-        export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
-
-        echo "Kubernetes orchestrator configured with embedded KinD cluster"
     fi
+
+    # Export the kubeconfig path for supervisord to inherit
+    export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
+    export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+
+    echo "Kubernetes orchestrator configured with embedded KinD cluster"
 fi
 
 # Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)

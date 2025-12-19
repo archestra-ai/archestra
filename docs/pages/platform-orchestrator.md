@@ -63,12 +63,11 @@ For production deployments, please refer to the [Deployment Guide](/docs/platfor
 
 ### Quickstart with Kubernetes in Docker
 
-Runs the platform with an embedded KinD cluster:
+Run the platform with an embedded KinD cluster:
 
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
-   -e ARCHESTRA_QUICKSTART
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \

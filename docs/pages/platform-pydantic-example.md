@@ -76,16 +76,13 @@ This demonstrates the vulnerability: an agent with access to external data and c
 Now let's add the security layer:
 
 ```shell
-docker run -p 9000:9000 -p 3000:3000 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  archestra/platform
+docker run -p 9000:9000 -p 3000:3000 archestra/platform
 ```
 
 This starts Archestra Platform with:
 
 - API proxy on port 9000
 - Web UI on port 3000
-- Embedded Kubernetes for MCP server execution
 
 ## Step 5. Run the example with Archestra (Secure)
 

@@ -281,14 +281,27 @@ if [ -S /var/run/docker.sock ]; then
         # 2. Traffic never leaves the host machine (container-to-container communication)
         # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
         # 4. Production deployments use external K8s clusters with proper TLS certificates
-        # Use a more robust approach to avoid duplicate entries
+        # Use targeted approach to avoid duplicates and only modify KinD cluster entries
         cat "${KUBECONFIG_PATH}" | \
             sed "s|server: https://127.0.0.1:[0-9]\+|server: https://${CONTROL_PLANE_IP}:6443|g" | \
-            awk '/^    server:/ {print; print "    insecure-skip-tls-verify: true"; next} {print}' > "${KUBECONFIG_PATH}.tmp"
+            awk '
+                /^    server: https:\/\/.*:6443$/ {
+                    print
+                    if (!insecure_added) {
+                        print "    insecure-skip-tls-verify: true"
+                        insecure_added = 1
+                    }
+                    next
+                }
+                /^    insecure-skip-tls-verify:/ { next }
+                { print }
+            ' > "${KUBECONFIG_PATH}.tmp"
         mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
         chmod 600 "${KUBECONFIG_PATH}"
 
         # Connect this container to the KinD network for direct communication
+        # SECURITY WARNING: This grants the container privileged access to manipulate
+        # host Docker networks. This is acceptable ONLY for local development.
         CONTAINER_ID=$(hostname)
         if ! docker network inspect kind >/dev/null 2>&1; then
             echo "WARNING: KinD network not found"

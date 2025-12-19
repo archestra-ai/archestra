@@ -3,7 +3,6 @@
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
   AlertDialog,
@@ -16,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -103,19 +103,10 @@ export function ChatApiKeySelector({
   };
 
   const applyKeyChange = (keyId: string) => {
-    updateConversationMutation.mutate(
-      {
-        id: conversationId,
-        chatApiKeyId: keyId,
-      },
-      {
-        onError: (error) => {
-          toast.error(
-            `Failed to change API key: ${error instanceof Error ? error.message : "Unknown error"}`,
-          );
-        },
-      },
-    );
+    updateConversationMutation.mutate({
+      id: conversationId,
+      chatApiKeyId: keyId,
+    });
   };
 
   const handleConfirmChange = () => {
@@ -164,10 +155,10 @@ export function ChatApiKeySelector({
             </div>
 
             {/* Auto option - uses resolution priority */}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               className={cn(
-                "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left",
+                "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
                 !selectedKeyId && "bg-accent",
               )}
               onClick={() => {
@@ -189,7 +180,7 @@ export function ChatApiKeySelector({
                 <span className="truncate">Auto (recommended)</span>
               </div>
               {!selectedKeyId && <CheckIcon className="h-4 w-4 shrink-0" />}
-            </button>
+            </Button>
 
             {/* Personal keys */}
             {keysByScope.personal.length > 0 && (
@@ -199,11 +190,11 @@ export function ChatApiKeySelector({
                   <span>Personal</span>
                 </div>
                 {keysByScope.personal.map((key) => (
-                  <button
+                  <Button
                     key={key.id}
-                    type="button"
+                    variant="ghost"
                     className={cn(
-                      "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left",
+                      "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
                       selectedKeyId === key.id && "bg-accent",
                     )}
                     onClick={() => handleSelectKey(key.id)}
@@ -221,7 +212,7 @@ export function ChatApiKeySelector({
                     {selectedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
-                  </button>
+                  </Button>
                 ))}
               </>
             )}
@@ -234,11 +225,11 @@ export function ChatApiKeySelector({
                   <span>Team</span>
                 </div>
                 {keysByScope.team.map((key) => (
-                  <button
+                  <Button
                     key={key.id}
-                    type="button"
+                    variant="ghost"
                     className={cn(
-                      "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left",
+                      "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
                       selectedKeyId === key.id && "bg-accent",
                     )}
                     onClick={() => handleSelectKey(key.id)}
@@ -266,7 +257,7 @@ export function ChatApiKeySelector({
                     {selectedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
-                  </button>
+                  </Button>
                 ))}
               </>
             )}
@@ -279,11 +270,11 @@ export function ChatApiKeySelector({
                   <span>Organization</span>
                 </div>
                 {keysByScope.org_wide.map((key) => (
-                  <button
+                  <Button
                     key={key.id}
-                    type="button"
+                    variant="ghost"
                     className={cn(
-                      "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left",
+                      "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
                       selectedKeyId === key.id && "bg-accent",
                     )}
                     onClick={() => handleSelectKey(key.id)}
@@ -301,7 +292,7 @@ export function ChatApiKeySelector({
                     {selectedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
-                  </button>
+                  </Button>
                 ))}
               </>
             )}

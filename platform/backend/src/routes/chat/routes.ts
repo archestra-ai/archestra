@@ -622,23 +622,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate chatApiKeyId if provided
       if (chatApiKeyId) {
-        const apiKey = await ChatApiKeyModel.findById(chatApiKeyId);
-        if (!apiKey || apiKey.organizationId !== organizationId) {
-          throw new ApiError(404, "Chat API key not found");
-        }
-
-        // Verify user has access to the API key based on scope
-        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-        const canAccessKey =
-          apiKey.scope === "org_wide" ||
-          (apiKey.scope === "personal" && apiKey.userId === user.id) ||
-          (apiKey.scope === "team" &&
-            apiKey.teamId &&
-            userTeamIds.includes(apiKey.teamId));
-
-        if (!canAccessKey) {
-          throw new ApiError(403, "You do not have access to this API key");
-        }
+        await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
       // Determine smart default model if none specified
@@ -687,23 +671,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, body, user, organizationId }, reply) => {
       // Validate chatApiKeyId if provided
       if (body.chatApiKeyId) {
-        const apiKey = await ChatApiKeyModel.findById(body.chatApiKeyId);
-        if (!apiKey || apiKey.organizationId !== organizationId) {
-          throw new ApiError(404, "Chat API key not found");
-        }
-
-        // Verify user has access to the API key based on scope
-        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-        const canAccessKey =
-          apiKey.scope === "org_wide" ||
-          (apiKey.scope === "personal" && apiKey.userId === user.id) ||
-          (apiKey.scope === "team" &&
-            apiKey.teamId &&
-            userTeamIds.includes(apiKey.teamId));
-
-        if (!canAccessKey) {
-          throw new ApiError(403, "You do not have access to this API key");
-        }
+        await validateChatApiKeyAccess(body.chatApiKeyId, user.id, organizationId);
       }
 
       const conversation = await ConversationModel.update(
@@ -1028,5 +996,34 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
   );
 };
+
+/**
+ * Validates that a chat API key exists, belongs to the organization,
+ * and the user has access to it based on scope.
+ * Throws ApiError if validation fails.
+ */
+async function validateChatApiKeyAccess(
+  chatApiKeyId: string,
+  userId: string,
+  organizationId: string,
+): Promise<void> {
+  const apiKey = await ChatApiKeyModel.findById(chatApiKeyId);
+  if (!apiKey || apiKey.organizationId !== organizationId) {
+    throw new ApiError(404, "Chat API key not found");
+  }
+
+  // Verify user has access to the API key based on scope
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const canAccessKey =
+    apiKey.scope === "org_wide" ||
+    (apiKey.scope === "personal" && apiKey.userId === userId) ||
+    (apiKey.scope === "team" &&
+      apiKey.teamId &&
+      userTeamIds.includes(apiKey.teamId));
+
+  if (!canAccessKey) {
+    throw new ApiError(403, "You do not have access to this API key");
+  }
+}
 
 export default chatRoutes;

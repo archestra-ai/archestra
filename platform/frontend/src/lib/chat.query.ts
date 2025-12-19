@@ -1,5 +1,6 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const {
   getChatConversations,
@@ -100,6 +101,11 @@ export function useUpdateConversation() {
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
       });
+    },
+    onError: (error) => {
+      toast.error(
+        `Failed to update conversation: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     },
   });
 }

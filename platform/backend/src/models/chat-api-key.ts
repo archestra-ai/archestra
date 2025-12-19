@@ -69,19 +69,21 @@ class ChatApiKeyModel {
 
     if (isProfileAdmin) {
       // Admins see all keys except other users' personal keys
-      conditions.push(
-        or(
-          // Own personal keys
-          and(
-            eq(schema.chatApiKeysTable.scope, "personal"),
-            eq(schema.chatApiKeysTable.userId, userId),
-          ),
-          // All team keys
-          eq(schema.chatApiKeysTable.scope, "team"),
-          // All org-wide keys
-          eq(schema.chatApiKeysTable.scope, "org_wide"),
-        )!,
-      );
+      const adminConditions = [
+        // Own personal keys
+        and(
+          eq(schema.chatApiKeysTable.scope, "personal"),
+          eq(schema.chatApiKeysTable.userId, userId),
+        ),
+        // All team keys
+        eq(schema.chatApiKeysTable.scope, "team"),
+        // All org-wide keys
+        eq(schema.chatApiKeysTable.scope, "org_wide"),
+      ];
+      const adminOrCondition = or(...adminConditions);
+      if (adminOrCondition) {
+        conditions.push(adminOrCondition);
+      }
     } else {
       // Regular users see their personal + their teams + org-wide
       const visibilityConditions = [
@@ -104,7 +106,10 @@ class ChatApiKeyModel {
         );
       }
 
-      conditions.push(or(...visibilityConditions)!);
+      const userOrCondition = or(...visibilityConditions);
+      if (userOrCondition) {
+        conditions.push(userOrCondition);
+      }
     }
 
     // Query with team and user name joins
@@ -174,7 +179,10 @@ class ChatApiKeyModel {
       );
     }
 
-    conditions.push(or(...accessConditions)!);
+    const accessOrCondition = or(...accessConditions);
+    if (accessOrCondition) {
+      conditions.push(accessOrCondition);
+    }
 
     // Filter by provider if specified
     if (provider) {

@@ -299,7 +299,11 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const results = await Promise.all(
         providersToFetch.map((p) =>
-          fetchModelsForProvider(p as SupportedProvider, organizationId, user.id),
+          fetchModelsForProvider(
+            p as SupportedProvider,
+            organizationId,
+            user.id,
+          ),
         ),
       );
 

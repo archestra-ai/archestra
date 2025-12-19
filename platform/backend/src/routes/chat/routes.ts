@@ -671,7 +671,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, body, user, organizationId }, reply) => {
       // Validate chatApiKeyId if provided
       if (body.chatApiKeyId) {
-        await validateChatApiKeyAccess(body.chatApiKeyId, user.id, organizationId);
+        await validateChatApiKeyAccess(
+          body.chatApiKeyId,
+          user.id,
+          organizationId,
+        );
       }
 
       const conversation = await ConversationModel.update(

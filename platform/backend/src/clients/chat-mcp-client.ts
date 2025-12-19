@@ -77,7 +77,7 @@ export const __test = {
  * @param userIsProfileAdmin - Whether the user has profile admin permission
  * @returns Token value and metadata, or null if no token available
  */
-async function selectTeamToken(
+async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   userIsProfileAdmin: boolean,
@@ -284,7 +284,7 @@ export async function getChatMcpClient(
   );
 
   // Select appropriate token for this user
-  const tokenResult = await selectTeamToken(
+  const tokenResult = await selectMCPGatewayToken(
     agentId,
     userId,
     userIsProfileAdmin,
@@ -429,8 +429,8 @@ export async function getChatMcpTools({
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
-  const teamToken = await selectTeamToken(agentId, userId, userIsProfileAdmin);
-  if (!teamToken) {
+  const mcpGwToken = await selectMCPGatewayToken(agentId, userId, userIsProfileAdmin);
+  if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
       "No valid team token available for user - cannot execute tools",
@@ -556,9 +556,9 @@ export async function getChatMcpTools({
                 toolCall,
                 agentId,
                 {
-                  tokenId: teamToken.tokenId,
-                  teamId: teamToken.teamId,
-                  isOrganizationToken: teamToken.isOrganizationToken,
+                  tokenId: mcpGwToken.tokenId,
+                  teamId: mcpGwToken.teamId,
+                  isOrganizationToken: mcpGwToken.isOrganizationToken,
                   userId, // Pass userId for user-owned server priority
                 },
               );

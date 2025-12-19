@@ -238,7 +238,6 @@ class UserTokenModel {
   static async ensureUserToken(
     userId: string,
     organizationId: string,
-    userName?: string,
   ): Promise<SelectUserToken> {
     const existing = await UserTokenModel.findByUserAndOrg(
       userId,
@@ -246,8 +245,7 @@ class UserTokenModel {
     );
     if (existing) return existing;
 
-    const name = userName ? `${userName}'s Personal Token` : "Personal Token";
-    const { token } = await UserTokenModel.create(userId, organizationId, name);
+    const { token } = await UserTokenModel.create(userId, organizationId);
     return token;
   }
 }

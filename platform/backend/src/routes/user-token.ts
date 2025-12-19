@@ -28,11 +28,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { user, organizationId } = request;
 
       // Ensure token exists (creates if not)
-      const token = await UserTokenModel.ensureUserToken(
-        user.id,
-        organizationId,
-        user.name,
-      );
+      const token = await UserTokenModel.ensureUserToken(user.id, organizationId);
 
       return reply.send({
         id: token.id,

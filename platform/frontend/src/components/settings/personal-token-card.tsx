@@ -2,7 +2,7 @@
 
 import { archestraApiSdk } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,37 +24,25 @@ export function PersonalTokenCard() {
   const { data: token, isLoading, error } = useUserToken();
   const rotateMutation = useRotateUserToken();
 
-  const [showValue, setShowValue] = useState(false);
-  const [displayedValue, setDisplayedValue] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
-  const [isLoadingValue, setIsLoadingValue] = useState(false);
-
-  const handleShowToken = async () => {
-    if (!showValue && token) {
-      setIsLoadingValue(true);
-      try {
-        const response = await archestraApiSdk.getUserTokenValue();
-        const value = (response.data as { value: string })?.value;
-        if (value) {
-          setDisplayedValue(value);
-          setShowValue(true);
-        }
-      } finally {
-        setIsLoadingValue(false);
-      }
-    } else {
-      setShowValue(false);
-      setDisplayedValue(null);
-    }
-  };
 
   const handleCopy = async () => {
-    if (displayedValue) {
-      await navigator.clipboard.writeText(displayedValue);
-      setCopied(true);
-      toast.success("Token copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
+    if (!token) return;
+
+    setIsCopying(true);
+    try {
+      const response = await archestraApiSdk.getUserTokenValue();
+      const value = (response.data as { value: string })?.value;
+      if (value) {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        toast.success("Token copied to clipboard");
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } finally {
+      setIsCopying(false);
     }
   };
 
@@ -69,8 +57,6 @@ export function PersonalTokenCard() {
       if (result?.value) {
         await navigator.clipboard.writeText(result.value);
         toast.success("Token rotated and copied to clipboard");
-        setDisplayedValue(result.value);
-        setShowValue(true);
         setConfirmRotate(false);
         queryClient.invalidateQueries({ queryKey: ["userTokenValue"] });
       }
@@ -136,42 +122,24 @@ export function PersonalTokenCard() {
           <div className="flex gap-2">
             <Input
               readOnly
-              value={
-                showValue && displayedValue
-                  ? displayedValue
-                  : `${token?.tokenStart || "archestra_"}...`
-              }
+              value={`${token?.tokenStart || "archestra_"}***`}
               className="font-mono"
             />
             <Button
               variant="outline"
               size="icon"
-              onClick={handleShowToken}
-              disabled={isLoadingValue}
-              title={showValue ? "Hide token" : "Show token"}
+              onClick={handleCopy}
+              disabled={isCopying}
+              title="Copy token"
             >
-              {isLoadingValue ? (
+              {isCopying ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : showValue ? (
-                <EyeOff className="h-4 w-4" />
+              ) : copied ? (
+                <Check className="h-4 w-4 text-green-500" />
               ) : (
-                <Eye className="h-4 w-4" />
+                <Copy className="h-4 w-4" />
               )}
             </Button>
-            {showValue && displayedValue && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleCopy}
-                title="Copy token"
-              >
-                {copied ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            )}
           </div>
         </div>
 

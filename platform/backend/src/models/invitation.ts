@@ -103,11 +103,7 @@ class InvitationModel {
 
       // Create personal token for the new member
       try {
-        await UserTokenModel.ensureUserToken(
-          user.id,
-          organizationId,
-          user.name,
-        );
+        await UserTokenModel.ensureUserToken(user.id, organizationId);
         logger.info(
           `🔑 Personal token created for user ${user.email} in organization ${organizationId}`,
         );

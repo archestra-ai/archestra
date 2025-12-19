@@ -220,18 +220,14 @@ describe("UserTokenModel", () => {
       makeMember,
     }) => {
       const org = await makeOrganization();
-      const user = await makeUser({ name: "Test User" });
+      const user = await makeUser();
       await makeMember(user.id, org.id);
 
-      const token = await UserTokenModel.ensureUserToken(
-        user.id,
-        org.id,
-        "Test User",
-      );
+      const token = await UserTokenModel.ensureUserToken(user.id, org.id);
 
       expect(token.userId).toBe(user.id);
       expect(token.organizationId).toBe(org.id);
-      expect(token.name).toBe("Test User's Personal Token");
+      expect(token.name).toBe("Personal Token");
     });
 
     test("returns existing token if exists", async ({
@@ -247,20 +243,6 @@ describe("UserTokenModel", () => {
       const second = await UserTokenModel.ensureUserToken(user.id, org.id);
 
       expect(first.id).toBe(second.id);
-    });
-
-    test("uses default name when userName not provided", async ({
-      makeUser,
-      makeOrganization,
-      makeMember,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id);
-
-      const token = await UserTokenModel.ensureUserToken(user.id, org.id);
-
-      expect(token.name).toBe("Personal Token");
     });
   });
 

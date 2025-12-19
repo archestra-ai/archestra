@@ -1,33 +1,80 @@
+import type { IncomingHttpHeaders } from "node:http";
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { ChatApiKeyModel } from "@/models";
+import { hasPermission } from "@/auth";
+import { ChatApiKeyModel, TeamModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
-  ChatApiKeyWithProfilesSchema,
+  ChatApiKeyScopeSchema,
+  ChatApiKeyWithScopeInfoSchema,
   constructResponseSchema,
   SelectChatApiKeySchema,
   SupportedChatProviderSchema,
 } from "@/types";
 
 const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // List all chat API keys for the organization
+  // List all visible chat API keys for the user
   fastify.get(
     "/api/chat-api-keys",
     {
       schema: {
         operationId: RouteId.GetChatApiKeys,
-        description: "Get all chat API keys for the organization",
+        description:
+          "Get all chat API keys visible to the current user based on scope access",
         tags: ["Chat API Keys"],
         response: constructResponseSchema(
-          z.array(ChatApiKeyWithProfilesSchema),
+          z.array(ChatApiKeyWithScopeInfoSchema),
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const apiKeys =
-        await ChatApiKeyModel.findByOrganizationIdWithProfiles(organizationId);
+    async ({ organizationId, user, headers }, reply) => {
+      // Get user's team IDs
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      // Check if user is a profile admin
+      const { success: isProfileAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const apiKeys = await ChatApiKeyModel.getVisibleKeys(
+        organizationId,
+        user.id,
+        userTeamIds,
+        isProfileAdmin,
+      );
+      return reply.send(apiKeys);
+    },
+  );
+
+  // Get available API keys for chat (keys the user can use)
+  fastify.get(
+    "/api/chat-api-keys/available",
+    {
+      schema: {
+        operationId: RouteId.GetAvailableChatApiKeys,
+        description:
+          "Get API keys available for the current user to use in chat",
+        tags: ["Chat API Keys"],
+        querystring: z.object({
+          provider: SupportedChatProviderSchema.optional(),
+        }),
+        response: constructResponseSchema(
+          z.array(ChatApiKeyWithScopeInfoSchema),
+        ),
+      },
+    },
+    async ({ organizationId, user, query }, reply) => {
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      const apiKeys = await ChatApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        user.id,
+        userTeamIds,
+        query.provider,
+      );
       return reply.send(apiKeys);
     },
   );
@@ -38,18 +85,73 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateChatApiKey,
-        description: "Create a new chat API key",
+        description: "Create a new chat API key with specified scope",
         tags: ["Chat API Keys"],
         body: z.object({
           name: z.string().min(1, "Name is required"),
           provider: SupportedChatProviderSchema,
           apiKey: z.string().min(1, "API key is required"),
-          isOrganizationDefault: z.boolean().optional().default(false),
+          scope: ChatApiKeyScopeSchema.default("personal"),
+          teamId: z.string().optional(),
         }),
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
     },
-    async ({ body, organizationId }, reply) => {
+    async ({ body, organizationId, user, headers }, reply) => {
+      // Validate scope-specific requirements
+      if (body.scope === "team" && !body.teamId) {
+        throw new ApiError(400, "teamId is required for team-scoped API keys");
+      }
+
+      if (body.scope === "personal" && body.teamId) {
+        throw new ApiError(
+          400,
+          "teamId should not be provided for personal-scoped API keys",
+        );
+      }
+
+      if (body.scope === "org_wide" && body.teamId) {
+        throw new ApiError(
+          400,
+          "teamId should not be provided for org-wide API keys",
+        );
+      }
+
+      // For team-scoped keys, verify user has access to the team
+      if (body.scope === "team" && body.teamId) {
+        const { success: isTeamAdmin } = await hasPermission(
+          { team: ["admin"] },
+          headers,
+        );
+
+        if (!isTeamAdmin) {
+          const isUserInTeam = await TeamModel.isUserInTeam(
+            body.teamId,
+            user.id,
+          );
+          if (!isUserInTeam) {
+            throw new ApiError(
+              403,
+              "You can only create team API keys for teams you are a member of",
+            );
+          }
+        }
+      }
+
+      // For org-wide keys, require profile admin permission
+      if (body.scope === "org_wide") {
+        const { success: isProfileAdmin } = await hasPermission(
+          { profile: ["admin"] },
+          headers,
+        );
+        if (!isProfileAdmin) {
+          throw new ApiError(
+            403,
+            "Only admins can create organization-wide API keys",
+          );
+        }
+      }
+
       // Use forceDB when BYOS is enabled because chat API keys are user-provided values
       const forceDB = isByosEnabled();
 
@@ -60,24 +162,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         forceDB,
       );
 
-      // If setting as default, first unset any existing default
-      if (body.isOrganizationDefault) {
-        const existingDefault = await ChatApiKeyModel.findOrganizationDefault(
-          organizationId,
-          body.provider,
-        );
-        if (existingDefault) {
-          await ChatApiKeyModel.unsetOrganizationDefault(existingDefault.id);
-        }
-      }
-
       // Create the API key record
       const apiKey = await ChatApiKeyModel.create({
         organizationId,
         name: body.name,
         provider: body.provider,
         secretId: secret.id,
-        isOrganizationDefault: body.isOrganizationDefault,
+        scope: body.scope,
+        userId: body.scope === "personal" ? user.id : null,
+        teamId: body.scope === "team" ? body.teamId : null,
       });
 
       return reply.send(apiKey);
@@ -95,22 +188,36 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        response: constructResponseSchema(ChatApiKeyWithProfilesSchema),
+        response: constructResponseSchema(ChatApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ params, organizationId }, reply) => {
+    async ({ params, organizationId, user, headers }, reply) => {
       const apiKey = await ChatApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
         throw new ApiError(404, "Chat API key not found");
       }
 
-      const profiles = await ChatApiKeyModel.getAssignedProfiles(apiKey.id);
+      // Check visibility based on scope
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const { success: isProfileAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-      return reply.send({
-        ...apiKey,
-        profiles,
-      });
+      // Personal keys: only visible to owner
+      if (apiKey.scope === "personal" && apiKey.userId !== user.id) {
+        throw new ApiError(404, "Chat API key not found");
+      }
+
+      // Team keys: visible to team members or admins
+      if (apiKey.scope === "team" && !isProfileAdmin) {
+        if (!apiKey.teamId || !userTeamIds.includes(apiKey.teamId)) {
+          throw new ApiError(404, "Chat API key not found");
+        }
+      }
+
+      return reply.send(apiKey);
     },
   );
 
@@ -120,7 +227,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatApiKey,
-        description: "Update a chat API key",
+        description: "Update a chat API key (name or API key value)",
         tags: ["Chat API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -132,12 +239,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
     },
-    async ({ params, body, organizationId }, reply) => {
+    async ({ params, body, organizationId, user, headers }, reply) => {
       const apiKey = await ChatApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
         throw new ApiError(404, "Chat API key not found");
       }
+
+      // Check authorization based on scope
+      await authorizeApiKeyAccess(apiKey, user.id, headers);
 
       // Update the secret if a new API key is provided
       if (body.apiKey) {
@@ -183,12 +293,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async ({ params, organizationId }, reply) => {
+    async ({ params, organizationId, user, headers }, reply) => {
       const apiKey = await ChatApiKeyModel.findById(params.id);
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
         throw new ApiError(404, "Chat API key not found");
       }
+
+      // Check authorization based on scope
+      await authorizeApiKeyAccess(apiKey, user.id, headers);
 
       // Delete the associated secret
       if (apiKey.secretId) {
@@ -200,164 +313,57 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success: true });
     },
   );
-
-  // Set a chat API key as organization default
-  fastify.post(
-    "/api/chat-api-keys/:id/set-default",
-    {
-      schema: {
-        operationId: RouteId.SetChatApiKeyDefault,
-        description: "Set a chat API key as the organization default",
-        tags: ["Chat API Keys"],
-        params: z.object({
-          id: z.string().uuid(),
-        }),
-        response: constructResponseSchema(SelectChatApiKeySchema),
-      },
-    },
-    async ({ params, organizationId }, reply) => {
-      const apiKey = await ChatApiKeyModel.findById(params.id);
-
-      if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "Chat API key not found");
-      }
-
-      const updated = await ChatApiKeyModel.setAsOrganizationDefault(params.id);
-
-      if (!updated) {
-        throw new ApiError(500, "Failed to set API key as default");
-      }
-
-      return reply.send(updated);
-    },
-  );
-
-  // Unset a chat API key as organization default
-  fastify.post(
-    "/api/chat-api-keys/:id/unset-default",
-    {
-      schema: {
-        operationId: RouteId.UnsetChatApiKeyDefault,
-        description: "Unset a chat API key as the organization default",
-        tags: ["Chat API Keys"],
-        params: z.object({
-          id: z.string().uuid(),
-        }),
-        response: constructResponseSchema(SelectChatApiKeySchema),
-      },
-    },
-    async ({ params, organizationId }, reply) => {
-      const apiKey = await ChatApiKeyModel.findById(params.id);
-
-      if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "Chat API key not found");
-      }
-
-      const updated = await ChatApiKeyModel.unsetOrganizationDefault(params.id);
-
-      if (!updated) {
-        throw new ApiError(500, "Failed to unset API key as default");
-      }
-
-      return reply.send(updated);
-    },
-  );
-
-  // Update profile assignments for a chat API key
-  fastify.put(
-    "/api/chat-api-keys/:id/profiles",
-    {
-      schema: {
-        operationId: RouteId.UpdateChatApiKeyProfiles,
-        description: "Update profile assignments for a chat API key",
-        tags: ["Chat API Keys"],
-        params: z.object({
-          id: z.string().uuid(),
-        }),
-        body: z.object({
-          profileIds: z.array(z.string().uuid()),
-        }),
-        response: constructResponseSchema(ChatApiKeyWithProfilesSchema),
-      },
-    },
-    async ({ params, body, organizationId }, reply) => {
-      const apiKey = await ChatApiKeyModel.findById(params.id);
-
-      if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "Chat API key not found");
-      }
-
-      await ChatApiKeyModel.replaceProfileAssignments(
-        params.id,
-        body.profileIds,
-      );
-
-      const profiles = await ChatApiKeyModel.getAssignedProfiles(params.id);
-
-      return reply.send({
-        ...apiKey,
-        profiles,
-      });
-    },
-  );
-
-  // Bulk assign multiple API keys to profiles
-  fastify.post(
-    "/api/chat-api-keys/bulk-assign",
-    {
-      schema: {
-        operationId: RouteId.BulkAssignChatApiKeysToProfiles,
-        description:
-          "Assign multiple API keys to multiple profiles. Only one key per provider is allowed per profile - existing assignments for the same provider will be replaced.",
-        tags: ["Chat API Keys"],
-        body: z.object({
-          chatApiKeyIds: z
-            .array(z.string().uuid())
-            .min(1, "At least one API key is required"),
-          profileIds: z
-            .array(z.string().uuid())
-            .min(1, "At least one profile is required"),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            assignedCount: z.number(),
-          }),
-        ),
-      },
-    },
-    async ({ body, organizationId }, reply) => {
-      // Verify all API keys exist and belong to the organization
-      const apiKeys = await Promise.all(
-        body.chatApiKeyIds.map((id) => ChatApiKeyModel.findById(id)),
-      );
-
-      for (const apiKey of apiKeys) {
-        if (!apiKey || apiKey.organizationId !== organizationId) {
-          throw new ApiError(404, "One or more chat API keys not found");
-        }
-      }
-
-      // Assign each API key to each profile
-      // The model method handles the one-key-per-provider-per-profile constraint
-      for (const chatApiKeyId of body.chatApiKeyIds) {
-        await ChatApiKeyModel.bulkAssignProfiles(chatApiKeyId, body.profileIds);
-      }
-
-      // Calculate actual assignment count based on unique providers
-      // Since only one key per provider is allowed per profile, same-provider keys replace each other
-      const validApiKeys = apiKeys.filter(
-        (key): key is NonNullable<typeof key> => key !== null,
-      );
-      const uniqueProviders = new Set(validApiKeys.map((key) => key.provider));
-      const assignedCount = uniqueProviders.size * body.profileIds.length;
-
-      return reply.send({
-        success: true,
-        assignedCount,
-      });
-    },
-  );
 };
+
+/**
+ * Helper to check if a user is authorized to modify an API key based on scope
+ */
+async function authorizeApiKeyAccess(
+  apiKey: { scope: string; userId: string | null; teamId: string | null },
+  userId: string,
+  headers: IncomingHttpHeaders,
+): Promise<void> {
+  // Personal keys: only owner can modify
+  if (apiKey.scope === "personal") {
+    if (apiKey.userId !== userId) {
+      throw new ApiError(403, "You can only modify your own personal API keys");
+    }
+    return;
+  }
+
+  // Team keys: require team membership or team admin
+  if (apiKey.scope === "team") {
+    const { success: isTeamAdmin } = await hasPermission(
+      { team: ["admin"] },
+      headers,
+    );
+
+    if (!isTeamAdmin && apiKey.teamId) {
+      const isUserInTeam = await TeamModel.isUserInTeam(apiKey.teamId, userId);
+      if (!isUserInTeam) {
+        throw new ApiError(
+          403,
+          "You can only modify team API keys for teams you are a member of",
+        );
+      }
+    }
+    return;
+  }
+
+  // Org-wide keys: require profile admin
+  if (apiKey.scope === "org_wide") {
+    const { success: isProfileAdmin } = await hasPermission(
+      { profile: ["admin"] },
+      headers,
+    );
+    if (!isProfileAdmin) {
+      throw new ApiError(
+        403,
+        "Only admins can modify organization-wide API keys",
+      );
+    }
+    return;
+  }
+}
 
 export default chatApiKeysRoutes;

@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,10 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
-
-type SupportedChatProvider =
-  archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
+import {
+  type ChatApiKeyScope,
+  type SupportedChatProvider,
+  useChatApiKeys,
+  useCreateChatApiKey,
+} from "@/lib/chat-settings.query";
 
 const PROVIDER_CONFIG: Record<
   SupportedChatProvider,
@@ -66,8 +66,8 @@ export type { SupportedChatProvider };
 interface CreateChatApiKeyFormProps {
   /**
    * Variant of the form
-   * - "full": Shows all fields including name and set as default checkbox
-   * - "compact": Shows only provider and API key fields, auto-sets name and default
+   * - "full": Shows all fields including name
+   * - "compact": Shows only provider and API key fields, auto-sets name
    */
   variant?: "full" | "compact";
   /**
@@ -78,6 +78,10 @@ interface CreateChatApiKeyFormProps {
    * Whether to show the console link for getting API keys
    */
   showConsoleLink?: boolean;
+  /**
+   * Default scope for the API key (used in compact mode)
+   */
+  defaultScope?: ChatApiKeyScope;
 }
 
 const PLACEHOLDER_KEY = "••••••••••••••••";
@@ -86,6 +90,7 @@ export function CreateChatApiKeyForm({
   variant = "full",
   onSuccess,
   showConsoleLink = true,
+  defaultScope = "personal",
 }: CreateChatApiKeyFormProps) {
   const { data: chatApiKeys = [] } = useChatApiKeys();
   const createChatApiKey = useCreateChatApiKey();
@@ -93,7 +98,6 @@ export function CreateChatApiKeyForm({
   const [provider, setProvider] = useState<SupportedChatProvider>("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [name, setName] = useState("");
-  const [isDefault, setIsDefault] = useState(false);
   const [hasApiKeyChanged, setHasApiKeyChanged] = useState(false);
 
   // Check if any API key is configured for the selected provider
@@ -138,7 +142,7 @@ export function CreateChatApiKeyForm({
         name: keyName,
         provider,
         apiKey: keyToSend,
-        isOrganizationDefault: variant === "compact" ? true : isDefault,
+        scope: defaultScope,
       });
 
       toast.success("API key saved successfully");
@@ -146,7 +150,6 @@ export function CreateChatApiKeyForm({
       setHasApiKeyChanged(false);
       if (variant === "full") {
         setName("");
-        setIsDefault(false);
       }
       onSuccess?.();
     } catch (_error) {
@@ -157,7 +160,7 @@ export function CreateChatApiKeyForm({
     apiKey,
     name,
     provider,
-    isDefault,
+    defaultScope,
     createChatApiKey,
     variant,
     onSuccess,
@@ -245,22 +248,6 @@ export function CreateChatApiKeyForm({
           </p>
         )}
       </div>
-
-      {variant === "full" && (
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="create-api-key-default"
-            checked={isDefault}
-            onCheckedChange={(checked) => setIsDefault(checked === true)}
-          />
-          <Label
-            htmlFor="create-api-key-default"
-            className="text-sm font-normal"
-          >
-            Set as organization default for {providerConfig.name}
-          </Label>
-        </div>
-      )}
 
       <Button
         onClick={handleSubmit}

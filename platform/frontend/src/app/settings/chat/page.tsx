@@ -1,15 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import { E2eTestId } from "@shared";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Building2,
   CheckCircle2,
   Loader2,
   Pencil,
   Plus,
-  Star,
-  StarOff,
   Trash2,
+  User,
   Users,
 } from "lucide-react";
 import Image from "next/image";
@@ -22,7 +22,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -48,68 +47,51 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfiles } from "@/lib/agent.query";
 import {
-  useBulkAssignChatApiKeysToProfiles,
+  type ChatApiKey,
+  type ChatApiKeyScope,
   useChatApiKeys,
   useCreateChatApiKey,
   useDeleteChatApiKey,
-  useSetChatApiKeyDefault,
-  useUnsetChatApiKeyDefault,
   useUpdateChatApiKey,
-  useUpdateChatApiKeyProfiles,
 } from "@/lib/chat-settings.query";
+import { useTeams } from "@/lib/team.query";
 
-type ChatApiKey = archestraApiTypes.GetChatApiKeysResponses["200"][number];
+const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
+  personal: <User className="h-3 w-3" />,
+  team: <Users className="h-3 w-3" />,
+  org_wide: <Building2 className="h-3 w-3" />,
+};
 
 function ChatSettingsContent() {
   const { data: apiKeys = [] } = useChatApiKeys();
-  const { data: allProfiles = [] } = useProfiles();
+  const { data: teams = [] } = useTeams();
   const createApiKeyMutation = useCreateChatApiKey();
   const updateApiKeyMutation = useUpdateChatApiKey();
   const deleteApiKeyMutation = useDeleteChatApiKey();
-  const setDefaultMutation = useSetChatApiKeyDefault();
-  const unsetDefaultMutation = useUnsetChatApiKeyDefault();
-  const updateProfilesMutation = useUpdateChatApiKeyProfiles();
-  const bulkAssignMutation = useBulkAssignChatApiKeysToProfiles();
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isProfilesDialogOpen, setIsProfilesDialogOpen] = useState(false);
-  const [isBulkAssignDialogOpen, setIsBulkAssignDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<ChatApiKey | null>(null);
-
-  // Row selection state
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   // Form states
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyProvider, setNewKeyProvider] =
     useState<SupportedChatProvider>("anthropic");
   const [newKeyValue, setNewKeyValue] = useState("");
-  const [newKeyIsDefault, setNewKeyIsDefault] = useState(false);
+  const [newKeyScope, setNewKeyScope] = useState<ChatApiKeyScope>("personal");
+  const [newKeyTeamId, setNewKeyTeamId] = useState<string>("");
   const [editKeyName, setEditKeyName] = useState("");
   const [editKeyValue, setEditKeyValue] = useState("");
-  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
-  const [bulkAssignProfileIds, setBulkAssignProfileIds] = useState<string[]>(
-    [],
-  );
-
-  // Compute selected API keys from row selection
-  // Since we use getRowId, rowSelection keys are the actual API key IDs
-  const selectedApiKeyIds = useMemo(() => {
-    return Object.keys(rowSelection).filter((id) => rowSelection[id]);
-  }, [rowSelection]);
-
-  const hasSelection = selectedApiKeyIds.length > 0;
 
   const resetCreateForm = useCallback(() => {
     setNewKeyName("");
     setNewKeyProvider("anthropic");
     setNewKeyValue("");
-    setNewKeyIsDefault(false);
+    setNewKeyScope("personal");
+    setNewKeyTeamId("");
   }, []);
 
   const handleCreate = useCallback(async () => {
@@ -118,7 +100,8 @@ function ChatSettingsContent() {
         name: newKeyName,
         provider: newKeyProvider,
         apiKey: newKeyValue,
-        isOrganizationDefault: newKeyIsDefault,
+        scope: newKeyScope,
+        teamId: newKeyScope === "team" ? newKeyTeamId : undefined,
       });
       toast.success("API key created successfully");
       setIsCreateDialogOpen(false);
@@ -133,7 +116,8 @@ function ChatSettingsContent() {
     newKeyName,
     newKeyProvider,
     newKeyValue,
-    newKeyIsDefault,
+    newKeyScope,
+    newKeyTeamId,
     resetCreateForm,
   ]);
 
@@ -171,87 +155,6 @@ function ChatSettingsContent() {
     }
   }, [selectedApiKey, deleteApiKeyMutation]);
 
-  const handleSetDefault = useCallback(
-    async (apiKey: ChatApiKey) => {
-      try {
-        await setDefaultMutation.mutateAsync(apiKey.id);
-        toast.success("Set as organization default");
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to set as default";
-        toast.error(message);
-      }
-    },
-    [setDefaultMutation],
-  );
-
-  const handleUnsetDefault = useCallback(
-    async (apiKey: ChatApiKey) => {
-      try {
-        await unsetDefaultMutation.mutateAsync(apiKey.id);
-        toast.success("Removed as organization default");
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to remove as default";
-        toast.error(message);
-      }
-    },
-    [unsetDefaultMutation],
-  );
-
-  const handleUpdateProfiles = useCallback(async () => {
-    if (!selectedApiKey) return;
-    try {
-      await updateProfilesMutation.mutateAsync({
-        id: selectedApiKey.id,
-        profileIds: selectedProfileIds,
-      });
-      toast.success("Profile assignments updated");
-      setIsProfilesDialogOpen(false);
-      setSelectedApiKey(null);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to update profile assignments";
-      toast.error(message);
-    }
-  }, [selectedApiKey, updateProfilesMutation, selectedProfileIds]);
-
-  const handleBulkAssign = useCallback(async () => {
-    if (selectedApiKeyIds.length === 0 || bulkAssignProfileIds.length === 0)
-      return;
-    try {
-      await bulkAssignMutation.mutateAsync({
-        chatApiKeyIds: selectedApiKeyIds,
-        profileIds: bulkAssignProfileIds,
-      });
-      toast.success(
-        `Assigned ${selectedApiKeyIds.length} API key(s) to ${bulkAssignProfileIds.length} profile(s)`,
-      );
-      setIsBulkAssignDialogOpen(false);
-      setBulkAssignProfileIds([]);
-      setRowSelection({});
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to bulk assign API keys";
-      toast.error(message);
-    }
-  }, [selectedApiKeyIds, bulkAssignProfileIds, bulkAssignMutation]);
-
-  const openBulkAssignDialog = useCallback(() => {
-    setBulkAssignProfileIds([]);
-    setIsBulkAssignDialogOpen(true);
-  }, []);
-
-  const clearSelection = useCallback(() => {
-    setRowSelection({});
-  }, []);
-
   const openEditDialog = useCallback((apiKey: ChatApiKey) => {
     setSelectedApiKey(apiKey);
     setEditKeyName(apiKey.name);
@@ -264,37 +167,18 @@ function ChatSettingsContent() {
     setIsDeleteDialogOpen(true);
   }, []);
 
-  const openProfilesDialog = useCallback((apiKey: ChatApiKey) => {
-    setSelectedApiKey(apiKey);
-    setSelectedProfileIds(apiKey.profiles?.map((p) => p.id) || []);
-    setIsProfilesDialogOpen(true);
+  const getScopeDisplayText = useCallback((apiKey: ChatApiKey) => {
+    if (apiKey.scope === "personal") {
+      return apiKey.userName || "Personal";
+    }
+    if (apiKey.scope === "team") {
+      return apiKey.teamName || "Team";
+    }
+    return "Organization";
   }, []);
 
   const columns: ColumnDef<ChatApiKey>[] = useMemo(
     () => [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.name}`}
-          />
-        ),
-        size: 30,
-      },
       {
         accessorKey: "name",
         header: "Name",
@@ -304,16 +188,6 @@ function ChatSettingsContent() {
             data-testid={`${E2eTestId.ChatApiKeyRow}-${row.original.name}`}
           >
             <span className="font-medium">{row.original.name}</span>
-            {row.original.isOrganizationDefault && (
-              <Badge
-                variant="secondary"
-                className="text-xs"
-                data-testid={`${E2eTestId.ChatApiKeyDefaultBadge}-${row.original.name}`}
-              >
-                <Star className="h-3 w-3 mr-1" />
-                Default
-              </Badge>
-            )}
           </div>
         ),
       },
@@ -337,6 +211,33 @@ function ChatSettingsContent() {
         },
       },
       {
+        accessorKey: "scope",
+        header: "Scope",
+        cell: ({ row }) => (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="gap-1">
+                  {SCOPE_ICONS[row.original.scope]}
+                  <span>{getScopeDisplayText(row.original)}</span>
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                {row.original.scope === "personal" && (
+                  <p>Only visible to you</p>
+                )}
+                {row.original.scope === "team" && (
+                  <p>Available to team members of {row.original.teamName}</p>
+                )}
+                {row.original.scope === "org_wide" && (
+                  <p>Available to all organization members</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ),
+      },
+      {
         accessorKey: "secretId",
         header: "Status",
         cell: ({ row }) => (
@@ -355,41 +256,6 @@ function ChatSettingsContent() {
             )}
           </div>
         ),
-      },
-      {
-        accessorKey: "profiles",
-        header: "Profiles",
-        cell: ({ row }) => {
-          const profileCount = row.original.profiles?.length || 0;
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm text-muted-foreground">
-                    {profileCount}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {profileCount > 0 ? (
-                    <div>
-                      <p className="font-medium mb-1">Assigned to:</p>
-                      <ul className="text-xs">
-                        {row.original.profiles?.slice(0, 5).map((p) => (
-                          <li key={p.id}>{p.name}</li>
-                        ))}
-                        {profileCount > 5 && (
-                          <li>...and {profileCount - 5} more</li>
-                        )}
-                      </ul>
-                    </div>
-                  ) : (
-                    "No profiles assigned"
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        },
       },
       {
         id: "actions",
@@ -411,50 +277,6 @@ function ChatSettingsContent() {
               <Pencil className="h-4 w-4" />
             </PermissionButton>
             <PermissionButton
-              permissions={{ chatSettings: ["update"] }}
-              tooltip="Manage Profiles"
-              aria-label="Manage Profiles"
-              variant="outline"
-              size="icon-sm"
-              data-testid={`${E2eTestId.ManageProfilesChatApiKeyButton}-${row.original.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                openProfilesDialog(row.original);
-              }}
-            >
-              <Users className="h-4 w-4" />
-            </PermissionButton>
-            <PermissionButton
-              permissions={{ chatSettings: ["update"] }}
-              tooltip={
-                row.original.isOrganizationDefault
-                  ? "Remove as Default"
-                  : "Set as Default"
-              }
-              aria-label={
-                row.original.isOrganizationDefault
-                  ? "Remove as Default"
-                  : "Set as Default"
-              }
-              variant="outline"
-              size="icon-sm"
-              data-testid={`${E2eTestId.SetDefaultChatApiKeyButton}-${row.original.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (row.original.isOrganizationDefault) {
-                  handleUnsetDefault(row.original);
-                } else {
-                  handleSetDefault(row.original);
-                }
-              }}
-            >
-              {row.original.isOrganizationDefault ? (
-                <StarOff className="h-4 w-4" />
-              ) : (
-                <Star className="h-4 w-4" />
-              )}
-            </PermissionButton>
-            <PermissionButton
               permissions={{ chatSettings: ["delete"] }}
               tooltip="Delete"
               aria-label="Delete"
@@ -472,13 +294,7 @@ function ChatSettingsContent() {
         ),
       },
     ],
-    [
-      openEditDialog,
-      openDeleteDialog,
-      openProfilesDialog,
-      handleSetDefault,
-      handleUnsetDefault,
-    ],
+    [openEditDialog, openDeleteDialog, getScopeDisplayText],
   );
 
   return (
@@ -499,36 +315,10 @@ function ChatSettingsContent() {
         </Button>
       </div>
 
-      {/* Bulk Actions Bar */}
-      {hasSelection && (
-        <div className="flex items-center gap-4 rounded-md border bg-muted/50 p-3">
-          <span className="text-sm font-medium">
-            {selectedApiKeyIds.length} key(s) selected
-          </span>
-          <div className="flex items-center gap-2">
-            <PermissionButton
-              permissions={{ chatSettings: ["update"] }}
-              size="sm"
-              variant="outline"
-              onClick={openBulkAssignDialog}
-              data-testid={E2eTestId.BulkAssignChatApiKeysButton}
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Assign to Profiles
-            </PermissionButton>
-          </div>
-          <Button size="sm" variant="ghost" onClick={clearSelection}>
-            Clear selection
-          </Button>
-        </div>
-      )}
-
       <div data-testid={E2eTestId.ChatApiKeysTable}>
         <DataTable
           columns={columns}
           data={apiKeys}
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
           getRowId={(row) => row.id}
         />
       </div>
@@ -600,19 +390,59 @@ function ChatSettingsContent() {
                 onChange={(e) => setNewKeyValue(e.target.value)}
               />
             </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="isDefault"
-                checked={newKeyIsDefault}
-                onCheckedChange={(checked) =>
-                  setNewKeyIsDefault(checked === true)
-                }
-              />
-              <Label htmlFor="isDefault" className="text-sm font-normal">
-                Set as organization default for{" "}
-                {PROVIDER_CONFIG[newKeyProvider].name}
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="scope">Visibility</Label>
+              <Select
+                value={newKeyScope}
+                onValueChange={(v) => {
+                  setNewKeyScope(v as ChatApiKeyScope);
+                  if (v !== "team") {
+                    setNewKeyTeamId("");
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="personal">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span>Personal - Only visible to you</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="team">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      <span>Team - Visible to team members</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="org_wide">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      <span>Organization - Visible to everyone</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {newKeyScope === "team" && (
+              <div className="space-y-2">
+                <Label htmlFor="team">Team</Label>
+                <Select value={newKeyTeamId} onValueChange={setNewKeyTeamId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -627,7 +457,10 @@ function ChatSettingsContent() {
             <Button
               onClick={handleCreate}
               disabled={
-                !newKeyName || !newKeyValue || createApiKeyMutation.isPending
+                !newKeyName ||
+                !newKeyValue ||
+                (newKeyScope === "team" && !newKeyTeamId) ||
+                createApiKeyMutation.isPending
               }
             >
               {createApiKeyMutation.isPending && (
@@ -719,161 +552,6 @@ function ChatSettingsContent() {
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Profiles Assignment Dialog */}
-      <Dialog
-        open={isProfilesDialogOpen}
-        onOpenChange={setIsProfilesDialogOpen}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage Profile Assignments</DialogTitle>
-            <DialogDescription>
-              Select which profiles should use this API key
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 max-h-[300px] overflow-y-auto">
-            {allProfiles.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No profiles available
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {allProfiles.map((profile) => (
-                  <div
-                    key={profile.id}
-                    className="flex items-center space-x-2 p-2 rounded hover:bg-muted"
-                  >
-                    <Checkbox
-                      id={`profile-${profile.id}`}
-                      checked={selectedProfileIds.includes(profile.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedProfileIds([
-                            ...selectedProfileIds,
-                            profile.id,
-                          ]);
-                        } else {
-                          setSelectedProfileIds(
-                            selectedProfileIds.filter(
-                              (id) => id !== profile.id,
-                            ),
-                          );
-                        }
-                      }}
-                    />
-                    <Label
-                      htmlFor={`profile-${profile.id}`}
-                      className="flex-1 cursor-pointer"
-                    >
-                      {profile.name}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsProfilesDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateProfiles}
-              disabled={updateProfilesMutation.isPending}
-            >
-              {updateProfilesMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Assign Dialog */}
-      <Dialog
-        open={isBulkAssignDialogOpen}
-        onOpenChange={setIsBulkAssignDialogOpen}
-      >
-        <DialogContent
-          className="max-w-md"
-          data-testid={E2eTestId.BulkAssignChatApiKeysDialog}
-        >
-          <DialogHeader>
-            <DialogTitle>Assign to Profiles</DialogTitle>
-            <DialogDescription>
-              Assign {selectedApiKeyIds.length} selected API key(s) to profiles.
-              Note: Only one key per provider is allowed per profile. Existing
-              assignments for the same provider will be replaced.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 max-h-[300px] overflow-y-auto">
-            {allProfiles.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No profiles available
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {allProfiles.map((profile) => (
-                  <div
-                    key={profile.id}
-                    className="flex items-center space-x-2 p-2 rounded hover:bg-muted"
-                  >
-                    <Checkbox
-                      id={`bulk-profile-${profile.id}`}
-                      checked={bulkAssignProfileIds.includes(profile.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setBulkAssignProfileIds([
-                            ...bulkAssignProfileIds,
-                            profile.id,
-                          ]);
-                        } else {
-                          setBulkAssignProfileIds(
-                            bulkAssignProfileIds.filter(
-                              (id) => id !== profile.id,
-                            ),
-                          );
-                        }
-                      }}
-                    />
-                    <Label
-                      htmlFor={`bulk-profile-${profile.id}`}
-                      className="flex-1 cursor-pointer"
-                    >
-                      {profile.name}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsBulkAssignDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleBulkAssign}
-              disabled={
-                bulkAssignMutation.isPending ||
-                bulkAssignProfileIds.length === 0 ||
-                selectedApiKeyIds.length === 0
-              }
-            >
-              {bulkAssignMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Assign
             </Button>
           </DialogFooter>
         </DialogContent>

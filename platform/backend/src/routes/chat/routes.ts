@@ -27,6 +27,7 @@ import {
   ConversationModel,
   MessageModel,
   PromptModel,
+  TeamModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
@@ -74,27 +75,31 @@ function detectProviderFromModel(model: string): SupportedChatProvider {
 }
 
 /**
- * Get a smart default model based on available API keys for the agent/organization.
- * Priority: profile-specific key > org default key > env var > fallback
+ * Get a smart default model based on available API keys for the user.
+ * Priority: personal key > team key > org-wide key > env var > fallback
  */
 async function getSmartDefaultModel(
-  agentId: string,
+  userId: string,
   organizationId: string,
 ): Promise<string> {
+  // Get user's team IDs for resolution
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
   /**
-   * Check what API keys are available (profile-specific or org defaults)
+   * Check what API keys are available using the new scope-based resolution
    * Try to find an available API key in order of preference
    */
   for (const provider of SupportedProviders) {
-    const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-      agentId,
-      provider,
+    const resolvedKey = await ChatApiKeyModel.resolveApiKey(
       organizationId,
+      userId,
+      userTeamIds,
+      provider,
     );
 
-    if (profileApiKey?.secretId) {
+    if (resolvedKey?.secretId) {
       const secretValue = await getSecretValueForLlmProviderApiKey(
-        profileApiKey.secretId,
+        resolvedKey.secretId,
       );
 
       if (secretValue) {
@@ -226,19 +231,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Resolve API key: profile-specific -> org default -> env var
+      // Resolve API key using priority: conversation > personal > team > org_wide > env var
       let providerApiKey: string | undefined;
       let apiKeySource = "environment";
 
-      // Try profile-specific API key first (getProfileApiKey already falls back to org default)
-      const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-        conversation.agentId,
-        provider,
+      // Get user's team IDs for API key resolution
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      // Try scope-based resolution (checks conversation's chatApiKeyId first, then personal > team > org_wide)
+      const resolvedApiKey = await ChatApiKeyModel.resolveApiKey(
         organizationId,
+        user.id,
+        userTeamIds,
+        provider,
+        conversation.chatApiKeyId,
       );
 
-      if (profileApiKey?.secretId) {
-        const secret = await secretManager().getSecret(profileApiKey.secretId);
+      if (resolvedApiKey?.secretId) {
+        const secret = await secretManager().getSecret(resolvedApiKey.secretId);
         // Support both old format (anthropicApiKey) and new format (apiKey)
         const secretValue =
           secret?.secret?.apiKey ??
@@ -247,31 +257,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           secret?.secret?.openaiApiKey;
         if (secretValue) {
           providerApiKey = secretValue as string;
-          apiKeySource = profileApiKey.isOrganizationDefault
-            ? "organization default"
-            : "profile-specific";
-        }
-      }
-
-      // If profileApiKey exists but has no secretId, or getProfileApiKey returned null,
-      // explicitly try organization default as a fallback
-      if (!providerApiKey) {
-        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
-          organizationId,
-          provider,
-        );
-        if (orgDefault?.secretId) {
-          const secret = await secretManager().getSecret(orgDefault.secretId);
-          // Support both old format (anthropicApiKey) and new format (apiKey)
-          const secretValue =
-            secret?.secret?.apiKey ??
-            secret?.secret?.anthropicApiKey ??
-            secret?.secret?.geminiApiKey ??
-            secret?.secret?.openaiApiKey;
-          if (secretValue) {
-            providerApiKey = secretValue as string;
-            apiKeySource = "organization default";
-          }
+          apiKeySource = resolvedApiKey.scope;
         }
       }
 
@@ -600,15 +586,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId: true,
           title: true,
           selectedModel: true,
+          chatApiKeyId: true,
         })
           .required({ agentId: true })
-          .partial({ promptId: true, title: true, selectedModel: true }),
+          .partial({
+            promptId: true,
+            title: true,
+            selectedModel: true,
+            chatApiKeyId: true,
+          }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
       {
-        body: { agentId, promptId, title, selectedModel },
+        body: { agentId, promptId, title, selectedModel, chatApiKeyId },
         user,
         organizationId,
         headers,
@@ -628,9 +620,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Validate chatApiKeyId if provided
+      if (chatApiKeyId) {
+        const apiKey = await ChatApiKeyModel.findById(chatApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "Chat API key not found");
+        }
+
+        // Verify user has access to the API key based on scope
+        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+        const canAccessKey =
+          apiKey.scope === "org_wide" ||
+          (apiKey.scope === "personal" && apiKey.userId === user.id) ||
+          (apiKey.scope === "team" &&
+            apiKey.teamId &&
+            userTeamIds.includes(apiKey.teamId));
+
+        if (!canAccessKey) {
+          throw new ApiError(403, "You do not have access to this API key");
+        }
+      }
+
       // Determine smart default model if none specified
       const modelToUse =
-        selectedModel || (await getSmartDefaultModel(agentId, organizationId));
+        selectedModel || (await getSmartDefaultModel(user.id, organizationId));
 
       logger.info(
         {
@@ -638,6 +651,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           selectedModel,
           modelToUse,
+          chatApiKeyId,
           wasSmartDefault: !selectedModel,
         },
         "Creating conversation with model",
@@ -652,6 +666,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
+          chatApiKeyId,
         }),
       );
     },
@@ -662,7 +677,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatConversation,
-        description: "Update conversation title or model",
+        description: "Update conversation title, model, or API key",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
@@ -670,6 +685,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Validate chatApiKeyId if provided
+      if (body.chatApiKeyId) {
+        const apiKey = await ChatApiKeyModel.findById(body.chatApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "Chat API key not found");
+        }
+
+        // Verify user has access to the API key based on scope
+        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+        const canAccessKey =
+          apiKey.scope === "org_wide" ||
+          (apiKey.scope === "personal" && apiKey.userId === user.id) ||
+          (apiKey.scope === "team" &&
+            apiKey.teamId &&
+            userTeamIds.includes(apiKey.teamId));
+
+        if (!canAccessKey) {
+          throw new ApiError(403, "You do not have access to this API key");
+        }
+      }
+
       const conversation = await ConversationModel.update(
         id,
         user.id,
@@ -785,44 +821,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Resolve API key: profile-specific -> org default -> env var
+      // Resolve API key using scope-based priority: personal -> team -> org_wide -> env var
       let anthropicApiKey: string | undefined;
 
-      // Try profile-specific API key first (if conversation has an agent)
-      if (conversation.agentId) {
-        const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-          conversation.agentId,
-          "anthropic",
-          organizationId,
-        );
+      // Get user's team IDs for resolution
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-        if (profileApiKey?.secretId) {
-          const secret = await secretManager().getSecret(
-            profileApiKey.secretId,
-          );
-          // Support both old format (anthropicApiKey) and new format (apiKey)
-          const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
-          if (secretValue) {
-            anthropicApiKey = secretValue as string;
-          }
-        }
-      }
+      // Use resolveApiKey which handles priority: conversation key -> personal -> team -> org_wide
+      const resolvedKey = await ChatApiKeyModel.resolveApiKey(
+        organizationId,
+        user.id,
+        userTeamIds,
+        "anthropic",
+        conversation.chatApiKeyId,
+      );
 
-      // If profileApiKey doesn't work, explicitly try organization default as a fallback
-      if (!anthropicApiKey) {
-        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
-          organizationId,
-          "anthropic",
-        );
-        if (orgDefault?.secretId) {
-          const secret = await secretManager().getSecret(orgDefault.secretId);
-          // Support both old format (anthropicApiKey) and new format (apiKey)
-          const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
-          if (secretValue) {
-            anthropicApiKey = secretValue as string;
-          }
+      if (resolvedKey?.secretId) {
+        const secret = await secretManager().getSecret(resolvedKey.secretId);
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+        if (secretValue) {
+          anthropicApiKey = secretValue as string;
         }
       }
 

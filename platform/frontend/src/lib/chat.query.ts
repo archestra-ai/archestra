@@ -81,14 +81,16 @@ export function useUpdateConversation() {
       id,
       title,
       selectedModel,
+      chatApiKeyId,
     }: {
       id: string;
       title?: string | null;
       selectedModel?: string;
+      chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel },
+        body: { title, selectedModel, chatApiKeyId },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;

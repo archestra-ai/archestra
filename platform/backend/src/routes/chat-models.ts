@@ -180,15 +180,16 @@ async function getProviderApiKey(
   provider: SupportedProvider,
   organizationId: string,
 ): Promise<string | null> {
-  // Try organization default first
-  const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+  // Try organization-wide key first
+  const orgWideKey = await ChatApiKeyModel.findByScope(
     organizationId,
     provider,
+    "org_wide",
   );
 
-  if (orgDefault?.secretId) {
+  if (orgWideKey?.secretId) {
     const secretValue = await getSecretValueForLlmProviderApiKey(
-      orgDefault.secretId,
+      orgWideKey.secretId,
     );
 
     if (secretValue) {

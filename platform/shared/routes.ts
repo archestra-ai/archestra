@@ -156,14 +156,11 @@ export const RouteId = {
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",
+  GetAvailableChatApiKeys: "getAvailableChatApiKeys",
   CreateChatApiKey: "createChatApiKey",
   GetChatApiKey: "getChatApiKey",
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
-  SetChatApiKeyDefault: "setChatApiKeyDefault",
-  UnsetChatApiKeyDefault: "unsetChatApiKeyDefault",
-  UpdateChatApiKeyProfiles: "updateChatApiKeyProfiles",
-  BulkAssignChatApiKeysToProfiles: "bulkAssignChatApiKeysToProfiles",
 
   // Prompt Routes
   GetPrompts: "getPrompts",

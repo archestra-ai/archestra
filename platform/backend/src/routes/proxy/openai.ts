@@ -23,6 +23,7 @@ import {
 } from "@/models";
 import {
   type Agent,
+  ApiError,
   constructResponseSchema,
   OpenAi,
   UuidIdSchema,
@@ -986,16 +987,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const statusCode =
         error instanceof Error && "status" in error
-          ? (error.status as 200 | 400 | 404 | 403 | 500)
+          ? (error.status as 400 | 404 | 403 | 500)
           : 500;
 
-      return reply.status(statusCode).send({
-        error: {
-          message:
-            error instanceof Error ? error.message : "Internal server error",
-          type: "api_error",
-        },
-      });
+      const message =
+        error instanceof Error ? error.message : "Internal server error";
+
+      // Throw ApiError to let the central error handler format the response correctly
+      // This ensures the error type matches the expected schema for each status code
+      throw new ApiError(statusCode, message);
     }
   };
 

@@ -54,7 +54,15 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.ts", "**/*.tsx", "!**/*.ee.ts", "!**/*.ee.tsx", "!**/*.ee.test.ts", "!**/*.ee.test.tsx", "!**/*.ee.spec.ts"],
+      "includes": [
+        "**/*.ts",
+        "**/*.tsx",
+        "!**/*.ee.ts",
+        "!**/*.ee.tsx",
+        "!**/*.ee.test.ts",
+        "!**/*.ee.test.tsx",
+        "!**/*.ee.spec.ts"
+      ],
       "linter": {
         "rules": {
           "style": {

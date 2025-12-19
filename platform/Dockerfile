@@ -3,16 +3,19 @@
 # Build image:
 #   docker build -t archestra/platform .
 #
-# Run in quickstart mode (with embedded KinD cluster):
+# Run in quickstart mode (with embedded Kubernetes cluster using KinD):
 #   docker run -p 9000:9000 -p 3000:3000 \
-#     -e ARCHESTRA_QUICKSTART=true \
-#     -v /var/run/docker.sock:/var/run/docker.sock \
-#     archestra/platform
+#       -e ARCHESTRA_QUICKSTART=true \
+#       -v archestra-postgres-data:/var/lib/postgresql/data \
+#       -v archestra-app-data:/app/data \
+#       -v /var/run/docker.sock:/var/run/docker.sock \
+#       archestra/platform;
 #
-# Run with external Kubernetes:
+# Run with external Kubernetes cluster
 #   docker run -p 9000:9000 -p 3000:3000 \
-#     -e ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig \
-#     archestra/platform
+#       -v archestra-postgres-data:/var/lib/postgresql/data \
+#       -v archestra-app-data:/app/data \
+#       archestra/platform;
 #
 FROM node:24.11.1-alpine3.22 AS base
 

@@ -161,39 +161,6 @@ class TeamVaultFolderModel {
     );
     return folders.map((f) => f.folder);
   }
-
-  /**
-   * Check if a Vault path is accessible to a user based on their team folder mappings.
-   * A path is accessible if it starts with one of the user's team folder paths.
-   */
-  static async isVaultPathAccessible(
-    userId: string,
-    organizationId: string,
-    vaultPath: string,
-    isOrgAdmin: boolean,
-  ): Promise<boolean> {
-    logger.debug(
-      { userId, vaultPath, isOrgAdmin },
-      "TeamVaultFolderModel.isVaultPathAccessible: checking path access",
-    );
-
-    const accessibleFolders = await TeamVaultFolderModel.getAccessibleFolders(
-      userId,
-      organizationId,
-      isOrgAdmin,
-    );
-
-    // Check if the path starts with any of the accessible folder paths
-    const hasAccess = accessibleFolders.some((folder) =>
-      vaultPath.startsWith(folder.vaultPath),
-    );
-
-    logger.debug(
-      { userId, vaultPath, hasAccess },
-      "TeamVaultFolderModel.isVaultPathAccessible: completed",
-    );
-    return hasAccess;
-  }
 }
 
 export default TeamVaultFolderModel;

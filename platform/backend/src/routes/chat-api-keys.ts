@@ -8,6 +8,7 @@ import {
   ChatApiKeyWithProfilesSchema,
   constructResponseSchema,
   SelectChatApiKeySchema,
+  type SelectSecret,
   SupportedChatProviderSchema,
 } from "@/types";
 
@@ -38,27 +39,54 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateChatApiKey,
-        description: "Create a new chat API key",
+        description:
+          "Create a new chat API key. Either provide apiKey directly, or provide vaultSecretPath + vaultSecretKey to reference a secret from Vault (when BYOS is enabled).",
         tags: ["Chat API Keys"],
-        body: z.object({
-          name: z.string().min(1, "Name is required"),
-          provider: SupportedChatProviderSchema,
-          apiKey: z.string().min(1, "API key is required"),
-          isOrganizationDefault: z.boolean().optional().default(false),
-        }),
+        body: z
+          .object({
+            name: z.string().min(1, "Name is required"),
+            provider: SupportedChatProviderSchema,
+            apiKey: z.string().min(1).optional(),
+            vaultSecretPath: z.string().min(1).optional(),
+            vaultSecretKey: z.string().min(1).optional(),
+            isOrganizationDefault: z.boolean().optional().default(false),
+          })
+          .refine(
+            (data) =>
+              data.apiKey || (data.vaultSecretPath && data.vaultSecretKey),
+            {
+              message:
+                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+            },
+          ),
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
     },
     async ({ body, organizationId }, reply) => {
-      // Use forceDB when BYOS is enabled because chat API keys are user-provided values
-      const forceDB = isByosEnabled();
+      let secret: SelectSecret;
 
-      // Create the secret for the API key
-      const secret = await secretManager().createSecret(
-        { apiKey: body.apiKey },
-        "chatapikey",
-        forceDB,
-      );
+      if (isByosEnabled()) {
+        if (!body.vaultSecretPath || !body.vaultSecretKey) {
+          throw new ApiError(400, "Vault secret path and key are required");
+        }
+
+        // Create secret with vault reference (isByosVault=true)
+        const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+        secret = await secretManager().createSecret(
+          { apiKey: vaultReference },
+          "chatapikey",
+          false, // forceDB=false to store as vault reference
+        );
+      } else {
+        if (!body.apiKey) {
+          throw new ApiError(400, "API key is required");
+        }
+        // Create the secret for the API key
+        secret = await secretManager().createSecret(
+          { apiKey: body.apiKey },
+          "chatapikey",
+        );
+      }
 
       // If setting as default, first unset any existing default
       if (body.isOrganizationDefault) {
@@ -120,7 +148,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatApiKey,
-        description: "Update a chat API key",
+        description:
+          "Update a chat API key. Can update name, apiKey directly, or switch to vault reference (vaultSecretPath + vaultSecretKey when BYOS is enabled).",
         tags: ["Chat API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -128,31 +157,57 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           apiKey: z.string().min(1).optional(),
+          vaultSecretPath: z.string().min(1).optional(),
+          vaultSecretKey: z.string().min(1).optional(),
         }),
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
     },
     async ({ params, body, organizationId }, reply) => {
-      const apiKey = await ChatApiKeyModel.findById(params.id);
+      const existingApiKey = await ChatApiKeyModel.findById(params.id);
 
-      if (!apiKey || apiKey.organizationId !== organizationId) {
+      if (!existingApiKey || existingApiKey.organizationId !== organizationId) {
         throw new ApiError(404, "Chat API key not found");
       }
 
-      // Update the secret if a new API key is provided
-      if (body.apiKey) {
-        if (apiKey.secretId) {
-          await secretManager().updateSecret(apiKey.secretId, {
+      // Handle vault reference update
+      if (body.vaultSecretPath && body.vaultSecretKey) {
+        if (!isByosEnabled()) {
+          throw new ApiError(
+            400,
+            "Vault secret references are only supported when BYOS (READONLY_VAULT) mode is enabled",
+          );
+        }
+
+        // Create new secret with vault reference
+        const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+        const newSecret = await secretManager().createSecret(
+          { apiKey: vaultReference },
+          "chatapikey",
+          false, // forceDB=false to store as vault reference
+        );
+
+        // Delete old secret if it exists
+        if (existingApiKey.secretId) {
+          await secretManager().deleteSecret(existingApiKey.secretId);
+        }
+
+        // Update the API key record with the new secret
+        await ChatApiKeyModel.update(params.id, { secretId: newSecret.id });
+      } else if (body.apiKey) {
+        // Direct API key update
+        if (existingApiKey.secretId) {
+          await secretManager().updateSecret(existingApiKey.secretId, {
             apiKey: body.apiKey,
           });
         } else {
           const forceDB = isByosEnabled();
-          const secret = await secretManager().createSecret(
+          const newSecret = await secretManager().createSecret(
             { apiKey: body.apiKey },
             "chatapikey",
             forceDB,
           );
-          await ChatApiKeyModel.update(params.id, { secretId: secret.id });
+          await ChatApiKeyModel.update(params.id, { secretId: newSecret.id });
         }
       }
 

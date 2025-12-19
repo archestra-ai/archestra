@@ -278,7 +278,7 @@ export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 export const getChatApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetChatApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetChatApiKeysResponses, GetChatApiKeysErrors, ThrowOnError>({ url: '/api/chat-api-keys', ...options });
 
 /**
- * Create a new chat API key
+ * Create a new chat API key. Either provide apiKey directly, or provide vaultSecretPath + vaultSecretKey to reference a secret from Vault (when BYOS is enabled).
  */
 export const createChatApiKey = <ThrowOnError extends boolean = false>(options: Options<CreateChatApiKeyData, ThrowOnError>) => (options.client ?? client).post<CreateChatApiKeyResponses, CreateChatApiKeyErrors, ThrowOnError>({
     url: '/api/chat-api-keys',
@@ -300,7 +300,7 @@ export const deleteChatApiKey = <ThrowOnError extends boolean = false>(options: 
 export const getChatApiKey = <ThrowOnError extends boolean = false>(options: Options<GetChatApiKeyData, ThrowOnError>) => (options.client ?? client).get<GetChatApiKeyResponses, GetChatApiKeyErrors, ThrowOnError>({ url: '/api/chat-api-keys/{id}', ...options });
 
 /**
- * Update a chat API key
+ * Update a chat API key. Can update name, apiKey directly, or switch to vault reference (vaultSecretPath + vaultSecretKey when BYOS is enabled).
  */
 export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: Options<UpdateChatApiKeyData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatApiKeyResponses, UpdateChatApiKeyErrors, ThrowOnError>({
     url: '/api/chat-api-keys/{id}',

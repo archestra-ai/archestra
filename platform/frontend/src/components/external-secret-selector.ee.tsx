@@ -25,7 +25,6 @@ import {
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
 } from "@/lib/team-vault-folder.query.ee";
-import Divider from "./divider";
 
 interface ExternalSecretSelectorProps {
   selectedTeamId: string | null;
@@ -133,8 +132,6 @@ export default function ExternalSecretSelector({
           </div>
         </div>
       )}
-
-      <Divider />
       <p className="font-medium">Select external secret from Vault</p>
       {/* Team selector */}
       <div className="space-y-2">

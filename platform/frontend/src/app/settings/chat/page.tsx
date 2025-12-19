@@ -1,6 +1,11 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  isVaultReference,
+  parseVaultReference,
+} from "@shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   CheckCircle2,
@@ -13,12 +18,27 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   PROVIDER_CONFIG,
   type SupportedChatProvider,
 } from "@/components/chat/create-chat-api-key-form";
+import { useFeatureFlag } from "@/lib/features.hook";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -59,6 +79,7 @@ import {
   useUpdateChatApiKey,
   useUpdateChatApiKeyProfiles,
 } from "@/lib/chat-settings.query";
+import { useGetSecret } from "@/lib/secrets.query";
 
 type ChatApiKey = archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
@@ -72,6 +93,7 @@ function ChatSettingsContent() {
   const unsetDefaultMutation = useUnsetChatApiKeyDefault();
   const updateProfilesMutation = useUpdateChatApiKeyProfiles();
   const bulkAssignMutation = useBulkAssignChatApiKeysToProfiles();
+  const byosEnabled = useFeatureFlag("byosEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -97,6 +119,52 @@ function ChatSettingsContent() {
     [],
   );
 
+  // Vault secret selection state (for BYOS mode) - Create Dialog
+  const [newKeySelectedTeamId, setNewKeySelectedTeamId] = useState<
+    string | null
+  >(null);
+  const [newKeySelectedSecretPath, setNewKeySelectedSecretPath] = useState<
+    string | null
+  >(null);
+  const [newKeySelectedSecretKey, setNewKeySelectedSecretKey] = useState<
+    string | null
+  >(null);
+
+  // Vault secret selection state (for BYOS mode) - Edit Dialog
+  const [editKeySelectedTeamId, setEditKeySelectedTeamId] = useState<
+    string | null
+  >(null);
+  const [editKeySelectedSecretPath, setEditKeySelectedSecretPath] = useState<
+    string | null
+  >(null);
+  const [editKeySelectedSecretKey, setEditKeySelectedSecretKey] = useState<
+    string | null
+  >(null);
+
+  // Fetch secret for edit dialog to parse vault reference
+  const { data: editSecretData } = useGetSecret(
+    isEditDialogOpen ? selectedApiKey?.secretId : null,
+  );
+
+  // Parse vault reference from secret when edit dialog opens
+  useEffect(() => {
+    if (editSecretData?.isByosVault && editSecretData.secret) {
+      // The secret value is stored as { apiKey: "path#key" }
+      const secretValue = editSecretData.secret as { apiKey?: string };
+      if (secretValue.apiKey && isVaultReference(secretValue.apiKey)) {
+        const { path, key } = parseVaultReference(secretValue.apiKey);
+        setEditKeySelectedSecretPath(path);
+        setEditKeySelectedSecretKey(key);
+        // Note: teamId cannot be derived from path, user can reselect if needed
+        setEditKeySelectedTeamId(null);
+      }
+    }
+  }, [editSecretData]);
+
+  // Check if vault secret is fully selected
+  const hasNewKeyVaultSecretSelected =
+    byosEnabled && newKeySelectedSecretPath && newKeySelectedSecretKey;
+
   // Compute selected API keys from row selection
   // Since we use getRowId, rowSelection keys are the actual API key IDs
   const selectedApiKeyIds = useMemo(() => {
@@ -110,17 +178,33 @@ function ChatSettingsContent() {
     setNewKeyProvider("anthropic");
     setNewKeyValue("");
     setNewKeyIsDefault(false);
+    // Reset vault selection
+    setNewKeySelectedTeamId(null);
+    setNewKeySelectedSecretPath(null);
+    setNewKeySelectedSecretKey(null);
   }, []);
 
   const handleCreate = useCallback(async () => {
     try {
-      await createApiKeyMutation.mutateAsync({
-        name: newKeyName,
-        provider: newKeyProvider,
-        apiKey: newKeyValue,
-        isOrganizationDefault: newKeyIsDefault,
-      });
-      toast.success("API key created successfully");
+      // When BYOS is enabled and vault secret is selected, use vault reference
+      if (byosEnabled && newKeySelectedSecretPath && newKeySelectedSecretKey) {
+        await createApiKeyMutation.mutateAsync({
+          name: newKeyName,
+          provider: newKeyProvider,
+          vaultSecretPath: newKeySelectedSecretPath,
+          vaultSecretKey: newKeySelectedSecretKey,
+          isOrganizationDefault: newKeyIsDefault,
+        });
+        toast.success("API key saved successfully with Vault reference");
+      } else {
+        await createApiKeyMutation.mutateAsync({
+          name: newKeyName,
+          provider: newKeyProvider,
+          apiKey: newKeyValue,
+          isOrganizationDefault: newKeyIsDefault,
+        });
+        toast.success("API key created successfully");
+      }
       setIsCreateDialogOpen(false);
       resetCreateForm();
     } catch (error) {
@@ -135,19 +219,39 @@ function ChatSettingsContent() {
     newKeyValue,
     newKeyIsDefault,
     resetCreateForm,
+    byosEnabled,
+    newKeySelectedSecretPath,
+    newKeySelectedSecretKey,
   ]);
 
   const handleEdit = useCallback(async () => {
     if (!selectedApiKey) return;
     try {
-      await updateApiKeyMutation.mutateAsync({
-        id: selectedApiKey.id,
-        data: {
-          name: editKeyName || undefined,
-          apiKey: editKeyValue || undefined,
-        },
-      });
-      toast.success("API key updated successfully");
+      // When BYOS is enabled and vault secret is selected, use vault reference
+      if (
+        byosEnabled &&
+        editKeySelectedSecretPath &&
+        editKeySelectedSecretKey
+      ) {
+        await updateApiKeyMutation.mutateAsync({
+          id: selectedApiKey.id,
+          data: {
+            name: editKeyName || undefined,
+            vaultSecretPath: editKeySelectedSecretPath,
+            vaultSecretKey: editKeySelectedSecretKey,
+          },
+        });
+        toast.success("API key updated successfully with Vault reference");
+      } else {
+        await updateApiKeyMutation.mutateAsync({
+          id: selectedApiKey.id,
+          data: {
+            name: editKeyName || undefined,
+            apiKey: editKeyValue || undefined,
+          },
+        });
+        toast.success("API key updated successfully");
+      }
       setIsEditDialogOpen(false);
       setSelectedApiKey(null);
     } catch (error) {
@@ -155,7 +259,15 @@ function ChatSettingsContent() {
         error instanceof Error ? error.message : "Failed to update API key";
       toast.error(message);
     }
-  }, [selectedApiKey, updateApiKeyMutation, editKeyName, editKeyValue]);
+  }, [
+    selectedApiKey,
+    updateApiKeyMutation,
+    editKeyName,
+    editKeyValue,
+    byosEnabled,
+    editKeySelectedSecretPath,
+    editKeySelectedSecretKey,
+  ]);
 
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey) return;
@@ -256,6 +368,10 @@ function ChatSettingsContent() {
     setSelectedApiKey(apiKey);
     setEditKeyName(apiKey.name);
     setEditKeyValue("");
+    // Reset vault selection
+    setEditKeySelectedTeamId(null);
+    setEditKeySelectedSecretPath(null);
+    setEditKeySelectedSecretKey(null);
     setIsEditDialogOpen(true);
   }, []);
 
@@ -590,16 +706,40 @@ function ChatSettingsContent() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder={PROVIDER_CONFIG[newKeyProvider].placeholder}
-                value={newKeyValue}
-                onChange={(e) => setNewKeyValue(e.target.value)}
-              />
-            </div>
+            {/* API Key input - show vault selector if BYOS enabled, otherwise show manual input */}
+            {byosEnabled ? (
+              <div className="space-y-2">
+                <Label>API Key from Vault</Label>
+                <Suspense
+                  fallback={
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </div>
+                  }
+                >
+                  <ExternalSecretSelector
+                    selectedTeamId={newKeySelectedTeamId}
+                    selectedSecretPath={newKeySelectedSecretPath}
+                    selectedSecretKey={newKeySelectedSecretKey}
+                    onTeamChange={setNewKeySelectedTeamId}
+                    onSecretChange={setNewKeySelectedSecretPath}
+                    onSecretKeyChange={setNewKeySelectedSecretKey}
+                  />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">API Key</Label>
+                <Input
+                  id="apiKey"
+                  type="password"
+                  placeholder={PROVIDER_CONFIG[newKeyProvider].placeholder}
+                  value={newKeyValue}
+                  onChange={(e) => setNewKeyValue(e.target.value)}
+                />
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="isDefault"
@@ -627,13 +767,15 @@ function ChatSettingsContent() {
             <Button
               onClick={handleCreate}
               disabled={
-                !newKeyName || !newKeyValue || createApiKeyMutation.isPending
+                createApiKeyMutation.isPending ||
+                !newKeyName ||
+                (byosEnabled ? !hasNewKeyVaultSecretSelected : !newKeyValue)
               }
             >
               {createApiKeyMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Create
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -657,21 +799,50 @@ function ChatSettingsContent() {
                 onChange={(e) => setEditKeyName(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="editApiKey">
-                API Key{" "}
-                <span className="text-muted-foreground font-normal">
-                  (leave blank to keep current)
-                </span>
-              </Label>
-              <Input
-                id="editApiKey"
-                type="password"
-                placeholder="••••••••••••••••"
-                value={editKeyValue}
-                onChange={(e) => setEditKeyValue(e.target.value)}
-              />
-            </div>
+            {/* API Key input - show vault selector if BYOS enabled, otherwise show manual input */}
+            {byosEnabled ? (
+              <div className="space-y-2">
+                <Label>
+                  API Key from Vault{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (select to update)
+                  </span>
+                </Label>
+                <Suspense
+                  fallback={
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </div>
+                  }
+                >
+                  <ExternalSecretSelector
+                    selectedTeamId={editKeySelectedTeamId}
+                    selectedSecretPath={editKeySelectedSecretPath}
+                    selectedSecretKey={editKeySelectedSecretKey}
+                    onTeamChange={setEditKeySelectedTeamId}
+                    onSecretChange={setEditKeySelectedSecretPath}
+                    onSecretKeyChange={setEditKeySelectedSecretKey}
+                  />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="editApiKey">
+                  API Key{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (leave blank to keep current)
+                  </span>
+                </Label>
+                <Input
+                  id="editApiKey"
+                  type="password"
+                  placeholder="••••••••••••••••"
+                  value={editKeyValue}
+                  onChange={(e) => setEditKeyValue(e.target.value)}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

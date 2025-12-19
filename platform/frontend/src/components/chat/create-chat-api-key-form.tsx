@@ -4,7 +4,14 @@ import type { archestraApiTypes } from "@shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +26,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
+import { useFeatureFlag } from "@/lib/features.hook";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
 
 type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
@@ -89,12 +103,22 @@ export function CreateChatApiKeyForm({
 }: CreateChatApiKeyFormProps) {
   const { data: chatApiKeys = [] } = useChatApiKeys();
   const createChatApiKey = useCreateChatApiKey();
+  const byosEnabled = useFeatureFlag("byosEnabled");
 
   const [provider, setProvider] = useState<SupportedChatProvider>("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [name, setName] = useState("");
   const [isDefault, setIsDefault] = useState(false);
   const [hasApiKeyChanged, setHasApiKeyChanged] = useState(false);
+
+  // Vault secret selection state (for BYOS mode)
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedSecretPath, setSelectedSecretPath] = useState<string | null>(
+    null,
+  );
+  const [selectedSecretKey, setSelectedSecretKey] = useState<string | null>(
+    null,
+  );
 
   // Check if any API key is configured for the selected provider
   const hasExistingApiKey = useMemo(() => {
@@ -124,26 +148,49 @@ export function CreateChatApiKeyForm({
     [hasExistingApiKey],
   );
 
+  // Check if vault secret is fully selected
+  const hasVaultSecretSelected =
+    byosEnabled && selectedSecretPath && selectedSecretKey;
+
   const handleSubmit = useCallback(async () => {
     try {
-      const keyToSend = hasApiKeyChanged ? apiKey : undefined;
-      if (!keyToSend) return;
-
       const keyName =
         variant === "compact"
           ? `Default ${PROVIDER_CONFIG[provider].name} Key`
           : name;
 
-      await createChatApiKey.mutateAsync({
-        name: keyName,
-        provider,
-        apiKey: keyToSend,
-        isOrganizationDefault: variant === "compact" ? true : isDefault,
-      });
+      // When BYOS is enabled and vault secret is selected, use vault reference
+      if (byosEnabled && selectedSecretPath && selectedSecretKey) {
+        await createChatApiKey.mutateAsync({
+          name: keyName,
+          provider,
+          vaultSecretPath: selectedSecretPath,
+          vaultSecretKey: selectedSecretKey,
+          isOrganizationDefault: variant === "compact" ? true : isDefault,
+        });
 
-      toast.success("API key saved successfully");
-      setApiKey(PLACEHOLDER_KEY);
-      setHasApiKeyChanged(false);
+        toast.success("API key saved successfully with Vault reference");
+        // Reset vault selection
+        setSelectedTeamId(null);
+        setSelectedSecretPath(null);
+        setSelectedSecretKey(null);
+      } else {
+        // Use direct API key
+        const keyToSend = hasApiKeyChanged ? apiKey : undefined;
+        if (!keyToSend) return;
+
+        await createChatApiKey.mutateAsync({
+          name: keyName,
+          provider,
+          apiKey: keyToSend,
+          isOrganizationDefault: variant === "compact" ? true : isDefault,
+        });
+
+        toast.success("API key saved successfully");
+        setApiKey(PLACEHOLDER_KEY);
+        setHasApiKeyChanged(false);
+      }
+
       if (variant === "full") {
         setName("");
         setIsDefault(false);
@@ -161,6 +208,9 @@ export function CreateChatApiKeyForm({
     createChatApiKey,
     variant,
     onSuccess,
+    byosEnabled,
+    selectedSecretPath,
+    selectedSecretKey,
   ]);
 
   const providerConfig = PROVIDER_CONFIG[provider];
@@ -212,39 +262,63 @@ export function CreateChatApiKeyForm({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="create-api-key-value">API Key</Label>
-        <div className="relative">
-          <Input
-            id="create-api-key-value"
-            type="password"
-            placeholder={providerConfig.placeholder}
-            value={apiKey}
-            onChange={(e) => handleApiKeyChange(e.target.value)}
-            className={
-              hasExistingApiKey && !hasApiKeyChanged
-                ? "border-green-500 pr-10"
-                : ""
+      {/* API Key input - show vault selector if BYOS enabled, otherwise show manual input */}
+      {byosEnabled ? (
+        <div className="space-y-2">
+          <Label>API Key from Vault</Label>
+          <Suspense
+            fallback={
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading...
+              </div>
             }
-          />
-          {hasExistingApiKey && !hasApiKeyChanged && (
-            <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+          >
+            <ExternalSecretSelector
+              selectedTeamId={selectedTeamId}
+              selectedSecretPath={selectedSecretPath}
+              selectedSecretKey={selectedSecretKey}
+              onTeamChange={setSelectedTeamId}
+              onSecretChange={setSelectedSecretPath}
+              onSecretKeyChange={setSelectedSecretKey}
+            />
+          </Suspense>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="create-api-key-value">API Key</Label>
+          <div className="relative">
+            <Input
+              id="create-api-key-value"
+              type="password"
+              placeholder={providerConfig.placeholder}
+              value={apiKey}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
+              className={
+                hasExistingApiKey && !hasApiKeyChanged
+                  ? "border-green-500 pr-10"
+                  : ""
+              }
+            />
+            {hasExistingApiKey && !hasApiKeyChanged && (
+              <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+            )}
+          </div>
+          {showConsoleLink && (
+            <p className="text-xs text-muted-foreground">
+              Get your API key from{" "}
+              <Link
+                href={providerConfig.consoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                {providerConfig.consoleName}
+              </Link>
+            </p>
           )}
         </div>
-        {showConsoleLink && (
-          <p className="text-xs text-muted-foreground">
-            Get your API key from{" "}
-            <Link
-              href={providerConfig.consoleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              {providerConfig.consoleName}
-            </Link>
-          </p>
-        )}
-      </div>
+      )}
 
       {variant === "full" && (
         <div className="flex items-center space-x-2">
@@ -266,16 +340,15 @@ export function CreateChatApiKeyForm({
         onClick={handleSubmit}
         disabled={
           createChatApiKey.isPending ||
-          !apiKey ||
-          !hasApiKeyChanged ||
-          (variant === "full" && !name)
+          (variant === "full" && !name) ||
+          (byosEnabled ? !hasVaultSecretSelected : !apiKey || !hasApiKeyChanged)
         }
         size="sm"
       >
         {createChatApiKey.isPending && (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         )}
-        {hasExistingApiKey ? "Update API Key" : "Save API Key"}
+        Save
       </Button>
     </div>
   );

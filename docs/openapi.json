@@ -18006,7 +18006,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Create a new chat API key",
+        "description": "Create a new chat API key. Either provide apiKey directly, or provide vaultSecretPath + vaultSecretKey to reference a secret from Vault (when BYOS is enabled).",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18029,6 +18029,14 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "vaultSecretPath": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vaultSecretKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "isOrganizationDefault": {
                     "default": false,
                     "type": "boolean"
@@ -18036,8 +18044,7 @@
                 },
                 "required": [
                   "name",
-                  "provider",
-                  "apiKey"
+                  "provider"
                 ]
               }
             }
@@ -18635,7 +18642,7 @@
         "tags": [
           "Chat API Keys"
         ],
-        "description": "Update a chat API key",
+        "description": "Update a chat API key. Can update name, apiKey directly, or switch to vault reference (vaultSecretPath + vaultSecretKey when BYOS is enabled).",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18647,6 +18654,14 @@
                     "minLength": 1
                   },
                   "apiKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vaultSecretPath": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vaultSecretKey": {
                     "type": "string",
                     "minLength": 1
                   }

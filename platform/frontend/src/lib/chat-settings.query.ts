@@ -42,7 +42,9 @@ export function useCreateChatApiKey() {
     mutationFn: async (data: {
       name: string;
       provider: SupportedChatProvider;
-      apiKey: string;
+      apiKey?: string;
+      vaultSecretPath?: string;
+      vaultSecretKey?: string;
       isOrganizationDefault?: boolean;
     }) => {
       const { data: responseData, error } = await createChatApiKey({
@@ -74,6 +76,8 @@ export function useUpdateChatApiKey() {
       data: {
         name?: string;
         apiKey?: string;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
       };
     }) => {
       const { data: responseData, error } = await updateChatApiKey({

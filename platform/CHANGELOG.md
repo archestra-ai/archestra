@@ -1,5 +1,59 @@
 # Changelog
 
+## [1.0.7](https://github.com/archestra-ai/archestra/compare/platform-v1.0.6...platform-v1.0.7) (2025-12-18)
+
+
+### Features
+
+* add support for LLM proxy `X-Archestra-User-Id` header ([#1641](https://github.com/archestra-ai/archestra/issues/1641)) ([e07bd17](https://github.com/archestra-ai/archestra/commit/e07bd17cda802066168c33f8b10f876390196962))
+* bulk profile assignment for LLM provider API keys ([#1614](https://github.com/archestra-ai/archestra/issues/1614)) ([9ec2b26](https://github.com/archestra-ai/archestra/commit/9ec2b269c3c218ce0d5af4c79f6e2f862f4bffd0))
+* **chat:** Add model selector for switching LLM models in chat ([#1575](https://github.com/archestra-ai/archestra/issues/1575)) ([1823713](https://github.com/archestra-ai/archestra/commit/18237134832b819e262905c2d1d8662b0ddd380a))
+* deterministic tool policy generator subagent ([#1603](https://github.com/archestra-ai/archestra/issues/1603)) ([7a3c0dc](https://github.com/archestra-ai/archestra/commit/7a3c0dc35e3da0ef6c43d5e9fff48e30d93a8af6))
+* manage MCP server `Pod`s with `Deployment`s ([#1634](https://github.com/archestra-ai/archestra/issues/1634)) ([3038eca](https://github.com/archestra-ai/archestra/commit/3038eca8a5f49c9c9e561bc283e5413eadb913fe))
+
+
+### Bug Fixes
+
+* address dark-mode theme styling in chat ([#1596](https://github.com/archestra-ai/archestra/issues/1596)) ([b961047](https://github.com/archestra-ai/archestra/commit/b961047ff74636729c0baf01b53352dd1b28f0c3))
+* default MCP var values, markdown in dialog ([#1592](https://github.com/archestra-ai/archestra/issues/1592)) ([113b776](https://github.com/archestra-ai/archestra/commit/113b776fa12be57c8f844dd60f1fdd1921063330))
+* explicit namespaces for k8s resources ([#1607](https://github.com/archestra-ai/archestra/issues/1607)) ([c8f7004](https://github.com/archestra-ai/archestra/commit/c8f70047a54624025401a33f95494d95a4f67d4b))
+* fix default k8s-mcp SA name and make it consistent in local dev ([#1622](https://github.com/archestra-ai/archestra/issues/1622)) ([9b4fb25](https://github.com/archestra-ai/archestra/commit/9b4fb25039f8e95a3b15021c6a2e5d042aebc30b))
+* fix model selector, get models via API, fix statistics timeBucketKey ([#1647](https://github.com/archestra-ai/archestra/issues/1647)) ([383956a](https://github.com/archestra-ai/archestra/commit/383956adc33cc113dbf493ba0afb3bfc46df20e9))
+* fix policy configurator subagent prompt permission ([#1651](https://github.com/archestra-ai/archestra/issues/1651)) ([47d0348](https://github.com/archestra-ai/archestra/commit/47d0348a4c7408f56a09ec165d5b06ecc1fe5699))
+* make `pnpm codegen` results consistent + fix `pnpm dev` backend occasional restart issue ([#1646](https://github.com/archestra-ai/archestra/issues/1646)) ([ed51504](https://github.com/archestra-ai/archestra/commit/ed51504342ae8eb6c9a114821d54bb997d863de8))
+* move SSO logic to .ee files ([#1625](https://github.com/archestra-ai/archestra/issues/1625)) ([f10027e](https://github.com/archestra-ai/archestra/commit/f10027e89305f9cdc85aff4d8a2b7a45bc8bb296))
+* support Gemini for token prices, deduplicate `SupportedProviders` type/schema ([#1591](https://github.com/archestra-ai/archestra/issues/1591)) ([81dff9a](https://github.com/archestra-ai/archestra/commit/81dff9ae1e6d5152602f76bec7b58aced5cfa122))
+* tooltip overflow in start free chat dialog ([#1597](https://github.com/archestra-ai/archestra/issues/1597)) ([12bf7f9](https://github.com/archestra-ai/archestra/commit/12bf7f9ca15598a7b0dd47cb073f9ed2dff05e64))
+
+
+### Dependencies
+
+* MIT-compatible better-auth-ui ([#1648](https://github.com/archestra-ai/archestra/issues/1648)) ([3a5d74e](https://github.com/archestra-ai/archestra/commit/3a5d74e274a71f8b50f0f87ea9c1703dcf8e603a))
+
+
+### Miscellaneous Chores
+
+* address chat "tool pill" height inconsistency + remove duplicate function ([#1598](https://github.com/archestra-ai/archestra/issues/1598)) ([a1d9f17](https://github.com/archestra-ai/archestra/commit/a1d9f1786e82c9f60f78b085d339838ecc05ce03))
+* attempt to fix/improve flaky e2e tests ([#1619](https://github.com/archestra-ai/archestra/issues/1619)) ([a5b0a92](https://github.com/archestra-ai/archestra/commit/a5b0a92233a39cd963bf7e6be148a9cc08e260cc))
+* don't flash "LLM Provider API Keys" dialog on /chat ([#1594](https://github.com/archestra-ai/archestra/issues/1594)) ([af08b1a](https://github.com/archestra-ai/archestra/commit/af08b1a277dccab30d0c3913c7be26a5de6e5d56))
+* edit gitattributes ([#1629](https://github.com/archestra-ai/archestra/issues/1629)) ([dcc93b1](https://github.com/archestra-ai/archestra/commit/dcc93b1487a47e96b8891c5e7ad50ac0fdb4a9ce))
+* enable speech btn ([#1652](https://github.com/archestra-ai/archestra/issues/1652)) ([c3c1cca](https://github.com/archestra-ai/archestra/commit/c3c1cca3125573717210d93c126d666a338a7751))
+* enable/disable tools in chat, move model selector into PromptInput, bump AI Elements version ([#1610](https://github.com/archestra-ai/archestra/issues/1610)) ([149601a](https://github.com/archestra-ai/archestra/commit/149601afe2360afda563d770a917bff2117e0abb))
+* filter out noisy `/healthcheck` + mcp server healthcheck request/response server logs ([#1653](https://github.com/archestra-ai/archestra/issues/1653)) ([1610d11](https://github.com/archestra-ai/archestra/commit/1610d1186d5ef72a6f9c336de83bc095c67f90c2))
+* fix `tilt up` ([#1637](https://github.com/archestra-ai/archestra/issues/1637)) ([1b9823e](https://github.com/archestra-ai/archestra/commit/1b9823e05d1a113363f37b81d0f7aafdcbcd6f67))
+* hide Drizzle ORM snapshots in GitHub pull requests ([#1601](https://github.com/archestra-ai/archestra/issues/1601)) ([99aa135](https://github.com/archestra-ai/archestra/commit/99aa135a52d791fe20fbdf8d34da20e915cdb82e))
+* improve "tool pills" chat styling ([129f718](https://github.com/archestra-ai/archestra/commit/129f7184fa484dca7000c009eebacef656378240))
+* k8s mcp polish ([#1611](https://github.com/archestra-ai/archestra/issues/1611)) ([8760d9f](https://github.com/archestra-ai/archestra/commit/8760d9faeec6c2b6c2c32f55f3a11c0bbd6113c0))
+* llmproxy e2e tests for profiles spending limit ([#1636](https://github.com/archestra-ai/archestra/issues/1636)) ([abfaefd](https://github.com/archestra-ai/archestra/commit/abfaefdebd554af4446f2902c42cd50be54be33c))
+* make it clear what value selected when using boolean field in mcp server form ([#1630](https://github.com/archestra-ai/archestra/issues/1630)) ([feb9cd3](https://github.com/archestra-ai/archestra/commit/feb9cd32aa5159c44815a157d51fe9abe0f4de22))
+* move `ARCHESTRA_AUTH_SECRET` and `ARCHESTRA_CHAT_*_API_KEY` env vars in helm chart to `Secret` ([#1620](https://github.com/archestra-ai/archestra/issues/1620)) ([74b13c7](https://github.com/archestra-ai/archestra/commit/74b13c715c00d737a890ba36e05ad4eb9ac47ba1))
+* move helm chart sensitive environment variables to use `Secret` & `secretKeyRef` ([#1618](https://github.com/archestra-ai/archestra/issues/1618)) ([cdf4828](https://github.com/archestra-ai/archestra/commit/cdf48283e49dd1ba5db266be1f44e817272fe4a0))
+* move vault-related functionalities to ee ([#1606](https://github.com/archestra-ai/archestra/issues/1606)) ([c03e673](https://github.com/archestra-ai/archestra/commit/c03e673e65407ae1bc77b0ca4459b70036a3e943))
+* refactor e2e llm-proxy tests ([#1633](https://github.com/archestra-ai/archestra/issues/1633)) ([bf17d43](https://github.com/archestra-ai/archestra/commit/bf17d43dbe1c0451a98895cb7ca1301dde8c6abc))
+* rename default profile from "Default agent" to "Default Profile" ([#1640](https://github.com/archestra-ai/archestra/issues/1640)) ([4d3a292](https://github.com/archestra-ai/archestra/commit/4d3a2924e684d88571ba47b23ef17d93933e23ff))
+* update `chat-mcp-client` to use `CacheManager` + add `CacheManager` tests ([#1654](https://github.com/archestra-ai/archestra/issues/1654)) ([c62ff7f](https://github.com/archestra-ai/archestra/commit/c62ff7f76f2a85e829899ecbf14fbf5446441200))
+* update several Postgres `helm` sub-chart defaults ([#1612](https://github.com/archestra-ai/archestra/issues/1612)) ([38bfbc8](https://github.com/archestra-ai/archestra/commit/38bfbc86d38d0d92b8fcebdc09f51a45eab6265f))
+
 ## [1.0.6](https://github.com/archestra-ai/archestra/compare/platform-v1.0.5...platform-v1.0.6) (2025-12-15)
 
 

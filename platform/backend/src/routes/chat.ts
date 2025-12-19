@@ -1,7 +1,12 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId, SupportedProviders } from "@shared";
+import {
+  EXTERNAL_AGENT_ID_HEADER,
+  RouteId,
+  SupportedProviders,
+  USER_ID_HEADER,
+} from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -17,13 +22,17 @@ import logger from "@/logging";
 import {
   AgentModel,
   ChatApiKeyModel,
+  ConversationEnabledToolModel,
   ConversationModel,
   MessageModel,
   PromptModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import { secretManager } from "@/secretsmanager";
+import {
+  getSecretValueForLlmProviderApiKey,
+  secretManager,
+} from "@/secretsmanager";
 import type { SupportedChatProvider } from "@/types";
 import {
   ApiError,
@@ -82,12 +91,9 @@ async function getSmartDefaultModel(
     );
 
     if (profileApiKey?.secretId) {
-      const secret = await secretManager().getSecret(profileApiKey.secretId);
-      const secretValue =
-        secret?.secret?.apiKey ??
-        secret?.secret?.anthropicApiKey ??
-        secret?.secret?.geminiApiKey ??
-        secret?.secret?.openaiApiKey;
+      const secretValue = await getSecretValueForLlmProviderApiKey(
+        profileApiKey.secretId,
+      );
 
       if (secretValue) {
         // Found a valid API key for this provider - return appropriate default model
@@ -163,16 +169,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch MCP tools and agent prompts in parallel
-      const [mcpTools, prompt] = await Promise.all([
-        getChatMcpTools({
-          agentName: conversation.agent.name,
-          agentId: conversation.agentId,
-          userId: user.id,
-          userIsProfileAdmin,
-        }),
+      // Fetch enabled tool IDs, MCP tools, and agent prompts in parallel
+      const [enabledToolIds, prompt] = await Promise.all([
+        ConversationEnabledToolModel.findByConversation(conversationId),
         PromptModel.findById(conversation.promptId),
       ]);
+
+      // Fetch MCP tools with enabled tool filtering
+      const mcpTools = await getChatMcpTools({
+        agentName: conversation.agent.name,
+        agentId: conversation.agentId,
+        userId: user.id,
+        userIsProfileAdmin,
+        enabledToolIds,
+      });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
@@ -294,12 +304,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create provider client pointing to LLM Proxy
-      // Forward external agent ID header if present
-      const clientHeaders = externalAgentId
-        ? {
-            [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
-          }
-        : undefined;
+      // Forward external agent ID and user ID headers to LLM Proxy
+      // so interactions can be properly associated with the user
+      const clientHeaders: Record<string, string> = {};
+      if (externalAgentId) {
+        clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
+      }
+      // Always include user ID header so interactions are saved with user association
+      clientHeaders[USER_ID_HEADER] = user.id;
 
       let llmClient:
         | ReturnType<typeof createAnthropic>
@@ -311,7 +323,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createAnthropic({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else if (provider === "gemini") {
         // URL format: /v1/gemini/:agentId/v1beta/models
@@ -319,14 +332,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createGoogleGenerativeAI({
           apiKey: providerApiKey || "vertex-ai-mode",
           baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else if (provider === "openai") {
         // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
         llmClient = createOpenAI({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else {
         throw new ApiError(400, `Unsupported provider: ${provider}`);
@@ -859,6 +874,122 @@ The title should capture the main topic or theme of the conversation. Respond wi
         // Return the conversation without title update on error
         return reply.send(conversation);
       }
+    },
+  );
+
+  // Enabled Tools Routes
+  fastify.get(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.GetConversationEnabledTools,
+        description:
+          "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.object({
+            hasCustomSelection: z.boolean(),
+            enabledToolIds: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const [hasCustomSelection, enabledToolIds] = await Promise.all([
+        ConversationEnabledToolModel.hasCustomSelection(id),
+        ConversationEnabledToolModel.findByConversation(id),
+      ]);
+
+      return reply.send({
+        hasCustomSelection,
+        enabledToolIds,
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.UpdateConversationEnabledTools,
+        description:
+          "Set enabled tools for a conversation. Replaces all existing selections.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          toolIds: z.array(z.string()),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            hasCustomSelection: z.boolean(),
+            enabledToolIds: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async (
+      { params: { id }, body: { toolIds }, user, organizationId },
+      reply,
+    ) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationEnabledToolModel.setEnabledTools(id, toolIds);
+
+      return reply.send({
+        hasCustomSelection: toolIds.length > 0,
+        enabledToolIds: toolIds,
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.DeleteConversationEnabledTools,
+        description:
+          "Clear custom tool selection for a conversation (revert to all tools enabled)",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationEnabledToolModel.clearCustomSelection(id);
+
+      return reply.send({ success: true });
     },
   );
 };

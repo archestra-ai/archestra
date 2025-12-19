@@ -37,7 +37,7 @@ import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { enterpriseLicenseMiddleware } from "@/middleware";
-import { AgentLabelModel } from "@/models";
+import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,
@@ -48,10 +48,13 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 
-const eeRoutes = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-    await import("./routes/index.ee")
-  : ({} as Record<string, never>);
+// Load enterprise routes if license is activated OR if running in codegen mode
+// (codegen mode ensures OpenAPI spec always includes all enterprise routes)
+const eeRoutes =
+  config.enterpriseLicenseActivated || config.codegenMode
+    ? // biome-ignore lint/style/noRestrictedImports: conditional schema
+      await import("./routes/index.ee")
+    : ({} as Record<string, never>);
 
 const {
   api: {
@@ -164,6 +167,7 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
 export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
+    disableRequestLogging: true,
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
@@ -336,6 +340,43 @@ const startMcpServerRuntime = async (
 
 const start = async () => {
   const fastify = createFastifyInstance();
+
+  /**
+   * Custom request logging hook that excludes noisy endpoints:
+   * - /health: Kubernetes liveness/readiness probes
+   * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
+   */
+  const shouldSkipRequestLogging = (url: string, method: string): boolean => {
+    if (url === "/health") return true;
+    // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
+    if (method === "GET" && url.startsWith("/v1/mcp/")) return true;
+    return false;
+  };
+
+  fastify.addHook("onRequest", (request, _reply, done) => {
+    if (!shouldSkipRequestLogging(request.url, request.method)) {
+      request.log.info(
+        { url: request.url, method: request.method },
+        "incoming request",
+      );
+    }
+    done();
+  });
+
+  fastify.addHook("onResponse", (request, reply, done) => {
+    if (!shouldSkipRequestLogging(request.url, request.method)) {
+      request.log.info(
+        {
+          url: request.url,
+          method: request.method,
+          statusCode: reply.statusCode,
+          responseTime: reply.elapsedTime,
+        },
+        "request completed",
+      );
+    }
+    done();
+  });
 
   /**
    * Setup Sentry error handler for Fastify

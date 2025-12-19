@@ -103,12 +103,12 @@ beforeEach(async () => {
   }
 
   // Re-insert the default agent that tests expect to exist
-  // This matches what migration 0050_steady_talisman.sql creates
+  // This matches what the migrations create (initially 'Default Agent', renamed to 'Default Profile')
   const seedSql = `
     INSERT INTO agents (id, name, is_demo, is_default, created_at, updated_at)
     VALUES (
       gen_random_uuid(),
-      'Default Agent',
+      'Default Profile',
       false,
       true,
       NOW(),

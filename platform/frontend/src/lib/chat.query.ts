@@ -9,6 +9,10 @@ const {
   updateChatConversation,
   deleteChatConversation,
   generateChatConversationTitle,
+  getConversationEnabledTools,
+  updateConversationEnabledTools,
+  deleteConversationEnabledTools,
+  getAgentTools,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -152,6 +156,103 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
         path: { agentId },
       });
       if (error) throw new Error("Failed to fetch MCP tools");
+      return data;
+    },
+    enabled: !!agentId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
+  });
+}
+
+/**
+ * Get enabled tools for a conversation
+ * Returns { hasCustomSelection: boolean, enabledToolIds: string[] }
+ * Empty enabledToolIds with hasCustomSelection=false means all tools enabled (default)
+ */
+export function useConversationEnabledTools(
+  conversationId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["conversation", conversationId, "enabled-tools"],
+    queryFn: async () => {
+      if (!conversationId) return null;
+      const { data, error } = await getConversationEnabledTools({
+        path: { id: conversationId },
+      });
+      if (error) throw new Error("Failed to fetch enabled tools");
+      return data;
+    },
+    enabled: !!conversationId,
+    staleTime: 30 * 1000, // 30 seconds
+    gcTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Update enabled tools for a conversation
+ * Pass toolIds to set specific enabled tools
+ */
+export function useUpdateConversationEnabledTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      toolIds,
+    }: {
+      conversationId: string;
+      toolIds: string[];
+    }) => {
+      const { data, error } = await updateConversationEnabledTools({
+        path: { id: conversationId },
+        body: { toolIds },
+      });
+      if (error) throw new Error("Failed to update enabled tools");
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.conversationId, "enabled-tools"],
+      });
+    },
+  });
+}
+
+/**
+ * Clear custom tool selection for a conversation (revert to all tools enabled)
+ */
+export function useClearConversationEnabledTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const { data, error } = await deleteConversationEnabledTools({
+        path: { id: conversationId },
+      });
+      if (error) throw new Error("Failed to clear enabled tools");
+      return data;
+    },
+    onSuccess: (_, conversationId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId, "enabled-tools"],
+      });
+    },
+  });
+}
+
+/**
+ * Get profile tools with IDs (for the manage tools dialog)
+ * Returns full tool objects including IDs needed for enabled tools junction table
+ */
+export function useProfileToolsWithIds(agentId: string | undefined) {
+  return useQuery({
+    queryKey: ["agents", agentId, "tools"],
+    queryFn: async () => {
+      if (!agentId) return [];
+      const { data, error } = await getAgentTools({
+        path: { agentId },
+      });
+      if (error) throw new Error("Failed to fetch profile tools");
       return data;
     },
     enabled: !!agentId,

@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_NAME } from "@shared";
+import { DEFAULT_PROFILE_NAME, isArchestraMcpServerTool } from "@shared";
 import {
   and,
   asc,
@@ -11,7 +11,6 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,

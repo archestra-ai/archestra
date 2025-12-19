@@ -7,24 +7,24 @@ export type K8sRuntimeStatus =
   | "error"
   | "stopped";
 
-export type K8sPodState =
+export type K8sDeploymentState =
   | "not_created"
   | "pending"
   | "running"
   | "failed"
   | "succeeded";
 
-export interface K8sPodStatusSummary {
-  state: K8sPodState;
+export interface K8sDeploymentStatusSummary {
+  state: K8sDeploymentState;
   message: string;
   error: string | null;
-  podName: string | null;
+  deploymentName: string | null;
   namespace: string;
 }
 
 export interface K8sRuntimeStatusSummary {
   status: K8sRuntimeStatus;
-  mcpServers: Record<string, K8sPodStatusSummary>;
+  mcpServers: Record<string, K8sDeploymentStatusSummary>;
 }
 
 export const AvailableToolAnalysisSchema = z.object({

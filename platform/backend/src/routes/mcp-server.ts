@@ -238,7 +238,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // For LOCAL servers: validate env vars and create secrets (no connection validation, since pod will be started later)
+      // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
@@ -367,14 +367,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       try {
-        // For local servers, start the K8s pod first
+        // For local servers, start the K8s deployment first
         if (catalogItem?.serverType === "local") {
           try {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
             const capturedCatalogName = catalogItem.name;
 
-            // Set status to pending before starting the pod
+            // Set status to pending before starting the deployment
             await McpServerModel.update(mcpServer.id, {
               localInstallationStatus: "pending",
               localInstallationError: null,
@@ -386,11 +386,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               environmentValues,
             );
             fastify.log.info(
-              `Started K8s pod for local MCP server: ${mcpServer.name}`,
+              `Started K8s deployment for local MCP server: ${mcpServer.name}`,
             );
 
             // For local servers, return immediately without waiting for tools
-            // Tools will be fetched asynchronously after the pod is ready
+            // Tools will be fetched asynchronously after the deployment is ready
             fastify.log.info(
               `Skipping synchronous tool fetch for local server: ${mcpServer.name}. Tools will be fetched asynchronously.`,
             );
@@ -398,22 +398,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Start async tool fetching in the background (non-blocking)
             (async () => {
               try {
-                // Wait for the pod to be fully ready before fetching tools
-                const podManager = McpServerRuntimeManager.getPod(mcpServer.id);
-                if (!podManager) {
-                  throw new Error("Pod manager not found");
+                // Wait for the deployment to be fully ready before fetching tools
+                const k8sDeployment = McpServerRuntimeManager.getDeployment(
+                  mcpServer.id,
+                );
+                if (!k8sDeployment) {
+                  throw new Error("Deployment manager not found");
                 }
 
                 fastify.log.info(
-                  `Waiting for pod to be ready: ${mcpServer.name}`,
+                  `Waiting for deployment to be ready: ${mcpServer.name}`,
                 );
 
-                // Wait for pod to be ready (with timeout)
-                // This will throw an error if the pod fails or times out
-                await podManager.waitForPodReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+                // Wait for deployment to be ready (with timeout)
+                await k8sDeployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
 
                 fastify.log.info(
-                  `Pod is ready, updating status to discovering-tools: ${mcpServer.name}`,
+                  `Deployment is ready, updating status to discovering-tools: ${mcpServer.name}`,
                 );
 
                 await McpServerModel.update(mcpServer.id, {
@@ -487,23 +488,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               localInstallationError: null,
             });
           } catch (podError) {
-            // If pod fails to start, set status to error
+            // If deployment fails to start, set status to error
             const errorMessage =
               podError instanceof Error ? podError.message : "Unknown error";
             fastify.log.error(
-              `Failed to start K8s pod for MCP server ${mcpServer.name}: ${errorMessage}`,
+              `Failed to start K8s deployment for MCP server ${mcpServer.name}: ${errorMessage}`,
             );
 
             await McpServerModel.update(mcpServer.id, {
               localInstallationStatus: "error",
-              localInstallationError: `Failed to start pod: ${errorMessage}`,
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
 
             // Return the server with error status instead of throwing 500
             return reply.send({
               ...mcpServer,
               localInstallationStatus: "error",
-              localInstallationError: `Failed to start pod: ${errorMessage}`,
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
           }
         }
@@ -592,12 +593,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await McpServerRuntimeManager.stopServer(mcpServerId);
           logger.info(
             { mcpServerId },
-            "Stopped K8s pod and deleted K8s Secret for local MCP server",
+            "Stopped K8s deployment and deleted K8s Secret for local MCP server",
           );
         } catch (error) {
           logger.error(
             { err: error, mcpServerId },
-            "Failed to stop local MCP server pod",
+            "Failed to stop local MCP server deployment",
           );
           // Continue with deletion even if pod stop fails
         }
@@ -715,7 +716,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMcpServerLogs,
-        description: "Get logs for a specific MCP server pod",
+        description: "Get logs for a specific MCP server deployment",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -782,7 +783,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.RestartMcpServer,
-        description: "Restart a single MCP server pod",
+        description: "Restart a single MCP server deployment",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,

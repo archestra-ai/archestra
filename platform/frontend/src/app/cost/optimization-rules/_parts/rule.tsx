@@ -168,7 +168,7 @@ function ModelSelect({
         <Badge
           variant="outline"
           className={cn(
-            "text-sm bg-green-100 border-green-200",
+            "text-sm",
             !hasPricing && "bg-orange-100 border-orange-300",
           )}
         >

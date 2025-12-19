@@ -14,6 +14,7 @@ export const RouteId = {
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
+  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -97,6 +98,7 @@ export const RouteId = {
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
+  GetUniqueUserIds: "getUniqueUserIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
@@ -114,6 +116,7 @@ export const RouteId = {
   GetTrustedDataPolicy: "getTrustedDataPolicy",
   UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
   DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
+  GetPolicyConfigSubagentPrompt: "getPolicyConfigSubagentPrompt",
 
   // Dual LLM Config Routes
   GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
@@ -146,6 +149,10 @@ export const RouteId = {
   DeleteChatConversation: "deleteChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
+  GetConversationEnabledTools: "getConversationEnabledTools",
+  UpdateConversationEnabledTools: "updateConversationEnabledTools",
+  DeleteConversationEnabledTools: "deleteConversationEnabledTools",
+  GetChatModels: "getChatModels",
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",

@@ -12,6 +12,7 @@
       "**/*.ts",
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
+      "standalone-scripts/**/*.ts",
       "!node_modules",
       "!.next",
       "!**/dist",
@@ -68,6 +69,16 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["standalone-scripts/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           }
         }
       }

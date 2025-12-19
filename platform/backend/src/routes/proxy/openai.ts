@@ -111,6 +111,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     _organizationId: string,
     agentId?: string,
     externalAgentId?: string,
+    userId?: string,
   ) => {
     const { messages, tools, stream } = body;
 
@@ -229,6 +230,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Client declares tools they want to use - no injection needed
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
+
+      // Extract enabled tool names for filtering in evaluatePolicies
+      const enabledToolNames = new Set(
+        mergedTools.map((tool) =>
+          tool.type === "function" ? tool.function.name : tool.custom.name,
+        ),
+      );
 
       const baselineModel = body.model;
       let model = baselineModel;
@@ -560,6 +568,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }),
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
 
           // If there are tool calls, evaluate policies and stream the result
@@ -800,6 +809,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await InteractionModel.create({
             profileId: resolvedAgentId,
             externalAgentId,
+            userId,
             type: "openai:chatCompletions",
             request: body,
             processedRequest: {
@@ -882,6 +892,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             resolvedAgentId,
             contextIsTrusted,
+            enabledToolNames,
           );
 
         if (toolInvocationRefusal) {
@@ -950,6 +961,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InteractionModel.create({
           profileId: resolvedAgentId,
           externalAgentId,
+          userId,
           type: "openai:chatCompletions",
           request: body,
           processedRequest: {
@@ -1011,6 +1023,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1018,6 +1031,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
         undefined,
         externalAgentId,
+        userId,
       );
     },
   );
@@ -1048,6 +1062,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1055,6 +1070,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
         request.params.agentId,
         externalAgentId,
+        userId,
       );
     },
   );

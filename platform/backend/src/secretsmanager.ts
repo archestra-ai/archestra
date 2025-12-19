@@ -21,13 +21,13 @@ export class SecretsManagerConfigurationError extends Error {
 class SecretManager {
   private static initialized = false;
   private currentInstance: ISecretManager | null = null;
-  private managerType: SecretsManagerType =
-    getSecretsManagerTypeBasedOnEnvVars();
+  private managerType: SecretsManagerType;
 
   constructor() {
     if (SecretManager.initialized) {
       throw new Error("SecretManager already initialized");
     }
+    this.managerType = getSecretsManagerTypeBasedOnEnvVars();
     this.initialize();
     SecretManager.initialized = true;
   }
@@ -402,4 +402,16 @@ export function assertByosEnabled(): ReadonlyVaultSecretManager {
 
   // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
   return secretManager() as ReadonlyVaultSecretManager;
+}
+
+export async function getSecretValueForLlmProviderApiKey(
+  secretId: string,
+): Promise<string | unknown> {
+  const secret = await secretManager().getSecret(secretId);
+  return (
+    secret?.secret?.apiKey ??
+    secret?.secret?.anthropicApiKey ??
+    secret?.secret?.geminiApiKey ??
+    secret?.secret?.openaiApiKey
+  );
 }

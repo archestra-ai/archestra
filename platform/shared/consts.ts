@@ -26,6 +26,7 @@ export const E2eTestId = {
   SsoRoleMappingRuleRole: "sso-role-mapping-rule-role",
   SsoRoleMappingRuleTemplate: "sso-role-mapping-rule-template",
   SsoRoleMappingAddRule: "sso-role-mapping-add-rule",
+  McpServerError: "mcp-server-error",
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
@@ -80,7 +81,7 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
 export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
-export const DEFAULT_PROFILE_NAME = "Default Profile with Archestra";
+export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -105,6 +106,13 @@ export const MCP_CATALOG_API_BASE_URL =
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 
 /**
+ * Header name for user ID.
+ * Clients can pass this header to associate interactions with a specific user (by their Archestra user UUID).
+ * Particularly useful for identifying which user was using the Archestra Chat.
+ */
+export const USER_ID_HEADER = "X-Archestra-User-Id";
+
+/**
  * SSO Provider IDs - these are the canonical provider identifiers used for:
  * - Account linking (trustedProviders)
  * - Provider registration
@@ -125,3 +133,10 @@ export type SsoProviderId =
 export const SSO_TRUSTED_PROVIDER_IDS = Object.values(SSO_PROVIDER_ID);
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
+
+export const TimeInMs = {
+  Second: 1_000,
+  Minute: 1_000 * 60,
+  Hour: 1_000 * 60 * 60,
+  Day: 1_000 * 60 * 60 * 24,
+} as const;

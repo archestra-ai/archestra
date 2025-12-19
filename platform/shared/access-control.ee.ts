@@ -166,6 +166,10 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["update"],
     tool: ["update"],
   },
+  [RouteId.AutoConfigureAgentToolPolicies]: {
+    profile: ["update"],
+    tool: ["update"],
+  },
   [RouteId.UnassignToolFromAgent]: {
     profile: ["update"],
   },
@@ -200,6 +204,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUniqueExternalAgentIds]: {
     interaction: ["read"],
   },
+  [RouteId.GetUniqueUserIds]: {
+    interaction: ["read"],
+  },
   [RouteId.GetOperators]: {
     policy: ["read"],
   },
@@ -232,6 +239,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteTrustedDataPolicy]: {
     policy: ["delete"],
+  },
+  [RouteId.GetPolicyConfigSubagentPrompt]: {
+    organization: ["read"],
   },
   [RouteId.GetDefaultDualLlmConfig]: {
     dualLlmConfig: ["read"],
@@ -427,6 +437,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
+  },
+  [RouteId.GetChatModels]: {
+    conversation: ["read"],
+  },
+  [RouteId.GetConversationEnabledTools]: {
+    conversation: ["read"],
+  },
+  [RouteId.UpdateConversationEnabledTools]: {
+    conversation: ["update"],
+  },
+  [RouteId.DeleteConversationEnabledTools]: {
+    conversation: ["update"],
   },
   [RouteId.GetChatApiKeys]: {
     chatSettings: ["read"],

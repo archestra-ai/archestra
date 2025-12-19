@@ -58,8 +58,10 @@ Environment variables for the Archestra Platform container
 List of sensitive environment variables that should be stored in the Secret
 and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
 This must match the list in secret.yaml.
+Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensitive.
 */}}
 {{- $sensitiveEnvVars := list
+  "ARCHESTRA_AUTH_SECRET"
   "ARCHESTRA_AUTH_ADMIN_PASSWORD"
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
@@ -112,7 +114,9 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- if .Values.archestra.orchestrator.kubernetes.mcpServerRbac.create }}
 {{- end }}
 {{- range $key, $value := .Values.archestra.env }}
-{{- if has $key $sensitiveEnvVars }}
+{{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
+{{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
+{{- if $isSensitive }}
 {{/* Sensitive env vars are stored in the Secret and referenced via secretKeyRef */}}
 - name: {{ $key }}
   valueFrom:

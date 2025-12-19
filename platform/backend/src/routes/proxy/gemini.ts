@@ -97,6 +97,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
     externalAgentId?: string,
+    userId?: string,
   ) => {
     logger.debug(
       {
@@ -226,6 +227,16 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Client declares tools they want to use - no injection needed
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
+
+      // Extract enabled tool names from Gemini's functionDeclarations structure
+      const enabledToolNames = new Set(
+        mergedTools
+          .filter((tool) => tool.functionDeclarations !== undefined)
+          .flatMap((tool) =>
+            (tool.functionDeclarations || []).map((fd) => fd.name),
+          )
+          .filter((name): name is string => !!name),
+      );
 
       const baselineModel = modelName;
       let optimizedModelName = baselineModel;
@@ -523,6 +534,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   validToolCalls,
                   resolvedAgentId,
                   contextIsTrusted,
+                  enabledToolNames,
                 );
             }
 
@@ -713,6 +725,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await InteractionModel.create({
             profileId: resolvedAgentId,
             externalAgentId,
+            userId,
             type: "gemini:generateContent",
             request: body,
             processedRequest: {
@@ -802,6 +815,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               validToolCalls,
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
           }
         }
@@ -886,6 +900,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await InteractionModel.create({
             profileId: resolvedAgentId,
             externalAgentId,
+            userId,
             type: "gemini:generateContent",
             request: body,
             processedRequest: {
@@ -926,6 +941,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InteractionModel.create({
           profileId: resolvedAgentId,
           externalAgentId,
+          userId,
           type: "gemini:generateContent",
           request: body,
           processedRequest: {
@@ -1007,6 +1023,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1015,6 +1032,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         false,
         externalAgentId,
+        userId,
       );
     },
   );
@@ -1043,6 +1061,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1051,6 +1070,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         true,
         externalAgentId,
+        userId,
       );
     },
   );
@@ -1081,6 +1101,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1089,6 +1110,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         false,
         externalAgentId,
+        userId,
       );
     },
   );
@@ -1119,6 +1141,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleGenerateContent(
         request.body,
         request.headers,
@@ -1127,6 +1150,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         true,
         externalAgentId,
+        userId,
       );
     },
   );

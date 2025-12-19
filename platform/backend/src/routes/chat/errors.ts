@@ -1,12 +1,19 @@
 import {
+  AnthropicErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
   type ChatErrorResponse,
+  GeminiErrorCodes,
+  OpenAIErrorTypes,
   RetryableErrorCodes,
   type SupportedProvider,
 } from "@shared";
 import { APICallError } from "ai";
 import logger from "@/logging";
+
+// =============================================================================
+// Safe Serialization
+// =============================================================================
 
 /**
  * Safely stringify an object, handling circular references.
@@ -56,209 +63,352 @@ function safeSerialize(obj: unknown): unknown {
   }
 }
 
-/**
- * Patterns to detect context length exceeded errors from provider messages
- */
-const CONTEXT_LENGTH_PATTERNS = [
-  /context.*(length|window|limit)/i,
-  /maximum.*token/i,
-  /too many tokens/i,
-  /exceeds.*limit/i,
-  /input.*too.*long/i,
-  /max_tokens/i,
-];
+// =============================================================================
+// Parsed Error Types
+// =============================================================================
+
+interface ParsedOpenAIError {
+  type?: string;
+  code?: string;
+  message?: string;
+  param?: string;
+}
+
+interface ParsedAnthropicError {
+  type?: string;
+  message?: string;
+}
+
+interface ParsedGeminiError {
+  code?: number;
+  status?: string;
+  message?: string;
+  details?: unknown[];
+}
+
+// =============================================================================
+// Provider-Specific Error Parsers
+// =============================================================================
 
 /**
- * Patterns to detect content filtering errors
+ * Parse OpenAI error response body.
+ * OpenAI errors have structure: { error: { type, code, message, param } }
+ *
+ * @see https://platform.openai.com/docs/guides/error-codes - Error codes guide
+ * @see https://platform.openai.com/docs/api-reference/errors - API error reference
  */
-const CONTENT_FILTER_PATTERNS = [
-  /content.*filter/i,
-  /safety.*violation/i,
-  /blocked.*safety/i,
-  /harmful.*content/i,
-  /policy.*violation/i,
-  /moderation/i,
-];
+function parseOpenAIError(responseBody: string): ParsedOpenAIError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+    if (parsed?.error) {
+      return {
+        type: parsed.error.type,
+        code: parsed.error.code,
+        message: parsed.error.message,
+        param: parsed.error.param,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Patterns to detect authentication/API key errors
+ * Parse Anthropic error response body.
+ * Anthropic errors have structure: { error: { type, message } } or { type, message }
+ *
+ * @see https://docs.anthropic.com/en/api/errors - Anthropic API errors documentation
  */
-const AUTH_PATTERNS = [
-  /api.?key.*not.*valid/i,
-  /invalid.*api.?key/i,
-  /api.?key.*invalid/i,
-  /authentication.*failed/i,
-  /unauthorized/i,
-  /invalid.*credentials/i,
-  /API_KEY_INVALID/i,
-];
+function parseAnthropicError(
+  responseBody: string,
+): ParsedAnthropicError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+    // Handle nested error object
+    if (parsed?.error) {
+      return {
+        type: parsed.error.type,
+        message: parsed.error.message,
+      };
+    }
+    // Handle flat structure
+    if (parsed?.type) {
+      return {
+        type: parsed.type,
+        message: parsed.message,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Recursively extract the deepest meaningful error message from nested JSON
- * Provider errors often come with multiple layers of JSON encoding
+ * Recursively parse nested JSON strings to find the innermost error
+ * Gemini errors can be deeply nested with JSON-encoded strings
  */
-function extractDeepErrorMessage(obj: unknown, depth = 0): string | null {
-  // Prevent infinite recursion
-  if (depth > 10) return null;
+function parseNestedJson(obj: unknown, depth = 0): unknown {
+  if (depth > 10) return obj; // Prevent infinite recursion
 
   if (typeof obj === "string") {
-    // Try to parse as JSON and recurse
     try {
       const parsed = JSON.parse(obj);
-      const deeperMessage = extractDeepErrorMessage(parsed, depth + 1);
-      if (deeperMessage) return deeperMessage;
+      return parseNestedJson(parsed, depth + 1);
     } catch {
-      // Not JSON, return as-is if it looks like a meaningful message
-      // (not just escaped JSON noise)
-      if (obj.length > 0 && !obj.startsWith("{") && !obj.startsWith("[")) {
-        return obj;
-      }
+      return obj;
+    }
+  }
+
+  if (typeof obj === "object" && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = parseNestedJson(value, depth + 1);
+    }
+    return result;
+  }
+
+  return obj;
+}
+
+/**
+ * Parse Gemini/Vertex AI error response body.
+ * Gemini errors have structure: { error: { code, status, message, details } }
+ * Note: Errors can be deeply nested with JSON-encoded strings when proxied.
+ *
+ * @see https://ai.google.dev/gemini-api/docs/troubleshooting - Google AI Studio troubleshooting
+ * @see https://cloud.google.com/vertex-ai/generative-ai/docs/error-codes - Vertex AI error codes
+ * @see https://cloud.google.com/apis/design/errors - Google Cloud API error design (gRPC codes)
+ */
+function parseGeminiError(responseBody: string): ParsedGeminiError | null {
+  try {
+    // First, recursively parse any nested JSON strings
+    const parsed = parseNestedJson(responseBody) as Record<string, unknown>;
+
+    // Handle nested error structure (can be multiple levels deep)
+    let errorObj = parsed;
+    while (errorObj?.error && typeof errorObj.error === "object") {
+      errorObj = errorObj.error as Record<string, unknown>;
+    }
+
+    // Extract the innermost error details
+    if (errorObj) {
+      return {
+        code:
+          typeof errorObj.code === "number"
+            ? errorObj.code
+            : typeof parsed?.error === "object"
+              ? ((parsed.error as Record<string, unknown>).code as
+                  | number
+                  | undefined)
+              : undefined,
+        status:
+          typeof errorObj.status === "string"
+            ? errorObj.status
+            : typeof parsed?.error === "object"
+              ? ((parsed.error as Record<string, unknown>).status as
+                  | string
+                  | undefined)
+              : undefined,
+        message:
+          typeof errorObj.message === "string"
+            ? errorObj.message
+            : typeof parsed?.error === "object"
+              ? ((parsed.error as Record<string, unknown>).message as
+                  | string
+                  | undefined)
+              : undefined,
+        details: Array.isArray(errorObj.details) ? errorObj.details : undefined,
+      };
     }
     return null;
-  }
-
-  if (typeof obj !== "object" || obj === null) {
+  } catch {
     return null;
   }
+}
 
-  const record = obj as Record<string, unknown>;
+// =============================================================================
+// Provider-Specific Error Mappers
+// =============================================================================
 
-  // Check for message field first
-  if (typeof record.message === "string") {
-    // Try to extract deeper message from this string
-    const deeperMessage = extractDeepErrorMessage(record.message, depth + 1);
-    if (deeperMessage) return deeperMessage;
-    // If the message itself isn't nested JSON, use it
+/**
+ * Map OpenAI error to ChatErrorCode.
+ * Uses error.type and error.code fields from the API response.
+ *
+ * Error types documented at:
+ * @see https://platform.openai.com/docs/guides/error-codes/api-errors
+ *
+ * HTTP Status -> Error Type mapping:
+ * - 400 -> invalid_request_error (malformed request)
+ * - 401 -> authentication_error (invalid API key)
+ * - 403 -> permission_denied_error (no access to resource)
+ * - 404 -> not_found_error (resource doesn't exist)
+ * - 422 -> unprocessable_entity_error (valid request, can't process)
+ * - 429 -> rate_limit_exceeded (quota exceeded)
+ * - 500 -> server_error (internal error)
+ * - 503 -> service_unavailable (temporarily down)
+ */
+function mapOpenAIErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorCode = parsedError?.code;
+
+  // First check error.code for specific error codes
+  if (errorCode) {
     if (
-      !record.message.startsWith("{") &&
-      !record.message.startsWith("[") &&
-      record.message.length > 0
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY_CODE ||
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY
     ) {
-      return record.message;
+      return ChatErrorCode.Authentication;
+    }
+    if (errorCode === OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED) {
+      return ChatErrorCode.ContextTooLong;
+    }
+    if (errorCode === OpenAIErrorTypes.MODEL_NOT_FOUND) {
+      return ChatErrorCode.NotFound;
     }
   }
 
-  // Check for error.message pattern
-  if (typeof record.error === "object" && record.error !== null) {
-    const innerError = record.error as Record<string, unknown>;
-    const innerMessage = extractDeepErrorMessage(innerError, depth + 1);
-    if (innerMessage) return innerMessage;
+  // Then check error.type
+  if (errorType) {
+    switch (errorType) {
+      case OpenAIErrorTypes.AUTHENTICATION:
+      case OpenAIErrorTypes.INVALID_API_KEY:
+        return ChatErrorCode.Authentication;
+      case OpenAIErrorTypes.RATE_LIMIT:
+        return ChatErrorCode.RateLimit;
+      case OpenAIErrorTypes.PERMISSION_DENIED:
+        return ChatErrorCode.PermissionDenied;
+      case OpenAIErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case OpenAIErrorTypes.SERVER_ERROR:
+      case OpenAIErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case OpenAIErrorTypes.INVALID_REQUEST:
+      case OpenAIErrorTypes.UNPROCESSABLE_ENTITY:
+      case OpenAIErrorTypes.CONFLICT:
+        return ChatErrorCode.InvalidRequest;
+    }
   }
 
-  return null;
+  // Fall back to status code
+  return mapStatusCodeToErrorCode(statusCode);
 }
 
 /**
- * Extract error message from various error formats
+ * Map Anthropic error to ChatErrorCode.
+ * Uses error.type field from the API response.
+ *
+ * Error types documented at:
+ * @see https://docs.anthropic.com/en/api/errors
+ *
+ * HTTP Status -> Error Type mapping:
+ * - 400 -> invalid_request_error (invalid request body)
+ * - 401 -> authentication_error (invalid API key)
+ * - 403 -> permission_error (no access to resource)
+ * - 404 -> not_found_error (resource doesn't exist)
+ * - 413 -> request_too_large (request exceeds max size)
+ * - 429 -> rate_limit_error (quota exceeded)
+ * - 500 -> api_error (internal error)
+ * - 529 -> overloaded_error (API temporarily overloaded)
  */
-function extractErrorMessage(error: unknown): string {
-  // Handle objects first to check for responseBody (AI SDK errors)
-  // This needs to come BEFORE the Error instanceof check because APICallError
-  // is an Error but has responseBody with the actual provider error
-  if (typeof error === "object" && error !== null) {
-    const obj = error as Record<string, unknown>;
+function mapAnthropicErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedAnthropicError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
 
-    // For AI SDK errors, try to extract from responseBody first (contains actual provider error)
-    if (typeof obj.responseBody === "string") {
-      const deepMessage = extractDeepErrorMessage(obj.responseBody, 0);
-      if (deepMessage) return deepMessage;
-    }
-
-    // Try common error message paths with deep extraction
-    if (typeof obj.message === "string") {
-      const deepMessage = extractDeepErrorMessage(obj.message, 0);
-      if (deepMessage) return deepMessage;
-      return obj.message;
-    }
-
-    if (typeof obj.error === "object" && obj.error !== null) {
-      const innerError = obj.error as Record<string, unknown>;
-      if (typeof innerError.message === "string") {
-        const deepMessage = extractDeepErrorMessage(innerError.message, 0);
-        if (deepMessage) return deepMessage;
-        return innerError.message;
-      }
+  if (errorType) {
+    switch (errorType) {
+      case AnthropicErrorTypes.AUTHENTICATION:
+        return ChatErrorCode.Authentication;
+      case AnthropicErrorTypes.RATE_LIMIT:
+        return ChatErrorCode.RateLimit;
+      case AnthropicErrorTypes.PERMISSION:
+        return ChatErrorCode.PermissionDenied;
+      case AnthropicErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case AnthropicErrorTypes.REQUEST_TOO_LARGE:
+        return ChatErrorCode.ContextTooLong;
+      case AnthropicErrorTypes.API_ERROR:
+      case AnthropicErrorTypes.OVERLOADED:
+        return ChatErrorCode.ServerError;
+      case AnthropicErrorTypes.INVALID_REQUEST:
+        return ChatErrorCode.InvalidRequest;
     }
   }
 
-  if (error instanceof Error) {
-    return error.message;
+  // Fall back to status code (including 529 for overloaded)
+  if (statusCode === 529) {
+    return ChatErrorCode.ServerError;
   }
-  if (typeof error === "string") {
-    return error;
-  }
-  return "Unknown error";
+
+  return mapStatusCodeToErrorCode(statusCode);
 }
 
 /**
- * Extract HTTP status code from various error formats
+ * Map Gemini/Vertex AI error to ChatErrorCode.
+ * Uses error.status (gRPC status code string) from the API response.
+ *
+ * gRPC status codes documented at:
+ * @see https://cloud.google.com/apis/design/errors#handling_errors
+ * @see https://grpc.io/docs/guides/status-codes/
+ *
+ * HTTP Status -> gRPC Status mapping (per Google's AIP-193):
+ * - 400 -> INVALID_ARGUMENT (client specified an invalid argument)
+ * - 401 -> UNAUTHENTICATED (missing/invalid authentication)
+ * - 403 -> PERMISSION_DENIED (insufficient permissions)
+ * - 404 -> NOT_FOUND (resource doesn't exist)
+ * - 429 -> RESOURCE_EXHAUSTED (quota exceeded)
+ * - 500 -> INTERNAL (internal server error)
+ * - 503 -> UNAVAILABLE (service temporarily unavailable)
+ * - 504 -> DEADLINE_EXCEEDED (request timeout)
  */
-function extractStatusCode(error: unknown): number | undefined {
-  if (typeof error === "object" && error !== null) {
-    const obj = error as Record<string, unknown>;
-    if (typeof obj.status === "number") return obj.status;
-    if (typeof obj.statusCode === "number") return obj.statusCode;
-    if (typeof obj.code === "number") return obj.code;
+function mapGeminiErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedGeminiError | null,
+): ChatErrorCode {
+  const grpcStatus = parsedError?.status;
 
-    // Handle AI_RetryError which wraps the actual error in lastError
-    if (typeof obj.lastError === "object" && obj.lastError !== null) {
-      const lastError = obj.lastError as Record<string, unknown>;
-      if (typeof lastError.statusCode === "number") return lastError.statusCode;
-    }
-
-    // Also check first error in errors array (AI_RetryError structure)
-    if (Array.isArray(obj.errors) && obj.errors.length > 0) {
-      const firstError = obj.errors[0] as Record<string, unknown>;
-      if (typeof firstError?.statusCode === "number")
-        return firstError.statusCode;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Extract error type from various error formats
- */
-function extractErrorType(error: unknown): string | undefined {
-  if (typeof error === "object" && error !== null) {
-    const obj = error as Record<string, unknown>;
-    if (typeof obj.type === "string") return obj.type;
-    if (typeof obj.name === "string") return obj.name;
-    if (typeof obj.error === "object" && obj.error !== null) {
-      const innerError = obj.error as Record<string, unknown>;
-      if (typeof innerError.type === "string") return innerError.type;
+  if (grpcStatus) {
+    switch (grpcStatus) {
+      case GeminiErrorCodes.UNAUTHENTICATED:
+        return ChatErrorCode.Authentication;
+      case GeminiErrorCodes.PERMISSION_DENIED:
+        return ChatErrorCode.PermissionDenied;
+      case GeminiErrorCodes.RESOURCE_EXHAUSTED:
+        return ChatErrorCode.RateLimit;
+      case GeminiErrorCodes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case GeminiErrorCodes.INVALID_ARGUMENT:
+      case GeminiErrorCodes.FAILED_PRECONDITION:
+      case GeminiErrorCodes.OUT_OF_RANGE:
+        return ChatErrorCode.InvalidRequest;
+      case GeminiErrorCodes.INTERNAL:
+      case GeminiErrorCodes.UNAVAILABLE:
+      case GeminiErrorCodes.DEADLINE_EXCEEDED:
+        return ChatErrorCode.ServerError;
     }
   }
-  return undefined;
+
+  // Fall back to status code
+  return mapStatusCodeToErrorCode(statusCode);
 }
 
 /**
- * Check if error message matches any patterns in the list
- */
-function matchesPatterns(message: string, patterns: RegExp[]): boolean {
-  return patterns.some((pattern) => pattern.test(message));
-}
-
-/**
- * Map HTTP status code to ChatErrorCode
+ * Generic status code to error code mapping (fallback)
  */
 function mapStatusCodeToErrorCode(
-  status: number,
-  errorMessage: string,
+  statusCode: number | undefined,
 ): ChatErrorCode {
-  // Check for specific error types in message first (more precise than status code)
-  if (matchesPatterns(errorMessage, AUTH_PATTERNS)) {
-    return ChatErrorCode.Authentication;
-  }
-  if (matchesPatterns(errorMessage, CONTEXT_LENGTH_PATTERNS)) {
-    return ChatErrorCode.ContextTooLong;
-  }
-  if (matchesPatterns(errorMessage, CONTENT_FILTER_PATTERNS)) {
-    return ChatErrorCode.ContentFiltered;
+  if (!statusCode) {
+    return ChatErrorCode.Unknown;
   }
 
-  // Map by status code
-  switch (status) {
+  switch (statusCode) {
     case 400:
       return ChatErrorCode.InvalidRequest;
     case 401:
@@ -267,68 +417,186 @@ function mapStatusCodeToErrorCode(
       return ChatErrorCode.PermissionDenied;
     case 404:
       return ChatErrorCode.NotFound;
+    case 413:
+      return ChatErrorCode.ContextTooLong;
     case 422:
-      // Unprocessable entity - often validation errors
       return ChatErrorCode.InvalidRequest;
     case 429:
       return ChatErrorCode.RateLimit;
+    case 529: // Anthropic overloaded
+      return ChatErrorCode.ServerError;
     default:
-      if (status >= 500) {
+      if (statusCode >= 500) {
         return ChatErrorCode.ServerError;
       }
       return ChatErrorCode.Unknown;
   }
 }
 
+// =============================================================================
+// Provider Parser/Mapper Registry
+// =============================================================================
+
+/** Union type of all parsed error types */
+type ParsedProviderError =
+  | ParsedOpenAIError
+  | ParsedAnthropicError
+  | ParsedGeminiError;
+
+type ErrorParser = (responseBody: string) => ParsedProviderError | null;
+type ErrorMapper = (
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+) => ChatErrorCode;
+
 /**
- * Map error type string to ChatErrorCode
+ * Wrapper functions that accept the union type for type compatibility
  */
-function mapErrorTypeToErrorCode(
-  errorType: string,
-  errorMessage: string,
+function mapOpenAIErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
 ): ChatErrorCode {
-  const type = errorType.toLowerCase();
-
-  // Check message patterns first (more precise than type)
-  if (matchesPatterns(errorMessage, AUTH_PATTERNS)) {
-    return ChatErrorCode.Authentication;
-  }
-  if (matchesPatterns(errorMessage, CONTEXT_LENGTH_PATTERNS)) {
-    return ChatErrorCode.ContextTooLong;
-  }
-  if (matchesPatterns(errorMessage, CONTENT_FILTER_PATTERNS)) {
-    return ChatErrorCode.ContentFiltered;
-  }
-
-  // Map by error type
-  if (type.includes("rate") || type.includes("quota")) {
-    return ChatErrorCode.RateLimit;
-  }
-  if (type.includes("auth") || type.includes("invalid_api_key")) {
-    return ChatErrorCode.Authentication;
-  }
-  if (type.includes("permission") || type.includes("forbidden")) {
-    return ChatErrorCode.PermissionDenied;
-  }
-  if (type.includes("not_found")) {
-    return ChatErrorCode.NotFound;
-  }
-  if (
-    type.includes("invalid") ||
-    type.includes("bad_request") ||
-    type.includes("validation")
-  ) {
-    return ChatErrorCode.InvalidRequest;
-  }
-  if (type.includes("server") || type.includes("internal")) {
-    return ChatErrorCode.ServerError;
-  }
-  if (type.includes("connection") || type.includes("network")) {
-    return ChatErrorCode.NetworkError;
-  }
-
-  return ChatErrorCode.Unknown;
+  return mapOpenAIErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
 }
+
+function mapAnthropicErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapAnthropicErrorToCode(
+    statusCode,
+    parsedError as ParsedAnthropicError | null,
+  );
+}
+
+function mapGeminiErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapGeminiErrorToCode(
+    statusCode,
+    parsedError as ParsedGeminiError | null,
+  );
+}
+
+/**
+ * Registry of provider-specific error parsers.
+ * Using Record<SupportedProvider, ...> ensures TypeScript will error
+ * if a new provider is added to SupportedProvider without updating this map.
+ */
+const providerParsers: Record<SupportedProvider, ErrorParser> = {
+  openai: parseOpenAIError,
+  anthropic: parseAnthropicError,
+  gemini: parseGeminiError,
+};
+
+/**
+ * Registry of provider-specific error mappers.
+ * Using Record<SupportedProvider, ...> ensures TypeScript will error
+ * if a new provider is added to SupportedProvider without updating this map.
+ */
+const providerMappers: Record<SupportedProvider, ErrorMapper> = {
+  openai: mapOpenAIErrorWrapper,
+  anthropic: mapAnthropicErrorWrapper,
+  gemini: mapGeminiErrorWrapper,
+};
+
+// =============================================================================
+// Message Extraction
+// =============================================================================
+
+/**
+ * Recursively find the deepest string message in a parsed object
+ * Handles both cases where message is a string or an already-parsed object
+ */
+function findDeepestMessage(obj: unknown, depth = 0): string | null {
+  if (depth > 10) return null;
+
+  if (typeof obj !== "object" || obj === null) {
+    return null;
+  }
+
+  const record = obj as Record<string, unknown>;
+
+  // If message is a string, check if it's a meaningful message
+  if (typeof record.message === "string" && record.message.length > 0) {
+    // If message doesn't look like JSON, return it
+    if (!record.message.startsWith("{") && !record.message.startsWith("[")) {
+      return record.message;
+    }
+  }
+
+  // If message is an object (already parsed from nested JSON), recurse into it
+  if (typeof record.message === "object" && record.message !== null) {
+    const deeper = findDeepestMessage(record.message, depth + 1);
+    if (deeper) return deeper;
+  }
+
+  // Recurse into error object
+  if (typeof record.error === "object" && record.error !== null) {
+    const deeper = findDeepestMessage(record.error, depth + 1);
+    if (deeper) return deeper;
+  }
+
+  // If we have a message that looks like JSON, still return it as fallback
+  if (typeof record.message === "string" && record.message.length > 0) {
+    return record.message;
+  }
+
+  return null;
+}
+
+/**
+ * Extract the most meaningful error message from the parsed error or raw response
+ */
+function extractErrorMessage(
+  parsedError: ParsedProviderError | null,
+  responseBody: string | undefined,
+  error: unknown,
+): string {
+  // Try to extract from responseBody with deep parsing first (for nested Gemini errors)
+  if (responseBody) {
+    try {
+      const parsed = parseNestedJson(responseBody) as Record<string, unknown>;
+      const deepMessage = findDeepestMessage(parsed, 0);
+      if (deepMessage) {
+        return deepMessage;
+      }
+    } catch {
+      // Ignore parsing errors
+    }
+  }
+
+  // Then try to get message from parsed error
+  if (parsedError?.message) {
+    return parsedError.message;
+  }
+
+  // Fall back to error object properties
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const obj = error as Record<string, unknown>;
+    if (typeof obj.message === "string") {
+      return obj.message;
+    }
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Unknown error";
+}
+
+// =============================================================================
+// Main Error Mapper
+// =============================================================================
 
 /**
  * Create a ChatErrorResponse from the determined error code.
@@ -336,11 +604,11 @@ function mapErrorTypeToErrorCode(
  */
 function createErrorResponse(
   code: ChatErrorCode,
-  provider?: SupportedProvider,
-  status?: number,
-  originalMessage?: string,
-  errorType?: string,
-  rawError?: unknown,
+  provider: SupportedProvider,
+  status: number | undefined,
+  originalMessage: string,
+  errorType: string | undefined,
+  rawError: unknown,
 ): ChatErrorResponse {
   return {
     code,
@@ -358,9 +626,9 @@ function createErrorResponse(
 
 /**
  * Map a provider error to a normalized ChatErrorResponse.
- * Handles errors from Vercel AI SDK (APICallError) as well as raw provider errors.
+ * Uses provider-specific parsing and mapping for accurate error classification.
  *
- * @param error - The error to map
+ * @param error - The error to map (typically an APICallError from Vercel AI SDK)
  * @param provider - The provider that generated the error
  * @returns A normalized ChatErrorResponse with user-friendly message and technical details
  */
@@ -370,86 +638,63 @@ export function mapProviderError(
 ): ChatErrorResponse {
   logger.debug({ error, provider }, "[ChatErrorMapper] Mapping provider error");
 
+  // Get provider-specific parser and mapper
+  const parseError = providerParsers[provider];
+  const mapError = providerMappers[provider];
+
+  let statusCode: number | undefined;
+  let responseBody: string | undefined;
+  let parsedError: ParsedProviderError | null = null;
+
   // Handle Vercel AI SDK APICallError
   if (APICallError.isInstance(error)) {
     const apiError = error as InstanceType<typeof APICallError>;
-    const errorMessage = extractErrorMessage(apiError);
+    statusCode = apiError.statusCode;
+    responseBody = apiError.responseBody;
 
-    // APICallError has statusCode and isRetryable properties
-    const statusCode = apiError.statusCode;
-    let errorCode: ChatErrorCode;
-
-    if (statusCode) {
-      errorCode = mapStatusCodeToErrorCode(statusCode, errorMessage);
-    } else if (apiError.isRetryable) {
-      // Network errors are typically retryable without status codes
-      errorCode = ChatErrorCode.NetworkError;
-    } else {
-      errorCode = ChatErrorCode.Unknown;
+    // Parse the response body using provider-specific parser
+    if (responseBody) {
+      parsedError = parseError(responseBody);
     }
+  } else if (typeof error === "object" && error !== null) {
+    // Handle generic error objects
+    const obj = error as Record<string, unknown>;
+    statusCode =
+      typeof obj.statusCode === "number"
+        ? obj.statusCode
+        : typeof obj.status === "number"
+          ? obj.status
+          : undefined;
+    responseBody =
+      typeof obj.responseBody === "string" ? obj.responseBody : undefined;
 
-    logger.info(
-      {
-        originalError: errorMessage,
-        statusCode,
-        mappedCode: errorCode,
-        provider,
-      },
-      "[ChatErrorMapper] Mapped APICallError",
-    );
-
-    return createErrorResponse(
-      errorCode,
-      provider,
-      statusCode,
-      errorMessage,
-      apiError.name,
-      {
-        url: apiError.url,
-        statusCode: apiError.statusCode,
-        responseBody: apiError.responseBody,
-        isRetryable: apiError.isRetryable,
-      },
-    );
+    if (responseBody) {
+      parsedError = parseError(responseBody);
+    }
   }
 
-  // Handle generic errors
-  const errorMessage = extractErrorMessage(error);
-  const statusCode = extractStatusCode(error);
-  const errorType = extractErrorType(error);
+  // Map to error code using provider-specific mapper
+  const errorCode = mapError(statusCode, parsedError);
 
-  let errorCode: ChatErrorCode;
+  // Extract the most meaningful error message
+  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
 
-  // Try to determine error code from available information
-  if (statusCode) {
-    errorCode = mapStatusCodeToErrorCode(statusCode, errorMessage);
-  } else if (errorType) {
-    errorCode = mapErrorTypeToErrorCode(errorType, errorMessage);
-  } else if (matchesPatterns(errorMessage, AUTH_PATTERNS)) {
-    errorCode = ChatErrorCode.Authentication;
-  } else if (matchesPatterns(errorMessage, CONTEXT_LENGTH_PATTERNS)) {
-    errorCode = ChatErrorCode.ContextTooLong;
-  } else if (matchesPatterns(errorMessage, CONTENT_FILTER_PATTERNS)) {
-    errorCode = ChatErrorCode.ContentFiltered;
-  } else if (
-    errorMessage.toLowerCase().includes("network") ||
-    errorMessage.toLowerCase().includes("econnrefused") ||
-    errorMessage.toLowerCase().includes("timeout")
-  ) {
-    errorCode = ChatErrorCode.NetworkError;
-  } else {
-    errorCode = ChatErrorCode.Unknown;
-  }
+  // Determine error type from parsed error
+  const errorType =
+    (parsedError as ParsedOpenAIError)?.type ||
+    (parsedError as ParsedAnthropicError)?.type ||
+    (parsedError as ParsedGeminiError)?.status ||
+    (error instanceof Error ? error.name : undefined);
 
   logger.info(
     {
-      originalError: errorMessage,
-      statusCode,
-      errorType,
-      mappedCode: errorCode,
       provider,
+      statusCode,
+      parsedError,
+      mappedCode: errorCode,
+      errorMessage,
     },
-    "[ChatErrorMapper] Mapped generic error",
+    "[ChatErrorMapper] Mapped provider error",
   );
 
   return createErrorResponse(
@@ -458,6 +703,15 @@ export function mapProviderError(
     statusCode,
     errorMessage,
     errorType,
-    error,
+    {
+      url: APICallError.isInstance(error)
+        ? (error as InstanceType<typeof APICallError>).url
+        : undefined,
+      statusCode,
+      responseBody,
+      isRetryable: APICallError.isInstance(error)
+        ? (error as InstanceType<typeof APICallError>).isRetryable
+        : undefined,
+    },
   );
 }

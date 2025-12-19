@@ -1,5 +1,68 @@
 import type { SupportedProvider } from "./model-constants";
 
+// =============================================================================
+// Provider-Specific Error Types (from official documentation)
+// =============================================================================
+
+/**
+ * OpenAI API error types (from response body `error.type` field)
+ * @see https://platform.openai.com/docs/guides/error-codes
+ */
+export const OpenAIErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  PERMISSION_DENIED: "insufficient_quota", // OpenAI uses this for permission issues
+  NOT_FOUND: "not_found_error",
+  CONFLICT: "conflict_error",
+  UNPROCESSABLE_ENTITY: "unprocessable_entity_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  // Additional codes that appear in error.code field
+  INVALID_API_KEY_CODE: "invalid_api_key",
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+} as const;
+
+/**
+ * Anthropic API error types (from response body `error.type` field)
+ * @see https://docs.anthropic.com/en/api/errors
+ */
+export const AnthropicErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  PERMISSION: "permission_error",
+  NOT_FOUND: "not_found_error",
+  REQUEST_TOO_LARGE: "request_too_large",
+  RATE_LIMIT: "rate_limit_error",
+  API_ERROR: "api_error",
+  OVERLOADED: "overloaded_error",
+} as const;
+
+/**
+ * Gemini/Vertex AI gRPC status codes (from response body `error.status` field)
+ * @see https://ai.google.dev/gemini-api/docs/troubleshooting
+ * @see https://cloud.google.com/apis/design/errors
+ */
+export const GeminiErrorCodes = {
+  INVALID_ARGUMENT: "INVALID_ARGUMENT",
+  UNAUTHENTICATED: "UNAUTHENTICATED",
+  PERMISSION_DENIED: "PERMISSION_DENIED",
+  NOT_FOUND: "NOT_FOUND",
+  RESOURCE_EXHAUSTED: "RESOURCE_EXHAUSTED",
+  INTERNAL: "INTERNAL",
+  UNAVAILABLE: "UNAVAILABLE",
+  // Additional codes for specific scenarios
+  FAILED_PRECONDITION: "FAILED_PRECONDITION",
+  OUT_OF_RANGE: "OUT_OF_RANGE",
+  DEADLINE_EXCEEDED: "DEADLINE_EXCEEDED",
+} as const;
+
+// =============================================================================
+// Normalized Chat Error Codes
+// =============================================================================
+
 /**
  * Normalized error codes for chat errors across all LLM providers.
  * These provide a consistent set of error categories regardless of the underlying provider.

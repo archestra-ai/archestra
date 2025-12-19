@@ -1,207 +1,189 @@
-import { ChatErrorCode, ChatErrorMessages } from "@shared";
+import {
+  AnthropicErrorTypes,
+  ChatErrorCode,
+  ChatErrorMessages,
+  GeminiErrorCodes,
+  OpenAIErrorTypes,
+} from "@shared";
 import { describe, expect, it } from "vitest";
 import { mapProviderError } from "./errors";
 
-describe("mapProviderError", () => {
-  describe("AI_APICallError with deeply nested invalid API key error (Gemini 400)", () => {
-    // Real error captured from Gemini with invalid API key - VERY deeply nested JSON (4+ levels)
-    // This is the exact error structure from the UI
-    const geminiDeeplyNestedError = {
+// =============================================================================
+// OpenAI Error Tests
+// =============================================================================
+
+describe("mapProviderError - OpenAI", () => {
+  /**
+   * Helper to create an APICallError-like object for OpenAI
+   */
+  function createOpenAIError(
+    statusCode: number,
+    errorType: string,
+    message: string,
+    code?: string,
+  ) {
+    return {
       name: "AI_APICallError",
-      url: "http://localhost:9000/v1/gemini/2990c615-09c8-402e-9ca2-371d7a95ecbc/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
-      statusCode: 400,
-      responseBody:
-        '{"error":{"message":"{\\"error\\":{\\"message\\":\\"{\\\\\\"error\\\\\\": {\\\\\\"code\\\\\\": 400, \\\\\\"message\\\\\\": \\\\\\"API key not valid. Please pass a valid API key.\\\\\\", \\\\\\"status\\\\\\": \\\\\\"INVALID_ARGUMENT\\\\\\"}}\\",\\"code\\":400,\\"status\\":\\"Bad Request\\"}}","type":"api_validation_error"}}',
-      isRetryable: false,
-    };
-
-    it("should map to authentication error for deeply nested API key message", () => {
-      const result = mapProviderError(geminiDeeplyNestedError, "gemini");
-
-      // Even though status is 400, the message indicates authentication issue
-      expect(result.code).toBe(ChatErrorCode.Authentication);
-      expect(result.message).toBe(
-        ChatErrorMessages[ChatErrorCode.Authentication],
-      );
-      expect(result.isRetryable).toBe(false);
-    });
-
-    it("should include provider in response", () => {
-      const result = mapProviderError(geminiDeeplyNestedError, "gemini");
-
-      expect(result.originalError?.provider).toBe("gemini");
-    });
-  });
-
-  describe("AI_APICallError with invalid API key (Gemini 400)", () => {
-    // Real error captured from Gemini with invalid API key - moderately nested JSON
-    const geminiInvalidApiKeyError = {
-      name: "AI_APICallError",
-      url: "http://localhost:9000/v1/gemini/2990c615-09c8-402e-9ca2-371d7a95ecbc/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
-      requestBodyValues: {
-        generationConfig: {},
-        contents: [{ role: "user", parts: [{ text: "hiiii" }] }],
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: "internal-dev-test-server__print_archestra_test",
-                description:
-                  "Prints the ARCHESTRA_TEST environment variable value",
-              },
-            ],
-          },
-        ],
-        toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-      },
-      statusCode: 400,
-      responseHeaders: {
-        "access-control-allow-credentials": "true",
-        "content-type": "application/json; charset=utf-8",
-      },
-      responseBody:
-        '{"error":{"message":"{\\"error\\":{\\"message\\":\\"API key not valid. Please pass a valid API key.\\",\\"code\\":400,\\"status\\":\\"Bad Request\\"}}","type":"api_validation_error"}}',
-      isRetryable: false,
-    };
-
-    it("should map to authentication error for invalid API key message", () => {
-      const result = mapProviderError(geminiInvalidApiKeyError, "gemini");
-
-      // Even though status is 400, the message indicates authentication issue
-      expect(result.code).toBe(ChatErrorCode.Authentication);
-      expect(result.message).toBe(
-        ChatErrorMessages[ChatErrorCode.Authentication],
-      );
-      expect(result.isRetryable).toBe(false);
-    });
-
-    it("should include provider in response", () => {
-      const result = mapProviderError(geminiInvalidApiKeyError, "gemini");
-
-      expect(result.originalError?.provider).toBe("gemini");
-    });
-
-    it("should extract a clean user-friendly message, not the raw nested JSON", () => {
-      const result = mapProviderError(geminiInvalidApiKeyError, "gemini");
-
-      // The message should NOT contain escaped JSON
-      expect(result.message).not.toContain('\\"');
-      expect(result.message).not.toContain("\\n");
-      // Should be the user-friendly mapped message for authentication errors
-      expect(result.message).toBe(
-        "Invalid API key. Please check your Chat Settings.",
-      );
-    });
-  });
-
-  describe("AI_RetryError with nested AI_APICallError (Gemini)", () => {
-    // Real error captured from Gemini with invalid API key
-    const geminiRetryError = {
-      name: "AI_RetryError",
-      reason: "maxRetriesExceeded",
-      errors: [
-        {
-          name: "AI_APICallError",
-          url: "http://localhost:9000/v1/gemini/2990c615-09c8-402e-9ca2-371d7a95ecbc/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
-          requestBodyValues: {
-            generationConfig: {},
-            contents: [{ role: "user", parts: [{ text: "hiiii" }] }],
-            tools: [],
-            toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-          },
-          statusCode: 500,
-          responseHeaders: {
-            "access-control-allow-credentials": "true",
-            "content-type": "application/json; charset=utf-8",
-          },
-          responseBody:
-            '{"error":{"message":"Response doesn\'t match the schema","type":"api_internal_server_error"}}',
-          isRetryable: true,
+      statusCode,
+      responseBody: JSON.stringify({
+        error: {
+          type: errorType,
+          message,
+          code,
         },
-      ],
-      lastError: {
-        name: "AI_APICallError",
-        url: "http://localhost:9000/v1/gemini/2990c615-09c8-402e-9ca2-371d7a95ecbc/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
-        statusCode: 500,
-        responseBody:
-          '{"error":{"message":"Response doesn\'t match the schema","type":"api_internal_server_error"}}',
-        isRetryable: true,
-      },
+      }),
+      isRetryable: statusCode >= 500 || statusCode === 429,
     };
+  }
 
-    it("should map to server_error for 500 status code", () => {
-      const result = mapProviderError(geminiRetryError, "gemini");
-
-      expect(result.code).toBe(ChatErrorCode.ServerError);
-      expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.ServerError]);
-      expect(result.isRetryable).toBe(true);
-    });
-
-    it("should include provider in response", () => {
-      const result = mapProviderError(geminiRetryError, "gemini");
-
-      expect(result.originalError?.provider).toBe("gemini");
-    });
-
-    it("should preserve the original error details", () => {
-      const result = mapProviderError(geminiRetryError, "gemini");
-
-      expect(result.originalError).toBeDefined();
-      expect(result.originalError?.raw).toEqual(geminiRetryError);
-    });
-  });
-
-  describe("status code mapping", () => {
-    it("should map 400 to InvalidRequest", () => {
-      const error = { statusCode: 400, message: "Bad request" };
+  describe("400 - invalid_request_error", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createOpenAIError(
+        400,
+        OpenAIErrorTypes.INVALID_REQUEST,
+        "Invalid request parameters",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.InvalidRequest);
       expect(result.isRetryable).toBe(false);
+      expect(result.originalError?.provider).toBe("openai");
+      expect(result.originalError?.status).toBe(400);
     });
+  });
 
-    it("should map 401 to Authentication", () => {
-      const error = { statusCode: 401, message: "Unauthorized" };
+  describe("401 - authentication_error", () => {
+    it("should map to Authentication for authentication_error type", () => {
+      const error = createOpenAIError(
+        401,
+        OpenAIErrorTypes.AUTHENTICATION,
+        "Invalid authentication credentials",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.Authentication],
+      );
       expect(result.isRetryable).toBe(false);
     });
 
-    it("should map 403 to PermissionDenied", () => {
-      const error = { statusCode: 403, message: "Forbidden" };
+    it("should map to Authentication for invalid_api_key code", () => {
+      const error = createOpenAIError(
+        401,
+        OpenAIErrorTypes.INVALID_REQUEST,
+        "Invalid API key provided",
+        OpenAIErrorTypes.INVALID_API_KEY_CODE,
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+  });
+
+  describe("403 - insufficient_quota / permission_denied", () => {
+    it("should map to PermissionDenied", () => {
+      const error = createOpenAIError(
+        403,
+        OpenAIErrorTypes.PERMISSION_DENIED,
+        "You have insufficient quota for this operation",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.PermissionDenied);
       expect(result.isRetryable).toBe(false);
     });
+  });
 
-    it("should map 404 to NotFound", () => {
-      const error = { statusCode: 404, message: "Not found" };
+  describe("404 - not_found_error", () => {
+    it("should map to NotFound", () => {
+      const error = createOpenAIError(
+        404,
+        OpenAIErrorTypes.NOT_FOUND,
+        "The model 'gpt-5' does not exist",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.NotFound);
       expect(result.isRetryable).toBe(false);
     });
 
-    it("should map 429 to RateLimit", () => {
-      const error = { statusCode: 429, message: "Too many requests" };
+    it("should map to NotFound for model_not_found code", () => {
+      const error = createOpenAIError(
+        404,
+        OpenAIErrorTypes.INVALID_REQUEST,
+        "The model does not exist",
+        OpenAIErrorTypes.MODEL_NOT_FOUND,
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.NotFound);
+    });
+  });
+
+  describe("409 - conflict_error", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createOpenAIError(
+        409,
+        OpenAIErrorTypes.CONFLICT,
+        "Conflict with existing resource",
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("422 - unprocessable_entity_error", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createOpenAIError(
+        422,
+        OpenAIErrorTypes.UNPROCESSABLE_ENTITY,
+        "Unable to process the request",
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("429 - rate_limit_exceeded", () => {
+    it("should map to RateLimit", () => {
+      const error = createOpenAIError(
+        429,
+        OpenAIErrorTypes.RATE_LIMIT,
+        "Rate limit exceeded. Please retry after 20 seconds.",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.RateLimit);
       expect(result.isRetryable).toBe(true);
     });
+  });
 
-    it("should map 500 to ServerError", () => {
-      const error = { statusCode: 500, message: "Internal server error" };
+  describe("500 - server_error", () => {
+    it("should map to ServerError", () => {
+      const error = createOpenAIError(
+        500,
+        OpenAIErrorTypes.SERVER_ERROR,
+        "Internal server error",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.ServerError);
       expect(result.isRetryable).toBe(true);
     });
+  });
 
-    it("should map 503 to ServerError", () => {
-      const error = { statusCode: 503, message: "Service unavailable" };
+  describe("503 - service_unavailable", () => {
+    it("should map to ServerError", () => {
+      const error = createOpenAIError(
+        503,
+        OpenAIErrorTypes.SERVICE_UNAVAILABLE,
+        "Service temporarily unavailable",
+      );
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.ServerError);
@@ -209,259 +191,587 @@ describe("mapProviderError", () => {
     });
   });
 
-  describe("context length detection", () => {
-    it("should detect context length errors from message", () => {
-      const error = {
-        statusCode: 400,
-        message: "This request exceeds the maximum context length",
-      };
-      const result = mapProviderError(error, "anthropic");
+  describe("context_length_exceeded", () => {
+    it("should map to ContextTooLong for context_length_exceeded code", () => {
+      const error = createOpenAIError(
+        400,
+        OpenAIErrorTypes.INVALID_REQUEST,
+        "This model's maximum context length is 8192 tokens",
+        OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED,
+      );
+      const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.ContextTooLong);
-    });
-
-    it("should detect token limit errors", () => {
-      const error = {
-        statusCode: 400,
-        message: "Maximum token limit exceeded",
-      };
-      const result = mapProviderError(error, "anthropic");
-
-      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
-    });
-
-    it("should detect input too long errors", () => {
-      const error = {
-        statusCode: 400,
-        message: "Input is too long for this model",
-      };
-      const result = mapProviderError(error, "anthropic");
-
-      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
     });
   });
 
-  describe("content filter detection", () => {
-    it("should detect content filter errors", () => {
+  describe("connection timeout", () => {
+    it("should map to Unknown when no status code and no responseBody", () => {
       const error = {
-        statusCode: 400,
-        message: "Content was blocked by safety filters",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.ContentFiltered);
-    });
-
-    it("should detect safety violation errors", () => {
-      const error = {
-        statusCode: 400,
-        message: "Safety violation detected in the request",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.ContentFiltered);
-    });
-
-    it("should detect moderation errors", () => {
-      const error = {
-        statusCode: 400,
-        message: "Request failed moderation check",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.ContentFiltered);
-    });
-  });
-
-  describe("provider parameter", () => {
-    it("should include anthropic provider in response", () => {
-      const error = { statusCode: 500, message: "Server error" };
-      const result = mapProviderError(error, "anthropic");
-
-      expect(result.originalError?.provider).toBe("anthropic");
-    });
-
-    it("should include openai provider in response", () => {
-      const error = { statusCode: 500, message: "Server error" };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.originalError?.provider).toBe("openai");
-    });
-
-    it("should include gemini provider in response", () => {
-      const error = { statusCode: 500, message: "Server error" };
-      const result = mapProviderError(error, "gemini");
-
-      expect(result.originalError?.provider).toBe("gemini");
-    });
-  });
-
-  describe("error type mapping", () => {
-    it("should map rate_limit type to RateLimit", () => {
-      const error = {
-        type: "rate_limit_exceeded",
-        message: "Too many requests",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.RateLimit);
-    });
-
-    it("should map authentication type to Authentication", () => {
-      const error = {
-        type: "authentication_error",
-        message: "Invalid API key",
-      };
-      const result = mapProviderError(error, "anthropic");
-
-      expect(result.code).toBe(ChatErrorCode.Authentication);
-    });
-
-    it("should map invalid_api_key type to Authentication", () => {
-      const error = {
-        type: "invalid_api_key",
-        message: "The API key is invalid",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.Authentication);
-    });
-  });
-
-  describe("network error detection", () => {
-    it("should detect network errors from message", () => {
-      const error = {
-        message: "Network error occurred",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.NetworkError);
-      expect(result.isRetryable).toBe(true);
-    });
-
-    it("should detect ECONNREFUSED errors", () => {
-      const error = {
-        message: "connect ECONNREFUSED 127.0.0.1:443",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.NetworkError);
-    });
-
-    it("should detect timeout errors", () => {
-      const error = {
-        message: "Request timeout after 30000ms",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.NetworkError);
-    });
-  });
-
-  describe("fallback behavior", () => {
-    it("should return Unknown for unrecognized errors", () => {
-      const error = {
-        message: "Something unexpected happened",
+        name: "AI_APIConnectionError",
+        message: "Connection timeout after 30000ms",
       };
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.Unknown);
-      expect(result.isRetryable).toBe(false);
     });
+  });
+});
 
-    it("should handle Error instances", () => {
-      const error = new Error("Standard error message");
+// =============================================================================
+// Anthropic Error Tests
+// =============================================================================
+
+describe("mapProviderError - Anthropic", () => {
+  /**
+   * Helper to create an APICallError-like object for Anthropic
+   */
+  function createAnthropicError(
+    statusCode: number,
+    errorType: string,
+    message: string,
+  ) {
+    return {
+      name: "AI_APICallError",
+      statusCode,
+      responseBody: JSON.stringify({
+        error: {
+          type: errorType,
+          message,
+        },
+      }),
+      isRetryable:
+        statusCode >= 500 || statusCode === 429 || statusCode === 529,
+    };
+  }
+
+  describe("400 - invalid_request_error", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createAnthropicError(
+        400,
+        AnthropicErrorTypes.INVALID_REQUEST,
+        "Invalid request body",
+      );
       const result = mapProviderError(error, "anthropic");
 
-      expect(result.originalError?.message).toBe("Standard error message");
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.isRetryable).toBe(false);
+      expect(result.originalError?.provider).toBe("anthropic");
+    });
+  });
+
+  describe("401 - authentication_error", () => {
+    it("should map to Authentication", () => {
+      const error = createAnthropicError(
+        401,
+        AnthropicErrorTypes.AUTHENTICATION,
+        "Invalid API key",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.Authentication],
+      );
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("403 - permission_error", () => {
+    it("should map to PermissionDenied", () => {
+      const error = createAnthropicError(
+        403,
+        AnthropicErrorTypes.PERMISSION,
+        "API key does not have access to this resource",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.PermissionDenied);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("404 - not_found_error", () => {
+    it("should map to NotFound", () => {
+      const error = createAnthropicError(
+        404,
+        AnthropicErrorTypes.NOT_FOUND,
+        "Model not found",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.NotFound);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("413 - request_too_large", () => {
+    it("should map to ContextTooLong", () => {
+      const error = createAnthropicError(
+        413,
+        AnthropicErrorTypes.REQUEST_TOO_LARGE,
+        "Request exceeds the maximum allowed size",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("429 - rate_limit_error", () => {
+    it("should map to RateLimit", () => {
+      const error = createAnthropicError(
+        429,
+        AnthropicErrorTypes.RATE_LIMIT,
+        "Rate limit exceeded",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("500 - api_error", () => {
+    it("should map to ServerError", () => {
+      const error = createAnthropicError(
+        500,
+        AnthropicErrorTypes.API_ERROR,
+        "Internal server error",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("529 - overloaded_error", () => {
+    it("should map to ServerError", () => {
+      const error = createAnthropicError(
+        529,
+        AnthropicErrorTypes.OVERLOADED,
+        "API is temporarily overloaded",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
     });
 
-    it("should handle string errors", () => {
-      const result = mapProviderError("Simple string error", "gemini");
-
-      expect(result.originalError?.message).toBe("Simple string error");
-    });
-
-    it("should detect auth errors from message when no status code or type", () => {
-      // Error with auth-related message but no statusCode or type
+    it("should map 529 to ServerError even without error type", () => {
       const error = {
-        message: "API key not valid. Please pass a valid API key.",
+        name: "AI_APICallError",
+        statusCode: 529,
+        responseBody: JSON.stringify({ error: { message: "Overloaded" } }),
       };
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+    });
+  });
+});
+
+// =============================================================================
+// Gemini Error Tests (Google AI Studio)
+// =============================================================================
+
+describe("mapProviderError - Gemini (Google AI Studio)", () => {
+  /**
+   * Helper to create an APICallError-like object for Gemini
+   */
+  function createGeminiError(
+    statusCode: number,
+    grpcStatus: string,
+    message: string,
+  ) {
+    return {
+      name: "AI_APICallError",
+      statusCode,
+      responseBody: JSON.stringify({
+        error: {
+          code: statusCode,
+          status: grpcStatus,
+          message,
+        },
+      }),
+      isRetryable: statusCode >= 500 || statusCode === 429,
+    };
+  }
+
+  describe("400 - INVALID_ARGUMENT", () => {
+    it("should map to InvalidRequest", () => {
+      const error = createGeminiError(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "Invalid argument",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.isRetryable).toBe(false);
+      expect(result.originalError?.provider).toBe("gemini");
+    });
+  });
+
+  describe("401 - UNAUTHENTICATED", () => {
+    it("should map to Authentication", () => {
+      const error = createGeminiError(
+        401,
+        GeminiErrorCodes.UNAUTHENTICATED,
+        "API key not valid. Please pass a valid API key.",
+      );
       const result = mapProviderError(error, "gemini");
 
       expect(result.code).toBe(ChatErrorCode.Authentication);
       expect(result.message).toBe(
         ChatErrorMessages[ChatErrorCode.Authentication],
       );
-    });
-
-    it("should detect auth errors from invalid API key message pattern", () => {
-      const error = {
-        message: "Invalid API key provided",
-      };
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.Authentication);
-    });
-
-    it("should detect auth errors from authentication failed message", () => {
-      const error = {
-        message: "Authentication failed for this request",
-      };
-      const result = mapProviderError(error, "anthropic");
-
-      expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.isRetryable).toBe(false);
     });
   });
 
-  describe("circular reference handling", () => {
-    it("should safely serialize errors with circular references", () => {
-      // Create an object with a circular reference
-      const circularError: Record<string, unknown> = {
-        message: "Error with circular reference",
-        statusCode: 500,
-      };
-      circularError.self = circularError; // Create circular reference
+  describe("403 - PERMISSION_DENIED", () => {
+    it("should map to PermissionDenied", () => {
+      const error = createGeminiError(
+        403,
+        GeminiErrorCodes.PERMISSION_DENIED,
+        "Permission denied for this resource",
+      );
+      const result = mapProviderError(error, "gemini");
 
-      const result = mapProviderError(circularError, "openai");
+      expect(result.code).toBe(ChatErrorCode.PermissionDenied);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
 
-      // Should not throw and should return a valid response
+  describe("404 - NOT_FOUND", () => {
+    it("should map to NotFound", () => {
+      const error = createGeminiError(
+        404,
+        GeminiErrorCodes.NOT_FOUND,
+        "Model not found",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.NotFound);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("429 - RESOURCE_EXHAUSTED", () => {
+    it("should map to RateLimit", () => {
+      const error = createGeminiError(
+        429,
+        GeminiErrorCodes.RESOURCE_EXHAUSTED,
+        "Quota exceeded",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("500 - INTERNAL", () => {
+    it("should map to ServerError", () => {
+      const error = createGeminiError(
+        500,
+        GeminiErrorCodes.INTERNAL,
+        "Internal server error",
+      );
+      const result = mapProviderError(error, "gemini");
+
       expect(result.code).toBe(ChatErrorCode.ServerError);
-      expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.ServerError]);
-
-      // The raw error should be serializable (circular ref replaced)
-      expect(() => JSON.stringify(result)).not.toThrow();
+      expect(result.isRetryable).toBe(true);
     });
+  });
 
-    it("should safely serialize Error objects with cause chains", () => {
-      const rootCause = new Error("Root cause");
-      const middleError = new Error("Middle error", { cause: rootCause });
-      const topError = new Error("Top level error", { cause: middleError });
+  describe("503 - UNAVAILABLE", () => {
+    it("should map to ServerError", () => {
+      const error = createGeminiError(
+        503,
+        GeminiErrorCodes.UNAVAILABLE,
+        "Service unavailable",
+      );
+      const result = mapProviderError(error, "gemini");
 
-      const result = mapProviderError(topError, "anthropic");
-
-      // Should not throw and should return a valid response
-      expect(result.originalError?.message).toBe("Top level error");
-      expect(() => JSON.stringify(result)).not.toThrow();
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
     });
+  });
+});
 
-    it("should handle deeply nested circular references", () => {
-      const obj: Record<string, unknown> = {
-        message: "Nested circular",
-        level1: {
-          level2: {
-            level3: {},
-          },
+// =============================================================================
+// Gemini Error Tests (Vertex AI)
+// =============================================================================
+
+describe("mapProviderError - Gemini (Vertex AI)", () => {
+  /**
+   * Helper to create an APICallError-like object for Vertex AI
+   * Vertex AI errors have the same structure as Google AI Studio
+   */
+  function createVertexAIError(
+    statusCode: number,
+    grpcStatus: string,
+    message: string,
+  ) {
+    return {
+      name: "AI_APICallError",
+      url: "https://us-central1-aiplatform.googleapis.com/v1/projects/...",
+      statusCode,
+      responseBody: JSON.stringify({
+        error: {
+          code: statusCode,
+          status: grpcStatus,
+          message,
         },
-      };
-      // Create circular reference deep in the object
-      (obj.level1 as Record<string, unknown>).level2 = {
-        level3: obj,
-      };
+      }),
+      isRetryable: statusCode >= 500 || statusCode === 429,
+    };
+  }
 
-      const result = mapProviderError(obj, "gemini");
+  describe("401 - UNAUTHENTICATED (OAuth token)", () => {
+    it("should map to Authentication for invalid OAuth token", () => {
+      const error = createVertexAIError(
+        401,
+        GeminiErrorCodes.UNAUTHENTICATED,
+        "Request had invalid authentication credentials",
+      );
+      const result = mapProviderError(error, "gemini");
 
-      expect(() => JSON.stringify(result)).not.toThrow();
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.originalError?.message).toContain("invalid authentication");
     });
+  });
+
+  describe("403 - PERMISSION_DENIED (IAM)", () => {
+    it("should map to PermissionDenied for IAM permission issues", () => {
+      const error = createVertexAIError(
+        403,
+        GeminiErrorCodes.PERMISSION_DENIED,
+        "Permission denied on resource project",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.PermissionDenied);
+    });
+  });
+
+  describe("429 - RESOURCE_EXHAUSTED (quota)", () => {
+    it("should map to RateLimit for quota exceeded", () => {
+      const error = createVertexAIError(
+        429,
+        GeminiErrorCodes.RESOURCE_EXHAUSTED,
+        "Quota exceeded for aiplatform.googleapis.com",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("500 - INTERNAL", () => {
+    it("should map to ServerError", () => {
+      const error = createVertexAIError(
+        500,
+        GeminiErrorCodes.INTERNAL,
+        "Internal error encountered",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("503 - UNAVAILABLE", () => {
+    it("should map to ServerError", () => {
+      const error = createVertexAIError(
+        503,
+        GeminiErrorCodes.UNAVAILABLE,
+        "The service is currently unavailable",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+      expect(result.isRetryable).toBe(true);
+    });
+  });
+
+  describe("DEADLINE_EXCEEDED", () => {
+    it("should map to ServerError", () => {
+      const error = createVertexAIError(
+        504,
+        GeminiErrorCodes.DEADLINE_EXCEEDED,
+        "Deadline exceeded while waiting for response",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ServerError);
+    });
+  });
+});
+
+// =============================================================================
+// Nested JSON Parsing Tests (Real-world Gemini errors)
+// =============================================================================
+
+describe("mapProviderError - Nested JSON parsing", () => {
+  describe("deeply nested Gemini error (real-world example)", () => {
+    // Real error captured from Gemini with invalid API key - 4+ levels of nesting
+    const deeplyNestedError = {
+      name: "AI_APICallError",
+      url: "http://localhost:9000/v1/gemini/xxx/v1beta/models/gemini-2.5-pro:streamGenerateContent",
+      statusCode: 400,
+      responseBody:
+        '{"error":{"message":"{\\"error\\":{\\"message\\":\\"{\\\\\\"error\\\\\\": {\\\\\\"code\\\\\\": 400, \\\\\\"message\\\\\\": \\\\\\"API key not valid. Please pass a valid API key.\\\\\\", \\\\\\"status\\\\\\": \\\\\\"INVALID_ARGUMENT\\\\\\"}}\\",\\"code\\":400,\\"status\\":\\"Bad Request\\"}}","type":"api_validation_error"}}',
+      isRetryable: false,
+    };
+
+    it("should parse deeply nested JSON and extract meaningful message", () => {
+      const result = mapProviderError(deeplyNestedError, "gemini");
+
+      // The status should be extracted from the innermost error
+      expect(result.originalError?.message).toContain("API key not valid");
+    });
+
+    it("should map based on extracted status", () => {
+      const result = mapProviderError(deeplyNestedError, "gemini");
+
+      // Even though outer status is 400, the inner status is INVALID_ARGUMENT
+      // which maps to InvalidRequest
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    });
+  });
+
+  describe("moderately nested Gemini error", () => {
+    const nestedError = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody:
+        '{"error":{"message":"{\\"error\\":{\\"message\\":\\"API key not valid. Please pass a valid API key.\\",\\"code\\":400,\\"status\\":\\"Bad Request\\"}}","type":"api_validation_error"}}',
+      isRetryable: false,
+    };
+
+    it("should extract message from nested structure", () => {
+      const result = mapProviderError(nestedError, "gemini");
+
+      expect(result.originalError?.message).toContain("API key not valid");
+    });
+  });
+});
+
+// =============================================================================
+// Circular Reference Handling Tests
+// =============================================================================
+
+describe("mapProviderError - Circular reference handling", () => {
+  it("should safely serialize errors with circular references", () => {
+    const circularError: Record<string, unknown> = {
+      message: "Error with circular reference",
+      statusCode: 500,
+    };
+    circularError.self = circularError;
+
+    const result = mapProviderError(circularError, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it("should safely serialize Error objects with cause chains", () => {
+    const rootCause = new Error("Root cause");
+    const middleError = new Error("Middle error", { cause: rootCause });
+    const topError = new Error("Top level error", { cause: middleError });
+
+    const result = mapProviderError(topError, "anthropic");
+
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it("should handle deeply nested circular references", () => {
+    const obj: Record<string, unknown> = {
+      message: "Nested circular",
+      level1: {
+        level2: {
+          level3: {},
+        },
+      },
+    };
+    (obj.level1 as Record<string, unknown>).level2 = { level3: obj };
+
+    const result = mapProviderError(obj, "gemini");
+
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+});
+
+// =============================================================================
+// Fallback Behavior Tests
+// =============================================================================
+
+describe("mapProviderError - Fallback behavior", () => {
+  it("should map by status code when error type is missing", () => {
+    const error = {
+      statusCode: 429,
+      responseBody: JSON.stringify({ error: { message: "Rate limited" } }),
+    };
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.RateLimit);
+  });
+
+  it("should return Unknown for unrecognized errors without status", () => {
+    const error = {
+      message: "Something unexpected happened",
+    };
+    const result = mapProviderError(error, "anthropic");
+
+    expect(result.code).toBe(ChatErrorCode.Unknown);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("should handle plain Error instances", () => {
+    const error = new Error("Standard error message");
+    const result = mapProviderError(error, "gemini");
+
+    expect(result.originalError?.message).toBe("Standard error message");
+  });
+
+  it("should handle string errors", () => {
+    const result = mapProviderError("Simple string error", "openai");
+
+    expect(result.originalError?.message).toBe("Simple string error");
+  });
+});
+
+// =============================================================================
+// Provider Preservation Tests
+// =============================================================================
+
+describe("mapProviderError - Provider preservation", () => {
+  it("should preserve openai provider", () => {
+    const error = { statusCode: 500, message: "Error" };
+    const result = mapProviderError(error, "openai");
+
+    expect(result.originalError?.provider).toBe("openai");
+  });
+
+  it("should preserve anthropic provider", () => {
+    const error = { statusCode: 500, message: "Error" };
+    const result = mapProviderError(error, "anthropic");
+
+    expect(result.originalError?.provider).toBe("anthropic");
+  });
+
+  it("should preserve gemini provider", () => {
+    const error = { statusCode: 500, message: "Error" };
+    const result = mapProviderError(error, "gemini");
+
+    expect(result.originalError?.provider).toBe("gemini");
   });
 });

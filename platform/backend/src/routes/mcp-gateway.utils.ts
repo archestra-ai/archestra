@@ -441,7 +441,7 @@ export async function validateUserToken(
  * Tries team/org tokens first, then user tokens
  * Returns token auth info if valid, null otherwise
  */
-export async function validateArchestraToken(
+export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {

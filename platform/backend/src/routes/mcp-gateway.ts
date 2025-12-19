@@ -16,7 +16,7 @@ import {
   createAgentServer,
   createTransport,
   extractProfileIdAndTokenFromRequest,
-  validateArchestraToken,
+  validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
 
 // =============================================================================
@@ -491,7 +491,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateArchestraToken(profileId, token);
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -545,7 +545,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateArchestraToken(profileId, token);
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
       if (!tokenAuth) {
         reply.status(401);
         return {

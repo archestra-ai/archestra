@@ -27,6 +27,7 @@ Run the platform with a single command:
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
+   -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
    archestra/platform;
@@ -37,6 +38,9 @@ This will start the platform with:
 - **Admin UI** available at <http://localhost:3000>
 - **API** available at <http://localhost:9000>
 - **Auth Secret** auto-generated and saved to `/app/data/.auth_secret` (persisted across restarts)
+- **Embedded Kubernetes** via KinD for running MCP servers in isolated pods
+
+**Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
 
 ### Using External PostgreSQL
 

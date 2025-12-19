@@ -1,22 +1,3 @@
-# Archestra Platform Dockerfile
-#
-# Build image:
-#   docker build -t archestra/platform .
-#
-# Run in quickstart mode (with embedded Kubernetes cluster using KinD):
-#   docker run -p 9000:9000 -p 3000:3000 \
-#       -e ARCHESTRA_QUICKSTART=true \
-#       -v archestra-postgres-data:/var/lib/postgresql/data \
-#       -v archestra-app-data:/app/data \
-#       -v /var/run/docker.sock:/var/run/docker.sock \
-#       archestra/platform;
-#
-# Run with external Kubernetes cluster
-#   docker run -p 9000:9000 -p 3000:3000 \
-#       -v archestra-postgres-data:/var/lib/postgresql/data \
-#       -v archestra-app-data:/app/data \
-#       archestra/platform;
-#
 FROM node:24.11.1-alpine3.22 AS base
 
 # Enable pnpm
@@ -77,8 +58,8 @@ RUN --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     pnpm build
 
-# <----- Common unified base stage ----->
-FROM base AS unified-base
+# <----- Final unified stage ----->
+FROM base AS unified
 WORKDIR /app
 
 ARG VERSION=dev
@@ -98,7 +79,7 @@ ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17 and supervisord (no curl/docker-cli in base)
+    # Install PostgreSQL 17 and supervisord
     apk add --no-cache postgresql17 postgresql17-contrib su-exec && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
@@ -111,7 +92,7 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# Install KinD (Kubernetes in Docker) for embedded K8s cluster support
+# Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
 RUN apk add --no-cache docker-cli && \
     ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
@@ -179,9 +160,9 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-# DATABASE_URL and ARCHESTRA_ORCHESTRATOR_KUBECONFIG are set to placeholders here and replaced via sed in docker-entrypoint.sh
+# DATABASE_URL is set to a placeholder here and replaced via sed in docker-entrypoint.sh
 # All other environment variables (NODE_ENV, ARCHESTRA_*, etc.) are inherited automatically
-environment=DATABASE_URL="placeholder",ARCHESTRA_ORCHESTRATOR_KUBECONFIG="placeholder"
+environment=DATABASE_URL="placeholder"
 
 [program:frontend]
 directory=/app/frontend
@@ -216,7 +197,7 @@ stderr_logfile_maxbytes=0
 priority=1
 EOF
 
-# Create base entrypoint script (shared by production and quickstart stages)
+# Create initialization script
 RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
@@ -248,7 +229,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Quickstart mode requires Docker socket, no external k8s
     if [ ! -S /var/run/docker.sock ]; then
         echo "ERROR: Quickstart mode requires Docker socket to be mounted."
-        echo "Please run with: `-v /var/run/docker.sock:/var/run/docker.sock`"
+        echo "Please run with: -v /var/run/docker.sock:/var/run/docker.sock"
         exit 1
     else
         if ! command -v kind >/dev/null 2>&1; then
@@ -257,7 +238,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         fi
 
         # Quickstart mode always uses embedded KinD cluster
-        CLUSTER_NAME="archestra-embedded"
+        CLUSTER_NAME="archestra-mcp"
         KUBECONFIG_PATH="/app/data/.kubeconfig"
 
         # Check if cluster already exists
@@ -282,11 +263,13 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         else
             echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
 
-            # Update kubeconfig server address to use control plane IP
-            sed -i "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" "${KUBECONFIG_PATH}"
-
-            # Disable TLS verification for local development (KinD uses self-signed certs)
-            sed -i "/server: https/a\\    insecure-skip-tls-verify: true" "${KUBECONFIG_PATH}"
+            # Update kubeconfig to use control plane IP and skip TLS verification
+            # Use a more robust approach to avoid duplicate entries
+            cat "${KUBECONFIG_PATH}" | \
+                sed "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
+                awk '/^    server:/ {print; print "    insecure-skip-tls-verify: true"; next} {print}' > "${KUBECONFIG_PATH}.tmp"
+            mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
+            chmod 600 "${KUBECONFIG_PATH}"
 
             # Connect this container to the KinD network for direct communication
             CONTAINER_ID=$(hostname)
@@ -304,9 +287,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             fi
         fi
 
-        # Set environment variable for backend via supervisord config
-        sed -i "s|ARCHESTRA_ORCHESTRATOR_KUBECONFIG=\"placeholder\"|ARCHESTRA_ORCHESTRATOR_KUBECONFIG=\"${KUBECONFIG_PATH}\"|" /etc/supervisord.conf
-
+        # Export the kubeconfig path for supervisord to inherit
         export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
 

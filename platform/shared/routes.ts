@@ -211,6 +211,11 @@ export const RouteId = {
   GetTokenValue: "getTokenValue",
   RotateToken: "rotateToken",
 
+  // User Token Routes (Personal Tokens)
+  GetUserToken: "getUserToken",
+  GetUserTokenValue: "getUserTokenValue",
+  RotateUserToken: "rotateUserToken",
+
   // Statistics Routes
   GetTeamStatistics: "getTeamStatistics",
   GetAgentStatistics: "getAgentStatistics",

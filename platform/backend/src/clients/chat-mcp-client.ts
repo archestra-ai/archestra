@@ -7,7 +7,13 @@ import { executeArchestraTool } from "@/archestra-mcp-server";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AgentTeamModel, TeamModel, TeamTokenModel, ToolModel } from "@/models";
+import {
+  AgentTeamModel,
+  TeamModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
 
 /**
  * MCP Gateway base URL (internal)
@@ -60,17 +66,18 @@ export const __test = {
 };
 
 /**
- * Select the appropriate team token for a user based on team overlap
+ * Select the appropriate token for a user based on team overlap
  * Priority:
- * 1. Organization token (if user is profile admin)
- * 2. Team token where user is a member AND team is assigned to profile
+ * 1. Personal user token (if user has access to profile via team membership)
+ * 2. Organization token (if user is profile admin)
+ * 3. Team token where user is a member AND team is assigned to profile
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
  * @param userIsProfileAdmin - Whether the user has profile admin permission
  * @returns Token value and metadata, or null if no token available
  */
-async function selectTeamToken(
+async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   userIsProfileAdmin: boolean,
@@ -79,11 +86,49 @@ async function selectTeamToken(
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  isUserToken?: boolean;
 } | null> {
-  // Get all tokens
+  // Get user's team IDs and profile's team IDs (needed for access check)
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
+
+  // 1. Try personal user token first (if user has access via team membership)
+  if (commonTeamIds.length > 0) {
+    // Get organizationId from one of the common teams
+    const team = await TeamModel.findById(commonTeamIds[0]);
+    if (team) {
+      const userToken = await UserTokenModel.findByUserAndOrg(
+        userId,
+        team.organizationId,
+      );
+      if (userToken) {
+        const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+        if (tokenValue) {
+          logger.info(
+            {
+              agentId,
+              userId,
+              tokenId: userToken.id,
+            },
+            "Using personal user token for chat MCP client",
+          );
+          return {
+            tokenValue,
+            tokenId: userToken.id,
+            teamId: null,
+            isOrganizationToken: false,
+            isUserToken: true,
+          };
+        }
+      }
+    }
+  }
+
+  // Get all team tokens
   const tokens = await TeamTokenModel.findAll();
 
-  // If user is profile admin, use organization token (teamId is null)
+  // 2. If user is profile admin, use organization token (teamId is null)
   if (userIsProfileAdmin) {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
@@ -107,16 +152,7 @@ async function selectTeamToken(
     }
   }
 
-  // Get user's team IDs
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-
-  // Get profile's team IDs
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-
-  // Find intersection of user's teams and profile's teams
-  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
-
-  // Try to find a team token where user is in that team and profile is assigned to it
+  // 3. Try to find a team token where user is in that team and profile is assigned to it
   if (commonTeamIds.length > 0) {
     for (const token of tokens) {
       if (token.teamId && commonTeamIds.includes(token.teamId)) {
@@ -151,7 +187,7 @@ async function selectTeamToken(
       commonTeamCount: commonTeamIds.length,
       tokenCount: tokens.length,
     },
-    "No valid team token found for user",
+    "No valid token found for user",
   );
 
   return null;
@@ -248,7 +284,7 @@ export async function getChatMcpClient(
   );
 
   // Select appropriate token for this user
-  const tokenResult = await selectTeamToken(
+  const tokenResult = await selectMCPGatewayToken(
     agentId,
     userId,
     userIsProfileAdmin,
@@ -393,8 +429,12 @@ export async function getChatMcpTools({
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
-  const teamToken = await selectTeamToken(agentId, userId, userIsProfileAdmin);
-  if (!teamToken) {
+  const mcpGwToken = await selectMCPGatewayToken(
+    agentId,
+    userId,
+    userIsProfileAdmin,
+  );
+  if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
       "No valid team token available for user - cannot execute tools",
@@ -520,9 +560,9 @@ export async function getChatMcpTools({
                 toolCall,
                 agentId,
                 {
-                  tokenId: teamToken.tokenId,
-                  teamId: teamToken.teamId,
-                  isOrganizationToken: teamToken.isOrganizationToken,
+                  tokenId: mcpGwToken.tokenId,
+                  teamId: mcpGwToken.teamId,
+                  isOrganizationToken: mcpGwToken.isOrganizationToken,
                   userId, // Pass userId for user-owned server priority
                 },
               );

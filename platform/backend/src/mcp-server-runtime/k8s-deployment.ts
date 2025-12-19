@@ -14,6 +14,13 @@ const {
 } = config;
 
 /**
+ * Cached nodeSelector from the archestra-platform pod.
+ * This is fetched once on first use and reused for all MCP server deployments.
+ */
+let cachedPlatformNodeSelector: k8s.V1PodSpec["nodeSelector"] | null = null;
+let nodeSelectorFetched = false;
+
+/**
  * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
  * K8s client errors can have either `statusCode` or `code` property set to 404.
  */
@@ -24,6 +31,118 @@ function isK8s404Error(error: unknown): boolean {
     (("statusCode" in error && error.statusCode === 404) ||
       ("code" in error && error.code === 404))
   );
+}
+
+/**
+ * Fetches the nodeSelector from the archestra-platform pod (the pod running the backend).
+ * This allows MCP server deployments to inherit the same nodeSelector as the platform,
+ * which is useful when targeting specific node pools (e.g., Karpenter nodepools).
+ *
+ * The result is cached after the first call to avoid repeated API calls.
+ *
+ * @param k8sApi - The Kubernetes CoreV1Api client
+ * @param namespace - The namespace to search for the platform pod
+ * @returns The nodeSelector from the platform pod, or null if not found/not configured
+ */
+export async function fetchPlatformPodNodeSelector(
+  k8sApi: k8s.CoreV1Api,
+  namespace: string,
+): Promise<k8s.V1PodSpec["nodeSelector"] | null> {
+  // Return cached value if already fetched
+  if (nodeSelectorFetched) {
+    return cachedPlatformNodeSelector;
+  }
+
+  try {
+    // Try to find the current pod by reading the POD_NAME environment variable
+    // which is typically set via the Kubernetes downward API
+    const podName = process.env.POD_NAME || process.env.HOSTNAME;
+
+    if (podName) {
+      // Read the current pod's spec directly
+      const pod = await k8sApi.readNamespacedPod({
+        name: podName,
+        namespace,
+      });
+
+      cachedPlatformNodeSelector = pod.spec?.nodeSelector || null;
+      nodeSelectorFetched = true;
+
+      if (cachedPlatformNodeSelector) {
+        logger.info(
+          { nodeSelector: cachedPlatformNodeSelector },
+          "Fetched nodeSelector from archestra-platform pod",
+        );
+      } else {
+        logger.debug("Archestra-platform pod has no nodeSelector configured");
+      }
+
+      return cachedPlatformNodeSelector;
+    }
+
+    // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
+    const pods = await k8sApi.listNamespacedPod({
+      namespace,
+      labelSelector: "app.kubernetes.io/name=archestra-platform",
+    });
+
+    // Get the first running pod's nodeSelector
+    const runningPod = pods.items.find(
+      (pod) => pod.status?.phase === "Running",
+    );
+
+    if (runningPod?.spec?.nodeSelector) {
+      cachedPlatformNodeSelector = runningPod.spec.nodeSelector;
+      nodeSelectorFetched = true;
+
+      logger.info(
+        { nodeSelector: cachedPlatformNodeSelector },
+        "Fetched nodeSelector from archestra-platform pod (via label selector)",
+      );
+
+      return cachedPlatformNodeSelector;
+    }
+
+    // No nodeSelector found
+    nodeSelectorFetched = true;
+    cachedPlatformNodeSelector = null;
+
+    logger.debug(
+      "No archestra-platform pod found or no nodeSelector configured",
+    );
+
+    return null;
+  } catch (error) {
+    // Log the error but don't fail - nodeSelector inheritance is optional
+    logger.warn(
+      { err: error },
+      "Failed to fetch archestra-platform pod nodeSelector, MCP servers will use default scheduling",
+    );
+
+    nodeSelectorFetched = true;
+    cachedPlatformNodeSelector = null;
+
+    return null;
+  }
+}
+
+/**
+ * Resets the cached platform nodeSelector.
+ * This is primarily useful for testing.
+ */
+export function resetPlatformNodeSelectorCache(): void {
+  cachedPlatformNodeSelector = null;
+  nodeSelectorFetched = false;
+}
+
+/**
+ * Returns the cached platform nodeSelector without fetching.
+ * This is useful for synchronous access after the initial fetch.
+ */
+export function getCachedPlatformNodeSelector():
+  | k8s.V1PodSpec["nodeSelector"]
+  | null {
+  return cachedPlatformNodeSelector;
 }
 
 /**
@@ -348,6 +467,7 @@ export default class K8sDeployment {
    * @param localConfig - The local configuration for the MCP server
    * @param needsHttp - Whether the deployment's pod needs HTTP port exposure
    * @param httpPort - The HTTP port to expose (if needsHttp is true)
+   * @param nodeSelector - Optional nodeSelector to apply to the pod spec (e.g., inherited from platform pod)
    * @returns The Kubernetes deployment specification
    */
   generateDeploymentSpec(
@@ -355,6 +475,7 @@ export default class K8sDeployment {
     localConfig: z.infer<typeof LocalConfigSchema>,
     needsHttp: boolean,
     httpPort: number,
+    nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
   ): k8s.V1Deployment {
     // Labels common to Deployment, RS, and Pods
     const labels = K8sDeployment.sanitizeMetadataLabels({
@@ -372,6 +493,10 @@ export default class K8sDeployment {
             serviceAccountName:
               config.orchestrator.kubernetes.mcpK8sServiceAccountName,
           }
+        : {}),
+      // Apply nodeSelector if provided (e.g., inherited from archestra-platform pod)
+      ...(nodeSelector && Object.keys(nodeSelector).length > 0
+        ? { nodeSelector }
         : {}),
       containers: [
         {
@@ -786,6 +911,10 @@ export default class K8sDeployment {
         })),
       };
 
+      // Get the cached nodeSelector from the platform pod (if available)
+      // This allows MCP servers to inherit the same scheduling constraints
+      const platformNodeSelector = getCachedPlatformNodeSelector();
+
       await this.k8sAppsApi.createNamespacedDeployment({
         namespace: this.namespace,
         body: this.generateDeploymentSpec(
@@ -793,6 +922,7 @@ export default class K8sDeployment {
           normalizedLocalConfig,
           needsHttp,
           httpPort,
+          platformNodeSelector,
         ),
       });
 

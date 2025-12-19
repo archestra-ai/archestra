@@ -44,7 +44,9 @@ export type TokenAuthContext = {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
-  /** Optional user ID for user-owned server priority (set when called from chat) */
+  /** True if this is a personal user token */
+  isUserToken?: boolean;
+  /** Optional user ID for user-owned server priority (set when called from chat or from user token) */
   userId?: string;
 };
 

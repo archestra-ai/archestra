@@ -1492,3 +1492,54 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: archestra-chat-custom-provider-api-key
+
+  # Node selector tests
+  - it: should not have nodeSelector when archestra.nodeSelector is empty
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+
+  - it: should apply nodeSelector when provided
+    documentIndex: 1
+    set:
+      archestra.nodeSelector:
+        karpenter.sh/nodepool: general-purpose
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["karpenter.sh/nodepool"]
+          value: general-purpose
+
+  - it: should apply multiple nodeSelector labels
+    documentIndex: 1
+    set:
+      archestra.nodeSelector:
+        karpenter.sh/nodepool: general-purpose
+        kubernetes.io/os: linux
+        node.kubernetes.io/instance-type: m5.large
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["karpenter.sh/nodepool"]
+          value: general-purpose
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+      - equal:
+          path: spec.template.spec.nodeSelector["node.kubernetes.io/instance-type"]
+          value: m5.large
+
+  - it: should support nodeSelector with custom labels
+    documentIndex: 1
+    set:
+      archestra.nodeSelector:
+        team: platform
+        environment: production
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["team"]
+          value: platform
+      - equal:
+          path: spec.template.spec.nodeSelector["environment"]
+          value: production

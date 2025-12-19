@@ -230,12 +230,18 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     fi
 fi
 
-# Auto-detect quickstart mode: enable if Docker socket is mounted
+# Quickstart mode: enable if ARCHESTRA_QUICKSTART is set
 # WARNING: Docker socket mounting provides container with privileged access to the host.
 # This is intended for local development ONLY. Never use in production environments.
 # For production, use external Kubernetes clusters without mounting the Docker socket.
-if [ -S /var/run/docker.sock ]; then
-    echo "Quickstart mode. Initializing embedded KinD cluster..."
+if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
+    echo "ARCHESTRA_QUICKSTART=true detected"
+    echo "Quickstart mode enabled - initializing embedded KinD cluster..."
+    if [ ! -S /var/run/docker.sock ]; then
+        echo "Quickstart mode is on but Docker socket is not mounted"
+        echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"
+        exit 1
+    fi
     echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
 
     if ! command -v kind >/dev/null 2>&1; then

@@ -99,6 +99,9 @@ RUN apk add --no-cache docker-cli && \
         wget -O /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64; \
     elif [ "$ARCH" = "aarch64" ]; then \
         wget -O /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64; \
+    else \
+        echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
+        exit 1; \
     fi && \
     chmod +x /usr/local/bin/kind
 
@@ -222,9 +225,13 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     fi
 fi
 
-# Auto-detect quickstart mode: enable if Docker socket is mounted OR explicitly requested
+# Auto-detect quickstart mode: enable if Docker socket is mounted
+# WARNING: Docker socket mounting provides container with privileged access to the host.
+# This is intended for local development ONLY. Never use in production environments.
+# For production, use external Kubernetes clusters without mounting the Docker socket.
 if [ -S /var/run/docker.sock ]; then
     echo "Quickstart mode. Initializing embedded KinD cluster..."
+    echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
 
     if ! command -v kind >/dev/null 2>&1; then
         echo "ERROR: KinD binary not found in this image."
@@ -240,12 +247,18 @@ if [ -S /var/run/docker.sock ]; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-        kind create cluster --name "${CLUSTER_NAME}" --wait 120s
+        if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
+            echo "ERROR: Failed to create KinD cluster"
+            exit 1
+        fi
         echo "KinD cluster created successfully"
     fi
 
     # Export kubeconfig
-    kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"
+    if ! kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"; then
+        echo "ERROR: Failed to export kubeconfig for KinD cluster"
+        exit 1
+    fi
     chmod 600 "${KUBECONFIG_PATH}"
 
     # Get the KinD control plane container IP address
@@ -258,6 +271,11 @@ if [ -S /var/run/docker.sock ]; then
         echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
 
         # Update kubeconfig to use control plane IP and skip TLS verification
+        # TLS verification is disabled here because:
+        # 1. This is ONLY for local development with embedded KinD cluster
+        # 2. Traffic never leaves the host machine (container-to-container communication)
+        # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
+        # 4. Production deployments use external K8s clusters with proper TLS certificates
         # Use a more robust approach to avoid duplicate entries
         cat "${KUBECONFIG_PATH}" | \
             sed "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
@@ -275,7 +293,10 @@ if [ -S /var/run/docker.sock ]; then
                 echo "Container already connected to KinD network"
             else
                 echo "Connecting container to KinD network..."
-                docker network connect kind "$CONTAINER_ID"
+                if ! docker network connect kind "$CONTAINER_ID"; then
+                    echo "ERROR: Failed to connect container to KinD network"
+                    exit 1
+                fi
                 echo "Connected to KinD network successfully"
             fi
         fi

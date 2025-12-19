@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { Loader } from "@/components/ai-elements/loader";
 import {
   PromptInput,
   PromptInputBody,
@@ -400,9 +401,17 @@ export default function ChatPage() {
     [sendMessage, status],
   );
 
+  // Show loading state while checking API key configuration
+  if (isLoadingApiKeyCheck) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader size={32} className="text-muted-foreground" />
+      </div>
+    );
+  }
+
   // If API key is not configured, show setup message
-  // Only show after loading completes to avoid flash of incorrect content
-  if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
+  if (!hasAnyApiKey) {
     return (
       <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="w-full max-w-md">
@@ -413,7 +422,6 @@ export default function ChatPage() {
             </div>
 
             <CardTitle>Connect Your AI Provider</CardTitle>
-            <CardDescription></CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-6">
@@ -426,6 +434,7 @@ export default function ChatPage() {
                     className="h-5 w-5"
                     viewBox="0 0 24 24"
                     fill="currentColor"
+                    role="img"
                     aria-label="OpenAI logo"
                   >
                     <title>OpenAI</title>
@@ -442,6 +451,7 @@ export default function ChatPage() {
                     className="h-5 w-5"
                     viewBox="0 0 24 24"
                     fill="currentColor"
+                    role="img"
                     aria-label="Anthropic logo"
                   >
                     <title>Anthropic</title>
@@ -458,6 +468,7 @@ export default function ChatPage() {
                     className="h-5 w-5"
                     viewBox="0 0 24 24"
                     fill="currentColor"
+                    role="img"
                     aria-label="Google Gemini logo"
                   >
                     <title>Gemini</title>

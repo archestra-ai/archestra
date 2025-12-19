@@ -8,8 +8,8 @@ import {
   ApiError,
   constructResponseSchema,
   type SelectTeamToken,
-  TeamTokenResponseSchema,
   TeamTokenWithValueResponseSchema,
+  TokensListResponseSchema,
 } from "@/types";
 
 /**
@@ -61,6 +61,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * - ac:update: can see org-wide token
    * - team:admin: can see all team tokens
    * - team:update + team membership: can see own team tokens only
+   *
+   * Also returns permission flags so the UI can show disabled options
+   * for tokens the user doesn't have access to.
    */
   fastify.get(
     "/api/tokens",
@@ -70,14 +73,14 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get tokens visible to the user based on their permissions",
         tags: ["Tokens"],
-        response: constructResponseSchema(z.array(TeamTokenResponseSchema)),
+        response: constructResponseSchema(TokensListResponseSchema),
       },
     },
     async (request, reply) => {
       const { user, headers } = request;
 
       // Check permissions
-      const { success: canSeeOrgTokens } = await hasPermission(
+      const { success: canAccessOrgToken } = await hasPermission(
         { ac: ["update"] },
         headers,
       );
@@ -85,6 +88,13 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { team: ["admin"] },
         headers,
       );
+      const { success: hasTeamUpdate } = await hasPermission(
+        { team: ["update"] },
+        headers,
+      );
+
+      // User can access team tokens if they have team:admin OR team:update
+      const canAccessTeamTokens = isTeamAdmin || hasTeamUpdate;
 
       // Ensure org token exists
       await TeamTokenModel.ensureOrganizationToken();
@@ -96,7 +106,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let visibleTokens = allTokens;
 
       // Filter org tokens (only ac:update can see)
-      if (!canSeeOrgTokens) {
+      if (!canAccessOrgToken) {
         visibleTokens = visibleTokens.filter(
           (token) => !token.isOrganizationToken,
         );
@@ -104,11 +114,6 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter team tokens
       if (!isTeamAdmin) {
-        const { success: hasTeamUpdate } = await hasPermission(
-          { team: ["update"] },
-          headers,
-        );
-
         if (!hasTeamUpdate) {
           // No team:update permission = no team tokens visible
           visibleTokens = visibleTokens.filter(
@@ -125,8 +130,8 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(
-        visibleTokens.map((token) => ({
+      return reply.send({
+        tokens: visibleTokens.map((token) => ({
           id: token.id,
           name: token.name,
           tokenStart: token.tokenStart,
@@ -135,7 +140,11 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: token.createdAt,
           lastUsedAt: token.lastUsedAt,
         })),
-      );
+        permissions: {
+          canAccessOrgToken,
+          canAccessTeamTokens,
+        },
+      });
     },
   );
 

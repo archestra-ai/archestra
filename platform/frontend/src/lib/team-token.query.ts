@@ -23,14 +23,38 @@ export interface TeamToken {
 }
 
 /**
+ * Token permissions from the API
+ */
+export interface TokenPermissions {
+  canAccessOrgToken: boolean;
+  canAccessTeamTokens: boolean;
+}
+
+/**
+ * Response type from GET /api/tokens
+ */
+export interface TokensListResponse {
+  tokens: TeamToken[];
+  permissions: TokenPermissions;
+}
+
+/**
  * Hook to fetch all tokens for the organization
+ * Returns both tokens and permission flags
  */
 export function useTokens() {
   return useQuery({
     queryKey: ["tokens"],
     queryFn: async () => {
       const response = await getTokens();
-      return (response.data ?? []) as TeamToken[];
+      const data = response.data as TokensListResponse | undefined;
+      return {
+        tokens: data?.tokens ?? [],
+        permissions: data?.permissions ?? {
+          canAccessOrgToken: false,
+          canAccessTeamTokens: false,
+        },
+      };
     },
   });
 }

@@ -429,7 +429,11 @@ export async function getChatMcpTools({
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
-  const mcpGwToken = await selectMCPGatewayToken(agentId, userId, userIsProfileAdmin);
+  const mcpGwToken = await selectMCPGatewayToken(
+    agentId,
+    userId,
+    userIsProfileAdmin,
+  );
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },

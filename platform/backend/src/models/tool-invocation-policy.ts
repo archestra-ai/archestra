@@ -1,6 +1,6 @@
+import { isArchestraMcpServerTool } from "@shared";
 import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
-import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
 import AgentToolModel from "./agent-tool";
@@ -18,6 +18,16 @@ class ToolInvocationPolicyModel {
       .insert(schema.toolInvocationPoliciesTable)
       .values(policy)
       .returning();
+
+    // Clear auto-configured timestamp and reasoning when adding a policy
+    await db
+      .update(schema.agentToolsTable)
+      .set({
+        policiesAutoConfiguredAt: null,
+        policiesAutoConfiguredReasoning: null,
+      })
+      .where(eq(schema.agentToolsTable.id, policy.agentToolId));
+
     return createdPolicy;
   }
 
@@ -47,14 +57,46 @@ class ToolInvocationPolicyModel {
       .set(policy)
       .where(eq(schema.toolInvocationPoliciesTable.id, id))
       .returning();
+
+    // Clear auto-configured timestamp and reasoning when updating a policy
+    if (updatedPolicy) {
+      await db
+        .update(schema.agentToolsTable)
+        .set({
+          policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
+        })
+        .where(eq(schema.agentToolsTable.id, updatedPolicy.agentToolId));
+    }
+
     return updatedPolicy || null;
   }
 
   static async delete(id: string): Promise<boolean> {
+    // Get the policy first to access agentToolId
+    const policy = await ToolInvocationPolicyModel.findById(id);
+    if (!policy) {
+      return false;
+    }
+
     const result = await db
       .delete(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+
+    // Clear auto-configured timestamp and reasoning when deleting a policy
+    if (deleted) {
+      await db
+        .update(schema.agentToolsTable)
+        .set({
+          policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
+        })
+        .where(eq(schema.agentToolsTable.id, policy.agentToolId));
+    }
+
+    return deleted;
   }
 
   /**

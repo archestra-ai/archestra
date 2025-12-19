@@ -364,6 +364,17 @@ export function McpServerCard({
     </>
   );
 
+  const errorBanner = isCurrentUserAuthenticated &&
+    hasError &&
+    errorMessage && (
+      <div
+        className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+        data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+      >
+        {errorMessage}
+      </div>
+    );
+
   const remoteCardContent = (
     <>
       <WithPermissions
@@ -379,11 +390,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
-      {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
-          {errorMessage}
-        </div>
-      )}
+      {errorBanner}
       {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
@@ -445,11 +452,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
-      {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
-          {errorMessage}
-        </div>
-      )}
+      {errorBanner}
       {isCurrentUserAuthenticated && needsReinstall && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
@@ -568,6 +571,9 @@ export function McpServerCard({
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
                 useDynamicTeamCredential: false,
+                policiesAutoConfiguredAt: null,
+                policiesAutoConfiguringStartedAt: null,
+                policiesAutoConfiguredReasoning: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,

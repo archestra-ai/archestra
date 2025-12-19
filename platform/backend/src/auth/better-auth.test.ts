@@ -14,6 +14,7 @@ vi.mock("@/config", async (importOriginal) => {
   return {
     default: {
       ...actual.default,
+      enterpriseLicenseActivated: true,
       auth: {
         ...actual.default.auth,
         get disableInvitations() {

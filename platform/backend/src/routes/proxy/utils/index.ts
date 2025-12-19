@@ -17,3 +17,4 @@ export * as tools from "./tools";
 export * as toonConversion from "./toon-conversion";
 export * as tracing from "./tracing";
 export * as trustedData from "./trusted-data";
+export * as userId from "./user-id";

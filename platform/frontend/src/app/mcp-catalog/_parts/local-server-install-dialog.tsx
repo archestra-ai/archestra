@@ -6,8 +6,8 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { BooleanToggle } from "@/components/ui/boolean-toggle";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -253,12 +253,37 @@ export function LocalServerInstallDialog({
               <h3 className="text-sm font-medium">Configuration</h3>
               {nonSecretEnvVars.map((env) => (
                 <div key={env.key} className="space-y-2">
-                  <Label htmlFor={`env-${env.key}`}>
-                    {env.key}
-                    {env.required && (
-                      <span className="text-destructive ml-1">*</span>
-                    )}
-                  </Label>
+                  {env.type === "boolean" ? (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`env-${env.key}`}
+                        checked={environmentValues[env.key] === "true"}
+                        onCheckedChange={(checked) =>
+                          handleEnvVarChange(
+                            env.key,
+                            checked ? "true" : "false",
+                          )
+                        }
+                        disabled={isInstalling}
+                      />
+                      <Label
+                        htmlFor={`env-${env.key}`}
+                        className="cursor-pointer"
+                      >
+                        {env.key}
+                        {env.required && (
+                          <span className="text-destructive ml-1">*</span>
+                        )}
+                      </Label>
+                    </div>
+                  ) : (
+                    <Label htmlFor={`env-${env.key}`}>
+                      {env.key}
+                      {env.required && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
+                    </Label>
+                  )}
                   {env.description && (
                     <div className="text-xs text-muted-foreground prose prose-sm max-w-none">
                       <ReactMarkdown
@@ -270,16 +295,7 @@ export function LocalServerInstallDialog({
                     </div>
                   )}
 
-                  {env.type === "boolean" ? (
-                    <BooleanToggle
-                      value={environmentValues[env.key] === "true"}
-                      onChange={(checked) =>
-                        handleEnvVarChange(env.key, checked ? "true" : "false")
-                      }
-                      disabled={isInstalling}
-                      variant="secondary"
-                    />
-                  ) : env.type === "number" ? (
+                  {env.type === "boolean" ? null : env.type === "number" ? (
                     <Input
                       id={`env-${env.key}`}
                       type="number"

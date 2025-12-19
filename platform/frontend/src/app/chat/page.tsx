@@ -4,36 +4,18 @@ import type { UIMessage } from "@ai-sdk/react";
 import { ArrowRight, Eye, EyeOff, KeyRound, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import { Loader } from "@/components/ai-elements/loader";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
-import { ChatError } from "@/components/chat/chat-error";
+import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
-import { ModelSelector } from "@/components/chat/model-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,6 +42,7 @@ import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -377,38 +360,26 @@ export default function ChatPage() {
     messages,
   ]);
 
-  const handleSubmit = useCallback(
-    (
-      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
-      message: { text?: string; files?: any[] },
-      e: FormEvent<HTMLFormElement>,
-    ) => {
-      e.preventDefault();
-      if (
-        !sendMessage ||
-        !message.text?.trim() ||
-        status === "submitted" ||
-        status === "streaming"
-      ) {
-        return;
-      }
+  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
+    e.preventDefault();
+    if (status === "submitted" || status === "streaming") {
+      stop?.();
+    }
 
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: message.text }],
-      });
-    },
-    [sendMessage, status],
-  );
+    if (
+      !sendMessage ||
+      !message.text?.trim() ||
+      status === "submitted" ||
+      status === "streaming"
+    ) {
+      return;
+    }
 
-  // Show loading state while checking API key configuration
-  if (isLoadingApiKeyCheck) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Loader size={32} className="text-muted-foreground" />
-      </div>
-    );
-  }
+    sendMessage?.({
+      role: "user",
+      parts: [{ type: "text", text: message.text }],
+    });
+  };
 
   // If API key is not configured, show setup message
   if (!hasAnyApiKey) {
@@ -616,20 +587,10 @@ export default function ChatPage() {
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
         <div className="flex flex-col h-full">
-          {error && <ChatError error={error} />}
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex-1 flex items-center gap-2">
-              {conversation && (
-                <ModelSelector
-                  selectedModel={conversation.selectedModel}
-                  onModelChange={handleModelChange}
-                  disabled={status === "streaming" || status === "submitted"}
-                  messageCount={messages.length}
-                />
-              )}
-            </div>
+            <div className="flex-1" />
             {conversation?.agent?.name && (
               <div className="flex-1 text-center">
                 <span className="text-sm font-medium text-muted-foreground">
@@ -666,45 +627,25 @@ export default function ChatPage() {
               hideToolCalls={hideToolCalls}
               status={status}
               isLoadingConversation={isLoadingConversation}
+              error={error}
             />
           </div>
 
-          <div className="sticky bottom-0 bg-background border-t p-4">
-            <div className="max-w-3xl mx-auto space-y-3">
-              {currentProfileId && (
-                <WithPermissions
-                  permissions={{ profile: ["read"] }}
-                  noPermissionHandle="tooltip"
-                >
-                  {({ hasPermission }) => {
-                    return hasPermission ===
-                      undefined ? null : hasPermission ? (
-                      <McpToolsDisplay
-                        agentId={currentProfileId}
-                        className="text-xs text-muted-foreground"
-                      />
-                    ) : (
-                      <Badge variant="outline" className="text-xs my-2">
-                        Unable to show the list of tools
-                      </Badge>
-                    );
-                  }}
-                </WithPermissions>
-              )}
-              <PromptInput onSubmit={handleSubmit}>
-                <PromptInputBody>
-                  <PromptInputTextarea placeholder="Type a message..." />
-                </PromptInputBody>
-                <PromptInputToolbar>
-                  <PromptInputTools />
-                  <PromptInputSubmit
-                    status={status === "error" ? "ready" : status}
-                    onStop={stop}
-                  />
-                </PromptInputToolbar>
-              </PromptInput>
+          {conversation?.agent.id && conversation?.id && (
+            <div className="sticky bottom-0 bg-background border-t p-4">
+              <div className="max-w-4xl mx-auto space-y-3">
+                <ArchestraPromptInput
+                  onSubmit={handleSubmit}
+                  status={status}
+                  selectedModel={conversation?.selectedModel ?? ""}
+                  onModelChange={handleModelChange}
+                  messageCount={messages.length}
+                  agentId={conversation?.agent.id}
+                  conversationId={conversation?.id}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

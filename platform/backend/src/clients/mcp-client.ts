@@ -279,7 +279,7 @@ class McpClient {
   }
 
   // Determines the target MCP server ID for a local catalog item
-  // Since there are multiple pods for a single catalog item that can receive request
+  // Since there are multiple deployments for a single catalog item that can receive request
   private async determineTargetMcpServerIdForCatalogItem({
     tool,
     tokenAuth,
@@ -514,15 +514,22 @@ class McpClient {
       }
 
       // Stdio transport - use K8s attach!
-      const k8sPod = McpServerRuntimeManager.getPod(targetLocalMcpServerId);
-      if (!k8sPod) {
-        throw new Error("Pod not found for MCP server");
+      const k8sDeployment = McpServerRuntimeManager.getDeployment(
+        targetLocalMcpServerId,
+      );
+      if (!k8sDeployment) {
+        throw new Error("Deployment not found for MCP server");
+      }
+
+      const podName = await k8sDeployment.getRunningPodName();
+      if (!podName) {
+        throw new Error("No running pod found for MCP server deployment");
       }
 
       return new K8sAttachTransport({
-        k8sAttach: k8sPod.k8sAttachClient,
-        namespace: k8sPod.k8sNamespace,
-        podName: k8sPod.k8sPodName,
+        k8sAttach: k8sDeployment.k8sAttachClient,
+        namespace: k8sDeployment.k8sNamespace,
+        podName: podName,
         containerName: "mcp-server",
       });
     }

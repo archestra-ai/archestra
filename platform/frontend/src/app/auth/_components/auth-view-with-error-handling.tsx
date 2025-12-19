@@ -4,7 +4,6 @@ import { AuthView } from "@daveyplate/better-auth-ui";
 import { AlertCircle, ExternalLink, KeyRound, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { SsoProviderSelector } from "@/components/sso-provider-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +14,25 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import config from "@/lib/config";
-import { usePublicSsoProviders } from "@/lib/sso-provider.query";
+
+const { SsoProviderSelector } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
+    await import("@/components/sso-provider-selector.ee")
+  : {
+      SsoProviderSelector: () => null,
+    };
+
+const { usePublicSsoProviders } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
+    await import("@/lib/sso-provider.query.ee")
+  : {
+      usePublicSsoProviders: () => ({
+        data: [],
+        isLoading: false,
+        isError: false,
+        error: null,
+      }),
+    };
 
 /**
  * Map of SSO error codes to user-friendly messages.
@@ -254,7 +271,12 @@ export function AuthViewWithErrorHandling({
   );
 
   // When basic auth is disabled but SSO providers exist, show SSO in a card
-  if (isBasicAuthDisabled && hasSsoProviders && isSignInPage) {
+  if (
+    isBasicAuthDisabled &&
+    hasSsoProviders &&
+    isSignInPage &&
+    config.enterpriseLicenseActivated
+  ) {
     return (
       <div className="w-full max-w-md space-y-4">
         {ssoErrorAlert}
@@ -339,7 +361,7 @@ export function AuthViewWithErrorHandling({
             }}
           />
         )}
-        {isSignInPage && (
+        {isSignInPage && config.enterpriseLicenseActivated && (
           <SsoProviderSelector showDivider={!isBasicAuthDisabled} />
         )}
       </div>

@@ -5,7 +5,7 @@ import { SecretsManagerType } from "@shared";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import logger from "./logging";
-import { SecretModel } from "./models";
+import SecretModel from "./models/secret";
 import type {
   ISecretManager,
   SecretsConnectivityResult,

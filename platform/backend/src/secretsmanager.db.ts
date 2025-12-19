@@ -1,5 +1,5 @@
 import { SecretsManagerType } from "@shared";
-import { SecretModel } from "./models";
+import SecretModel from "./models/secret";
 import type {
   ISecretManager,
   SecretsConnectivityResult,

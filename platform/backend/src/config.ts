@@ -266,6 +266,12 @@ export default {
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+  /**
+   * Codegen mode is set when running `pnpm codegen` via turbo.
+   * This ensures enterprise routes are always included in generated API specs,
+   * regardless of whether the enterprise license is activated locally.
+   */
+  codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -278,7 +284,9 @@ export default {
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
       mcpK8sServiceAccountName:
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME || "",
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME ||
+        // Default value matches the mcp-k8s-operator service account name from the official helm chart
+        "archestra-platform-mcp-k8s-operator",
     },
   },
   vault: {

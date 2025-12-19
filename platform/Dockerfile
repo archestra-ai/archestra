@@ -274,10 +274,11 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
 
     # Get the KinD control plane container IP address
     CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
-    CONTROL_PLANE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
+    CONTROL_PLANE_IP=$(docker inspect -f '{{with index .NetworkSettings.Networks "kind"}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
 
     if [ -z "$CONTROL_PLANE_IP" ]; then
         echo "ERROR: Could not get KinD control plane IP address"
+        exit 1
     else
         echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
 
@@ -289,7 +290,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # 4. Production deployments use external K8s clusters with proper TLS certificates
         # Use targeted approach to avoid duplicates and only modify KinD cluster entries
         cat "${KUBECONFIG_PATH}" | \
-            sed "s|server: https://127.0.0.1:[0-9]\+|server: https://${CONTROL_PLANE_IP}:6443|g" | \
+            sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
             awk '
                 /^    server: https:\/\/.*:6443$/ {
                     print
@@ -324,13 +325,15 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
                 echo "Connected to KinD network successfully"
             fi
         fi
+
+        # Export the kubeconfig path for supervisord to inherit, only if setup succeeded
+        export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
+        export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+        echo "Kubernetes orchestrator configured with embedded KinD cluster"
+    else
+        echo "WARNING: Skipping Kubernetes orchestrator configuration due to control plane IP setup failure"
+        echo "The KinD cluster was created but networking setup failed - orchestrator will not be configured"
     fi
-
-    # Export the kubeconfig path for supervisord to inherit
-    export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
-    export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
-
-    echo "Kubernetes orchestrator configured with embedded KinD cluster"
 fi
 
 # Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)

@@ -9,6 +9,7 @@ import type {
 } from "@/types";
 import MemberModel from "./member";
 import SessionModel from "./session";
+import UserTokenModel from "./user-token";
 
 class InvitationModel {
   /**
@@ -99,6 +100,24 @@ class InvitationModel {
 
       // Create member row linking user to organization
       await MemberModel.create(user.id, organizationId, role);
+
+      // Create personal token for the new member
+      try {
+        await UserTokenModel.ensureUserToken(
+          user.id,
+          organizationId,
+          user.name,
+        );
+        logger.info(
+          `🔑 Personal token created for user ${user.email} in organization ${organizationId}`,
+        );
+      } catch (tokenError) {
+        logger.error(
+          { err: tokenError },
+          `❌ Failed to create personal token for user ${user.email}:`,
+        );
+        // Don't fail invitation acceptance if token creation fails
+      }
 
       // Mark invitation as accepted
       await InvitationModel.patch(invitationId, { status: "accepted" });

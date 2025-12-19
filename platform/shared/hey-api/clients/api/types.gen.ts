@@ -12754,6 +12754,8 @@ export type GetV1McpByProfileIdResponses = {
             tokenId: string;
             teamId: string | null;
             isOrganizationToken: boolean;
+            isUserToken?: boolean;
+            userId?: string;
         };
     };
 };
@@ -16997,6 +16999,246 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type GetUserTokenData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/user-tokens/me';
+};
+
+export type GetUserTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUserTokenError = GetUserTokenErrors[keyof GetUserTokenErrors];
+
+export type GetUserTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        createdAt: string;
+        lastUsedAt: string | null;
+    };
+};
+
+export type GetUserTokenResponse = GetUserTokenResponses[keyof GetUserTokenResponses];
+
+export type GetUserTokenValueData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/user-tokens/me/value';
+};
+
+export type GetUserTokenValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetUserTokenValueError = GetUserTokenValueErrors[keyof GetUserTokenValueErrors];
+
+export type GetUserTokenValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetUserTokenValueResponse = GetUserTokenValueResponses[keyof GetUserTokenValueResponses];
+
+export type RotateUserTokenData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/user-tokens/me/rotate';
+};
+
+export type RotateUserTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RotateUserTokenError = RotateUserTokenErrors[keyof RotateUserTokenErrors];
+
+export type RotateUserTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        createdAt: string;
+        lastUsedAt: string | null;
+        value: string;
+    };
+};
+
+export type RotateUserTokenResponse = RotateUserTokenResponses[keyof RotateUserTokenResponses];
 
 export type GetRolesData = {
     body?: never;

@@ -278,7 +278,7 @@ if [ -S /var/run/docker.sock ]; then
         # 4. Production deployments use external K8s clusters with proper TLS certificates
         # Use a more robust approach to avoid duplicate entries
         cat "${KUBECONFIG_PATH}" | \
-            sed "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
+            sed "s|server: https://127.0.0.1:[0-9]\+|server: https://${CONTROL_PLANE_IP}:6443|g" | \
             awk '/^    server:/ {print; print "    insecure-skip-tls-verify: true"; next} {print}' > "${KUBECONFIG_PATH}.tmp"
         mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
         chmod 600 "${KUBECONFIG_PATH}"

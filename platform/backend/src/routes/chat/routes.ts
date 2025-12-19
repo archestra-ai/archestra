@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
+  type ChatErrorResponse,
   EXTERNAL_AGENT_ID_HEADER,
   RouteId,
   SupportedProviders,
@@ -44,6 +45,7 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { mapProviderError } from "./errors";
 
 /**
  * Detect which provider a model belongs to based on its name
@@ -387,23 +389,36 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream error occurred",
           );
 
-          // Return full error as JSON string for debugging
+          // Map provider error to user-friendly ChatErrorResponse
+          const mappedError: ChatErrorResponse = mapProviderError(
+            error,
+            provider,
+          );
+
+          logger.info(
+            {
+              mappedError,
+              originalErrorType:
+                error instanceof Error ? error.name : typeof error,
+              willBeSentToFrontend: true,
+            },
+            "Returning mapped error to frontend via stream",
+          );
+
+          // mapProviderError safely serializes raw errors, but add defensive try-catch
           try {
-            const fullError = JSON.stringify(error, null, 2);
-            logger.info(
-              { fullError, willBeSentToFrontend: true },
-              "Returning full error to frontend via stream",
-            );
-            return fullError;
+            return JSON.stringify(mappedError);
           } catch (stringifyError) {
-            // If stringify fails (circular reference), fall back to error message
-            const fallbackMessage =
-              error instanceof Error ? error.message : String(error);
-            logger.info(
-              { fallbackMessage, stringifyError },
-              "Failed to stringify error, using fallback",
+            logger.error(
+              { stringifyError, errorCode: mappedError.code },
+              "Failed to stringify mapped error, returning minimal error",
             );
-            return fallbackMessage;
+            // Return a minimal error response without the raw error
+            return JSON.stringify({
+              code: mappedError.code,
+              message: mappedError.message,
+              isRetryable: mappedError.isRetryable,
+            });
           }
         },
         onFinish: async ({ messages: finalMessages }) => {

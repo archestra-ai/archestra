@@ -4,6 +4,7 @@ import {
   ChatErrorMessages,
   type ChatErrorResponse,
   GeminiErrorCodes,
+  GeminiErrorReasons,
   OpenAIErrorTypes,
   RetryableErrorCodes,
   type SupportedProvider,
@@ -79,11 +80,27 @@ interface ParsedAnthropicError {
   message?: string;
 }
 
+/**
+ * Parsed ErrorInfo from google.rpc.ErrorInfo in the details array.
+ * @see https://cloud.google.com/apis/design/errors#error_info
+ * @see https://googleapis.dev/nodejs/spanner/latest/google.rpc.ErrorInfo.html
+ */
+interface GeminiErrorInfo {
+  /** The reason for the error (e.g., "API_KEY_INVALID", "RESOURCE_EXHAUSTED") */
+  reason?: string;
+  /** The domain of the error (e.g., "googleapis.com") */
+  domain?: string;
+  /** Additional metadata about the error */
+  metadata?: Record<string, string>;
+}
+
 interface ParsedGeminiError {
   code?: number;
   status?: string;
   message?: string;
   details?: unknown[];
+  /** Extracted ErrorInfo from details array, if present */
+  errorInfo?: GeminiErrorInfo;
 }
 
 // =============================================================================
@@ -146,8 +163,9 @@ function parseAnthropicError(
 }
 
 /**
- * Recursively parse nested JSON strings to find the innermost error
- * Gemini errors can be deeply nested with JSON-encoded strings
+ * Recursively parse nested JSON strings to find the innermost error.
+ * Gemini errors can be deeply nested with JSON-encoded strings.
+ * Arrays are preserved during parsing to maintain the details array structure.
  */
 function parseNestedJson(obj: unknown, depth = 0): unknown {
   if (depth > 10) return obj; // Prevent infinite recursion
@@ -159,6 +177,11 @@ function parseNestedJson(obj: unknown, depth = 0): unknown {
     } catch {
       return obj;
     }
+  }
+
+  // Preserve arrays (important for details array)
+  if (Array.isArray(obj)) {
+    return obj.map((item) => parseNestedJson(item, depth + 1));
   }
 
   if (typeof obj === "object" && obj !== null) {
@@ -173,27 +196,139 @@ function parseNestedJson(obj: unknown, depth = 0): unknown {
 }
 
 /**
+ * Extract ErrorInfo from the details array (or object-like array from nested JSON parsing).
+ * ErrorInfo provides specific error reasons like "API_KEY_INVALID".
+ *
+ * @see https://cloud.google.com/apis/design/errors#error_info
+ * @see https://googleapis.dev/nodejs/spanner/latest/google.rpc.ErrorInfo.html
+ */
+function extractErrorInfo(
+  details: unknown[] | Record<string, unknown>,
+): GeminiErrorInfo | undefined {
+  // Handle both arrays and object-like arrays (from nested JSON parsing)
+  const items = Array.isArray(details) ? details : Object.values(details);
+
+  for (const detail of items) {
+    if (typeof detail !== "object" || detail === null) continue;
+
+    const detailObj = detail as Record<string, unknown>;
+
+    // Check for ErrorInfo type (can be @type or type field)
+    const typeField = detailObj["@type"] || detailObj.type;
+    if (
+      typeof typeField === "string" &&
+      typeField.includes("google.rpc.ErrorInfo")
+    ) {
+      return {
+        reason:
+          typeof detailObj.reason === "string" ? detailObj.reason : undefined,
+        domain:
+          typeof detailObj.domain === "string" ? detailObj.domain : undefined,
+        metadata:
+          typeof detailObj.metadata === "object" && detailObj.metadata !== null
+            ? (detailObj.metadata as Record<string, string>)
+            : undefined,
+      };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Recursively find the innermost error object that has actual error fields.
+ * After parseNestedJson, the error structure can have error objects nested inside
+ * message fields (which were previously JSON strings).
+ */
+function findInnermostError(
+  obj: Record<string, unknown>,
+  depth = 0,
+): Record<string, unknown> {
+  if (depth > 10) return obj;
+
+  // Check if this object has the typical error fields (status, code, details)
+  const hasErrorFields =
+    typeof obj.status === "string" ||
+    typeof obj.code === "number" ||
+    Array.isArray(obj.details) ||
+    (typeof obj.details === "object" && obj.details !== null);
+
+  // If we have error fields and also have a nested error, prefer the deeper one
+  if (typeof obj.error === "object" && obj.error !== null) {
+    const nestedError = findInnermostError(
+      obj.error as Record<string, unknown>,
+      depth + 1,
+    );
+    // If the nested error has more specific fields, use it
+    if (
+      typeof nestedError.status === "string" ||
+      typeof nestedError.details === "object"
+    ) {
+      return nestedError;
+    }
+  }
+
+  // If message is an object (parsed from nested JSON), check for error inside it
+  if (typeof obj.message === "object" && obj.message !== null) {
+    const nestedMessage = obj.message as Record<string, unknown>;
+    if (
+      typeof nestedMessage.error === "object" &&
+      nestedMessage.error !== null
+    ) {
+      const nestedError = findInnermostError(
+        nestedMessage.error as Record<string, unknown>,
+        depth + 1,
+      );
+      if (
+        typeof nestedError.status === "string" ||
+        typeof nestedError.details === "object"
+      ) {
+        return nestedError;
+      }
+    }
+  }
+
+  // If current object has error fields, return it
+  if (hasErrorFields) {
+    return obj;
+  }
+
+  return obj;
+}
+
+/**
  * Parse Gemini/Vertex AI error response body.
  * Gemini errors have structure: { error: { code, status, message, details } }
  * Note: Errors can be deeply nested with JSON-encoded strings when proxied.
  *
+ * The `details` array may contain google.rpc.ErrorInfo objects with specific
+ * error reasons (e.g., "API_KEY_INVALID") that provide more precise error
+ * classification than the status code alone.
+ *
  * @see https://ai.google.dev/gemini-api/docs/troubleshooting - Google AI Studio troubleshooting
  * @see https://cloud.google.com/vertex-ai/generative-ai/docs/error-codes - Vertex AI error codes
  * @see https://cloud.google.com/apis/design/errors - Google Cloud API error design (gRPC codes)
+ * @see https://googleapis.dev/nodejs/spanner/latest/google.rpc.ErrorInfo.html - ErrorInfo structure
  */
 function parseGeminiError(responseBody: string): ParsedGeminiError | null {
   try {
     // First, recursively parse any nested JSON strings
     const parsed = parseNestedJson(responseBody) as Record<string, unknown>;
 
-    // Handle nested error structure (can be multiple levels deep)
+    // Find the innermost error object that has the actual error fields
     let errorObj = parsed;
-    while (errorObj?.error && typeof errorObj.error === "object") {
-      errorObj = errorObj.error as Record<string, unknown>;
+    if (typeof parsed.error === "object" && parsed.error !== null) {
+      errorObj = findInnermostError(parsed.error as Record<string, unknown>);
     }
 
     // Extract the innermost error details
     if (errorObj) {
+      // Details can be an array or object-like array from nested JSON parsing
+      const details =
+        Array.isArray(errorObj.details) ||
+        (typeof errorObj.details === "object" && errorObj.details !== null)
+          ? (errorObj.details as unknown[] | Record<string, unknown>)
+          : undefined;
+
       return {
         code:
           typeof errorObj.code === "number"
@@ -219,7 +354,9 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
                   | string
                   | undefined)
               : undefined,
-        details: Array.isArray(errorObj.details) ? errorObj.details : undefined,
+        details: Array.isArray(details) ? details : undefined,
+        // Extract ErrorInfo for specific error reason mapping
+        errorInfo: details ? extractErrorInfo(details) : undefined,
       };
     }
     return null;
@@ -351,11 +488,19 @@ function mapAnthropicErrorToCode(
 
 /**
  * Map Gemini/Vertex AI error to ChatErrorCode.
- * Uses error.status (gRPC status code string) from the API response.
+ * Uses error.status (gRPC status code) and error.details[].reason (ErrorInfo) from the API response.
+ *
+ * The ErrorInfo reason (from details array) provides more specific error classification
+ * than the gRPC status alone. For example, INVALID_ARGUMENT status with API_KEY_INVALID
+ * reason should map to Authentication, not InvalidRequest.
  *
  * gRPC status codes documented at:
  * @see https://cloud.google.com/apis/design/errors#handling_errors
  * @see https://grpc.io/docs/guides/status-codes/
+ *
+ * ErrorInfo reasons documented at:
+ * @see https://cloud.google.com/apis/design/errors#error_info
+ * @see https://googleapis.dev/nodejs/spanner/latest/google.rpc.ErrorInfo.html
  *
  * HTTP Status -> gRPC Status mapping (per Google's AIP-193):
  * - 400 -> INVALID_ARGUMENT (client specified an invalid argument)
@@ -372,7 +517,45 @@ function mapGeminiErrorToCode(
   parsedError: ParsedGeminiError | null,
 ): ChatErrorCode {
   const grpcStatus = parsedError?.status;
+  const errorReason = parsedError?.errorInfo?.reason;
 
+  // First, check ErrorInfo reason for more specific error classification
+  // This takes precedence because it provides more detail than status alone
+  if (errorReason) {
+    switch (errorReason) {
+      // Authentication errors
+      case GeminiErrorReasons.API_KEY_INVALID:
+      case GeminiErrorReasons.API_KEY_NOT_FOUND:
+      case GeminiErrorReasons.API_KEY_EXPIRED:
+      case GeminiErrorReasons.ACCESS_TOKEN_EXPIRED:
+      case GeminiErrorReasons.ACCESS_TOKEN_INVALID:
+      case GeminiErrorReasons.SERVICE_ACCOUNT_INVALID:
+        return ChatErrorCode.Authentication;
+
+      // Rate limit / quota errors
+      case GeminiErrorReasons.RATE_LIMIT_EXCEEDED:
+      case GeminiErrorReasons.RESOURCE_EXHAUSTED:
+      case GeminiErrorReasons.QUOTA_EXCEEDED:
+        return ChatErrorCode.RateLimit;
+
+      // Not found errors
+      case GeminiErrorReasons.MODEL_NOT_FOUND:
+      case GeminiErrorReasons.RESOURCE_NOT_FOUND:
+        return ChatErrorCode.NotFound;
+
+      // Content filtering errors
+      case GeminiErrorReasons.SAFETY_BLOCKED:
+      case GeminiErrorReasons.RECITATION_BLOCKED:
+      case GeminiErrorReasons.CONTENT_FILTERED:
+        return ChatErrorCode.ContentFiltered;
+
+      // Context length errors
+      case GeminiErrorReasons.CONTEXT_LENGTH_EXCEEDED:
+        return ChatErrorCode.ContextTooLong;
+    }
+  }
+
+  // Fall back to gRPC status code
   if (grpcStatus) {
     switch (grpcStatus) {
       case GeminiErrorCodes.UNAUTHENTICATED:
@@ -394,7 +577,7 @@ function mapGeminiErrorToCode(
     }
   }
 
-  // Fall back to status code
+  // Fall back to HTTP status code
   return mapStatusCodeToErrorCode(statusCode);
 }
 

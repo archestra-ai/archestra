@@ -3,6 +3,7 @@ import {
   ChatErrorCode,
   ChatErrorMessages,
   GeminiErrorCodes,
+  GeminiErrorReasons,
   OpenAIErrorTypes,
 } from "@shared";
 import { describe, expect, it } from "vitest";
@@ -612,6 +613,245 @@ describe("mapProviderError - Gemini (Vertex AI)", () => {
       const result = mapProviderError(error, "gemini");
 
       expect(result.code).toBe(ChatErrorCode.ServerError);
+    });
+  });
+});
+
+// =============================================================================
+// Gemini ErrorInfo Reason Tests (google.rpc.ErrorInfo)
+// =============================================================================
+
+describe("mapProviderError - Gemini ErrorInfo reasons", () => {
+  /**
+   * Helper to create a Gemini error with ErrorInfo in the details array
+   * @see https://googleapis.dev/nodejs/spanner/latest/google.rpc.ErrorInfo.html
+   */
+  function createGeminiErrorWithDetails(
+    statusCode: number,
+    grpcStatus: string,
+    message: string,
+    reason: string,
+    domain = "googleapis.com",
+  ) {
+    return {
+      name: "AI_APICallError",
+      statusCode,
+      responseBody: JSON.stringify({
+        error: {
+          code: statusCode,
+          status: grpcStatus,
+          message,
+          details: [
+            {
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              reason,
+              domain,
+              metadata: {
+                service: "generativelanguage.googleapis.com",
+              },
+            },
+            {
+              "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+              locale: "en-US",
+              message,
+            },
+          ],
+        },
+      }),
+      isRetryable: statusCode >= 500 || statusCode === 429,
+    };
+  }
+
+  describe("Authentication errors via ErrorInfo reason", () => {
+    it("should map API_KEY_INVALID to Authentication (even with INVALID_ARGUMENT status)", () => {
+      // This is the real-world case: status is INVALID_ARGUMENT but reason tells us it's an API key issue
+      const error = createGeminiErrorWithDetails(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "API key not valid. Please pass a valid API key.",
+        GeminiErrorReasons.API_KEY_INVALID,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.Authentication],
+      );
+    });
+
+    it("should map API_KEY_NOT_FOUND to Authentication", () => {
+      const error = createGeminiErrorWithDetails(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "API key not found",
+        GeminiErrorReasons.API_KEY_NOT_FOUND,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+
+    it("should map API_KEY_EXPIRED to Authentication", () => {
+      const error = createGeminiErrorWithDetails(
+        401,
+        GeminiErrorCodes.UNAUTHENTICATED,
+        "API key has expired",
+        GeminiErrorReasons.API_KEY_EXPIRED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+
+    it("should map ACCESS_TOKEN_EXPIRED to Authentication", () => {
+      const error = createGeminiErrorWithDetails(
+        401,
+        GeminiErrorCodes.UNAUTHENTICATED,
+        "Access token expired",
+        GeminiErrorReasons.ACCESS_TOKEN_EXPIRED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+
+    it("should map ACCESS_TOKEN_INVALID to Authentication", () => {
+      const error = createGeminiErrorWithDetails(
+        401,
+        GeminiErrorCodes.UNAUTHENTICATED,
+        "Invalid access token",
+        GeminiErrorReasons.ACCESS_TOKEN_INVALID,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+    });
+  });
+
+  describe("Rate limit errors via ErrorInfo reason", () => {
+    it("should map RATE_LIMIT_EXCEEDED to RateLimit", () => {
+      const error = createGeminiErrorWithDetails(
+        429,
+        GeminiErrorCodes.RESOURCE_EXHAUSTED,
+        "Rate limit exceeded",
+        GeminiErrorReasons.RATE_LIMIT_EXCEEDED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.isRetryable).toBe(true);
+    });
+
+    it("should map QUOTA_EXCEEDED to RateLimit", () => {
+      const error = createGeminiErrorWithDetails(
+        429,
+        GeminiErrorCodes.RESOURCE_EXHAUSTED,
+        "Quota exceeded",
+        GeminiErrorReasons.QUOTA_EXCEEDED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+    });
+  });
+
+  describe("Not found errors via ErrorInfo reason", () => {
+    it("should map MODEL_NOT_FOUND to NotFound", () => {
+      const error = createGeminiErrorWithDetails(
+        404,
+        GeminiErrorCodes.NOT_FOUND,
+        "Model not found",
+        GeminiErrorReasons.MODEL_NOT_FOUND,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.NotFound);
+    });
+  });
+
+  describe("Content filtering errors via ErrorInfo reason", () => {
+    it("should map SAFETY_BLOCKED to ContentFiltered", () => {
+      const error = createGeminiErrorWithDetails(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "Content blocked due to safety concerns",
+        GeminiErrorReasons.SAFETY_BLOCKED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ContentFiltered);
+    });
+
+    it("should map RECITATION_BLOCKED to ContentFiltered", () => {
+      const error = createGeminiErrorWithDetails(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "Content blocked due to potential recitation",
+        GeminiErrorReasons.RECITATION_BLOCKED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ContentFiltered);
+    });
+  });
+
+  describe("Context length errors via ErrorInfo reason", () => {
+    it("should map CONTEXT_LENGTH_EXCEEDED to ContextTooLong", () => {
+      const error = createGeminiErrorWithDetails(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "Request exceeds maximum context length",
+        GeminiErrorReasons.CONTEXT_LENGTH_EXCEEDED,
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    });
+  });
+
+  describe("Real-world deeply nested error with ErrorInfo", () => {
+    it("should extract ErrorInfo from deeply nested JSON and map correctly", () => {
+      // This is a real-world error structure captured from the chat UI
+      const deeplyNestedWithDetails = {
+        name: "AI_APICallError",
+        url: "http://localhost:9000/v1/gemini/xxx/v1beta/models/gemini-2.5-pro:streamGenerateContent",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          error: {
+            message: JSON.stringify({
+              error: {
+                message: JSON.stringify({
+                  error: {
+                    code: 400,
+                    message: "API key not valid. Please pass a valid API key.",
+                    status: "INVALID_ARGUMENT",
+                    details: [
+                      {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        reason: "API_KEY_INVALID",
+                        domain: "googleapis.com",
+                        metadata: {
+                          service: "generativelanguage.googleapis.com",
+                        },
+                      },
+                    ],
+                  },
+                }),
+                code: 400,
+                status: "Bad Request",
+              },
+            }),
+            type: "api_validation_error",
+          },
+        }),
+        isRetryable: false,
+      };
+
+      const result = mapProviderError(deeplyNestedWithDetails, "gemini");
+
+      // With ErrorInfo extraction, this should now map to Authentication, not InvalidRequest
+      expect(result.code).toBe(ChatErrorCode.Authentication);
+      expect(result.originalError?.message).toContain("API key not valid");
     });
   });
 });

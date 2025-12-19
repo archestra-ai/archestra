@@ -59,6 +59,41 @@ export const GeminiErrorCodes = {
   DEADLINE_EXCEEDED: "DEADLINE_EXCEEDED",
 } as const;
 
+/**
+ * Gemini/Vertex AI ErrorInfo reason codes (from `error.details[].reason` field)
+ * These provide more specific error reasons extracted from google.rpc.ErrorInfo.
+ *
+ * @see https://cloud.google.com/apis/design/errors#error_info
+ * @see https://googleapis.dev/nodejs/spanner/latest/google.rpc.ErrorInfo.html
+ */
+export const GeminiErrorReasons = {
+  // Authentication/Authorization reasons
+  API_KEY_INVALID: "API_KEY_INVALID",
+  API_KEY_NOT_FOUND: "API_KEY_NOT_FOUND",
+  API_KEY_EXPIRED: "API_KEY_EXPIRED",
+  ACCESS_TOKEN_EXPIRED: "ACCESS_TOKEN_EXPIRED",
+  ACCESS_TOKEN_INVALID: "ACCESS_TOKEN_INVALID",
+  SERVICE_ACCOUNT_INVALID: "SERVICE_ACCOUNT_INVALID",
+
+  // Quota/Rate limit reasons
+  RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+  RESOURCE_EXHAUSTED: "RESOURCE_EXHAUSTED",
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
+
+  // Resource reasons
+  MODEL_NOT_FOUND: "MODEL_NOT_FOUND",
+  RESOURCE_NOT_FOUND: "RESOURCE_NOT_FOUND",
+
+  // Content/Safety reasons
+  SAFETY_BLOCKED: "SAFETY_BLOCKED",
+  RECITATION_BLOCKED: "RECITATION_BLOCKED",
+  CONTENT_FILTERED: "CONTENT_FILTERED",
+
+  // Request reasons
+  INVALID_ARGUMENT: "INVALID_ARGUMENT",
+  CONTEXT_LENGTH_EXCEEDED: "CONTEXT_LENGTH_EXCEEDED",
+} as const;
+
 // =============================================================================
 // Normalized Chat Error Codes
 // =============================================================================

@@ -261,7 +261,11 @@ export function ChatSidebarSection() {
                                   disabled={generateTitleMutation.isPending}
                                   className="h-7 w-7 shrink-0"
                                 >
-                                  <AISparkleIcon isAnimating={generateTitleMutation.isPending} />
+                                  <AISparkleIcon
+                                    isAnimating={
+                                      generateTitleMutation.isPending
+                                    }
+                                  />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent side="top">

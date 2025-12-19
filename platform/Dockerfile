@@ -108,7 +108,9 @@ RUN apk add --no-cache docker-cli && \
     fi && \
     wget -O /usr/local/bin/kind "${KIND_URL}" && \
     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
-    chmod +x /usr/local/bin/kind
+    chmod +x /usr/local/bin/kind && \
+    # Clean up after KinD installation specifically
+    rm -rf /tmp/* /var/cache/apk/*
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482

@@ -1,10 +1,18 @@
 # Archestra Platform Dockerfile
 #
-# Build default image:
+# Build image:
 #   docker build -t archestra/platform .
 #
-# Build quickstart image (with KinD):
-#   docker build --build-arg VARIANT=quickstart -t archestra/platform:quickstart .
+# Run in quickstart mode (with embedded KinD cluster):
+#   docker run -p 9000:9000 -p 3000:3000 \
+#     -e ARCHESTRA_QUICKSTART=true \
+#     -v /var/run/docker.sock:/var/run/docker.sock \
+#     archestra/platform
+#
+# Run with external Kubernetes:
+#   docker run -p 9000:9000 -p 3000:3000 \
+#     -e ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig \
+#     archestra/platform
 #
 FROM node:24.11.1-alpine3.22 AS base
 
@@ -71,7 +79,6 @@ FROM base AS unified-base
 WORKDIR /app
 
 ARG VERSION=dev
-ARG VARIANT=production
 
 ENV NODE_ENV=production
 # disable telemetry for next.js
@@ -101,17 +108,15 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# Conditionally install KinD for quickstart variant
-RUN if [ "$VARIANT" = "quickstart" ]; then \
-        apk add --no-cache docker-cli && \
-        ARCH=$(uname -m) && \
-        if [ "$ARCH" = "x86_64" ]; then \
-            wget -O /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64; \
-        elif [ "$ARCH" = "aarch64" ]; then \
-            wget -O /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64; \
-        fi && \
-        chmod +x /usr/local/bin/kind; \
-    fi
+# Install KinD (Kubernetes in Docker) for embedded K8s cluster support
+RUN apk add --no-cache docker-cli && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        wget -O /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        wget -O /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64; \
+    fi && \
+    chmod +x /usr/local/bin/kind
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
@@ -233,77 +238,76 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     fi
 fi
 
-# Initialize KinD cluster if kind binary exists (quickstart variant only)
-if command -v kind >/dev/null 2>&1; then
-    # No external Kubernetes configured, use embedded KinD
-    if [ -z "$ARCHESTRA_ORCHESTRATOR_KUBECONFIG" ] && [ "$ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER" != "true" ]; then
-        echo "No external Kubernetes configured, checking for embedded KinD cluster..."
+# Initialize KinD cluster if quickstart mode is explicitly enabled
+if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
+    echo "Quickstart mode enabled, initializing embedded KinD cluster..."
 
-        # Check if Docker socket is available
-        if [ ! -S /var/run/docker.sock ]; then
-            echo "ERROR: Docker socket not mounted."
-            echo ""
-            echo "The quickstart image requires Docker socket to create an embedded Kubernetes cluster."
-            echo "Please run with: -v /var/run/docker.sock:/var/run/docker.sock"
-            echo ""
-            echo "Alternatively, configure external Kubernetes with ARCHESTRA_ORCHESTRATOR_KUBECONFIG"
-            echo "or use ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true"
+    # Quickstart mode requires Docker socket, no external k8s
+    if [ ! -S /var/run/docker.sock ]; then
+        echo "ERROR: Quickstart mode requires Docker socket to be mounted."
+        echo "Please run with: `-v /var/run/docker.sock:/var/run/docker.sock`"
+        exit 1
+    else
+        if ! command -v kind >/dev/null 2>&1; then
+            echo "ERROR: ARCHESTRA_QUICKSTART=true but KinD binary not found in this image."
             exit 1
+        fi
+
+        # Quickstart mode always uses embedded KinD cluster
+        CLUSTER_NAME="archestra-embedded"
+        KUBECONFIG_PATH="/app/data/.kubeconfig"
+
+        # Check if cluster already exists
+        if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+            echo "KinD cluster '${CLUSTER_NAME}' already exists"
         else
-            USE_EMBEDDED_K8S=true
-            CLUSTER_NAME="archestra-embedded"
-            KUBECONFIG_PATH="/app/data/.kubeconfig"
+            echo "Creating KinD cluster '${CLUSTER_NAME}'..."
+            kind create cluster --name "${CLUSTER_NAME}" --wait 120s
+            echo "KinD cluster created successfully"
+        fi
 
-            # Check if cluster already exists
-            if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
-                echo "KinD cluster '${CLUSTER_NAME}' already exists"
+        # Export kubeconfig
+        kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"
+        chmod 600 "${KUBECONFIG_PATH}"
+
+        # Get the KinD control plane container IP address
+        CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
+        CONTROL_PLANE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
+
+        if [ -z "$CONTROL_PLANE_IP" ]; then
+            echo "ERROR: Could not get KinD control plane IP address"
+        else
+            echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
+
+            # Update kubeconfig server address to use control plane IP
+            sed -i "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" "${KUBECONFIG_PATH}"
+
+            # Disable TLS verification for local development (KinD uses self-signed certs)
+            sed -i "/server: https/a\\    insecure-skip-tls-verify: true" "${KUBECONFIG_PATH}"
+
+            # Connect this container to the KinD network for direct communication
+            CONTAINER_ID=$(hostname)
+            if ! docker network inspect kind >/dev/null 2>&1; then
+                echo "WARNING: KinD network not found"
             else
-                echo "Creating KinD cluster '${CLUSTER_NAME}'..."
-                kind create cluster --name "${CLUSTER_NAME}" --wait 120s
-                echo "KinD cluster created successfully"
-            fi
-
-            # Export kubeconfig
-            kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"
-            chmod 600 "${KUBECONFIG_PATH}"
-
-            # Get the KinD control plane container IP address
-            CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
-            CONTROL_PLANE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
-
-            if [ -z "$CONTROL_PLANE_IP" ]; then
-                echo "ERROR: Could not get KinD control plane IP address"
-            else
-                echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
-
-                # Update kubeconfig server address to use control plane IP
-                sed -i "s|server: https://127.0.0.1:[0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" "${KUBECONFIG_PATH}"
-
-                # Disable TLS verification for local development (KinD uses self-signed certs)
-                sed -i "/server: https/a\\    insecure-skip-tls-verify: true" "${KUBECONFIG_PATH}"
-
-                # Connect this container to the KinD network for direct communication
-                CONTAINER_ID=$(hostname)
-                if ! docker network inspect kind >/dev/null 2>&1; then
-                    echo "WARNING: KinD network not found"
+                # Check if already connected to kind network
+                if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "kind"; then
+                    echo "Container already connected to KinD network"
                 else
-                    # Check if already connected to kind network
-                    if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "kind"; then
-                        echo "Container already connected to KinD network"
-                    else
-                        echo "Connecting container to KinD network..."
-                        docker network connect kind "$CONTAINER_ID"
-                        echo "Connected to KinD network successfully"
-                    fi
+                    echo "Connecting container to KinD network..."
+                    docker network connect kind "$CONTAINER_ID"
+                    echo "Connected to KinD network successfully"
                 fi
             fi
-
-            # Set environment variable for backend
-            export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
-            export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
-
-            echo "Kubernetes orchestrator configured with embedded KinD cluster"
         fi
+
+        # Set environment variable for backend via supervisord config
+        sed -i "s|ARCHESTRA_ORCHESTRATOR_KUBECONFIG=\"placeholder\"|ARCHESTRA_ORCHESTRATOR_KUBECONFIG=\"${KUBECONFIG_PATH}\"|" /etc/supervisord.conf
+
+        export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
+        export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+
+        echo "Kubernetes orchestrator configured with embedded KinD cluster"
     fi
 fi
 

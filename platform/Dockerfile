@@ -94,23 +94,32 @@ RUN apk --no-cache upgrade && \
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
 # KinD v0.31.0 checksums from: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
-RUN apk add --no-cache docker-cli && \
+RUN echo "=== Installing docker-cli and wget ===" && \
+    apk add --no-cache docker-cli wget && \
+    echo "=== Detecting architecture ===" && \
     ARCH=$(uname -m) && \
+    echo "Architecture detected: $ARCH" && \
     if [ "$ARCH" = "x86_64" ]; then \
         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
         KIND_SHA256="1d721325e91f2afd296fc0dcf476d8710a6ce0ce806ea93e7b9114cf980021a8"; \
+        echo "Using x86_64 KinD binary"; \
     elif [ "$ARCH" = "aarch64" ]; then \
         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
         KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
+        echo "Using aarch64 KinD binary"; \
     else \
         echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
         exit 1; \
     fi && \
+    echo "=== Downloading KinD from: $KIND_URL ===" && \
     wget -O /usr/local/bin/kind "${KIND_URL}" && \
+    echo "=== Verifying checksum ===" && \
     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
+    echo "=== Making KinD executable ===" && \
     chmod +x /usr/local/bin/kind && \
-    # Clean up after KinD installation specifically
-    rm -rf /tmp/* /var/cache/apk/*
+    echo "=== Cleaning up ===" && \
+    rm -rf /tmp/* /var/cache/apk/* && \
+    echo "=== KinD installation completed ==="
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482

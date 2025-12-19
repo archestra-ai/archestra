@@ -73,7 +73,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: IS_CI ? 2 : 0,
   /* Reduce workers in CI to avoid resource contention */
-  workers: IS_CI ? 6 : 3,
+  workers: IS_CI ? 18 : 3,
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */

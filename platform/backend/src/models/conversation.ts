@@ -50,7 +50,10 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(desc(schema.conversationsTable.createdAt));
+      .orderBy(
+        desc(schema.conversationsTable.createdAt),
+        schema.messagesTable.createdAt,
+      );
 
     // Group messages by conversation
     const conversationMap = new Map<string, Conversation>();
@@ -68,7 +71,11 @@ class ConversationModel {
 
       const conversation = conversationMap.get(conversationId);
       if (conversation && row?.message?.content) {
-        conversation.messages.push(row.message.content);
+        // Merge database UUID into message content (overrides AI SDK's temporary ID)
+        conversation.messages.push({
+          ...row.message.content,
+          id: row.message.id,
+        });
       }
     }
 
@@ -104,7 +111,8 @@ class ConversationModel {
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
-      );
+      )
+      .orderBy(schema.messagesTable.createdAt);
 
     if (rows.length === 0) {
       return null;
@@ -115,7 +123,11 @@ class ConversationModel {
 
     for (const row of rows) {
       if (row.message?.content) {
-        messages.push(row.message.content);
+        // Merge database UUID into message content (overrides AI SDK's temporary ID)
+        messages.push({
+          ...row.message.content,
+          id: row.message.id,
+        });
       }
     }
 

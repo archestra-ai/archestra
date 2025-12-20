@@ -51,14 +51,8 @@ const dependencies = {
     projectNames.firefox,
     projectNames.webkit,
   ],
-  // API tests run after all UI tests (including SSO)
-  apiProject: [
-    projectNames.credentialsWithVault,
-    projectNames.chromium,
-    projectNames.firefox,
-    projectNames.webkit,
-    projectNames.sso,
-  ],
+  // API tests only need authentication setup, not the full UI test suite
+  apiProject: [projectNames.setupTeams],
 };
 
 /**
@@ -73,7 +67,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: IS_CI ? 2 : 0,
   /* Reduce workers in CI to avoid resource contention */
-  workers: IS_CI ? 6 : 3,
+  workers: IS_CI ? 18 : 3,
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
@@ -191,7 +185,7 @@ export default defineConfig({
       dependencies: dependencies.ssoProject,
     },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
-    // API tests run after all UI tests complete (including SSO tests)
+    // API tests only need authentication setup, not the full UI test suite
     {
       name: projectNames.api,
       testDir: "./tests/api",
@@ -200,7 +194,7 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run after all UI test projects complete (including SSO)
+      // Only depend on auth setup, not UI tests
       dependencies: dependencies.apiProject,
     },
   ],

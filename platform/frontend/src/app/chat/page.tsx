@@ -68,6 +68,7 @@ export default function ChatPage() {
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
+  const userMessageJustEdited = useRef(false);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -335,26 +336,23 @@ export default function ChatPage() {
       loadedConversationRef.current = undefined;
     }
 
-    // Only sync messages from backend if:
-    // 1. We have conversation data
-    // 2. We haven't synced this conversation yet
-    // 3. The session doesn't already have messages (don't overwrite active session)
-    if (
+    // Sync messages from backend only on initial load or when recovering from empty state
+    // The AI SDK manages message state correctly during streaming, so we shouldn't overwrite it
+    const shouldSync =
       conversation?.messages &&
       conversation.id === conversationId &&
-      loadedConversationRef.current !== conversationId &&
-      messages.length === 0 // Only sync if session is empty
-    ) {
+      status !== "submitted" &&
+      status !== "streaming" &&
+      !userMessageJustEdited.current &&
+      (loadedConversationRef.current !== conversationId ||
+        messages.length === 0);
+
+    if (shouldSync) {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
       // If there's a pending prompt and the conversation is empty, send it
-      if (
-        pendingPromptRef.current &&
-        conversation.messages.length === 0 &&
-        status !== "submitted" &&
-        status !== "streaming"
-      ) {
+      if (pendingPromptRef.current && conversation.messages.length === 0) {
         const promptToSend = pendingPromptRef.current;
         pendingPromptRef.current = undefined;
         sendMessage({
@@ -363,13 +361,75 @@ export default function ChatPage() {
         });
       }
     }
+
+    // Clear the edit flag when status changes to ready (streaming finished)
+    if (status === "ready" && userMessageJustEdited.current) {
+      userMessageJustEdited.current = false;
+    }
   }, [
     conversationId,
     conversation,
     setMessages,
     sendMessage,
     status,
+    messages.length,
+  ]);
+
+  // Merge database UUIDs from backend into local message state
+  // This runs after streaming completes and backend query has fetched
+  useEffect(() => {
+    if (
+      !setMessages ||
+      !conversation?.messages ||
+      conversation.id !== conversationId ||
+      status === "streaming" ||
+      status === "submitted"
+    ) {
+      return;
+    }
+
+    // Only merge IDs if backend has same or more messages than local state
+    if (conversation.messages.length < messages.length) {
+      return;
+    }
+
+    // Check if any message has a non-UUID ID that needs updating
+    const needsIdUpdate = messages.some((localMsg, idx) => {
+      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
+      return (
+        backendMsg &&
+        backendMsg.id !== localMsg.id &&
+        // Check if backend ID looks like a UUID (has dashes)
+        backendMsg.id.includes("-")
+      );
+    });
+
+    if (!needsIdUpdate) {
+      return;
+    }
+
+    // Merge IDs from backend into local messages
+    const mergedMessages = messages.map((localMsg, idx) => {
+      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
+      if (
+        backendMsg &&
+        backendMsg.id !== localMsg.id &&
+        backendMsg.id.includes("-")
+      ) {
+        // Update only the ID, keep everything else from local state
+        return { ...localMsg, id: backendMsg.id };
+      }
+      return localMsg;
+    });
+
+    setMessages(mergedMessages as UIMessage[]);
+  }, [
+    conversationId,
+    conversation?.messages,
+    conversation?.id,
     messages,
+    setMessages,
+    status,
   ]);
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
@@ -570,10 +630,43 @@ export default function ChatPage() {
 
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
+              conversationId={conversationId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
               isLoadingConversation={isLoadingConversation}
+              onMessagesUpdate={setMessages}
+              onUserMessageEdit={(
+                editedMessage,
+                updatedMessages,
+                editedPartIndex,
+              ) => {
+                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
+                if (setMessages && sendMessage) {
+                  // Set flag to prevent message sync from overwriting our state
+                  userMessageJustEdited.current = true;
+
+                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
+                  const messagesWithoutEditedMessage = updatedMessages.slice(
+                    0,
+                    -1,
+                  );
+                  setMessages(messagesWithoutEditedMessage);
+
+                  // Send the edited message to generate new response (same as handleSubmit)
+                  // Use the specific part that was edited (via editedPartIndex) instead of finding
+                  // the first text part, in case the message has multiple text parts
+                  const editedPart = editedMessage.parts?.[editedPartIndex];
+                  const editedText =
+                    editedPart?.type === "text" ? editedPart.text : "";
+                  if (editedText?.trim()) {
+                    sendMessage({
+                      role: "user",
+                      parts: [{ type: "text", text: editedText }],
+                    });
+                  }
+                }
+              }}
               error={error}
             />
           </div>

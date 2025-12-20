@@ -1493,6 +1493,95 @@ tests:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: archestra-chat-custom-provider-api-key
 
+  # Empty value edge case tests for sensitive env vars
+  - it: should use plain value for ARCHESTRA_METRICS_SECRET when set to empty string
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_METRICS_SECRET: ""
+    asserts:
+      # Empty sensitive env vars should use plain value, not secretKeyRef
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+            value: ""
+
+  - it: should not use secretKeyRef for ARCHESTRA_METRICS_SECRET with empty value
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_METRICS_SECRET: ""
+    asserts:
+      # Should NOT contain secretKeyRef for empty values
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-metrics-secret
+
+  - it: should use plain value for multiple empty sensitive env vars
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_METRICS_SECRET: ""
+        ARCHESTRA_AUTH_ADMIN_PASSWORD: ""
+        ARCHESTRA_HASHICORP_VAULT_TOKEN: ""
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+            value: ""
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+            value: ""
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_TOKEN
+            value: ""
+
+  - it: should handle mix of empty and non-empty sensitive env vars
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_METRICS_SECRET: ""
+        ARCHESTRA_HASHICORP_VAULT_TOKEN: "valid-token"
+    asserts:
+      # Empty value should use plain value
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+            value: ""
+      # Non-empty value should use secretKeyRef
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_HASHICORP_VAULT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-hashicorp-vault-token
+
+  - it: should use plain value for ARCHESTRA_CHAT_*_API_KEY with empty value
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_CHAT_ANTHROPIC_API_KEY: ""
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CHAT_ANTHROPIC_API_KEY
+            value: ""
+
   # Node selector tests
   - it: should not have nodeSelector when archestra.nodeSelector is empty
     documentIndex: 1

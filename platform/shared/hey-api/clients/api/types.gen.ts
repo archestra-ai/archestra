@@ -7040,6 +7040,102 @@ export type GenerateChatConversationTitleResponses = {
 
 export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
 
+export type UpdateChatMessageData = {
+    body: {
+        partIndex: number;
+        text: string;
+        deleteSubsequentMessages?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/messages/{id}';
+};
+
+export type UpdateChatMessageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateChatMessageError = UpdateChatMessageErrors[keyof UpdateChatMessageErrors];
+
+export type UpdateChatMessageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string;
+        promptId: string | null;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
+    };
+};
+
+export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
+
 export type DeleteConversationEnabledToolsData = {
     body?: never;
     path: {

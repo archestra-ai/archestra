@@ -884,6 +884,76 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
   );
 
+  // Message Update Route
+  fastify.patch(
+    "/api/chat/messages/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateChatMessage,
+        description: "Update a specific text part in a message",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          partIndex: z.number().int().min(0),
+          text: z.string().min(1),
+          deleteSubsequentMessages: z.boolean().optional(),
+        }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async (
+      {
+        params: { id },
+        body: { partIndex, text, deleteSubsequentMessages },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Fetch the message to get its conversation ID
+      const message = await MessageModel.findById(id);
+
+      if (!message) {
+        throw new ApiError(404, "Message not found");
+      }
+
+      // Verify the user has access to the conversation
+      const conversation = await ConversationModel.findById(
+        message.conversationId,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Message not found or access denied");
+      }
+
+      // Update the message and optionally delete subsequent messages atomically
+      // Using a transaction ensures both operations succeed or fail together,
+      // preventing inconsistent state where message is updated but subsequent
+      // messages remain when they should have been deleted
+      await MessageModel.updateTextPartAndDeleteSubsequent(
+        id,
+        partIndex,
+        text,
+        deleteSubsequentMessages ?? false,
+      );
+
+      // Return updated conversation with all messages
+      const updatedConversation = await ConversationModel.findById(
+        message.conversationId,
+        user.id,
+        organizationId,
+      );
+
+      if (!updatedConversation) {
+        throw new ApiError(500, "Failed to retrieve updated conversation");
+      }
+
+      return reply.send(updatedConversation);
+    },
+  );
+
   // Enabled Tools Routes
   fastify.get(
     "/api/chat/conversations/:id/enabled-tools",

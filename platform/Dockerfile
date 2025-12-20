@@ -92,8 +92,23 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# Docker-cli and KinD are installed at runtime when ARCHESTRA_QUICKSTART=true
-# This keeps the base image smaller for production use cases
+# Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
+# KinD v0.31.0 checksums from: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
+RUN apk add --no-cache docker-cli && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
+        KIND_SHA256="1d721325e91f2afd296fc0dcf476d8710a6ce0ce806ea93e7b9114cf980021a8"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
+        KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
+    else \
+        echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
+        exit 1; \
+    fi && \
+    wget -O /usr/local/bin/kind "${KIND_URL}" && \
+    echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
+    chmod +x /usr/local/bin/kind
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
@@ -229,39 +244,9 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     fi
     echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
 
-    # Install docker-cli and KinD at runtime for quickstart mode
-    if ! command -v docker >/dev/null 2>&1; then
-        echo "Installing docker-cli for quickstart mode..."
-        apk add --no-cache docker-cli
-    fi
-
     if ! command -v kind >/dev/null 2>&1; then
-        echo "Installing KinD for quickstart mode..."
-        ARCH=$(uname -m)
-        if [ "$ARCH" = "x86_64" ]; then
-            KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"
-            KIND_SHA256="1d721325e91f2afd296fc0dcf476d8710a6ce0ce806ea93e7b9114cf980021a8"
-        elif [ "$ARCH" = "aarch64" ]; then
-            KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"
-            KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"
-        else
-            echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."
-            exit 1
-        fi
-
-        echo "Downloading KinD for $ARCH..."
-        if ! wget -O /usr/local/bin/kind "${KIND_URL}"; then
-            echo "ERROR: Failed to download KinD"
-            exit 1
-        fi
-
-        if ! echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c -; then
-            echo "ERROR: KinD checksum verification failed"
-            exit 1
-        fi
-
-        chmod +x /usr/local/bin/kind
-        echo "KinD installed successfully"
+        echo "ERROR: KinD binary not found in this image."
+        exit 1
     fi
 
     # Quickstart mode always uses embedded KinD cluster

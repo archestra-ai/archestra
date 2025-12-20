@@ -198,12 +198,12 @@ export function AssignToolsDialog({
         return prev.map((tool) =>
           tool.toolId === toolId
             ? {
-                ...tool,
-                credentialsSourceId: isDynamic
-                  ? undefined
-                  : credentialsSourceId,
-                useDynamicTeamCredential: isDynamic,
-              }
+              ...tool,
+              credentialsSourceId: isDynamic
+                ? undefined
+                : credentialsSourceId,
+              useDynamicTeamCredential: isDynamic,
+            }
             : tool,
         );
       });
@@ -218,10 +218,10 @@ export function AssignToolsDialog({
         return prev.map((tool) =>
           tool.toolId === toolId
             ? {
-                ...tool,
-                executionSourceId: isDynamic ? undefined : executionSourceId,
-                useDynamicTeamCredential: isDynamic,
-              }
+              ...tool,
+              executionSourceId: isDynamic ? undefined : executionSourceId,
+              useDynamicTeamCredential: isDynamic,
+            }
             : tool,
         );
       });
@@ -307,9 +307,9 @@ export function AssignToolsDialog({
         (current.credentialSourceMcpServerId !==
           (tool.credentialsSourceId || null) ||
           current.executionSourceMcpServerId !==
-            (tool.executionSourceId || null) ||
+          (tool.executionSourceId || null) ||
           current.useDynamicTeamCredential !==
-            (tool.useDynamicTeamCredential || false))
+          (tool.useDynamicTeamCredential || false))
       );
     });
 
@@ -452,25 +452,13 @@ export function AssignToolsDialog({
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
               <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
-              <p className="mb-4 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {showAssignedOnly && assignedToolIds.size === 0
                   ? "No tools are currently assigned to this profile."
                   : searchQuery || originFilter !== "all" || showAssignedOnly
                     ? "No tools match your filters. Try adjusting your search, origin, or assigned filter."
                     : "No tools available."}
               </p>
-              {(searchQuery || originFilter !== "all" || showAssignedOnly) && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setOriginFilter("all");
-                    setShowAssignedOnly(false);
-                  }}
-                >
-                  Clear filters
-                </Button>
-              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -539,13 +527,13 @@ export function AssignToolsDialog({
                                 onValueChange={(credentialSourceId) =>
                                   isLocalServer
                                     ? handleExecutionSourceChange(
-                                        tool.id,
-                                        credentialSourceId ?? undefined,
-                                      )
+                                      tool.id,
+                                      credentialSourceId ?? undefined,
+                                    )
                                     : handleCredentialsSourceChange(
-                                        tool.id,
-                                        credentialSourceId ?? undefined,
-                                      )
+                                      tool.id,
+                                      credentialSourceId ?? undefined,
+                                    )
                                 }
                                 value={displayValue ?? undefined}
                                 className="mb-4"

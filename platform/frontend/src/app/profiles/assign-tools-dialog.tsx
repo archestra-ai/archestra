@@ -277,6 +277,14 @@ export function AssignToolsDialog({
     [originFilter, filteredTools, isLocalServerForBulk],
   );
 
+  // Helper to close dialog and reset filters
+  const handleClose = useCallback(() => {
+    setSearchQuery("");
+    setOriginFilter("all");
+    setShowAssignedOnly(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
   const handleSave = useCallback(async () => {
     // Get current tool IDs and their state
     const currentToolIds = new Set(agentToolRelations.map((at) => at.tool.id));
@@ -339,7 +347,7 @@ export function AssignToolsDialog({
 
       toast.success(`Successfully updated tools for ${agent.name}`);
 
-      onOpenChange(false);
+      handleClose();
     } catch (_error) {
       toast.error("Failed to update tool assignments");
     }
@@ -349,7 +357,7 @@ export function AssignToolsDialog({
     assignTool,
     unassignTool,
     patchProfileTool,
-    onOpenChange,
+    handleClose,
     selectedTools,
   ]);
 
@@ -357,12 +365,10 @@ export function AssignToolsDialog({
     <Dialog
       open={open}
       onOpenChange={(newOpen) => {
-        onOpenChange(newOpen);
         if (!newOpen) {
-          // Reset filters when dialog closes
-          setSearchQuery("");
-          setOriginFilter("all");
-          setShowAssignedOnly(false);
+          handleClose();
+        } else {
+          onOpenChange(newOpen);
         }
       }}
     >
@@ -420,7 +426,7 @@ export function AssignToolsDialog({
               <span className="hidden sm:inline">Assigned</span>
               {showAssignedOnly && (
                 <span className="text-xs bg-primary-foreground text-primary rounded-full px-1.5 py-0.5">
-                  {filteredTools.length}
+                  {assignedToolIds.size}
                 </span>
               )}
             </Button>
@@ -585,11 +591,7 @@ export function AssignToolsDialog({
         )}
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSaving}
-          >
+          <Button variant="outline" onClick={handleClose} disabled={isSaving}>
             Cancel
           </Button>
           <Button

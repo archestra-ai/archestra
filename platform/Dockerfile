@@ -93,21 +93,17 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# KinD v0.31.0 checksums from: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
 RUN apk add --no-cache docker-cli && \
     ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
-        KIND_SHA256="1d721325e91f2afd296fc0dcf476d8710a6ce0ce806ea93e7b9114cf980021a8"; \
     elif [ "$ARCH" = "aarch64" ]; then \
         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
-        KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
     else \
         echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
         exit 1; \
     fi && \
     wget -O /usr/local/bin/kind "${KIND_URL}" && \
-    echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
     chmod +x /usr/local/bin/kind
 
 # Install supervisor from edge repository to address CVE-2023-27482

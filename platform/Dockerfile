@@ -97,8 +97,10 @@ RUN apk add --no-cache docker-cli && \
     ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
+        KIND_SHA256="eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"; \
     elif [ "$ARCH" = "aarch64" ]; then \
         KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
+        KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
     else \
         echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
         exit 1; \

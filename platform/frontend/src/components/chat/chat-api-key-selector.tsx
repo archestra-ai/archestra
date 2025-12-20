@@ -2,8 +2,9 @@
 
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +30,6 @@ import {
   useAvailableChatApiKeys,
 } from "@/lib/chat-settings.query";
 import { cn } from "@/lib/utils";
-import { PROVIDER_CONFIG } from "./create-chat-api-key-form";
 
 interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection */
@@ -49,6 +49,8 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   team: <Users className="h-3 w-3" />,
   org_wide: <Building2 className="h-3 w-3" />,
 };
+
+const LOCAL_STORAGE_KEY = "selected-chat-api-key-id";
 
 /**
  * API Key selector for chat - allows users to select which API key to use for the conversation.
@@ -87,6 +89,44 @@ export function ChatApiKeySelector({
     return availableKeys.find((k) => k.id === selectedKeyId);
   }, [availableKeys, selectedKeyId]);
 
+  // Auto-select first key when no key is selected or current key is invalid
+  // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
+  useEffect(() => {
+    // Skip if loading or no keys available
+    if (isLoading || availableKeys.length === 0) return;
+
+    // Check if current key is valid
+    const currentKeyValid =
+      selectedKeyId && availableKeys.some((k) => k.id === selectedKeyId);
+
+    const keyIdFromLocalStorage = localStorage.getItem(
+      `${LOCAL_STORAGE_KEY}-${currentProvider}`,
+    );
+    const keyFromLocalStorage = keyIdFromLocalStorage
+      ? availableKeys.find((k) => k.id === keyIdFromLocalStorage)
+      : null;
+    const keyToSelect =
+      keyFromLocalStorage ||
+      keysByScope.personal[0] ||
+      keysByScope.team[0] ||
+      keysByScope.org_wide[0];
+
+    // Auto-select first key if no valid key is selected
+    if (!currentKeyValid && keyToSelect) {
+      updateConversationMutation.mutate({
+        id: conversationId,
+        chatApiKeyId: keyToSelect.id,
+      });
+    }
+  }, [
+    availableKeys,
+    selectedKeyId,
+    isLoading,
+    conversationId,
+    currentProvider,
+    keysByScope,
+  ]);
+
   const handleSelectKey = (keyId: string) => {
     if (keyId === selectedKeyId) {
       setOpen(false);
@@ -107,6 +147,7 @@ export function ChatApiKeySelector({
       id: conversationId,
       chatApiKeyId: keyId,
     });
+    localStorage.setItem(`${LOCAL_STORAGE_KEY}-${currentProvider}`, keyId);
   };
 
   const handleConfirmChange = () => {
@@ -144,43 +185,19 @@ export function ChatApiKeySelector({
           <PromptInputButton disabled={disabled}>
             <Key className="h-3.5 w-3.5" />
             <span className="truncate max-w-[120px]">
-              {selectedKey ? getKeyDisplayName(selectedKey) : "Auto"}
+              {selectedKey
+                ? getKeyDisplayName(selectedKey)
+                : isLoading
+                  ? "Loading..."
+                  : "Select key"}
             </span>
           </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-2" align="start">
           <div className="space-y-2">
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div className="px-2 py-1 text-xs font-medium">
               API Key for {providerConfig.name}
             </div>
-
-            {/* Auto option - uses resolution priority */}
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
-                !selectedKeyId && "bg-accent",
-              )}
-              onClick={() => {
-                if (selectedKeyId) {
-                  handleSelectKey("");
-                } else {
-                  setOpen(false);
-                }
-              }}
-            >
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <Image
-                  src={providerConfig.icon}
-                  alt={providerConfig.name}
-                  width={16}
-                  height={16}
-                  className="rounded shrink-0"
-                />
-                <span className="truncate">Auto (recommended)</span>
-              </div>
-              {!selectedKeyId && <CheckIcon className="h-4 w-4 shrink-0" />}
-            </Button>
 
             {/* Personal keys */}
             {keysByScope.personal.length > 0 && (

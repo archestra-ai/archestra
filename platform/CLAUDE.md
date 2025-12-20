@@ -260,6 +260,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Only export what's needed externally
 - **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
 - **Prefer TanStack Query over prop drilling**: When a component needs data that's available via a TanStack Query hook, use the hook directly in that component rather than fetching in a parent and passing via props. TanStack Query's built-in caching ensures no duplicate requests. Only pass minimal identifiers (like `catalogId`) needed for the component to fetch/filter its own data.
+- **Use react-hook-form for forms**: Prefer `useForm` over multiple `useState` hooks for form state management. Pass form objects to child components via `form: UseFormReturn<FormValues>` prop rather than individual state setters. Parent components handle mutations and submission, form components focus on rendering.
+- **Reuse API types from @shared**: Use types from `archestraApiTypes` (e.g., `archestraApiTypes.CreateXxxData["body"]`, `archestraApiTypes.GetXxxResponses["200"]`) instead of defining duplicate types. Import from `@shared`.
 
 **Backend**:
 

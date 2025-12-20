@@ -2,6 +2,7 @@
 
 import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
+import { capitalize } from "lodash-es";
 import {
   Building2,
   CheckCircle2,
@@ -13,12 +14,16 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
+  ChatApiKeyForm,
+  type ChatApiKeyFormValues,
+  type ChatApiKeyResponse,
+  PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
-  type SupportedChatProvider,
-} from "@/components/chat/create-chat-api-key-form";
+} from "@/components/chat-api-key-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -31,16 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -48,14 +44,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  type ChatApiKey,
   type ChatApiKeyScope,
   useChatApiKeys,
   useCreateChatApiKey,
   useDeleteChatApiKey,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
-import { useTeams } from "@/lib/team.query";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -63,88 +57,97 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   org_wide: <Building2 className="h-3 w-3" />,
 };
 
+const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+  name: "",
+  provider: "anthropic",
+  apiKey: "",
+  scope: "personal",
+  teamId: "",
+};
+
 function ChatSettingsContent() {
   const { data: apiKeys = [] } = useChatApiKeys();
-  const { data: teams = [] } = useTeams();
-  const createApiKeyMutation = useCreateChatApiKey();
-  const updateApiKeyMutation = useUpdateChatApiKey();
-  const deleteApiKeyMutation = useDeleteChatApiKey();
+  const createMutation = useCreateChatApiKey();
+  const updateMutation = useUpdateChatApiKey();
+  const deleteMutation = useDeleteChatApiKey();
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedApiKey, setSelectedApiKey] = useState<ChatApiKey | null>(null);
+  const [selectedApiKey, setSelectedApiKey] =
+    useState<ChatApiKeyResponse | null>(null);
 
-  // Form states
-  const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyProvider, setNewKeyProvider] =
-    useState<SupportedChatProvider>("anthropic");
-  const [newKeyValue, setNewKeyValue] = useState("");
-  const [newKeyScope, setNewKeyScope] = useState<ChatApiKeyScope>("personal");
-  const [newKeyTeamId, setNewKeyTeamId] = useState<string>("");
-  const [editKeyName, setEditKeyName] = useState("");
-  const [editKeyValue, setEditKeyValue] = useState("");
+  // Forms
+  const createForm = useForm<ChatApiKeyFormValues>({
+    defaultValues: DEFAULT_FORM_VALUES,
+  });
 
-  const resetCreateForm = useCallback(() => {
-    setNewKeyName("");
-    setNewKeyProvider("anthropic");
-    setNewKeyValue("");
-    setNewKeyScope("personal");
-    setNewKeyTeamId("");
-  }, []);
+  const editForm = useForm<ChatApiKeyFormValues>({
+    defaultValues: DEFAULT_FORM_VALUES,
+  });
 
-  const handleCreate = useCallback(async () => {
-    try {
-      await createApiKeyMutation.mutateAsync({
-        name: newKeyName,
-        provider: newKeyProvider,
-        apiKey: newKeyValue,
-        scope: newKeyScope,
-        teamId: newKeyScope === "team" ? newKeyTeamId : undefined,
-      });
-      toast.success("API key created successfully");
-      setIsCreateDialogOpen(false);
-      resetCreateForm();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create API key";
-      toast.error(message);
+  // Reset create form when dialog opens
+  useEffect(() => {
+    if (isCreateDialogOpen) {
+      createForm.reset(DEFAULT_FORM_VALUES);
     }
-  }, [
-    createApiKeyMutation,
-    newKeyName,
-    newKeyProvider,
-    newKeyValue,
-    newKeyScope,
-    newKeyTeamId,
-    resetCreateForm,
-  ]);
+  }, [isCreateDialogOpen, createForm]);
 
-  const handleEdit = useCallback(async () => {
+  // Reset edit form with selected key values when dialog opens
+  useEffect(() => {
+    if (isEditDialogOpen && selectedApiKey) {
+      editForm.reset({
+        name: selectedApiKey.name,
+        provider: selectedApiKey.provider,
+        apiKey: PLACEHOLDER_KEY,
+        scope: selectedApiKey.scope,
+        teamId: selectedApiKey.teamId ?? "",
+      });
+    }
+  }, [isEditDialogOpen, selectedApiKey, editForm]);
+
+  // Submit handlers
+  const handleCreate = createForm.handleSubmit(async (values) => {
+    if (!values.apiKey || values.apiKey === PLACEHOLDER_KEY) {
+      toast.error("API key is required");
+      return;
+    }
+
+    await createMutation.mutateAsync({
+      name: values.name,
+      provider: values.provider,
+      apiKey: values.apiKey,
+      scope: values.scope,
+      teamId: values.scope === "team" ? values.teamId : undefined,
+    });
+
+    createForm.reset(DEFAULT_FORM_VALUES);
+    setIsCreateDialogOpen(false);
+  });
+
+  const handleEdit = editForm.handleSubmit(async (values) => {
     if (!selectedApiKey) return;
-    try {
-      await updateApiKeyMutation.mutateAsync({
-        id: selectedApiKey.id,
-        data: {
-          name: editKeyName || undefined,
-          apiKey: editKeyValue || undefined,
-        },
-      });
-      toast.success("API key updated successfully");
-      setIsEditDialogOpen(false);
-      setSelectedApiKey(null);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update API key";
-      toast.error(message);
-    }
-  }, [selectedApiKey, updateApiKeyMutation, editKeyName, editKeyValue]);
+
+    const apiKeyChanged =
+      values.apiKey !== PLACEHOLDER_KEY && values.apiKey !== "";
+
+    await updateMutation.mutateAsync({
+      id: selectedApiKey.id,
+      data: {
+        name: values.name || undefined,
+        apiKey: apiKeyChanged ? values.apiKey : undefined,
+      },
+    });
+
+    setIsEditDialogOpen(false);
+    setSelectedApiKey(null);
+  });
 
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey) return;
     try {
-      await deleteApiKeyMutation.mutateAsync(selectedApiKey.id);
+      await deleteMutation.mutateAsync(selectedApiKey.id);
       toast.success("API key deleted successfully");
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);
@@ -153,31 +156,31 @@ function ChatSettingsContent() {
         error instanceof Error ? error.message : "Failed to delete API key";
       toast.error(message);
     }
-  }, [selectedApiKey, deleteApiKeyMutation]);
+  }, [selectedApiKey, deleteMutation]);
 
-  const openEditDialog = useCallback((apiKey: ChatApiKey) => {
+  const openEditDialog = useCallback((apiKey: ChatApiKeyResponse) => {
     setSelectedApiKey(apiKey);
-    setEditKeyName(apiKey.name);
-    setEditKeyValue("");
     setIsEditDialogOpen(true);
   }, []);
 
-  const openDeleteDialog = useCallback((apiKey: ChatApiKey) => {
+  const openDeleteDialog = useCallback((apiKey: ChatApiKeyResponse) => {
     setSelectedApiKey(apiKey);
     setIsDeleteDialogOpen(true);
   }, []);
 
-  const getScopeDisplayText = useCallback((apiKey: ChatApiKey) => {
-    if (apiKey.scope === "personal") {
-      return apiKey.userName || "Personal";
-    }
-    if (apiKey.scope === "team") {
-      return apiKey.teamName || "Team";
-    }
-    return "Organization";
-  }, []);
+  // Validation for create form
+  const createFormValues = createForm.watch();
+  const isCreateValid =
+    createFormValues.apiKey &&
+    createFormValues.apiKey !== PLACEHOLDER_KEY &&
+    createFormValues.name &&
+    (createFormValues.scope !== "team" || createFormValues.teamId);
 
-  const columns: ColumnDef<ChatApiKey>[] = useMemo(
+  // Validation for edit form
+  const editFormValues = editForm.watch();
+  const isEditValid = Boolean(editFormValues.name);
+
+  const columns: ColumnDef<ChatApiKeyResponse>[] = useMemo(
     () => [
       {
         accessorKey: "name",
@@ -219,18 +222,22 @@ function ChatSettingsContent() {
               <TooltipTrigger asChild>
                 <Badge variant="outline" className="gap-1">
                   {SCOPE_ICONS[row.original.scope]}
-                  <span>{getScopeDisplayText(row.original)}</span>
+                  <span>
+                    {row.original.scope === "team"
+                      ? row.original.teamName
+                      : capitalize(row.original.scope)}
+                  </span>
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>
                 {row.original.scope === "personal" && (
-                  <p>Only visible to you</p>
+                  <p>Only available to you</p>
                 )}
                 {row.original.scope === "team" && (
                   <p>Available to team members of {row.original.teamName}</p>
                 )}
                 {row.original.scope === "org_wide" && (
-                  <p>Available to all organization members</p>
+                  <p>Available to all members of your organization</p>
                 )}
               </TooltipContent>
             </Tooltip>
@@ -294,7 +301,7 @@ function ChatSettingsContent() {
         ),
       },
     ],
-    [openEditDialog, openDeleteDialog, getScopeDisplayText],
+    [openEditDialog, openDeleteDialog],
   );
 
   return (
@@ -320,6 +327,7 @@ function ChatSettingsContent() {
           columns={columns}
           data={apiKeys}
           getRowId={(row) => row.id}
+          hideSelectedCount
         />
       </div>
 
@@ -332,138 +340,27 @@ function ChatSettingsContent() {
               Add a new LLM provider API key for use in Chat
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                placeholder="My Anthropic Key"
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider">Provider</Label>
-              <Select
-                value={newKeyProvider}
-                onValueChange={(v) =>
-                  setNewKeyProvider(v as SupportedChatProvider)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PROVIDER_CONFIG).map(([key, config]) => (
-                    <SelectItem
-                      key={key}
-                      value={key}
-                      disabled={!config.enabled}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Image
-                          src={config.icon}
-                          alt={config.name}
-                          width={16}
-                          height={16}
-                          className="rounded"
-                        />
-                        <span>{config.name}</span>
-                        {!config.enabled && (
-                          <Badge variant="outline" className="ml-2 text-xs">
-                            Coming Soon
-                          </Badge>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder={PROVIDER_CONFIG[newKeyProvider].placeholder}
-                value={newKeyValue}
-                onChange={(e) => setNewKeyValue(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="scope">Visibility</Label>
-              <Select
-                value={newKeyScope}
-                onValueChange={(v) => {
-                  setNewKeyScope(v as ChatApiKeyScope);
-                  if (v !== "team") {
-                    setNewKeyTeamId("");
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span>Personal - Only visible to you</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="team">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      <span>Team - Visible to team members</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="org_wide">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      <span>Organization - Visible to everyone</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {newKeyScope === "team" && (
-              <div className="space-y-2">
-                <Label htmlFor="team">Team</Label>
-                <Select value={newKeyTeamId} onValueChange={setNewKeyTeamId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <div className="py-4">
+            <ChatApiKeyForm
+              mode="full"
+              showConsoleLink={false}
+              form={createForm}
+              existingKeys={apiKeys}
+              isPending={createMutation.isPending}
+            />
           </div>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setIsCreateDialogOpen(false);
-                resetCreateForm();
-              }}
+              onClick={() => setIsCreateDialogOpen(false)}
             >
               Cancel
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={
-                !newKeyName ||
-                !newKeyValue ||
-                (newKeyScope === "team" && !newKeyTeamId) ||
-                createApiKeyMutation.isPending
-              }
+              disabled={!isCreateValid || createMutation.isPending}
             >
-              {createApiKeyMutation.isPending && (
+              {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Create
@@ -481,30 +378,16 @@ function ChatSettingsContent() {
               Update the name or API key value
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="editName">Name</Label>
-              <Input
-                id="editName"
-                value={editKeyName}
-                onChange={(e) => setEditKeyName(e.target.value)}
+          <div className="py-4">
+            {selectedApiKey && (
+              <ChatApiKeyForm
+                mode="full"
+                showConsoleLink={false}
+                existingKey={selectedApiKey}
+                form={editForm}
+                isPending={updateMutation.isPending}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="editApiKey">
-                API Key{" "}
-                <span className="text-muted-foreground font-normal">
-                  (leave blank to keep current)
-                </span>
-              </Label>
-              <Input
-                id="editApiKey"
-                type="password"
-                placeholder="••••••••••••••••"
-                value={editKeyValue}
-                onChange={(e) => setEditKeyValue(e.target.value)}
-              />
-            </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -515,9 +398,9 @@ function ChatSettingsContent() {
             </Button>
             <Button
               onClick={handleEdit}
-              disabled={updateApiKeyMutation.isPending}
+              disabled={!isEditValid || updateMutation.isPending}
             >
-              {updateApiKeyMutation.isPending && (
+              {updateMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Save
@@ -546,9 +429,9 @@ function ChatSettingsContent() {
             <Button
               variant="destructive"
               onClick={handleDelete}
-              disabled={deleteApiKeyMutation.isPending}
+              disabled={deleteMutation.isPending}
             >
-              {deleteApiKeyMutation.isPending && (
+              {deleteMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Delete

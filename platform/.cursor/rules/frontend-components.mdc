@@ -489,6 +489,133 @@ lib/chat.utils.ts
 lib/chat.hook.ts
 ```
 
+## Form Handling with react-hook-form
+
+**ALWAYS use react-hook-form** for form state management instead of multiple `useState` hooks:
+
+### Pass Form to Child Components
+
+```typescript
+// ❌ Bad: Multiple useState hooks
+function MyForm() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  // ... more states
+}
+
+// ✅ Good: Use useForm and pass form to child components
+import { useForm, UseFormReturn } from "react-hook-form";
+
+type FormValues = {
+  name: string;
+  email: string;
+  phone: string;
+};
+
+// Parent component owns the form
+function ParentComponent() {
+  const form = useForm<FormValues>({
+    defaultValues: { name: "", email: "", phone: "" },
+  });
+  const mutation = useCreateSomething();
+
+  const handleSubmit = form.handleSubmit(async (values) => {
+    await mutation.mutateAsync(values);
+    form.reset();
+  });
+
+  return (
+    <>
+      <MyFormFields form={form} isPending={mutation.isPending} />
+      <Button onClick={handleSubmit} disabled={mutation.isPending}>Submit</Button>
+    </>
+  );
+}
+
+// Child component renders form fields
+interface MyFormFieldsProps {
+  form: UseFormReturn<FormValues>;
+  isPending?: boolean;
+}
+
+function MyFormFields({ form, isPending }: MyFormFieldsProps) {
+  return (
+    <div>
+      <Input {...form.register("name")} disabled={isPending} />
+      <Input {...form.register("email")} disabled={isPending} />
+    </div>
+  );
+}
+```
+
+### Parent Controls Mutations and Submission
+
+Keep mutations in parent components. Form components focus on rendering fields only:
+
+```typescript
+// ❌ Bad: Mutation inside form component
+function FormComponent() {
+  const mutation = useCreateItem();  // Don't put mutations here
+  const handleSubmit = () => mutation.mutate(data);
+  return <form onSubmit={handleSubmit}>...</form>;
+}
+
+// ✅ Good: Parent handles mutations
+function ParentComponent() {
+  const form = useForm<FormValues>();
+  const mutation = useCreateItem();
+
+  const handleSubmit = form.handleSubmit(async (values) => {
+    await mutation.mutateAsync(values);
+  });
+
+  return (
+    <>
+      <FormFields form={form} isPending={mutation.isPending} />
+      <Button onClick={handleSubmit}>Submit</Button>
+    </>
+  );
+}
+
+function FormFields({ form, isPending }: Props) {
+  // Pure rendering, no mutations
+  return <Input {...form.register("name")} disabled={isPending} />;
+}
+```
+
+## Reuse API Types from @shared
+
+**ALWAYS reuse types from `archestraApiTypes`** instead of defining duplicate types:
+
+```typescript
+// ❌ Bad: Defining duplicate types
+type CreateItemPayload = {
+  name: string;
+  description?: string;
+  scope: "personal" | "team" | "org_wide";
+};
+
+// ✅ Good: Reuse from generated API types
+import { type archestraApiTypes } from "@shared";
+
+type CreateItemBody = archestraApiTypes.CreateItemData["body"];
+type ItemResponse = archestraApiTypes.GetItemsResponses["200"][number];
+
+// For form values, derive from API types
+type ItemFormValues = {
+  name: string;
+  description: string;
+  scope: NonNullable<CreateItemBody["scope"]>;
+};
+```
+
+Common patterns:
+- `archestraApiTypes.CreateXxxData["body"]` - Request body type for create endpoints
+- `archestraApiTypes.UpdateXxxData["body"]` - Request body type for update endpoints
+- `archestraApiTypes.GetXxxResponses["200"]` - Response type for list endpoints
+- `archestraApiTypes.GetXxxResponses["200"][number]` - Single item from list response
+
 ## Next.js App Router
 
 - Use file-based routing in `src/app/`
@@ -532,3 +659,5 @@ export default async function DashboardPage() {
 14. ✅ Extract business logic to pure functions or queries
 15. ✅ Only export what needs to be used by other modules - keep internal helpers private
 16. ✅ Prefer TanStack Query hooks over prop drilling - pass only identifiers, let components fetch their own data
+17. ✅ Use react-hook-form for forms - pass form object to child components, parent handles mutations
+18. ✅ Reuse API types from archestraApiTypes (e.g., CreateXxxData["body"]) instead of defining duplicate types

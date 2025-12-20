@@ -305,7 +305,7 @@ export const deleteChatApiKey = <ThrowOnError extends boolean = false>(options: 
 export const getChatApiKey = <ThrowOnError extends boolean = false>(options: Options<GetChatApiKeyData, ThrowOnError>) => (options.client ?? client).get<GetChatApiKeyResponses, GetChatApiKeyErrors, ThrowOnError>({ url: '/api/chat-api-keys/{id}', ...options });
 
 /**
- * Update a chat API key (name or API key value)
+ * Update a chat API key (name, API key value, scope, or team)
  */
 export const updateChatApiKey = <ThrowOnError extends boolean = false>(options: Options<UpdateChatApiKeyData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatApiKeyResponses, UpdateChatApiKeyErrors, ThrowOnError>({
     url: '/api/chat-api-keys/{id}',

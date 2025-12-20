@@ -98,59 +98,13 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
-      // Validate scope-specific requirements
-      if (body.scope === "team" && !body.teamId) {
-        throw new ApiError(400, "teamId is required for team-scoped API keys");
-      }
-
-      if (body.scope === "personal" && body.teamId) {
-        throw new ApiError(
-          400,
-          "teamId should not be provided for personal-scoped API keys",
-        );
-      }
-
-      if (body.scope === "org_wide" && body.teamId) {
-        throw new ApiError(
-          400,
-          "teamId should not be provided for org-wide API keys",
-        );
-      }
-
-      // For team-scoped keys, verify user has access to the team
-      if (body.scope === "team" && body.teamId) {
-        const { success: isTeamAdmin } = await hasPermission(
-          { team: ["admin"] },
-          headers,
-        );
-
-        if (!isTeamAdmin) {
-          const isUserInTeam = await TeamModel.isUserInTeam(
-            body.teamId,
-            user.id,
-          );
-          if (!isUserInTeam) {
-            throw new ApiError(
-              403,
-              "You can only create team API keys for teams you are a member of",
-            );
-          }
-        }
-      }
-
-      // For org-wide keys, require profile admin permission
-      if (body.scope === "org_wide") {
-        const { success: isProfileAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          headers,
-        );
-        if (!isProfileAdmin) {
-          throw new ApiError(
-            403,
-            "Only admins can create organization-wide API keys",
-          );
-        }
-      }
+      // Validate scope/teamId combination and authorization
+      await validateScopeAndAuthorization({
+        scope: body.scope,
+        teamId: body.teamId,
+        userId: user.id,
+        headers,
+      });
 
       // Use forceDB when BYOS is enabled because chat API keys are user-provided values
       const forceDB = isByosEnabled();
@@ -227,7 +181,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatApiKey,
-        description: "Update a chat API key (name or API key value)",
+        description:
+          "Update a chat API key (name, API key value, scope, or team)",
         tags: ["Chat API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -235,6 +190,8 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           apiKey: z.string().min(1).optional(),
+          scope: ChatApiKeyScopeSchema.optional(),
+          teamId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
@@ -246,8 +203,21 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Chat API key not found");
       }
 
-      // Check authorization based on scope
+      // Check authorization based on current scope
       await authorizeApiKeyAccess(apiKey, user.id, headers);
+
+      // If scope is changing, validate the new scope
+      const newScope = body.scope ?? apiKey.scope;
+      const newTeamId = body.teamId !== undefined ? body.teamId : apiKey.teamId;
+
+      if (body.scope !== undefined || body.teamId !== undefined) {
+        await validateScopeAndAuthorization({
+          scope: newScope,
+          teamId: newTeamId,
+          userId: user.id,
+          headers,
+        });
+      }
 
       // Update the secret if a new API key is provided
       if (body.apiKey) {
@@ -266,9 +236,30 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Update the name if provided
+      // Build update object
+      const updateData: Partial<{
+        name: string;
+        scope: "personal" | "team" | "org_wide";
+        userId: string | null;
+        teamId: string | null;
+      }> = {};
+
       if (body.name) {
-        await ChatApiKeyModel.update(params.id, { name: body.name });
+        updateData.name = body.name;
+      }
+
+      if (body.scope !== undefined) {
+        updateData.scope = body.scope;
+        // Set userId/teamId based on new scope
+        updateData.userId = body.scope === "personal" ? user.id : null;
+        updateData.teamId = body.scope === "team" ? newTeamId : null;
+      } else if (body.teamId !== undefined && apiKey.scope === "team") {
+        // Only update teamId if scope is team and not changing
+        updateData.teamId = body.teamId;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await ChatApiKeyModel.update(params.id, updateData);
       }
 
       const updated = await ChatApiKeyModel.findById(params.id);
@@ -314,6 +305,67 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Validates scope/teamId combination and checks user authorization for the scope.
+ * Used for both creating and updating API keys.
+ */
+async function validateScopeAndAuthorization(params: {
+  scope: "personal" | "team" | "org_wide";
+  teamId: string | null | undefined;
+  userId: string;
+  headers: IncomingHttpHeaders;
+}): Promise<void> {
+  const { scope, teamId, userId, headers } = params;
+
+  // Validate scope-specific requirements
+  if (scope === "team" && !teamId) {
+    throw new ApiError(400, "teamId is required for team-scoped API keys");
+  }
+
+  if (scope === "personal" && teamId) {
+    throw new ApiError(
+      400,
+      "teamId should not be provided for personal-scoped API keys",
+    );
+  }
+
+  if (scope === "org_wide" && teamId) {
+    throw new ApiError(
+      400,
+      "teamId should not be provided for org-wide API keys",
+    );
+  }
+
+  // For team-scoped keys, verify user has access to the team
+  if (scope === "team" && teamId) {
+    const { success: isTeamAdmin } = await hasPermission(
+      { team: ["admin"] },
+      headers,
+    );
+
+    if (!isTeamAdmin) {
+      const isUserInTeam = await TeamModel.isUserInTeam(teamId, userId);
+      if (!isUserInTeam) {
+        throw new ApiError(
+          403,
+          "You must be a member of the team to use this scope",
+        );
+      }
+    }
+  }
+
+  // For org-wide keys, require profile admin permission
+  if (scope === "org_wide") {
+    const { success: isProfileAdmin } = await hasPermission(
+      { profile: ["admin"] },
+      headers,
+    );
+    if (!isProfileAdmin) {
+      throw new ApiError(403, "Only admins can use organization-wide scope");
+    }
+  }
+}
 
 /**
  * Helper to check if a user is authorized to modify an API key based on scope

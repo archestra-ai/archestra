@@ -241,6 +241,25 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 ## Coding Conventions
 
+**General**:
+
+- **Function Parameters**: If a function accepts more than 2 parameters, use a single object parameter instead of multiple positional parameters. This improves readability, makes parameters self-documenting, and allows for easier future extension.
+  ```typescript
+  // Good
+  async function validateScope(params: {
+    scope: string;
+    teamId: string | null;
+    userId: string;
+  }): Promise<void> { ... }
+
+  // Avoid
+  async function validateScope(
+    scope: string,
+    teamId: string | null,
+    userId: string
+  ): Promise<void> { ... }
+  ```
+
 **Database Architecture Guidelines**:
 
 - **Model-Only Database Access**: All database queries MUST go through `backend/src/models/` - never directly in routes or services

@@ -132,11 +132,22 @@ function ChatSettingsContent() {
     const apiKeyChanged =
       values.apiKey !== PLACEHOLDER_KEY && values.apiKey !== "";
 
+    // Detect scope/team changes
+    const scopeChanged = values.scope !== selectedApiKey.scope;
+    const teamIdChanged = values.teamId !== (selectedApiKey.teamId ?? "");
+
     await updateMutation.mutateAsync({
       id: selectedApiKey.id,
       data: {
         name: values.name || undefined,
         apiKey: apiKeyChanged ? values.apiKey : undefined,
+        scope: scopeChanged ? values.scope : undefined,
+        teamId:
+          scopeChanged || teamIdChanged
+            ? values.scope === "team"
+              ? values.teamId
+              : null
+            : undefined,
       },
     });
 
@@ -206,7 +217,7 @@ function ChatSettingsContent() {
                 alt={config.name}
                 width={20}
                 height={20}
-                className="rounded"
+                className="rounded dark:invert"
               />
               <span>{config.name}</span>
             </div>
@@ -384,6 +395,7 @@ function ChatSettingsContent() {
                 mode="full"
                 showConsoleLink={false}
                 existingKey={selectedApiKey}
+                existingKeys={apiKeys}
                 form={editForm}
                 isPending={updateMutation.isPending}
               />

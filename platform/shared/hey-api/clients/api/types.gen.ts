@@ -6163,6 +6163,8 @@ export type UpdateChatApiKeyData = {
     body?: {
         name?: string;
         apiKey?: string;
+        scope?: 'personal' | 'team' | 'org_wide';
+        teamId?: string | null;
     };
     path: {
         id: string;

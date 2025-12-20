@@ -100,6 +100,8 @@ export function useUpdateChatApiKey() {
       data: {
         name?: string;
         apiKey?: string;
+        scope?: ChatApiKeyScope;
+        teamId?: string | null;
       };
     }) => {
       const { data: responseData, error } = await updateChatApiKey({

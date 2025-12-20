@@ -88,7 +88,7 @@ interface ChatApiKeyFormProps {
   showConsoleLink?: boolean;
   /**
    * Existing key to edit. When provided, form is in "edit" mode.
-   * Provider, scope, and team are shown but disabled.
+   * Provider is disabled, but scope and team can be changed (with uniqueness constraints).
    */
   existingKey?: ChatApiKeyResponse;
   /**
@@ -140,11 +140,16 @@ export function ChatApiKeyForm({
 
   // Compute which scopes are disabled based on existing keys for this provider
   const disabledScopes = useMemo(() => {
-    if (!existingKeys || isEditMode) {
+    if (!existingKeys) {
       return { personal: false, team: false, org_wide: false };
     }
 
-    const keysForProvider = existingKeys.filter((k) => k.provider === provider);
+    // In edit mode, exclude the current key from the check (so it doesn't block itself)
+    const otherKeys = existingKey
+      ? existingKeys.filter((k) => k.id !== existingKey.id)
+      : existingKeys;
+
+    const keysForProvider = otherKeys.filter((k) => k.provider === provider);
 
     return {
       // Personal: disabled if user already has one for this provider
@@ -154,19 +159,25 @@ export function ChatApiKeyForm({
       // Team: we'll handle individual teams separately
       team: false,
     };
-  }, [existingKeys, provider, isEditMode]);
+  }, [existingKeys, provider, existingKey]);
 
   // Teams already used for this provider
   const usedTeamIds = useMemo(() => {
-    if (!existingKeys || isEditMode) return new Set<string>();
+    if (!existingKeys) return new Set<string>();
+
+    // In edit mode, exclude the current key from the check (so it doesn't block itself)
+    const otherKeys = existingKey
+      ? existingKeys.filter((k) => k.id !== existingKey.id)
+      : existingKeys;
+
     return new Set(
-      existingKeys
+      otherKeys
         .filter(
           (k) => k.provider === provider && k.scope === "team" && k.teamId,
         )
         .map((k) => k.teamId as string),
     );
-  }, [existingKeys, provider, isEditMode]);
+  }, [existingKeys, provider, existingKey]);
 
   // Available teams (filter out already-used ones)
   const availableTeams = useMemo(() => {
@@ -270,7 +281,7 @@ export function ChatApiKeyForm({
               form.setValue("teamId", "");
             }
           }}
-          disabled={isEditMode || isPending}
+          disabled={isPending}
         >
           <SelectTrigger id="chat-api-key-scope">
             <SelectValue />
@@ -320,7 +331,7 @@ export function ChatApiKeyForm({
           <Select
             value={teamId}
             onValueChange={(v) => form.setValue("teamId", v)}
-            disabled={isEditMode || isPending}
+            disabled={isPending}
           >
             <SelectTrigger id="chat-api-key-team">
               <SelectValue placeholder="Select a team" />

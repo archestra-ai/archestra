@@ -47,9 +47,6 @@ export const UpdateChatApiKeySchema = createUpdateSchema(
     organizationId: true,
     createdAt: true,
     updatedAt: true,
-    // Don't allow changing these after creation
-    userId: true,
-    teamId: true,
   })
   .extend({
     provider: SupportedChatProviderSchema.optional(),

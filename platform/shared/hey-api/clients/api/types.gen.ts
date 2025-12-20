@@ -7122,6 +7122,7 @@ export type UpdateChatMessageResponses = {
         organizationId: string;
         agentId: string;
         promptId: string | null;
+        chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;

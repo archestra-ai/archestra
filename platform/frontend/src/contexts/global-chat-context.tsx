@@ -3,7 +3,6 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { DefaultChatTransport } from "ai";
 import {
   createContext,
   type ReactNode,
@@ -16,7 +15,17 @@ import {
 } from "react";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
 
+// Import DefaultChatTransport - ensure it's only used client-side
+// The "ai" package is browser-compatible, but we need to handle it carefully
+import type { DefaultChatTransport as DefaultChatTransportType } from "ai";
+
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
+
+interface QueuedMessage {
+  id: string;
+  text: string;
+  files?: any[];
+}
 
 interface ChatSession {
   conversationId: string;
@@ -37,6 +46,12 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
+  queuedMessages: QueuedMessage[];
+  addQueuedMessage: (message: QueuedMessage) => void;
+  removeQueuedMessage: (id: string) => void;
+  clearQueuedMessages: () => void;
+  removeMessagesUpTo: (id: string) => void;
+  isManuallySendingRef: React.MutableRefObject<boolean>;
 }
 
 interface ChatContextValue {
@@ -187,9 +202,52 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const isManuallySendingRef = useRef(false);
+  
+  const addQueuedMessage = useCallback((message: QueuedMessage) => {
+    setQueuedMessages((prev) => [...prev, message]);
+  }, []);
+  
+  const removeQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
+  }, []);
+  
+  const clearQueuedMessages = useCallback(() => {
+    setQueuedMessages([]);
+  }, []);
+  
+  const removeMessagesUpTo = useCallback((id: string) => {
+    setQueuedMessages((prev) => {
+      const messageIndex = prev.findIndex((msg) => msg.id === id);
+      if (messageIndex === -1) return prev;
+      // Remove all messages up to and including the specified one
+      return prev.slice(messageIndex + 1);
+    });
+  }, []);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
+  
+  // Lazy load transport to avoid Node.js module issues during bundling
+  const [transport, setTransport] = useState<InstanceType<DefaultChatTransportType> | null>(null);
+  
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Dynamic import to ensure it's only loaded in the browser
+      import("ai").then((module) => {
+        const { DefaultChatTransport } = module;
+        setTransport(
+          new DefaultChatTransport({
+            api: "/api/chat",
+            credentials: "include",
+          }),
+        );
+      }).catch((error) => {
+        console.error("[ChatSession] Failed to load DefaultChatTransport:", error);
+      });
+    }
+  }, []);
 
   const {
     messages,
@@ -200,10 +258,7 @@ function ChatSessionHook({
     error,
     addToolResult,
   } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      credentials: "include",
-    }),
+    transport: transport || undefined,
     id: conversationId,
     onFinish: () => {
       queryClient.invalidateQueries({
@@ -229,6 +284,31 @@ function ChatSessionHook({
       }
     },
   } as Parameters<typeof useChat>[0]);
+
+  // Auto-send queued message when stream finishes
+  useEffect(() => {
+    // Skip auto-send if we're manually sending a message
+    if (isManuallySendingRef.current) {
+      return;
+    }
+    
+    // When status changes from streaming/submitted to ready, and there's a queued message
+    if (
+      status === "ready" &&
+      queuedMessages.length > 0 &&
+      sendMessage
+    ) {
+      // Get the first message in the queue (FIFO)
+      const queued = queuedMessages[0];
+      // Remove it from the queue
+      setQueuedMessages((prev) => prev.slice(1));
+      // Send the queued message automatically
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: queued.text }],
+      });
+    }
+  }, [status, queuedMessages, sendMessage]);
 
   // Auto-generate title after first assistant response
   useEffect(() => {
@@ -277,6 +357,12 @@ function ChatSessionHook({
       lastAccessTime: Date.now(),
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
+      queuedMessages,
+      addQueuedMessage,
+      removeQueuedMessage,
+      clearQueuedMessages,
+      removeMessagesUpTo,
+      isManuallySendingRef,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -293,10 +379,17 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     pendingCustomServerToolCall,
-    sessionsRef,
-    scheduleCleanup,
-    notifySessionUpdate,
-  ]);
+    setPendingCustomServerToolCall,
+      queuedMessages,
+      addQueuedMessage,
+      removeQueuedMessage,
+      clearQueuedMessages,
+      removeMessagesUpTo,
+      isManuallySendingRef,
+      sessionsRef,
+      scheduleCleanup,
+      notifySessionUpdate,
+    ]);
 
   return null;
 }

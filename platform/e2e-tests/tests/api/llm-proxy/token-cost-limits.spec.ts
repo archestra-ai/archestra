@@ -205,19 +205,15 @@ for (const config of testConfigs) {
       // Usage tracking happens asynchronously after the response is sent
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      // DEBUG: Check current usage after first request
-      const usageResponse = await makeApiRequest({
+      // DEBUG: We are requesting usage limits between the two LLM requests
+      // to make sure the first LLM request counts against limits.
+      // This request is visible in Playwright UI and is helpful in debugging.
+      await makeApiRequest({
         request,
         method: "get",
         urlSuffix: `/api/limits`,
         ignoreStatusCheck: true,
       });
-      usageResponse.json();
-      const usage = await usageResponse.json();
-      console.info(
-        `Current usage for profile ${profileId}:`,
-        JSON.stringify(usage, null, 2),
-      );
 
       // 4. Second request should be blocked (limit exceeded)
       const blockedResponse = await makeApiRequest({

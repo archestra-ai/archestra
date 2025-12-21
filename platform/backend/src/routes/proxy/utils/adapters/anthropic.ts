@@ -18,6 +18,10 @@ type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
  * Convert Anthropic messages to common format for trusted data evaluation
  */
 export function toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
+  logger.debug(
+    { messageCount: messages.length },
+    "[adapters/anthropic] toCommonFormat: starting conversion",
+  );
   const commonMessages: CommonMessage[] = [];
 
   for (const message of messages) {
@@ -38,6 +42,10 @@ export function toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
           );
 
           if (toolName) {
+            logger.debug(
+              { toolUseId: contentBlock.tool_use_id, toolName },
+              "[adapters/anthropic] toCommonFormat: found tool result",
+            );
             // Parse the tool result
             let toolResult: unknown;
             if (typeof contentBlock.content === "string") {
@@ -62,12 +70,20 @@ export function toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
 
       if (toolCalls.length > 0) {
         commonMessage.toolCalls = toolCalls;
+        logger.debug(
+          { toolCallCount: toolCalls.length },
+          "[adapters/anthropic] toCommonFormat: attached tool calls to message",
+        );
       }
     }
 
     commonMessages.push(commonMessage);
   }
 
+  logger.debug(
+    { inputCount: messages.length, outputCount: commonMessages.length },
+    "[adapters/anthropic] toCommonFormat: conversion complete",
+  );
   return commonMessages;
 }
 
@@ -78,11 +94,19 @@ export function applyUpdates(
   messages: AnthropicMessages,
   updates: ToolResultUpdates,
 ): AnthropicMessages {
-  if (Object.keys(updates).length === 0) {
+  const updateCount = Object.keys(updates).length;
+  logger.debug(
+    { messageCount: messages.length, updateCount },
+    "[adapters/anthropic] applyUpdates: starting",
+  );
+
+  if (updateCount === 0) {
+    logger.debug("[adapters/anthropic] applyUpdates: no updates to apply");
     return messages;
   }
 
-  return messages.map((message) => {
+  let appliedCount = 0;
+  const result = messages.map((message) => {
     // Only process user messages with content arrays
     if (message.role === "user" && Array.isArray(message.content)) {
       const updatedContent = message.content.map((contentBlock) => {
@@ -90,6 +114,11 @@ export function applyUpdates(
           contentBlock.type === "tool_result" &&
           updates[contentBlock.tool_use_id]
         ) {
+          appliedCount++;
+          logger.debug(
+            { toolUseId: contentBlock.tool_use_id },
+            "[adapters/anthropic] applyUpdates: applying update to tool result",
+          );
           return {
             ...contentBlock,
             content: updates[contentBlock.tool_use_id],
@@ -106,6 +135,12 @@ export function applyUpdates(
 
     return message;
   });
+
+  logger.debug(
+    { updateCount, appliedCount },
+    "[adapters/anthropic] applyUpdates: complete",
+  );
+  return result;
 }
 
 /**

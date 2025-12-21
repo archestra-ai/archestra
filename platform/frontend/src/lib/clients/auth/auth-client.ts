@@ -1,5 +1,4 @@
 import { ssoClient } from "@better-auth/sso/client";
-import { ac, adminRole, editorRole, memberRole } from "@shared";
 import {
   adminClient,
   apiKeyClient,
@@ -7,9 +6,20 @@ import {
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
-import { nextCookies } from "better-auth/next-js";
+import { createAccessControl } from "better-auth/plugins/access";
 import { createAuthClient } from "better-auth/react";
 import config from "@/lib/config";
+
+const { allAvailableActions, editorPermissions, memberPermissions } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
+const ac = createAccessControl(allAvailableActions);
+
+const adminRole = ac.newRole(allAvailableActions);
+const editorRole = ac.newRole(editorPermissions);
+const memberRole = ac.newRole(memberPermissions);
 
 export const authClient = createAuthClient({
   baseURL: "", // Always use relative URLs (proxied through Next.js)
@@ -35,11 +45,9 @@ export const authClient = createAuthClient({
         },
       }),
     }),
-    nextCookies(),
     adminClient(),
     apiKeyClient(),
     twoFactorClient(),
-    // TODO: add this conditionally..
     ssoClient(),
   ],
   fetchOptions: {

@@ -328,6 +328,7 @@ describe("ToolModel", () => {
         executionSourceMcpServerId: null,
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",
+        useDynamicTeamCredential: false,
       });
     });
 

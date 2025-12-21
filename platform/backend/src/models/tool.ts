@@ -514,6 +514,7 @@ class ToolModel {
       mcpServerId: string | null;
       credentialSourceMcpServerId: string | null;
       executionSourceMcpServerId: string | null;
+      useDynamicTeamCredential: boolean;
       catalogId: string | null;
       catalogName: string | null;
     }>
@@ -534,6 +535,8 @@ class ToolModel {
           schema.agentToolsTable.credentialSourceMcpServerId,
         executionSourceMcpServerId:
           schema.agentToolsTable.executionSourceMcpServerId,
+        useDynamicTeamCredential:
+          schema.agentToolsTable.useDynamicTeamCredential,
         mcpServerId: schema.mcpServersTable.id,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
@@ -733,6 +736,23 @@ class ToolModel {
       .select()
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.id, ids));
+  }
+
+  /**
+   * Get tool names by IDs
+   * Used to map tool IDs to names for filtering
+   */
+  static async getNamesByIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.id, ids));
+
+    return tools.map((t) => t.name);
   }
 
   /**

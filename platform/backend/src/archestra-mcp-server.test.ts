@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test...
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { AgentModel, InternalMcpCatalogModel } from "@/models";
@@ -10,7 +11,6 @@ import {
   type ArchestraContext,
   executeArchestraTool,
   getArchestraMcpTools,
-  isArchestraMcpServerTool,
 } from "./archestra-mcp-server";
 
 describe("getArchestraMcpTools", () => {
@@ -268,7 +268,7 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain(
         "Full Featured Profile",
       );
-      expect((result.content[0] as any).text).toContain(team.id);
+      expect((result.content[0] as any).text).toContain(team.name);
     });
 
     test("should return error when name is missing", async () => {

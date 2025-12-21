@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*"],
+  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*", "CODEGEN"],
   "globalDependencies": [".env"],
   "tasks": {
     "build": {
@@ -42,10 +42,11 @@
     "test:e2e:ui": {
       "cache": false
     },
-    "codegen:api-client": {
+    "codegen": {
       "cache": false
     },
-    "codegen:theme-css": {
+    "@shared#codegen": {
+      "dependsOn": ["@backend#codegen"],
       "cache": false
     },
     "db:generate": {

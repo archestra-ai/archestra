@@ -4,17 +4,26 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
-const { getInteraction, getInteractions } = archestraApiSdk;
+const {
+  getInteraction,
+  getInteractions,
+  getUniqueExternalAgentIds,
+  getUniqueUserIds,
+} = archestraApiSdk;
 
 export function useInteractions({
-  agentId,
+  profileId,
+  externalAgentId,
+  userId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
   sortDirection = "desc",
   initialData,
 }: {
-  agentId?: string;
+  profileId?: string;
+  externalAgentId?: string;
+  userId?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -24,11 +33,22 @@ export function useInteractions({
   initialData?: archestraApiTypes.GetInteractionsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
-    queryKey: ["interactions", agentId, limit, offset, sortBy, sortDirection],
+    queryKey: [
+      "interactions",
+      profileId,
+      externalAgentId,
+      userId,
+      limit,
+      offset,
+      sortBy,
+      sortDirection,
+    ],
     queryFn: async () => {
       const response = await getInteractions({
         query: {
-          ...(agentId ? { agentId } : {}),
+          ...(profileId ? { profileId } : {}),
+          ...(externalAgentId ? { externalAgentId } : {}),
+          ...(userId ? { userId } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -42,7 +62,10 @@ export function useInteractions({
       offset === 0 &&
       limit === DEFAULT_TABLE_LIMIT &&
       sortBy === "createdAt" &&
-      sortDirection === "desc"
+      sortDirection === "desc" &&
+      !profileId &&
+      !externalAgentId &&
+      !userId
         ? initialData
         : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
@@ -66,5 +89,25 @@ export function useInteraction({
     },
     initialData,
     ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
+  });
+}
+
+export function useUniqueExternalAgentIds() {
+  return useSuspenseQuery({
+    queryKey: ["interactions", "externalAgentIds"],
+    queryFn: async () => {
+      const response = await getUniqueExternalAgentIds();
+      return response.data;
+    },
+  });
+}
+
+export function useUniqueUserIds() {
+  return useSuspenseQuery({
+    queryKey: ["interactions", "userIds"],
+    queryFn: async () => {
+      const response = await getUniqueUserIds();
+      return response.data;
+    },
   });
 }

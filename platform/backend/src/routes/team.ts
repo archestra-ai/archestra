@@ -29,16 +29,16 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: canUpdateTeams } = await hasPermission(
-        { team: ["update"] },
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
         request.headers,
       );
 
-      // Users that can't update teams only see teams they're members of
-      if (!canUpdateTeams) {
+      // Non-team admins only see teams they're members of
+      if (!isTeamAdmin) {
         return reply.send(await TeamModel.getUserTeams(request.user.id));
       }
-
+      // Team admins see all teams in the organization
       return reply.send(
         await TeamModel.findByOrganization(request.organizationId),
       );
@@ -81,7 +81,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user, headers }, reply) => {
       const team = await TeamModel.findById(id);
 
       if (!team) {
@@ -91,6 +91,19 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Verify the team belongs to the user's organization
       if (team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user is team:admin or member of the team
+      // Non team:admins can only see their own teams
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+      if (!isTeamAdmin) {
+        const isMember = await TeamModel.isUserInTeam(id, user.id);
+        if (!isMember) {
+          throw new ApiError(404, "Team not found");
+        }
       }
 
       return reply.send(team);
@@ -111,11 +124,27 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
+    async ({ params: { id }, body, organizationId, user, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user has team:admin permission or is a member of the team
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+
+      if (!isTeamAdmin) {
+        const isMember = await TeamModel.isUserInTeam(id, user.id);
+        if (!isMember) {
+          throw new ApiError(
+            403,
+            "You must be a member of this team to update it",
+          );
+        }
       }
 
       const team = await TeamModel.update(id, body);
@@ -141,11 +170,27 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user has team:admin permission or is a member of the team
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+
+      if (!isTeamAdmin) {
+        const isMember = await TeamModel.isUserInTeam(id, user.id);
+        if (!isMember) {
+          throw new ApiError(
+            403,
+            "You must be a member of this team to delete it",
+          );
+        }
       }
 
       const success = await TeamModel.delete(id);
@@ -171,11 +216,23 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectTeamMemberSchema)),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(id);
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user is team:admin or member of the team
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+      if (!isTeamAdmin) {
+        const isMember = await TeamModel.isUserInTeam(id, user.id);
+        if (!isMember) {
+          throw new ApiError(404, "Team not found");
+        }
       }
 
       return reply.send(await TeamModel.getTeamMembers(id));
@@ -284,7 +341,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user, headers }, reply) => {
       // Verify enterprise license
       if (!config.enterpriseLicenseActivated) {
         throw new ApiError(
@@ -297,6 +354,18 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const team = await TeamModel.findById(id);
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
+      }
+
+      // Check if user is team:admin or member of the team
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+      if (!isTeamAdmin) {
+        const isMember = await TeamModel.isUserInTeam(id, user.id);
+        if (!isMember) {
+          throw new ApiError(404, "Team not found");
+        }
       }
 
       return reply.send(await TeamModel.getExternalGroups(id));

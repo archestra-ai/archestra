@@ -1,5 +1,22 @@
 # Development + pre-requisite resources
 
+# MCP Server RBAC resources for local development
+# Render from Helm chart and filter to only RBAC resources (avoid duplication)
+k8s_yaml(local(
+  'helm template archestra-platform ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
+  quiet=True
+))
+
+k8s_resource(
+  new_name='mcp-rbac',
+  labels=['dev'],
+  objects=[
+    'archestra-platform-mcp-k8s-operator:serviceaccount:default',
+    'archestra-platform-mcp-server-operator:role:default',
+    'archestra-platform-mcp-server-operator:rolebinding:default'
+  ]
+)
+
 # Define is_prod locally (same logic as main Tiltfile)
 is_prod = os.getenv('PROD') == 'true'
 dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'
@@ -36,6 +53,7 @@ frontend_env_vars = get_frontend_env()
 local_resource(
   'pnpm-install',
   cmd='CI=true pnpm install',
+  cmd_bat='set CI=true && pnpm install',
   deps=[
     '../frontend/package.json',
     '../backend/package.json',
@@ -48,6 +66,7 @@ if is_prod:
   local_resource(
     dev_resource_name,
     cmd='rm -rf frontend/.next && pnpm build',
+    cmd_bat='if exist frontend\\.next rd /s /q frontend\\.next && pnpm build',
     serve_cmd='pnpm start',
     labels=['dev'],
     resource_deps=['db-migrate'],
@@ -86,8 +105,8 @@ local_resource(
 )
 
 local_resource(
-  'codegen:api-client',
-  cmd='pnpm codegen:api-client',
+  'codegen',
+  cmd='pnpm codegen',
   labels=['dev'],
   resource_deps=['pnpm-install', dev_resource_name],
   trigger_mode=TRIGGER_MODE_MANUAL,

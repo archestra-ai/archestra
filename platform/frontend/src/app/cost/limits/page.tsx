@@ -778,7 +778,6 @@ export default function LimitsPage() {
                 <SelectItem value="1m">Every month</SelectItem>
               </SelectContent>
             </Select>
-            x
           </div>
         </CardHeader>
       </Card>

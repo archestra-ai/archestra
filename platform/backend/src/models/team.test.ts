@@ -555,6 +555,163 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("checkTeamAccess", () => {
+    test("should allow access for team admin regardless of membership", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Admin user who is NOT a member of the team
+      const adminUser = await makeUser({ email: "admin@test.com" });
+
+      // Should not throw - admin has full access
+      await expect(
+        TeamModel.checkTeamAccess({
+          userId: adminUser.id,
+          teamId: team.id,
+          isTeamAdmin: true,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("should allow access for non-admin who is a team member", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Add a member to the team
+      const memberUser = await makeUser({ email: "member@test.com" });
+      await TeamModel.addMember(team.id, memberUser.id);
+
+      // Should not throw - user is a member
+      await expect(
+        TeamModel.checkTeamAccess({
+          userId: memberUser.id,
+          teamId: team.id,
+          isTeamAdmin: false,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("should deny access for non-admin who is not a team member", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Non-member, non-admin user
+      const outsiderUser = await makeUser({ email: "outsider@test.com" });
+
+      // Should throw 403 error
+      await expect(
+        TeamModel.checkTeamAccess({
+          userId: outsiderUser.id,
+          teamId: team.id,
+          isTeamAdmin: false,
+        }),
+      ).rejects.toThrow("Not authorized to access this team");
+    });
+
+    test("should throw ApiError with 403 status for unauthorized access", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      const outsiderUser = await makeUser({ email: "outsider@test.com" });
+
+      try {
+        await TeamModel.checkTeamAccess({
+          userId: outsiderUser.id,
+          teamId: team.id,
+          isTeamAdmin: false,
+        });
+        // Should not reach here
+        expect.fail("Expected checkTeamAccess to throw an error");
+      } catch (error) {
+        expect(error).toHaveProperty("statusCode", 403);
+        expect(error).toHaveProperty(
+          "message",
+          "Not authorized to access this team",
+        );
+      }
+    });
+  });
+
+  describe("getUserTeamIds", () => {
+    test("should return empty array when user is not in any team", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+
+      expect(teamIds).toEqual([]);
+    });
+
+    test("should return all team IDs the user belongs to", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const _team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+
+      // Add user to team1 and team2, but not team3
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+
+      expect(teamIds).toHaveLength(2);
+      expect(teamIds.sort()).toEqual([team1.id, team2.id].sort());
+    });
+
+    test("should return team IDs from multiple organizations", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeUser();
+      const org1 = await makeOrganization({ name: "Org 1" });
+      const org2 = await makeOrganization({ name: "Org 2" });
+      const team1 = await makeTeam(org1.id, admin.id, {
+        name: "Team in Org 1",
+      });
+      const team2 = await makeTeam(org2.id, admin.id, {
+        name: "Team in Org 2",
+      });
+
+      // Add user to both teams
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+
+      expect(teamIds).toHaveLength(2);
+      expect(teamIds).toContain(team1.id);
+      expect(teamIds).toContain(team2.id);
+    });
+  });
+
   describe("syncUserTeams", () => {
     test("should add user to teams based on their SSO groups", async ({
       makeUser,

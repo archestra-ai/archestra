@@ -4,26 +4,12 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
-import { ChatError } from "@/components/chat/chat-error";
+import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
@@ -31,7 +17,6 @@ import { QueuedMessage } from "@/components/chat/queued-message";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -49,10 +34,16 @@ import {
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useConversation, useCreateConversation } from "@/lib/chat.query";
-import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import {
+  useConversation,
+  useCreateConversation,
+  useUpdateConversation,
+} from "@/lib/chat.query";
+import { useChatApiKeys } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
+import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -61,7 +52,9 @@ export default function ChatPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [conversationId, setConversationId] = useState<string>();
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
+  );
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -99,8 +92,14 @@ export default function ChatPage() {
 
   const chatSession = useChatSession(conversationId);
 
-  // Check if API key is configured
-  const { data: chatSettings } = useChatSettingsOptional();
+  // Check if API key is configured for any provider
+  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
+    useChatApiKeys();
+  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  // Vertex AI Gemini mode doesn't require an API key (uses ADC)
+  const hasAnyApiKey =
+    chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
+  const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -124,7 +123,33 @@ export default function ChatPage() {
   );
 
   // Fetch conversation with messages
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation, isLoading: isLoadingConversation } =
+    useConversation(conversationId);
+
+  // Mutation for updating conversation model
+  const updateConversationMutation = useUpdateConversation();
+
+  // Handle model change with error handling
+  const handleModelChange = useCallback(
+    (model: string) => {
+      if (!conversation) return;
+
+      updateConversationMutation.mutate(
+        {
+          id: conversation.id,
+          selectedModel: model,
+        },
+        {
+          onError: (error) => {
+            toast.error(
+              `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          },
+        },
+      );
+    },
+    [conversation, updateConversationMutation],
+  );
 
   // Find the specific prompt for this conversation (if any)
   const conversationPrompt = conversation?.promptId
@@ -311,26 +336,23 @@ export default function ChatPage() {
       loadedConversationRef.current = undefined;
     }
 
-    // Only sync messages from backend if:
-    // 1. We have conversation data
-    // 2. We haven't synced this conversation yet
-    // 3. The session doesn't already have messages (don't overwrite active session)
-    if (
+    // Sync messages from backend only on initial load or when recovering from empty state
+    // The AI SDK manages message state correctly during streaming, so we shouldn't overwrite it
+    const shouldSync =
       conversation?.messages &&
       conversation.id === conversationId &&
-      loadedConversationRef.current !== conversationId &&
-      messages.length === 0 // Only sync if session is empty
-    ) {
+      status !== "submitted" &&
+      status !== "streaming" &&
+      !userMessageJustEdited.current &&
+      (loadedConversationRef.current !== conversationId ||
+        messages.length === 0);
+
+    if (shouldSync) {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
       // If there's a pending prompt and the conversation is empty, send it
-      if (
-        pendingPromptRef.current &&
-        conversation.messages.length === 0 &&
-        status !== "submitted" &&
-        status !== "streaming"
-      ) {
+      if (pendingPromptRef.current && conversation.messages.length === 0) {
         const promptToSend = pendingPromptRef.current;
         pendingPromptRef.current = undefined;
         sendMessage({
@@ -339,13 +361,18 @@ export default function ChatPage() {
         });
       }
     }
+
+    // Clear the edit flag when status changes to ready (streaming finished)
+    if (status === "ready" && userMessageJustEdited.current) {
+      userMessageJustEdited.current = false;
+    }
   }, [
     conversationId,
     conversation,
     setMessages,
     sendMessage,
     status,
-    messages,
+    messages.length,
   ]);
 
   const handleSubmit = useCallback(
@@ -374,6 +401,8 @@ export default function ChatPage() {
         });
         return;
       }
+      return localMsg;
+    });
 
       // Otherwise, send immediately
       sendMessage({
@@ -442,19 +471,20 @@ export default function ChatPage() {
   );
 
   // If API key is not configured, show setup message
-  if (chatSettings && !chatSettings.anthropicApiKeySecretId) {
+  // Only show after loading completes to avoid flash of incorrect content
+  if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
     return (
-      <div className="flex h-screen items-center justify-center p-8">
+      <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Anthropic API Key Required</CardTitle>
+            <CardTitle>LLM Provider API Key Required</CardTitle>
             <CardDescription>
-              The chat feature requires an Anthropic API key to function.
+              The chat feature requires an LLM provider API key to function.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure your Anthropic API key in Chat Settings to start
+              Please configure an LLM provider API key in Chat Settings to start
               using the chat feature.
             </p>
             <Button asChild>
@@ -581,7 +611,6 @@ export default function ChatPage() {
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
         <div className="flex flex-col h-full">
-          {error && <ChatError error={error} />}
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
@@ -618,9 +647,44 @@ export default function ChatPage() {
 
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
+              conversationId={conversationId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
+              isLoadingConversation={isLoadingConversation}
+              onMessagesUpdate={setMessages}
+              onUserMessageEdit={(
+                editedMessage,
+                updatedMessages,
+                editedPartIndex,
+              ) => {
+                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
+                if (setMessages && sendMessage) {
+                  // Set flag to prevent message sync from overwriting our state
+                  userMessageJustEdited.current = true;
+
+                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
+                  const messagesWithoutEditedMessage = updatedMessages.slice(
+                    0,
+                    -1,
+                  );
+                  setMessages(messagesWithoutEditedMessage);
+
+                  // Send the edited message to generate new response (same as handleSubmit)
+                  // Use the specific part that was edited (via editedPartIndex) instead of finding
+                  // the first text part, in case the message has multiple text parts
+                  const editedPart = editedMessage.parts?.[editedPartIndex];
+                  const editedText =
+                    editedPart?.type === "text" ? editedPart.text : "";
+                  if (editedText?.trim()) {
+                    sendMessage({
+                      role: "user",
+                      parts: [{ type: "text", text: editedText }],
+                    });
+                  }
+                }
+              }}
+              error={error}
             />
           </div>
 
@@ -675,7 +739,7 @@ export default function ChatPage() {
                 </PromptInputToolbar>
               </PromptInput>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

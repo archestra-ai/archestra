@@ -1,3 +1,5 @@
+import { isArchestraMcpServerTool } from "@shared";
+import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
 
 /**
@@ -6,15 +8,66 @@ import { ToolInvocationPolicyModel } from "@/models";
  *
  * If this method returns non-null it is because the tool call was blocked and we are returning a refusal message
  * (in the format of an assistant message with a refusal)
+ *
+ * @param toolCalls - The tool calls to evaluate
+ * @param agentId - The agent ID to evaluate policies for
+ * @param contextIsTrusted - Whether the context is trusted
+ * @param enabledToolNames - Optional set of tool names that are enabled in the request.
+ *                          If provided, tool calls not in this set will be filtered and reported as disabled.
  */
 export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
   agentId: string,
   contextIsTrusted: boolean,
+  enabledToolNames?: Set<string>,
 ): Promise<null | [string, string]> => {
-  for (const toolCall of toolCalls) {
-    const { toolCallName, toolCallArgs } = toolCall;
+  logger.debug(
+    { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
+    "[toolInvocation] evaluatePolicies: starting evaluation",
+  );
 
+  if (toolCalls.length === 0) {
+    return null;
+  }
+
+  // Filter out disabled tools (not in request's tools list)
+  // This is required because otherwise the tool invocation policies will be evaluated
+  // for tools that are disabled during chat session.
+  // Note: archestra__* tools are always enabled (built-in tools that bypass policies)
+  const isToolEnabled = (toolName: string) =>
+    isArchestraMcpServerTool(toolName) || enabledToolNames?.has(toolName);
+
+  let disabledToolNames: string[] = [];
+  let filteredToolCalls = toolCalls;
+  if (enabledToolNames && enabledToolNames.size > 0) {
+    disabledToolNames = toolCalls
+      .filter((tc) => !isToolEnabled(tc.toolCallName))
+      .map((tc) => tc.toolCallName);
+    filteredToolCalls = toolCalls.filter((tc) =>
+      isToolEnabled(tc.toolCallName),
+    );
+    if (disabledToolNames.length > 0) {
+      logger.info(
+        { disabledTools: disabledToolNames },
+        "[toolInvocation] evaluatePolicies: disabled tools filtered out",
+      );
+    }
+  }
+
+  // If any tools were disabled, return distinct message about them
+  if (disabledToolNames.length > 0) {
+    const toolList = disabledToolNames.join(", ");
+    const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
+    return [message, message];
+  }
+
+  // If all tools were filtered out, nothing to evaluate
+  if (filteredToolCalls.length === 0) {
+    return null;
+  }
+
+  // Parse all tool arguments upfront
+  const parsedToolCalls = filteredToolCalls.map((toolCall) => {
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:
      *
@@ -25,14 +78,29 @@ export const evaluatePolicies = async (
      * So it is possible that the "JSON" here is malformed because the model hallucinated parameters and we
      * may need to explicitly handle this case in the future...
      */
-    const toolInput = JSON.parse(toolCallArgs);
+    return {
+      toolCallName: toolCall.toolCallName,
+      toolInput: JSON.parse(toolCall.toolCallArgs),
+    };
+  });
 
-    const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
+  // Evaluate all tool calls in batch (1-2 queries total instead of N queries)
+  const { isAllowed, reason, toolCallName } =
+    await ToolInvocationPolicyModel.evaluateBatch(
       agentId,
-      toolCallName,
-      toolInput,
+      parsedToolCalls,
       contextIsTrusted,
     );
+
+  logger.debug(
+    { agentId, isAllowed, reason, toolCallName },
+    "[toolInvocation] evaluatePolicies: batch evaluation result",
+  );
+
+  if (!isAllowed && toolCallName) {
+    const toolInput = parsedToolCalls.find(
+      (tc) => tc.toolCallName === toolCallName,
+    )?.toolInput;
 
     const archestraMetadata = `
 <archestra-tool-name>${toolCallName}</archestra-tool-name>
@@ -49,28 +117,34 @@ ${reason}`;
     const refusalMessage = `${archestraMetadata}
 ${contentMessage}`;
 
-    if (!isAllowed) {
-      return [refusalMessage, contentMessage];
-      // TODO: return string or null, not provider specific message type
-      // return {
-      //   finish_reason: "stop",
-      //   index: 0,
-      //   logprobs: null,
-      //   message: {
-      //     role: "assistant",
-      //     /**
-      //      * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-      //      * is that most clients expect to see the content field, and don't conditionally render the refusal field
-      //      *
-      //      * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-      //      * message, but also show some special UI to indicate that the tool call was blocked.
-      //      */
-      //     refusal: refusalMessage,
-      //     content: contentMessage,
-      //   },
-      // };
-    }
+    logger.debug(
+      { agentId, toolCallName, reason },
+      "[toolInvocation] evaluatePolicies: tool invocation blocked",
+    );
+    // TODO: return string or null, not provider specific message type
+    // return {
+    //   finish_reason: "stop",
+    //   index: 0,
+    //   logprobs: null,
+    //   message: {
+    //     role: "assistant",
+    //     /**
+    //      * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
+    //      * is that most clients expect to see the content field, and don't conditionally render the refusal field
+    //      *
+    //      * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
+    //      * message, but also show some special UI to indicate that the tool call was blocked.
+    //      */
+    //     refusal: refusalMessage,
+    //     content: contentMessage,
+    //   },
+    // };
+    return [refusalMessage, contentMessage];
   }
 
+  logger.debug(
+    { agentId, toolCallCount: toolCalls.length },
+    "[toolInvocation] evaluatePolicies: all tool calls allowed",
+  );
   return null;
 };

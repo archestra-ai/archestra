@@ -1,7 +1,10 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME } from "@shared";
+import {
+  EXTERNAL_AGENT_ID_HEADER,
+  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+} from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,

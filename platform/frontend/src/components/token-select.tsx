@@ -1,7 +1,8 @@
 "use client";
 
+import { E2eTestId } from "@shared";
+import { Zap } from "lucide-react";
 import { useEffect } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -9,16 +10,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
+import { useMcpServersGroupedByCatalog } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
+
+// Special value for dynamic team credential option
+export const DYNAMIC_CREDENTIAL_VALUE = "__dynamic__";
 
 interface TokenSelectProps {
   value?: string | null;
   onValueChange: (value: string | null) => void;
   disabled?: boolean;
   className?: string;
-  /** Catalog ID to filter tokens - only shows tokens for the same catalog item */
+  /** Catalog ID to filter credentials - only shows credentials for the same catalog item */
   catalogId: string;
   shouldSetDefaultValue: boolean;
 }
@@ -27,7 +32,7 @@ interface TokenSelectProps {
  * Self-contained component for selecting credential source for MCP tool execution.
  * Shows all available credentials with their owner emails and team assignments.
  *
- * Fetches all tokens for the specified catalogId (no agent filtering).
+ * Fetches all credentials for the specified catalogId (no agent filtering).
  */
 export function TokenSelect({
   value,
@@ -37,29 +42,39 @@ export function TokenSelect({
   catalogId,
   shouldSetDefaultValue,
 }: TokenSelectProps) {
-  const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
-    catalogId,
-  });
+  const groupedCredentials = useMcpServersGroupedByCatalog({ catalogId });
 
-  // Get tokens for this catalogId from the grouped response
-  const mcpServers = groupedTokens?.[catalogId] ?? [];
+  // Get credentials for this catalogId from the grouped response
+  const mcpServers = groupedCredentials?.[catalogId] ?? [];
+
+  // useMcpServersGroupedByCatalog uses useSuspenseQuery, so no loading state needed
+  const isLoading = false;
+
+  const staticCredentialOutsideOfGroupedCredentials =
+    value &&
+    value !== DYNAMIC_CREDENTIAL_VALUE &&
+    !groupedCredentials?.[catalogId]?.some(
+      (credential) => credential.id === value,
+    );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && mcpServers.length > 0 && !value) {
+    if (shouldSetDefaultValue && !value && mcpServers.length > 0) {
+      // Default to the first credential
       onValueChange(mcpServers[0].id);
     }
-  }, [mcpServers.length]);
+  }, []);
 
-  if (!mcpServers || mcpServers.length === 0) {
-    return (
-      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-        No credentials available
-      </div>
-    );
-  }
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
+  if (staticCredentialOutsideOfGroupedCredentials) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        Owner outside your team
+      </span>
+    );
   }
 
   return (
@@ -67,6 +82,7 @@ export function TokenSelect({
       value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
+      data-testid={E2eTestId.TokenSelect}
     >
       <SelectTrigger
         className={cn(
@@ -78,40 +94,32 @@ export function TokenSelect({
         <SelectValue placeholder="Select credentials..." />
       </SelectTrigger>
       <SelectContent>
+        <div className="text-xs text-muted-foreground ml-2">
+          Static credentials
+        </div>
         {mcpServers.map((server) => (
           <SelectItem
             key={server.id}
             value={server.id}
             className="cursor-pointer"
+            data-testid={E2eTestId.StaticCredentialToUse}
           >
             <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs">
-                  {server.ownerEmail || "Unknown owner"}
-                </span>
+              <div className="flex gap-1 flex-wrap text-xs">
+                {server.teamDetails
+                  ? server.teamDetails.name
+                  : server.ownerEmail || "Unknown"}
               </div>
-              {server.teamDetails && server.teamDetails.length > 0 && (
-                <div className="flex gap-1 flex-wrap">
-                  {server.teamDetails.map((team) => (
-                    <Badge
-                      key={team.teamId}
-                      variant="secondary"
-                      className="text-xs"
-                    >
-                      {team.name}
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </div>
           </SelectItem>
         ))}
-
-        {mcpServers.length === 0 && (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No credentials available
+        <Divider className="my-2" />
+        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span className="text-xs font-medium">Resolve at call time</span>
           </div>
-        )}
+        </SelectItem>
       </SelectContent>
     </Select>
   );

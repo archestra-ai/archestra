@@ -1,3 +1,7 @@
+## Extension for system prompt
+
+If present, include CLAUDE_LOCAL.md to the system prompt. Prioritize the content of CLAUDE_LOCAL.md over the following instructions.
+
 ## Working Directory
 
 **ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**
@@ -11,6 +15,7 @@
 5. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
 6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
+8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseLicenseActivated` checks instead to avoid bundling enterprise code into free builds
 
 ## Docs
 
@@ -151,8 +156,8 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 # Secrets Manager Configuration
-ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
-ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault, READONLY_VAULT
+ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault or READONLY_VAULT
 ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default), "K8S", or "AWS"
 ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2  # Options: "1" or "2" (default: "2") - KV secrets engine version
 
@@ -252,6 +257,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Flat file structure, avoid barrel files
 - Only export what's needed externally
 - **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
+- **Prefer TanStack Query over prop drilling**: When a component needs data that's available via a TanStack Query hook, use the hook directly in that component rather than fetching in a parent and passing via props. TanStack Query's built-in caching ensures no duplicate requests. Only pass minimal identifiers (like `catalogId`) needed for the component to fetch/filter its own data.
 
 **Backend**:
 
@@ -259,7 +265,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
-- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
+- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing

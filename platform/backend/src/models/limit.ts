@@ -228,7 +228,7 @@ class LimitModel {
         totalOutputTokens: sql<number>`COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`,
       })
       .from(schema.interactionsTable)
-      .where(eq(schema.interactionsTable.agentId, agentId));
+      .where(eq(schema.interactionsTable.profileId, agentId));
 
     const totalInputTokens = Number(result[0]?.totalInputTokens || 0);
     const totalOutputTokens = Number(result[0]?.totalOutputTokens || 0);

@@ -2,7 +2,6 @@
   "bootstrap-sha": "975dd9685457d367d96d55cb50c198715f4dc365",
   "changelog-path": "CHANGELOG.md",
   "changelog-type": "default",
-  "bump-minor-pre-major": true,
   "pull-request-footer": "",
   "include-v-in-tag": true,
   "draft": false,

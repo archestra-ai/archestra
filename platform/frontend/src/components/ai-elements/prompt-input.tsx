@@ -11,7 +11,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import {
+import React, {
   type ChangeEventHandler,
   Children,
   type ClipboardEventHandler,
@@ -492,12 +492,10 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<typeof Textarea>;
 
-export const PromptInputTextarea = ({
-  onChange,
-  className,
-  placeholder = "What would you like to know?",
-  ...props
-}: PromptInputTextareaProps) => {
+export const PromptInputTextarea = React.forwardRef<
+  HTMLTextAreaElement,
+  PromptInputTextareaProps
+>(({ onChange, className, placeholder = "What would you like to know?", ...props }, ref) => {
   const attachments = usePromptInputAttachments();
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
@@ -547,6 +545,7 @@ export const PromptInputTextarea = ({
 
   return (
     <Textarea
+      ref={ref}
       key={attachments.textareaKey}
       className={cn(
         "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
@@ -565,7 +564,9 @@ export const PromptInputTextarea = ({
       {...props}
     />
   );
-};
+});
+
+PromptInputTextarea.displayName = "PromptInputTextarea";
 
 export type PromptInputToolbarProps = HTMLAttributes<HTMLDivElement>;
 

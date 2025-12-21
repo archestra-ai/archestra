@@ -458,93 +458,107 @@ const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATO
 test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)", () => {
   let profileId: string;
 
-  test.beforeAll(async ({ request, makeApiRequest, installMcpServer }) => {
-    // Use the Default Profile
-    const defaultProfileResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/agents/default",
-    });
-    const defaultProfile = await defaultProfileResponse.json();
-    profileId = defaultProfile.id;
-
-    // Find the catalog item for internal-dev-test-server
-    const catalogItem = await findCatalogItem(request, TEST_CATALOG_ITEM_NAME);
-    if (!catalogItem) {
-      throw new Error(
-        `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
-      );
-    }
-
-    // Check if already installed
-    let testServer = await findInstalledServer(request, catalogItem.id);
-
-    if (!testServer) {
-      // Install the server
-      const installResponse = await installMcpServer(request, {
-        name: catalogItem.name,
-        catalogId: catalogItem.id,
-        environmentValues: {
-          ARCHESTRA_TEST: "e2e-test-value",
-        },
-      });
-      const installedServer = await installResponse.json();
-
-      // Wait for installation to complete
-      await waitForServerInstallation(request, installedServer.id);
-      testServer = installedServer;
-    }
-
-    // Type guard - testServer is guaranteed to be defined here
-    if (!testServer) {
-      throw new Error("MCP server should be installed at this point");
-    }
-
-    // Find the test tool (may need to wait for tool discovery)
-    let testTool: { id: string; name: string } | undefined;
-    for (let attempt = 0; attempt < 14; attempt++) {
-      const toolsResponse = await makeApiRequest({
+  test.beforeAll(
+    async ({ request, makeApiRequest, installMcpServer, getTeamByName }) => {
+      // Use the Default Profile
+      const defaultProfileResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/tools",
+        urlSuffix: "/api/agents/default",
       });
-      const toolsData = await toolsResponse.json();
-      const tools = toolsData.data || toolsData;
-      testTool = tools.find((t: { name: string }) => t.name === TEST_TOOL_NAME);
+      const defaultProfile = await defaultProfileResponse.json();
+      profileId = defaultProfile.id;
 
-      if (testTool) break;
-      await new Promise((r) => setTimeout(r, 2000));
-    }
+      // Get the Default Team (required for MCP server installation when Vault is enabled)
+      const defaultTeam = await getTeamByName(request, "Default Team");
+      if (!defaultTeam) {
+        throw new Error("Default Team not found");
+      }
 
-    if (!testTool) {
-      throw new Error(
-        `Tool '${TEST_TOOL_NAME}' not found after installation. Tool discovery may have failed.`,
+      // Find the catalog item for internal-dev-test-server
+      const catalogItem = await findCatalogItem(
+        request,
+        TEST_CATALOG_ITEM_NAME,
       );
-    }
+      if (!catalogItem) {
+        throw new Error(
+          `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+        );
+      }
 
-    // Assign the tool to the profile with executionSourceMcpServerId
-    const assignResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/agents/tools/bulk-assign",
-      data: {
-        assignments: [
-          {
-            agentId: profileId,
-            toolId: testTool.id,
-            executionSourceMcpServerId: testServer.id,
+      // Check if already installed
+      let testServer = await findInstalledServer(request, catalogItem.id);
+
+      if (!testServer) {
+        // Install the server with team assignment
+        const installResponse = await installMcpServer(request, {
+          name: catalogItem.name,
+          catalogId: catalogItem.id,
+          teamId: defaultTeam.id,
+          environmentValues: {
+            ARCHESTRA_TEST: "e2e-test-value",
           },
-        ],
-      },
-    });
+        });
+        const installedServer = await installResponse.json();
 
-    const assignResult = await assignResponse.json();
-    if (assignResult.failed?.length > 0) {
-      throw new Error(
-        `Failed to assign tool: ${JSON.stringify(assignResult.failed)}`,
-      );
-    }
-  });
+        // Wait for installation to complete
+        await waitForServerInstallation(request, installedServer.id);
+        testServer = installedServer;
+      }
+
+      // Type guard - testServer is guaranteed to be defined here
+      if (!testServer) {
+        throw new Error("MCP server should be installed at this point");
+      }
+
+      // Find the test tool (may need to wait for tool discovery)
+      let testTool: { id: string; name: string } | undefined;
+      for (let attempt = 0; attempt < 14; attempt++) {
+        const toolsResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: "/api/tools",
+        });
+        const toolsData = await toolsResponse.json();
+        const tools = toolsData.data || toolsData;
+        testTool = tools.find(
+          (t: { name: string }) => t.name === TEST_TOOL_NAME,
+        );
+
+        if (testTool) break;
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+
+      if (!testTool) {
+        throw new Error(
+          `Tool '${TEST_TOOL_NAME}' not found after installation. Tool discovery may have failed.`,
+        );
+      }
+
+      // Assign the tool to the profile with executionSourceMcpServerId
+      const assignResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/agents/tools/bulk-assign",
+        data: {
+          assignments: [
+            {
+              agentId: profileId,
+              toolId: testTool.id,
+              executionSourceMcpServerId: testServer.id,
+            },
+          ],
+        },
+      });
+
+      const assignResult = await assignResponse.json();
+      if (assignResult.failed?.length > 0) {
+        throw new Error(
+          `Failed to assign tool: ${JSON.stringify(assignResult.failed)}`,
+        );
+      }
+    },
+  );
 
   const makeMcpGatewayRequestHeaders = (sessionId?: string) => ({
     Authorization: `Bearer ${profileId}`,
@@ -617,7 +631,7 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
   let profileId: string;
   let archestraToken: string;
 
-  test.beforeAll(async ({ request, installMcpServer }) => {
+  test.beforeAll(async ({ request, installMcpServer, getTeamByName }) => {
     // Use the Default Profile
     const defaultProfileResponse = await makeApiRequest({
       request,
@@ -629,6 +643,12 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
 
     // Get org token using shared utility
     archestraToken = await getOrgTokenForProfile(request);
+
+    // Get the Default Team (required for MCP server installation when Vault is enabled)
+    const defaultTeam = await getTeamByName(request, "Default Team");
+    if (!defaultTeam) {
+      throw new Error("Default Team not found");
+    }
 
     // Find the catalog item for internal-dev-test-server
     const catalogItem = await findCatalogItem(request, TEST_CATALOG_ITEM_NAME);
@@ -642,10 +662,11 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
     let testServer = await findInstalledServer(request, catalogItem.id);
 
     if (!testServer) {
-      // Install the server
+      // Install the server with team assignment
       const installResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
+        teamId: defaultTeam.id,
         environmentValues: {
           ARCHESTRA_TEST: "e2e-test-value",
         },

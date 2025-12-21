@@ -264,7 +264,7 @@ const installMcpServer = async (
   serverData: {
     name: string;
     catalogId?: string;
-    teamId?: string;
+    teams?: string[];
     userConfigValues?: Record<string, string>;
     environmentValues?: Record<string, string>;
     accessToken?: string;

@@ -1,10 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { lazy, useEffect, useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTeams } from "@/lib/team.query";
+
+const WithPermissions = lazy(() =>
+  // biome-ignore lint/style/noRestrictedImports: dynamic import
+  import("./roles/with-permissions.ee").then((mod) => ({
+    default: mod.WithPermissions,
+  })),
+);
 
 // Reuse types from generated API types
 type CreateChatApiKeyBody = archestraApiTypes.CreateChatApiKeyData["body"];
@@ -216,179 +223,181 @@ export function ChatApiKeyForm({
   }, [scope, teamId, usedTeamIds, form]);
 
   return (
-    <div className="space-y-6">
-      {/* Name field - only in full mode */}
-      {mode === "full" && (
+    <div data-testid={E2eTestId.ChatApiKeyForm}>
+      <div className="space-y-6">
+        {/* Name field - only in full mode */}
+        {mode === "full" && (
+          <div className="space-y-2">
+            <Label htmlFor="chat-api-key-name">Name</Label>
+            <Input
+              id="chat-api-key-name"
+              placeholder={`My ${providerConfig.name} Key`}
+              disabled={isPending}
+              {...form.register("name")}
+            />
+          </div>
+        )}
+
+        {/* Provider selector */}
         <div className="space-y-2">
-          <Label htmlFor="chat-api-key-name">Name</Label>
-          <Input
-            id="chat-api-key-name"
-            placeholder={`My ${providerConfig.name} Key`}
-            disabled={isPending}
-            {...form.register("name")}
-          />
-        </div>
-      )}
-
-      {/* Provider selector */}
-      <div className="space-y-2">
-        <Label htmlFor="chat-api-key-provider">Provider</Label>
-        <Select
-          value={provider}
-          onValueChange={(v) =>
-            form.setValue("provider", v as CreateChatApiKeyBody["provider"])
-          }
-          disabled={isEditMode || isPending}
-        >
-          <SelectTrigger id="chat-api-key-provider">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(PROVIDER_CONFIG).map(([key, config]) => (
-              <SelectItem key={key} value={key} disabled={!config.enabled}>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src={config.icon}
-                    alt={config.name}
-                    width={16}
-                    height={16}
-                    className="rounded dark:invert"
-                  />
-                  <span>{config.name}</span>
-                  {!config.enabled && (
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      Coming Soon
-                    </Badge>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Visibility/Scope selector */}
-      <div className="space-y-2">
-        <Label htmlFor="chat-api-key-scope">Scope</Label>
-        <Select
-          value={scope}
-          onValueChange={(v) => {
-            form.setValue(
-              "scope",
-              v as NonNullable<CreateChatApiKeyBody["scope"]>,
-            );
-            if (v !== "team") {
-              form.setValue("teamId", "");
-            }
-          }}
-          disabled={isPending}
-        >
-          <SelectTrigger id="chat-api-key-scope">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="personal" disabled={disabledScopes.personal}>
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                <span>Personal</span>
-                {disabledScopes.personal && (
-                  <span className="text-xs text-muted-foreground">
-                    (already exists)
-                  </span>
-                )}
-              </div>
-            </SelectItem>
-            <SelectItem value="team" disabled={isTeamScopeDisabled}>
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                <span>Team</span>
-                {isTeamScopeDisabled && (
-                  <span className="text-xs text-muted-foreground">
-                    (no teams available)
-                  </span>
-                )}
-              </div>
-            </SelectItem>
-            <SelectItem value="org_wide" disabled={disabledScopes.org_wide}>
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
-                <span>Whole Organization</span>
-                {disabledScopes.org_wide && (
-                  <span className="text-xs text-muted-foreground">
-                    (already exists)
-                  </span>
-                )}
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Team selector - only when scope is team */}
-      {scope === "team" && (
-        <div className="space-y-2">
-          <Label htmlFor="chat-api-key-team">Team</Label>
+          <Label htmlFor="chat-api-key-provider">Provider</Label>
           <Select
-            value={teamId}
-            onValueChange={(v) => form.setValue("teamId", v)}
-            disabled={isPending}
+            value={provider}
+            onValueChange={(v) =>
+              form.setValue("provider", v as CreateChatApiKeyBody["provider"])
+            }
+            disabled={isEditMode || isPending}
           >
-            <SelectTrigger id="chat-api-key-team">
-              <SelectValue placeholder="Select a team" />
+            <SelectTrigger id="chat-api-key-provider">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {availableTeams.length === 0 ? (
-                <div className="p-2 text-sm text-muted-foreground">
-                  All teams already have a {providerConfig.name} key
-                </div>
-              ) : (
-                availableTeams.map((team) => (
-                  <SelectItem key={team.id} value={team.id}>
-                    {team.name}
-                  </SelectItem>
-                ))
-              )}
+              {Object.entries(PROVIDER_CONFIG).map(([key, config]) => (
+                <SelectItem key={key} value={key} disabled={!config.enabled}>
+                  <div className="flex items-center gap-2">
+                    <Image
+                      src={config.icon}
+                      alt={config.name}
+                      width={16}
+                      height={16}
+                      className="rounded dark:invert"
+                    />
+                    <span>{config.name}</span>
+                    {!config.enabled && (
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        Coming Soon
+                      </Badge>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-      )}
 
-      {/* API Key input */}
-      <div className="space-y-2">
-        <Label htmlFor="chat-api-key-value">
-          API Key{" "}
-          {isEditMode && (
-            <span className="text-muted-foreground font-normal">
-              (leave blank to keep current)
-            </span>
-          )}
-        </Label>
-        <div className="relative">
-          <Input
-            id="chat-api-key-value"
-            type="password"
-            placeholder={providerConfig.placeholder}
+        {/* Visibility/Scope selector */}
+        <div className="space-y-2">
+          <Label htmlFor="chat-api-key-scope">Scope</Label>
+          <Select
+            value={scope}
+            onValueChange={(v) => {
+              form.setValue(
+                "scope",
+                v as NonNullable<CreateChatApiKeyBody["scope"]>,
+              );
+              if (v !== "team") {
+                form.setValue("teamId", "");
+              }
+            }}
             disabled={isPending}
-            className={showConfiguredStyling ? "border-green-500 pr-10" : ""}
-            {...form.register("apiKey")}
-          />
-          {showConfiguredStyling && (
-            <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+          >
+            <SelectTrigger id="chat-api-key-scope">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="personal" disabled={disabledScopes.personal}>
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  <span>
+                    Personal{disabledScopes.personal && " (already exists)"}
+                  </span>
+                </div>
+              </SelectItem>
+              <SelectItem value="team" disabled={isTeamScopeDisabled}>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>Team</span>
+                  {isTeamScopeDisabled && (
+                    <span className="text-xs text-muted-foreground">
+                      (no teams available)
+                    </span>
+                  )}
+                </div>
+              </SelectItem>
+              <WithPermissions
+                permissions={{ team: ["admin"] }}
+                noPermissionHandle="hide"
+              >
+                <SelectItem value="org_wide" disabled={disabledScopes.org_wide}>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    <span>
+                      Whole Organization{" "}
+                      {disabledScopes.org_wide ? " (already exists)" : ""}
+                    </span>
+                  </div>
+                </SelectItem>
+              </WithPermissions>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Team selector - only when scope is team */}
+        {scope === "team" && (
+          <div className="space-y-2">
+            <Label htmlFor="chat-api-key-team">Team</Label>
+            <Select
+              value={teamId}
+              onValueChange={(v) => form.setValue("teamId", v)}
+              disabled={isPending}
+            >
+              <SelectTrigger id="chat-api-key-team">
+                <SelectValue placeholder="Select a team" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTeams.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground">
+                    All teams already have a {providerConfig.name} key
+                  </div>
+                ) : (
+                  availableTeams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* API Key input */}
+        <div className="space-y-2">
+          <Label htmlFor="chat-api-key-value">
+            API Key{" "}
+            {isEditMode && (
+              <span className="text-muted-foreground font-normal">
+                (leave blank to keep current)
+              </span>
+            )}
+          </Label>
+          <div className="relative">
+            <Input
+              id="chat-api-key-value"
+              type="password"
+              placeholder={providerConfig.placeholder}
+              disabled={isPending}
+              className={showConfiguredStyling ? "border-green-500 pr-10" : ""}
+              {...form.register("apiKey")}
+            />
+            {showConfiguredStyling && (
+              <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+            )}
+          </div>
+          {showConsoleLink && (
+            <p className="text-xs text-muted-foreground">
+              Get your API key from{" "}
+              <Link
+                href={providerConfig.consoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                {providerConfig.consoleName}
+              </Link>
+            </p>
           )}
         </div>
-        {showConsoleLink && (
-          <p className="text-xs text-muted-foreground">
-            Get your API key from{" "}
-            <Link
-              href={providerConfig.consoleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              {providerConfig.consoleName}
-            </Link>
-          </p>
-        )}
       </div>
     </div>
   );

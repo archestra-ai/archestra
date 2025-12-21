@@ -5,6 +5,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
@@ -82,6 +83,7 @@ export function useCreateChatApiKey() {
       return responseData;
     },
     onSuccess: () => {
+      toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
@@ -118,6 +120,7 @@ export function useUpdateChatApiKey() {
       return responseData;
     },
     onSuccess: () => {
+      toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });

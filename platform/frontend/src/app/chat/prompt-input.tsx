@@ -86,7 +86,7 @@ const PromptInputContent = ({
             onModelChange={onModelChange}
             messageCount={messageCount}
           />
-          {currentProvider && conversationId && (
+          {conversationId && (
             <ChatApiKeySelector
               conversationId={conversationId}
               currentProvider={currentProvider}

@@ -35,7 +35,7 @@ interface ChatApiKeySelectorProps {
   /** Conversation ID for persisting selection */
   conversationId: string;
   /** Currently selected model (to filter API keys by provider) */
-  currentProvider: SupportedChatProvider;
+  currentProvider?: SupportedChatProvider;
   /** Currently selected API key ID */
   selectedKeyId: string | null;
   /** Whether the selector should be disabled */
@@ -166,8 +166,6 @@ export function ChatApiKeySelector({
     return null;
   }
 
-  const providerConfig = PROVIDER_CONFIG[currentProvider];
-
   const getKeyDisplayName = (key: ChatApiKey) => {
     if (key.scope === "personal") {
       return key.name;
@@ -177,6 +175,19 @@ export function ChatApiKeySelector({
     }
     return key.name;
   };
+
+  if (!currentProvider) {
+    return (
+      <PromptInputButton disabled={disabled}>
+        <Key className="h-3.5 w-3.5" />
+        <span className="truncate max-w-[200px]">
+          No valid API keys available
+        </span>
+      </PromptInputButton>
+    );
+  }
+
+  const providerConfig = PROVIDER_CONFIG[currentProvider];
 
   return (
     <>

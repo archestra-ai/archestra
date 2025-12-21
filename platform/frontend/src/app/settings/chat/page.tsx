@@ -281,7 +281,12 @@ function ChatSettingsContent() {
         cell: ({ row }) => (
           <ButtonGroup>
             <PermissionButton
-              permissions={{ chatSettings: ["update"] }}
+              permissions={{
+                chatSettings: ["update"],
+                ...(row.original.scope === "org_wide"
+                  ? { team: ["admin"] }
+                  : {}),
+              }}
               tooltip="Edit"
               aria-label="Edit"
               variant="outline"
@@ -295,7 +300,12 @@ function ChatSettingsContent() {
               <Pencil className="h-4 w-4" />
             </PermissionButton>
             <PermissionButton
-              permissions={{ chatSettings: ["delete"] }}
+              permissions={{
+                chatSettings: ["delete"],
+                ...(row.original.scope === "org_wide"
+                  ? { team: ["admin"] }
+                  : {}),
+              }}
               tooltip="Delete"
               aria-label="Delete"
               variant="outline"

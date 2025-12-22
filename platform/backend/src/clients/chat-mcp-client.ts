@@ -1,14 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { isArchestraMcpServerTool, TimeInMs } from "@shared";
 import { jsonSchema, type Tool } from "ai";
-import {
-  executeArchestraTool,
-  isArchestraMcpServerTool,
-} from "@/archestra-mcp-server";
+import { executeArchestraTool } from "@/archestra-mcp-server";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
+import {
+  AgentTeamModel,
+  TeamModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
 
 /**
  * MCP Gateway base URL (internal)
@@ -19,17 +24,15 @@ const MCP_GATEWAY_BASE_URL = "http://localhost:9000/v1/mcp";
 /**
  * Client cache per agent + user combination
  * Key: `${agentId}:${userId}`, Value: MCP Client
+ * Note: This cannot use cacheManager because Client instances need lifecycle
+ * management (close() on cleanup) which cacheManager doesn't support.
  */
 const clientCache = new Map<string, Client>();
 
 /**
- * Tool cache per agent + user with TTL to avoid hammering MCP Gateway
+ * Tool cache TTL - 30 seconds to avoid hammering MCP Gateway
  */
-const TOOL_CACHE_TTL_MS = 30_000; // 30 seconds
-const toolCache = new Map<
-  string,
-  { tools: Record<string, Tool>; expiresAt: number }
->();
+const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 
 /**
  * Generate cache key from agentId and userId
@@ -38,32 +41,43 @@ function getCacheKey(agentId: string, userId: string): string {
   return `${agentId}:${userId}`;
 }
 
+/**
+ * Generate the full cache key for tool cache
+ */
+function getToolCacheKey(
+  agentId: string,
+  userId: string,
+): `${typeof CacheKey.ChatMcpTools}-${string}` {
+  return `${CacheKey.ChatMcpTools}-${getCacheKey(agentId, userId)}`;
+}
+
 export const __test = {
   setCachedClient(cacheKey: string, client: Client) {
     clientCache.set(cacheKey, client);
   },
-  clearToolCache(cacheKey?: string) {
+  async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
-      toolCache.delete(cacheKey);
-    } else {
-      toolCache.clear();
+      await cacheManager.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
     }
+    // Note: cacheManager doesn't support clearing all keys with a prefix
+    // For tests, individual keys should be cleared explicitly
   },
   getCacheKey,
 };
 
 /**
- * Select the appropriate team token for a user based on team overlap
+ * Select the appropriate token for a user based on team overlap
  * Priority:
- * 1. Organization token (if user is profile admin)
- * 2. Team token where user is a member AND team is assigned to profile
+ * 1. Personal user token (if user has access to profile via team membership)
+ * 2. Organization token (if user is profile admin)
+ * 3. Team token where user is a member AND team is assigned to profile
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
  * @param userIsProfileAdmin - Whether the user has profile admin permission
  * @returns Token value and metadata, or null if no token available
  */
-async function selectTeamToken(
+async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   userIsProfileAdmin: boolean,
@@ -72,11 +86,49 @@ async function selectTeamToken(
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  isUserToken?: boolean;
 } | null> {
-  // Get all tokens
+  // Get user's team IDs and profile's team IDs (needed for access check)
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
+
+  // 1. Try personal user token first (if user has access via team membership)
+  if (commonTeamIds.length > 0) {
+    // Get organizationId from one of the common teams
+    const team = await TeamModel.findById(commonTeamIds[0]);
+    if (team) {
+      const userToken = await UserTokenModel.findByUserAndOrg(
+        userId,
+        team.organizationId,
+      );
+      if (userToken) {
+        const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+        if (tokenValue) {
+          logger.info(
+            {
+              agentId,
+              userId,
+              tokenId: userToken.id,
+            },
+            "Using personal user token for chat MCP client",
+          );
+          return {
+            tokenValue,
+            tokenId: userToken.id,
+            teamId: null,
+            isOrganizationToken: false,
+            isUserToken: true,
+          };
+        }
+      }
+    }
+  }
+
+  // Get all team tokens
   const tokens = await TeamTokenModel.findAll();
 
-  // If user is profile admin, use organization token (teamId is null)
+  // 2. If user is profile admin, use organization token (teamId is null)
   if (userIsProfileAdmin) {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
@@ -100,16 +152,7 @@ async function selectTeamToken(
     }
   }
 
-  // Get user's team IDs
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-
-  // Get profile's team IDs
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-
-  // Find intersection of user's teams and profile's teams
-  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
-
-  // Try to find a team token where user is in that team and profile is assigned to it
+  // 3. Try to find a team token where user is in that team and profile is assigned to it
   if (commonTeamIds.length > 0) {
     for (const token of tokens) {
       if (token.teamId && commonTeamIds.includes(token.teamId)) {
@@ -144,7 +187,7 @@ async function selectTeamToken(
       commonTeamCount: commonTeamIds.length,
       tokenCount: tokens.length,
     },
-    "No valid team token found for user",
+    "No valid token found for user",
   );
 
   return null;
@@ -153,6 +196,10 @@ async function selectTeamToken(
 /**
  * Clear cached client for a specific agent (all users)
  * Should be called when MCP Gateway sessions are cleared
+ *
+ * Note: Tool cache entries are stored in cacheManager with keys like
+ * "chat-mcp-tools-{agentId}:{userId}". Since we don't track all userIds,
+ * tool cache entries will expire naturally via TTL (30 seconds).
  *
  * @param agentId - The agent ID whose clients should be cleared
  */
@@ -187,12 +234,9 @@ export function clearChatMcpClient(agentId: string): void {
     }
   }
 
-  // Clear tool cache entries for this agentId
-  for (const key of toolCache.keys()) {
-    if (key.startsWith(`${agentId}:`)) {
-      toolCache.delete(key);
-    }
-  }
+  // Note: Tool cache entries in cacheManager will expire naturally via TTL.
+  // cacheManager doesn't support prefix-based deletion, but with a 30s TTL,
+  // stale entries will be refreshed quickly.
 
   logger.info(
     {
@@ -240,7 +284,7 @@ export async function getChatMcpClient(
   );
 
   // Select appropriate token for this user
-  const tokenResult = await selectTeamToken(
+  const tokenResult = await selectMCPGatewayToken(
     agentId,
     userId,
     userIsProfileAdmin,
@@ -345,6 +389,7 @@ function normalizeJsonSchema(schema: any): any {
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication
  * @param userIsProfileAdmin - Whether the user is a profile admin
+ * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools({
@@ -352,27 +397,30 @@ export async function getChatMcpTools({
   agentId,
   userId,
   userIsProfileAdmin,
+  enabledToolIds,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
   userIsProfileAdmin: boolean;
+  enabledToolIds?: string[];
 }): Promise<Record<string, Tool>> {
-  const cacheKey = getCacheKey(agentId, userId);
+  const toolCacheKey = getToolCacheKey(agentId, userId);
 
-  const cachedTools = toolCache.get(cacheKey);
-  if (cachedTools && cachedTools.expiresAt > Date.now()) {
+  // Check cache first using cacheManager
+  const cachedTools =
+    await cacheManager.get<Record<string, Tool>>(toolCacheKey);
+  if (cachedTools) {
     logger.info(
       {
         agentId,
         userId,
-        toolCount: Object.keys(cachedTools.tools).length,
+        toolCount: Object.keys(cachedTools).length,
       },
       "Returning cached MCP tools for chat",
     );
-    return cachedTools.tools;
-  } else if (cachedTools) {
-    toolCache.delete(cacheKey);
+    // Apply filtering if enabledToolIds provided and non-empty
+    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
   }
 
   logger.info(
@@ -381,8 +429,12 @@ export async function getChatMcpTools({
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
-  const teamToken = await selectTeamToken(agentId, userId, userIsProfileAdmin);
-  if (!teamToken) {
+  const mcpGwToken = await selectMCPGatewayToken(
+    agentId,
+    userId,
+    userIsProfileAdmin,
+  );
+  if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
       "No valid team token available for user - cannot execute tools",
@@ -508,9 +560,9 @@ export async function getChatMcpTools({
                 toolCall,
                 agentId,
                 {
-                  tokenId: teamToken.tokenId,
-                  teamId: teamToken.teamId,
-                  isOrganizationToken: teamToken.isOrganizationToken,
+                  tokenId: mcpGwToken.tokenId,
+                  teamId: mcpGwToken.teamId,
+                  isOrganizationToken: mcpGwToken.isOrganizationToken,
                   userId, // Pass userId for user-owned server priority
                 },
               );
@@ -575,12 +627,11 @@ export async function getChatMcpTools({
       "Successfully converted MCP tools to AI SDK Tool format",
     );
 
-    toolCache.set(cacheKey, {
-      tools: aiTools,
-      expiresAt: Date.now() + TOOL_CACHE_TTL_MS,
-    });
+    // Cache the tools using cacheManager with TTL
+    await cacheManager.set(toolCacheKey, aiTools, TOOL_CACHE_TTL_MS);
 
-    return aiTools;
+    // Apply filtering if enabledToolIds provided and non-empty
+    return await filterToolsByEnabledIds(aiTools, enabledToolIds);
   } catch (error) {
     logger.error(
       { agentId, userId, error },
@@ -588,4 +639,58 @@ export async function getChatMcpTools({
     );
     return {};
   }
+}
+
+/**
+ * Filter tools by enabled tool IDs
+ * If enabledToolIds is undefined or empty, returns all tools (default = all enabled)
+ * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
+ *
+ * @param tools - All available tools (keyed by tool name)
+ * @param enabledToolIds - Optional array of tool IDs to filter by
+ * @returns Filtered tools record
+ */
+async function filterToolsByEnabledIds(
+  tools: Record<string, Tool>,
+  enabledToolIds?: string[],
+): Promise<Record<string, Tool>> {
+  // Empty array or undefined = all tools enabled (default behavior)
+  if (!enabledToolIds || enabledToolIds.length === 0) {
+    logger.info(
+      {
+        totalTools: Object.keys(tools).length,
+        enabledToolIds: enabledToolIds?.length ?? 0,
+        reason: !enabledToolIds ? "undefined" : "empty array",
+      },
+      "No tool filtering applied - all tools enabled",
+    );
+    return tools;
+  }
+
+  // Fetch tool names for the enabled IDs
+  const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
+
+  // Filter tools to only include enabled ones
+  const filteredTools: Record<string, Tool> = {};
+  const excludedTools: string[] = [];
+  for (const [name, tool] of Object.entries(tools)) {
+    if (enabledToolNames.includes(name)) {
+      filteredTools[name] = tool;
+    } else {
+      excludedTools.push(name);
+    }
+  }
+
+  logger.info(
+    {
+      totalTools: Object.keys(tools).length,
+      enabledToolIds: enabledToolIds.length,
+      enabledToolNames: enabledToolNames.length,
+      filteredTools: Object.keys(filteredTools).length,
+      excludedTools,
+    },
+    "Filtered tools by enabled IDs",
+  );
+
+  return filteredTools;
 }

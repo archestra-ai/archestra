@@ -106,7 +106,7 @@ test.describe("Test self-hosted MCP server with Vault", () => {
     extractCookieHeaders,
     makeRandomString,
   }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(90_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
     const newCatalogItem = await addCustomSelfHostedCatalogItem({

@@ -1,7 +1,13 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId, SupportedProviders } from "@shared";
+import {
+  type ChatErrorResponse,
+  EXTERNAL_AGENT_ID_HEADER,
+  RouteId,
+  SupportedProviders,
+  USER_ID_HEADER,
+} from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -17,13 +23,18 @@ import logger from "@/logging";
 import {
   AgentModel,
   ChatApiKeyModel,
+  ConversationEnabledToolModel,
   ConversationModel,
   MessageModel,
   PromptModel,
+  TeamModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import { secretManager } from "@/secretsmanager";
+import {
+  getSecretValueForLlmProviderApiKey,
+  secretManager,
+} from "@/secretsmanager";
 import type { SupportedChatProvider } from "@/types";
 import {
   ApiError,
@@ -35,6 +46,7 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { mapProviderError } from "./errors";
 
 /**
  * Detect which provider a model belongs to based on its name
@@ -63,31 +75,33 @@ function detectProviderFromModel(model: string): SupportedChatProvider {
 }
 
 /**
- * Get a smart default model based on available API keys for the agent/organization.
- * Priority: profile-specific key > org default key > env var > fallback
+ * Get a smart default model based on available API keys for the user.
+ * Priority: personal key > team key > org-wide key > env var > fallback
  */
 async function getSmartDefaultModel(
-  agentId: string,
+  userId: string,
   organizationId: string,
 ): Promise<string> {
+  // Get user's team IDs for resolution
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
   /**
-   * Check what API keys are available (profile-specific or org defaults)
+   * Check what API keys are available using the new scope-based resolution
    * Try to find an available API key in order of preference
    */
   for (const provider of SupportedProviders) {
-    const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-      agentId,
-      provider,
-      organizationId,
-    );
+    const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
+      organizationId: organizationId,
+      userId: userId,
+      userTeamIds: userTeamIds,
+      provider: provider,
+      conversationId: null,
+    });
 
-    if (profileApiKey?.secretId) {
-      const secret = await secretManager().getSecret(profileApiKey.secretId);
-      const secretValue =
-        secret?.secret?.apiKey ??
-        secret?.secret?.anthropicApiKey ??
-        secret?.secret?.geminiApiKey ??
-        secret?.secret?.openaiApiKey;
+    if (resolvedKey?.secretId) {
+      const secretValue = await getSecretValueForLlmProviderApiKey(
+        resolvedKey.secretId,
+      );
 
       if (secretValue) {
         // Found a valid API key for this provider - return appropriate default model
@@ -153,26 +167,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = getExternalAgentId(headers);
 
       // Get conversation
-      const conversation = await ConversationModel.findById(
-        conversationId,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch MCP tools and agent prompts in parallel
-      const [mcpTools, prompt] = await Promise.all([
-        getChatMcpTools({
-          agentName: conversation.agent.name,
-          agentId: conversation.agentId,
-          userId: user.id,
-          userIsProfileAdmin,
-        }),
+      // Fetch enabled tool IDs, MCP tools, and agent prompts in parallel
+      const [enabledToolIds, prompt] = await Promise.all([
+        ConversationEnabledToolModel.findByConversation(conversationId),
         PromptModel.findById(conversation.promptId),
       ]);
+
+      // Fetch MCP tools with enabled tool filtering
+      const mcpTools = await getChatMcpTools({
+        agentName: conversation.agent.name,
+        agentId: conversation.agentId,
+        userId: user.id,
+        userIsProfileAdmin,
+        enabledToolIds,
+      });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
@@ -214,19 +232,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Resolve API key: profile-specific -> org default -> env var
+      // Resolve API key using priority: conversation > personal > team > org_wide > env var
       let providerApiKey: string | undefined;
       let apiKeySource = "environment";
 
-      // Try profile-specific API key first (getProfileApiKey already falls back to org default)
-      const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-        conversation.agentId,
-        provider,
-        organizationId,
-      );
+      // Get user's team IDs for API key resolution
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-      if (profileApiKey?.secretId) {
-        const secret = await secretManager().getSecret(profileApiKey.secretId);
+      // Try scope-based resolution (checks conversation's chatApiKeyId first, then personal > team > org_wide)
+      const resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId,
+        userId: user.id,
+        userTeamIds,
+        provider,
+        conversationId,
+      });
+
+      if (resolvedApiKey?.secretId) {
+        const secret = await secretManager().getSecret(resolvedApiKey.secretId);
         // Support both old format (anthropicApiKey) and new format (apiKey)
         const secretValue =
           secret?.secret?.apiKey ??
@@ -235,31 +258,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           secret?.secret?.openaiApiKey;
         if (secretValue) {
           providerApiKey = secretValue as string;
-          apiKeySource = profileApiKey.isOrganizationDefault
-            ? "organization default"
-            : "profile-specific";
-        }
-      }
-
-      // If profileApiKey exists but has no secretId, or getProfileApiKey returned null,
-      // explicitly try organization default as a fallback
-      if (!providerApiKey) {
-        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
-          organizationId,
-          provider,
-        );
-        if (orgDefault?.secretId) {
-          const secret = await secretManager().getSecret(orgDefault.secretId);
-          // Support both old format (anthropicApiKey) and new format (apiKey)
-          const secretValue =
-            secret?.secret?.apiKey ??
-            secret?.secret?.anthropicApiKey ??
-            secret?.secret?.geminiApiKey ??
-            secret?.secret?.openaiApiKey;
-          if (secretValue) {
-            providerApiKey = secretValue as string;
-            apiKeySource = "organization default";
-          }
+          apiKeySource = resolvedApiKey.scope;
         }
       }
 
@@ -294,12 +293,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create provider client pointing to LLM Proxy
-      // Forward external agent ID header if present
-      const clientHeaders = externalAgentId
-        ? {
-            [EXTERNAL_AGENT_ID_HEADER]: externalAgentId,
-          }
-        : undefined;
+      // Forward external agent ID and user ID headers to LLM Proxy
+      // so interactions can be properly associated with the user
+      const clientHeaders: Record<string, string> = {};
+      if (externalAgentId) {
+        clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
+      }
+      // Always include user ID header so interactions are saved with user association
+      clientHeaders[USER_ID_HEADER] = user.id;
 
       let llmClient:
         | ReturnType<typeof createAnthropic>
@@ -311,7 +312,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createAnthropic({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else if (provider === "gemini") {
         // URL format: /v1/gemini/:agentId/v1beta/models
@@ -319,14 +321,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmClient = createGoogleGenerativeAI({
           apiKey: providerApiKey || "vertex-ai-mode",
           baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else if (provider === "openai") {
         // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
         llmClient = createOpenAI({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
-          headers: clientHeaders,
+          headers:
+            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
       } else {
         throw new ApiError(400, `Unsupported provider: ${provider}`);
@@ -372,23 +376,36 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Chat stream error occurred",
           );
 
-          // Return full error as JSON string for debugging
+          // Map provider error to user-friendly ChatErrorResponse
+          const mappedError: ChatErrorResponse = mapProviderError(
+            error,
+            provider,
+          );
+
+          logger.info(
+            {
+              mappedError,
+              originalErrorType:
+                error instanceof Error ? error.name : typeof error,
+              willBeSentToFrontend: true,
+            },
+            "Returning mapped error to frontend via stream",
+          );
+
+          // mapProviderError safely serializes raw errors, but add defensive try-catch
           try {
-            const fullError = JSON.stringify(error, null, 2);
-            logger.info(
-              { fullError, willBeSentToFrontend: true },
-              "Returning full error to frontend via stream",
-            );
-            return fullError;
+            return JSON.stringify(mappedError);
           } catch (stringifyError) {
-            // If stringify fails (circular reference), fall back to error message
-            const fallbackMessage =
-              error instanceof Error ? error.message : String(error);
-            logger.info(
-              { fallbackMessage, stringifyError },
-              "Failed to stringify error, using fallback",
+            logger.error(
+              { stringifyError, errorCode: mappedError.code },
+              "Failed to stringify mapped error, returning minimal error",
             );
-            return fallbackMessage;
+            // Return a minimal error response without the raw error
+            return JSON.stringify({
+              code: mappedError.code,
+              message: mappedError.message,
+              isRetryable: mappedError.isRetryable,
+            });
           }
         },
         onFinish: async ({ messages: finalMessages }) => {
@@ -490,11 +507,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -570,15 +587,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId: true,
           title: true,
           selectedModel: true,
+          chatApiKeyId: true,
         })
           .required({ agentId: true })
-          .partial({ promptId: true, title: true, selectedModel: true }),
+          .partial({
+            promptId: true,
+            title: true,
+            selectedModel: true,
+            chatApiKeyId: true,
+          }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
       {
-        body: { agentId, promptId, title, selectedModel },
+        body: { agentId, promptId, title, selectedModel, chatApiKeyId },
         user,
         organizationId,
         headers,
@@ -598,9 +621,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Validate chatApiKeyId if provided
+      if (chatApiKeyId) {
+        await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
+      }
+
       // Determine smart default model if none specified
       const modelToUse =
-        selectedModel || (await getSmartDefaultModel(agentId, organizationId));
+        selectedModel || (await getSmartDefaultModel(user.id, organizationId));
 
       logger.info(
         {
@@ -608,6 +636,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           selectedModel,
           modelToUse,
+          chatApiKeyId,
           wasSmartDefault: !selectedModel,
         },
         "Creating conversation with model",
@@ -622,6 +651,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
+          chatApiKeyId,
         }),
       );
     },
@@ -632,7 +662,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatConversation,
-        description: "Update conversation title or model",
+        description: "Update conversation title, model, or API key",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
@@ -640,6 +670,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Validate chatApiKeyId if provided
+      if (body.chatApiKeyId) {
+        await validateChatApiKeyAccess(
+          body.chatApiKeyId,
+          user.id,
+          organizationId,
+        );
+      }
+
       const conversation = await ConversationModel.update(
         id,
         user.id,
@@ -698,11 +737,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const regenerate = body?.regenerate ?? false;
 
       // Get conversation with messages
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -755,44 +794,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Resolve API key: profile-specific -> org default -> env var
+      // Resolve API key using scope-based priority: personal -> team -> org_wide -> env var
       let anthropicApiKey: string | undefined;
 
-      // Try profile-specific API key first (if conversation has an agent)
-      if (conversation.agentId) {
-        const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-          conversation.agentId,
-          "anthropic",
-          organizationId,
-        );
+      // Get user's team IDs for resolution
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
-        if (profileApiKey?.secretId) {
-          const secret = await secretManager().getSecret(
-            profileApiKey.secretId,
-          );
-          // Support both old format (anthropicApiKey) and new format (apiKey)
-          const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
-          if (secretValue) {
-            anthropicApiKey = secretValue as string;
-          }
-        }
-      }
+      // Use resolveApiKey which handles priority: conversation key -> personal -> team -> org_wide
+      const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: organizationId,
+        userId: user.id,
+        userTeamIds: userTeamIds,
+        provider: "anthropic",
+        conversationId: id,
+      });
 
-      // If profileApiKey doesn't work, explicitly try organization default as a fallback
-      if (!anthropicApiKey) {
-        const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
-          organizationId,
-          "anthropic",
-        );
-        if (orgDefault?.secretId) {
-          const secret = await secretManager().getSecret(orgDefault.secretId);
-          // Support both old format (anthropicApiKey) and new format (apiKey)
-          const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
-          if (secretValue) {
-            anthropicApiKey = secretValue as string;
-          }
+      if (resolvedKey?.secretId) {
+        const secret = await secretManager().getSecret(resolvedKey.secretId);
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+        if (secretValue) {
+          anthropicApiKey = secretValue as string;
         }
       }
 
@@ -861,6 +884,221 @@ The title should capture the main topic or theme of the conversation. Respond wi
       }
     },
   );
+
+  // Message Update Route
+  fastify.patch(
+    "/api/chat/messages/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateChatMessage,
+        description: "Update a specific text part in a message",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          partIndex: z.number().int().min(0),
+          text: z.string().min(1),
+          deleteSubsequentMessages: z.boolean().optional(),
+        }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async (
+      {
+        params: { id },
+        body: { partIndex, text, deleteSubsequentMessages },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Fetch the message to get its conversation ID
+      const message = await MessageModel.findById(id);
+
+      if (!message) {
+        throw new ApiError(404, "Message not found");
+      }
+
+      // Verify the user has access to the conversation
+      const conversation = await ConversationModel.findById({
+        id: message.conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Message not found or access denied");
+      }
+
+      // Update the message and optionally delete subsequent messages atomically
+      // Using a transaction ensures both operations succeed or fail together,
+      // preventing inconsistent state where message is updated but subsequent
+      // messages remain when they should have been deleted
+      await MessageModel.updateTextPartAndDeleteSubsequent(
+        id,
+        partIndex,
+        text,
+        deleteSubsequentMessages ?? false,
+      );
+
+      // Return updated conversation with all messages
+      const updatedConversation = await ConversationModel.findById({
+        id: message.conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!updatedConversation) {
+        throw new ApiError(500, "Failed to retrieve updated conversation");
+      }
+
+      return reply.send(updatedConversation);
+    },
+  );
+
+  // Enabled Tools Routes
+  fastify.get(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.GetConversationEnabledTools,
+        description:
+          "Get enabled tools for a conversation. Empty array means all profile tools are enabled (default).",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.object({
+            hasCustomSelection: z.boolean(),
+            enabledToolIds: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const [hasCustomSelection, enabledToolIds] = await Promise.all([
+        ConversationEnabledToolModel.hasCustomSelection(id),
+        ConversationEnabledToolModel.findByConversation(id),
+      ]);
+
+      return reply.send({
+        hasCustomSelection,
+        enabledToolIds,
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.UpdateConversationEnabledTools,
+        description:
+          "Set enabled tools for a conversation. Replaces all existing selections.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          toolIds: z.array(z.string()),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            hasCustomSelection: z.boolean(),
+            enabledToolIds: z.array(z.string()),
+          }),
+        ),
+      },
+    },
+    async (
+      { params: { id }, body: { toolIds }, user, organizationId },
+      reply,
+    ) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationEnabledToolModel.setEnabledTools(id, toolIds);
+
+      return reply.send({
+        hasCustomSelection: toolIds.length > 0,
+        enabledToolIds: toolIds,
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/chat/conversations/:id/enabled-tools",
+    {
+      schema: {
+        operationId: RouteId.DeleteConversationEnabledTools,
+        description:
+          "Clear custom tool selection for a conversation (revert to all tools enabled)",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Verify conversation exists and user owns it
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationEnabledToolModel.clearCustomSelection(id);
+
+      return reply.send({ success: true });
+    },
+  );
 };
+
+/**
+ * Validates that a chat API key exists, belongs to the organization,
+ * and the user has access to it based on scope.
+ * Throws ApiError if validation fails.
+ */
+async function validateChatApiKeyAccess(
+  chatApiKeyId: string,
+  userId: string,
+  organizationId: string,
+): Promise<void> {
+  const apiKey = await ChatApiKeyModel.findById(chatApiKeyId);
+  if (!apiKey || apiKey.organizationId !== organizationId) {
+    throw new ApiError(404, "Chat API key not found");
+  }
+
+  // Verify user has access to the API key based on scope
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const canAccessKey =
+    apiKey.scope === "org_wide" ||
+    (apiKey.scope === "personal" && apiKey.userId === userId) ||
+    (apiKey.scope === "team" &&
+      apiKey.teamId &&
+      userTeamIds.includes(apiKey.teamId));
+
+  if (!canAccessKey) {
+    throw new ApiError(403, "You do not have access to this API key");
+  }
+}
 
 export default chatRoutes;

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Manually verified licenses for packages without proper license metadata in package.json or LICENSE files",
+  "licenses": {
+    "@instantdb/core": {
+      "license": "Apache-2.0",
+      "source": "https://github.com/instantdb/instant/blob/main/LICENSE",
+      "verifiedBy": "manual inspection",
+      "verifiedDate": "2025-12-18"
+    },
+    "@instantdb/react": {
+      "license": "Apache-2.0",
+      "source": "https://github.com/instantdb/instant/blob/main/LICENSE",
+      "verifiedBy": "manual inspection",
+      "verifiedDate": "2025-12-18"
+    },
+    "@instantdb/react-common": {
+      "license": "Apache-2.0",
+      "source": "https://github.com/instantdb/instant/blob/main/LICENSE",
+      "verifiedBy": "manual inspection",
+      "verifiedDate": "2025-12-18"
+    },
+    "@instantdb/version": {
+      "license": "Apache-2.0",
+      "source": "https://github.com/instantdb/instant/blob/main/LICENSE",
+      "verifiedBy": "manual inspection",
+      "verifiedDate": "2025-12-18"
+    }
+  }
+}

@@ -6,6 +6,7 @@ import {
   Info,
   MoreVertical,
   Pencil,
+  RefreshCcw,
   RefreshCw,
   Trash2,
   User,
@@ -89,6 +90,7 @@ export type McpServerCardProps = {
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
+  onRestartAll: () => void;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -110,6 +112,7 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
+  onRestartAll,
   onDetails,
   onEdit,
   onDelete,
@@ -259,6 +262,33 @@ export function McpServerCard({
               )}
             </Tooltip>
           </TooltipProvider>
+          <WithPermissions
+            permissions={{ mcpServer: ["admin"] }}
+            noPermissionHandle="hide"
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <DropdownMenuItem
+                      onClick={onRestartAll}
+                      disabled={variant !== "local"}
+                    >
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      Restart
+                    </DropdownMenuItem>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {variant !== "local"
+                      ? "Only available for local MCP servers"
+                      : "Restarts all running instances of this MCP server."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </WithPermissions>
           <DropdownMenuItem onClick={onDetails}>
             <Info className="mr-2 h-4 w-4" />
             About
@@ -364,6 +394,17 @@ export function McpServerCard({
     </>
   );
 
+  const errorBanner = isCurrentUserAuthenticated &&
+    hasError &&
+    errorMessage && (
+      <div
+        className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+        data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+      >
+        {errorMessage}
+      </div>
+    );
+
   const remoteCardContent = (
     <>
       <WithPermissions
@@ -379,11 +420,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
-      {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
-          {errorMessage}
-        </div>
-      )}
+      {errorBanner}
       {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
@@ -445,11 +482,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
-      {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
-          {errorMessage}
-        </div>
-      )}
+      {errorBanner}
       {isCurrentUserAuthenticated && needsReinstall && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
@@ -568,6 +601,9 @@ export function McpServerCard({
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
                 useDynamicTeamCredential: false,
+                policiesAutoConfiguredAt: null,
+                policiesAutoConfiguringStartedAt: null,
+                policiesAutoConfiguredReasoning: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,

@@ -398,4 +398,315 @@ describe("StatisticsModel", () => {
       expect(Array.isArray(result)).toBe(true);
     });
   });
+
+  describe("groupTimeSeries", () => {
+    test("should preserve separate entries for different models in same time bucket", () => {
+      const sameTimestamp = "2024-01-15T10:00:00.000Z";
+
+      const data = [
+        {
+          timeBucket: sameTimestamp,
+          model: "gpt-4",
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+        {
+          timeBucket: sameTimestamp,
+          model: "claude-3",
+          requests: 5,
+          inputTokens: 800,
+          outputTokens: 400,
+        },
+      ];
+
+      // Use "1h" timeframe which triggers grouping (5-minute buckets)
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "model");
+
+      // Should have 2 separate entries, one for each model
+      expect(result).toHaveLength(2);
+
+      const gpt4Entry = result.find((r) => r.model === "gpt-4");
+      const claudeEntry = result.find((r) => r.model === "claude-3");
+
+      expect(gpt4Entry).toBeDefined();
+      expect(claudeEntry).toBeDefined();
+      expect(gpt4Entry?.requests).toBe(10);
+      expect(claudeEntry?.requests).toBe(5);
+    });
+
+    test("should aggregate data for same model across same time bucket", () => {
+      // Use "1h" timeframe which uses 5-minute buckets
+      // Both timestamps are in the same 5-minute bucket (10:00-10:05)
+      const sameTimestamp = "2024-01-15T10:01:00.000Z";
+      const slightlyLater = "2024-01-15T10:02:00.000Z";
+
+      const data = [
+        {
+          timeBucket: sameTimestamp,
+          model: "gpt-4",
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+        {
+          timeBucket: slightlyLater,
+          model: "gpt-4",
+          requests: 5,
+          inputTokens: 500,
+          outputTokens: 250,
+        },
+      ];
+
+      // "1h" uses 5-minute buckets, so these should aggregate
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "model");
+
+      // Should aggregate into single entry
+      expect(result).toHaveLength(1);
+      expect(result[0].model).toBe("gpt-4");
+      expect(result[0].requests).toBe(15);
+      expect(result[0].inputTokens).toBe(1500);
+      expect(result[0].outputTokens).toBe(750);
+    });
+
+    test("should preserve separate entries for different teams in same time bucket", () => {
+      const sameTimestamp = "2024-01-15T10:00:00.000Z";
+
+      const data = [
+        {
+          timeBucket: sameTimestamp,
+          teamId: "team-1",
+          teamName: "Engineering",
+          requests: 20,
+          inputTokens: 2000,
+          outputTokens: 1000,
+        },
+        {
+          timeBucket: sameTimestamp,
+          teamId: "team-2",
+          teamName: "Marketing",
+          requests: 15,
+          inputTokens: 1500,
+          outputTokens: 750,
+        },
+      ];
+
+      // Use "1h" timeframe which triggers grouping
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "teamId");
+
+      expect(result).toHaveLength(2);
+
+      const team1 = result.find((r) => r.teamId === "team-1");
+      const team2 = result.find((r) => r.teamId === "team-2");
+
+      expect(team1?.requests).toBe(20);
+      expect(team2?.requests).toBe(15);
+    });
+
+    test("should preserve separate entries for different agents in same time bucket", () => {
+      const sameTimestamp = "2024-01-15T10:00:00.000Z";
+
+      const data = [
+        {
+          timeBucket: sameTimestamp,
+          agentId: "agent-1",
+          agentName: "Chatbot",
+          teamName: null,
+          requests: 100,
+          inputTokens: 10000,
+          outputTokens: 5000,
+        },
+        {
+          timeBucket: sameTimestamp,
+          agentId: "agent-2",
+          agentName: "Assistant",
+          teamName: null,
+          requests: 50,
+          inputTokens: 5000,
+          outputTokens: 2500,
+        },
+      ];
+
+      // Use "1h" timeframe which triggers grouping
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "agentId");
+
+      expect(result).toHaveLength(2);
+
+      const agent1 = result.find(
+        (r): r is Extract<typeof r, { agentId: string }> =>
+          "agentId" in r && r.agentId === "agent-1",
+      );
+      const agent2 = result.find(
+        (r): r is Extract<typeof r, { agentId: string }> =>
+          "agentId" in r && r.agentId === "agent-2",
+      );
+
+      expect(agent1?.requests).toBe(100);
+      expect(agent2?.requests).toBe(50);
+    });
+
+    test("should handle empty input array", () => {
+      // Use "1h" timeframe which triggers grouping
+      const result = StatisticsModel.groupTimeSeries([], "1h", "model");
+      expect(result).toEqual([]);
+    });
+
+    test("should return data unchanged for standard intervals (24h)", () => {
+      const data = [
+        {
+          timeBucket: "2024-01-15T10:00:00.000Z",
+          model: "gpt-4",
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+      ];
+
+      // 24h uses 60-minute buckets, which should pass through unchanged
+      const result = StatisticsModel.groupTimeSeries(data, "24h", "model");
+
+      expect(result).toEqual(data);
+    });
+
+    test("should sort results by time bucket", () => {
+      const data = [
+        {
+          timeBucket: "2024-01-15T10:30:00.000Z",
+          model: "gpt-4",
+          requests: 5,
+          inputTokens: 500,
+          outputTokens: 250,
+        },
+        {
+          timeBucket: "2024-01-15T10:00:00.000Z",
+          model: "gpt-4",
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+        {
+          timeBucket: "2024-01-15T10:15:00.000Z",
+          model: "gpt-4",
+          requests: 8,
+          inputTokens: 800,
+          outputTokens: 400,
+        },
+      ];
+
+      // Use "1h" timeframe which triggers grouping
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "model");
+
+      // Should be sorted by time
+      expect(new Date(result[0].timeBucket).getTime()).toBeLessThan(
+        new Date(result[1].timeBucket).getTime(),
+      );
+      expect(new Date(result[1].timeBucket).getTime()).toBeLessThan(
+        new Date(result[2].timeBucket).getTime(),
+      );
+    });
+
+    test("should handle null/undefined groupBy values", () => {
+      const data = [
+        {
+          timeBucket: "2024-01-15T10:00:00.000Z",
+          model: null as unknown as string,
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+        {
+          timeBucket: "2024-01-15T10:00:00.000Z",
+          model: undefined as unknown as string,
+          requests: 5,
+          inputTokens: 500,
+          outputTokens: 250,
+        },
+      ];
+
+      // Use "1h" timeframe which triggers grouping
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "model");
+
+      // Both null and undefined should be grouped as "unknown"
+      expect(result).toHaveLength(1);
+      expect(result[0].requests).toBe(15);
+    });
+
+    test("should correctly aggregate multiple models across multiple time buckets", () => {
+      // Using "1h" timeframe which uses 5-minute buckets
+      const data = [
+        // First 5-minute bucket (10:00-10:05) - two models
+        {
+          timeBucket: "2024-01-15T10:00:00.000Z",
+          model: "gpt-4",
+          requests: 10,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+        {
+          timeBucket: "2024-01-15T10:02:00.000Z", // Same bucket as above
+          model: "gpt-4",
+          requests: 5,
+          inputTokens: 500,
+          outputTokens: 250,
+        },
+        {
+          timeBucket: "2024-01-15T10:01:00.000Z",
+          model: "claude-3",
+          requests: 8,
+          inputTokens: 800,
+          outputTokens: 400,
+        },
+        // Second 5-minute bucket (10:10-10:15) - two models
+        {
+          timeBucket: "2024-01-15T10:10:00.000Z",
+          model: "gpt-4",
+          requests: 20,
+          inputTokens: 2000,
+          outputTokens: 1000,
+        },
+        {
+          timeBucket: "2024-01-15T10:12:00.000Z",
+          model: "claude-3",
+          requests: 12,
+          inputTokens: 1200,
+          outputTokens: 600,
+        },
+      ];
+
+      const result = StatisticsModel.groupTimeSeries(data, "1h", "model");
+
+      // Should have 4 entries: 2 models × 2 time buckets
+      expect(result).toHaveLength(4);
+
+      // First bucket gpt-4: 10 + 5 = 15 requests
+      const bucket1Gpt4 = result.find(
+        (r) =>
+          r.model === "gpt-4" && new Date(r.timeBucket).getUTCMinutes() === 0,
+      );
+      expect(bucket1Gpt4?.requests).toBe(15);
+
+      // First bucket claude-3: 8 requests
+      const bucket1Claude = result.find(
+        (r) =>
+          r.model === "claude-3" &&
+          new Date(r.timeBucket).getUTCMinutes() === 0,
+      );
+      expect(bucket1Claude?.requests).toBe(8);
+
+      // Second bucket gpt-4: 20 requests
+      const bucket2Gpt4 = result.find(
+        (r) =>
+          r.model === "gpt-4" && new Date(r.timeBucket).getUTCMinutes() === 10,
+      );
+      expect(bucket2Gpt4?.requests).toBe(20);
+
+      // Second bucket claude-3: 12 requests
+      const bucket2Claude = result.find(
+        (r) =>
+          r.model === "claude-3" &&
+          new Date(r.timeBucket).getUTCMinutes() === 10,
+      );
+      expect(bucket2Claude?.requests).toBe(12);
+    });
+  });
 });

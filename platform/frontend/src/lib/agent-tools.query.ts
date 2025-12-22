@@ -8,6 +8,7 @@ const {
   bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
+  autoConfigureAgentToolPolicies,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -266,6 +267,34 @@ export function useBulkUpdateProfileTools() {
         queryKey: ["agent-tools"],
       });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useAutoConfigurePolicies() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (agentToolIds: string[]) => {
+      const result = await autoConfigureAgentToolPolicies({
+        body: { agentToolIds },
+      });
+
+      if (!result.data) {
+        const errorMessage =
+          result.error && "message" in result.error
+            ? String(result.error.message)
+            : "Failed to auto-configure policies";
+        throw new Error(errorMessage);
+      }
+
+      return result.data;
+    },
+    onSuccess: () => {
+      // Invalidate agent-tools queries to refetch with new policies
+      queryClient.invalidateQueries({
+        queryKey: ["agent-tools"],
+      });
     },
   });
 }

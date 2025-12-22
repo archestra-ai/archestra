@@ -15,6 +15,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -49,6 +50,48 @@ class AgentToolModel {
         ...options,
       })
       .returning();
+
+    // Auto-configure policies if enabled (run in background)
+    // Import at top of method to avoid circular dependency
+    const { agentToolAutoPolicyService } = await import(
+      "./agent-tool-auto-policy"
+    );
+    const { default: OrganizationModel } = await import("./organization");
+
+    // Get agent's organization via team relationship and trigger auto-configure in background
+    db.select({ organizationId: schema.teamsTable.organizationId })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+
+        const organizationId = rows[0].organizationId;
+        const organization = await OrganizationModel.getById(organizationId);
+
+        if (organization?.autoConfigureNewTools) {
+          // Use the unified method with timeout and loading state management
+          await agentToolAutoPolicyService.configurePoliciesForAgentToolWithTimeout(
+            agentTool.id,
+            organizationId,
+          );
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            agentToolId: agentTool.id,
+            agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger auto-configure for new agent-tool",
+        );
+      });
+
     return agentTool;
   }
 
@@ -341,6 +384,9 @@ class AgentToolModel {
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"
+        | "policiesAutoConfiguredAt"
+        | "policiesAutoConfiguringStartedAt"
+        | "policiesAutoConfiguredReasoning"
       >
     >,
   ) {
@@ -359,17 +405,26 @@ class AgentToolModel {
     ids: string[],
     field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
     value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+    clearAutoConfigured = false,
   ): Promise<number> {
     if (ids.length === 0) {
       return 0;
     }
 
+    const updateData: Record<string, unknown> = {
+      [field]: value,
+      updatedAt: new Date(),
+    };
+
+    // Clear auto-configured timestamp and reasoning if requested (manual policy change)
+    if (clearAutoConfigured) {
+      updateData.policiesAutoConfiguredAt = null;
+      updateData.policiesAutoConfiguredReasoning = null;
+    }
+
     const result = await db
       .update(schema.agentToolsTable)
-      .set({
-        [field]: value,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(inArray(schema.agentToolsTable.id, ids));
 
     return result.rowCount ?? 0;

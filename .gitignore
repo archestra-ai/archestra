@@ -11,3 +11,5 @@
 *.sw?
 
 *.log
+
+platform/CLAUDE_LOCAL.md

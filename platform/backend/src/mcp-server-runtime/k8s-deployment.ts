@@ -7,24 +7,156 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
-import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
+import type { K8sDeploymentState, K8sDeploymentStatusSummary } from "./schemas";
 
 const {
   orchestrator: { mcpServerBaseImage },
 } = config;
 
 /**
- * K8sPod manages a single MCP server running as a Kubernetes pod.
- * This is analogous to PodmanContainer in the desktop app.
+ * Cached nodeSelector from the archestra-platform pod.
+ * This is fetched once on first use and reused for all MCP server deployments.
  */
-export default class K8sPod {
+let cachedPlatformNodeSelector: k8s.V1PodSpec["nodeSelector"] | null = null;
+let nodeSelectorFetched = false;
+
+/**
+ * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
+ * K8s client errors can have either `statusCode` or `code` property set to 404.
+ */
+function isK8s404Error(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    (("statusCode" in error && error.statusCode === 404) ||
+      ("code" in error && error.code === 404))
+  );
+}
+
+/**
+ * Fetches the nodeSelector from the archestra-platform pod (the pod running the backend).
+ * This allows MCP server deployments to inherit the same nodeSelector as the platform,
+ * which is useful when targeting specific node pools (e.g., Karpenter nodepools).
+ *
+ * The result is cached after the first call to avoid repeated API calls.
+ *
+ * @param k8sApi - The Kubernetes CoreV1Api client
+ * @param namespace - The namespace to search for the platform pod
+ * @returns The nodeSelector from the platform pod, or null if not found/not configured
+ */
+export async function fetchPlatformPodNodeSelector(
+  k8sApi: k8s.CoreV1Api,
+  namespace: string,
+): Promise<k8s.V1PodSpec["nodeSelector"] | null> {
+  // Return cached value if already fetched
+  if (nodeSelectorFetched) {
+    return cachedPlatformNodeSelector;
+  }
+
+  try {
+    // Try to find the current pod by reading the POD_NAME environment variable
+    // which is typically set via the Kubernetes downward API
+    const podName = process.env.POD_NAME || process.env.HOSTNAME;
+
+    if (podName) {
+      // Read the current pod's spec directly
+      const pod = await k8sApi.readNamespacedPod({
+        name: podName,
+        namespace,
+      });
+
+      cachedPlatformNodeSelector = pod.spec?.nodeSelector || null;
+      nodeSelectorFetched = true;
+
+      if (cachedPlatformNodeSelector) {
+        logger.info(
+          { nodeSelector: cachedPlatformNodeSelector },
+          "Fetched nodeSelector from archestra-platform pod",
+        );
+      } else {
+        logger.debug("Archestra-platform pod has no nodeSelector configured");
+      }
+
+      return cachedPlatformNodeSelector;
+    }
+
+    // Fallback: Search for pods with app.kubernetes.io/name=archestra-platform label
+    const pods = await k8sApi.listNamespacedPod({
+      namespace,
+      labelSelector: "app.kubernetes.io/name=archestra-platform",
+    });
+
+    // Get the first running pod's nodeSelector
+    const runningPod = pods.items.find(
+      (pod) => pod.status?.phase === "Running",
+    );
+
+    if (runningPod?.spec?.nodeSelector) {
+      cachedPlatformNodeSelector = runningPod.spec.nodeSelector;
+      nodeSelectorFetched = true;
+
+      logger.info(
+        { nodeSelector: cachedPlatformNodeSelector },
+        "Fetched nodeSelector from archestra-platform pod (via label selector)",
+      );
+
+      return cachedPlatformNodeSelector;
+    }
+
+    // No nodeSelector found
+    nodeSelectorFetched = true;
+    cachedPlatformNodeSelector = null;
+
+    logger.debug(
+      "No archestra-platform pod found or no nodeSelector configured",
+    );
+
+    return null;
+  } catch (error) {
+    // Log the error but don't fail - nodeSelector inheritance is optional
+    logger.warn(
+      { err: error },
+      "Failed to fetch archestra-platform pod nodeSelector, MCP servers will use default scheduling",
+    );
+
+    nodeSelectorFetched = true;
+    cachedPlatformNodeSelector = null;
+
+    return null;
+  }
+}
+
+/**
+ * Resets the cached platform nodeSelector.
+ * This is primarily useful for testing.
+ */
+export function resetPlatformNodeSelectorCache(): void {
+  cachedPlatformNodeSelector = null;
+  nodeSelectorFetched = false;
+}
+
+/**
+ * Returns the cached platform nodeSelector without fetching.
+ * This is useful for synchronous access after the initial fetch.
+ */
+export function getCachedPlatformNodeSelector():
+  | k8s.V1PodSpec["nodeSelector"]
+  | null {
+  return cachedPlatformNodeSelector;
+}
+
+/**
+ * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
+ */
+export default class K8sDeployment {
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
+  private k8sAppsApi: k8s.AppsV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
   private namespace: string;
-  private podName: string;
-  private state: K8sPodState = "not_created";
+  private deploymentName: string; // Used for deployment name
+  private state: K8sDeploymentState = "not_created";
   private errorMessage: string | null = null;
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
@@ -38,6 +170,7 @@ export default class K8sPod {
   constructor(
     mcpServer: McpServer,
     k8sApi: k8s.CoreV1Api,
+    k8sAppsApi: k8s.AppsV1Api,
     k8sAttach: Attach,
     k8sLog: k8s.Log,
     namespace: string,
@@ -47,22 +180,25 @@ export default class K8sPod {
   ) {
     this.mcpServer = mcpServer;
     this.k8sApi = k8sApi;
+    this.k8sAppsApi = k8sAppsApi;
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
     this.namespace = namespace;
     this.catalogItem = catalogItem;
     this.userConfigValues = userConfigValues;
     this.environmentValues = environmentValues;
-    this.podName = K8sPod.constructPodName(mcpServer);
+    this.deploymentName = K8sDeployment.constructDeploymentName(mcpServer);
   }
 
   /**
-   * Constructs a valid Kubernetes pod name for an MCP server.
+   * Constructs a valid Kubernetes deployment name for an MCP server.
    *
-   * Creates a pod name in the format "mcp-<slugified-name>".
+   * Creates a deployment name in the format "mcp-<slugified-name>".
    */
-  static constructPodName(mcpServer: McpServer): string {
-    const slugified = K8sPod.ensureStringIsRfc1123Compliant(mcpServer.name);
+  static constructDeploymentName(mcpServer: McpServer): string {
+    const slugified = K8sDeployment.ensureStringIsRfc1123Compliant(
+      mcpServer.name,
+    );
     return `mcp-${slugified}`.substring(0, 253);
   }
 
@@ -96,6 +232,16 @@ export default class K8sPod {
   }
 
   /**
+   * Sanitizes a single label value to ensure it's RFC 1123 compliant,
+   * no longer than 63 characters, and ends with an alphanumeric character.
+   */
+  static sanitizeLabelValue(value: string): string {
+    return K8sDeployment.ensureStringIsRfc1123Compliant(value)
+      .substring(0, 63)
+      .replace(/[^a-z0-9]+$/, "");
+  }
+
+  /**
    * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
    * Also ensures values are no longer than 63 characters as per Kubernetes label requirements.
    */
@@ -104,12 +250,8 @@ export default class K8sPod {
   ): Record<string, string> {
     const sanitized: Record<string, string> = {};
     for (const [key, value] of Object.entries(labels)) {
-      // Labels values must be 63 characters or less and end with alphanumeric
-      const compliantValue = K8sPod.ensureStringIsRfc1123Compliant(value)
-        .substring(0, 63)
-        .replace(/[^a-z0-9]+$/, "");
-
-      sanitized[K8sPod.ensureStringIsRfc1123Compliant(key)] = compliantValue;
+      sanitized[K8sDeployment.ensureStringIsRfc1123Compliant(key)] =
+        K8sDeployment.sanitizeLabelValue(value);
     }
     return sanitized;
   }
@@ -129,7 +271,9 @@ export default class K8sPod {
    * Create or update a Kubernetes Secret for environment variables marked as "secret" type
    */
   async createK8sSecret(secretData: Record<string, string>): Promise<void> {
-    const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+    const k8sSecretName = K8sDeployment.constructK8sSecretName(
+      this.mcpServer.id,
+    );
 
     if (Object.keys(secretData).length === 0) {
       logger.debug(
@@ -149,7 +293,7 @@ export default class K8sPod {
       const secret: k8s.V1Secret = {
         metadata: {
           name: k8sSecretName,
-          labels: K8sPod.sanitizeMetadataLabels({
+          labels: K8sDeployment.sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
             "mcp-server-name": this.mcpServer.name,
@@ -228,7 +372,9 @@ export default class K8sPod {
    * Delete the Kubernetes Secret for this MCP server
    */
   async deleteK8sSecret(): Promise<void> {
-    const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+    const k8sSecretName = K8sDeployment.constructK8sSecretName(
+      this.mcpServer.id,
+    );
 
     try {
       await this.k8sApi.deleteNamespacedSecret({
@@ -246,13 +392,7 @@ export default class K8sPod {
       );
     } catch (error: unknown) {
       // If secret doesn't exist (404), that's okay - it may have been deleted already or never created
-      const is404 =
-        error &&
-        typeof error === "object" &&
-        (("statusCode" in error && error.statusCode === 404) ||
-          ("code" in error && error.code === 404));
-
-      if (is404) {
+      if (isK8s404Error(error)) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,
@@ -276,104 +416,164 @@ export default class K8sPod {
   }
 
   /**
-   * Generate the pod specification for this MCP server
+   * Delete the Kubernetes Service for this MCP server (used by HTTP-based servers)
+   */
+  async deleteK8sService(): Promise<void> {
+    const serviceName = `${this.deploymentName}-service`;
+
+    try {
+      await this.k8sApi.deleteNamespacedService({
+        name: serviceName,
+        namespace: this.namespace,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          serviceName,
+          namespace: this.namespace,
+        },
+        "Deleted K8s Service for MCP server",
+      );
+    } catch (error: unknown) {
+      // If service doesn't exist (404), that's okay - it may have been deleted already or never created
+      if (isK8s404Error(error)) {
+        logger.debug(
+          {
+            mcpServerId: this.mcpServer.id,
+            serviceName,
+          },
+          "K8s Service not found (already deleted or never created)",
+        );
+        return;
+      }
+
+      logger.error(
+        {
+          err: error,
+          mcpServerId: this.mcpServer.id,
+          serviceName,
+        },
+        "Failed to delete K8s Service",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Generate the deployment specification for this MCP server
    *
    * @param dockerImage - The Docker image to use for the container
    * @param localConfig - The local configuration for the MCP server
-   * @param needsHttp - Whether the pod needs HTTP port exposure
+   * @param needsHttp - Whether the deployment's pod needs HTTP port exposure
    * @param httpPort - The HTTP port to expose (if needsHttp is true)
-   * @returns The Kubernetes pod specification
+   * @param nodeSelector - Optional nodeSelector to apply to the pod spec (e.g., inherited from platform pod)
+   * @returns The Kubernetes deployment specification
    */
-  generatePodSpec(
+  generateDeploymentSpec(
     dockerImage: string,
     localConfig: z.infer<typeof LocalConfigSchema>,
     needsHttp: boolean,
     httpPort: number,
-  ): k8s.V1Pod {
-    return {
-      metadata: {
-        name: this.podName,
-        labels: K8sPod.sanitizeMetadataLabels({
-          app: "mcp-server",
-          "mcp-server-id": this.mcpServer.id,
-          "mcp-server-name": this.mcpServer.name,
-        }),
-      },
-      spec: {
-        // Fast shutdown for stateless MCP servers (default is 30s)
-        terminationGracePeriodSeconds: 5,
-        // Use dedicated service account if serviceAccount is enabled in localConfig
-        // This allows MCP servers that need Kubernetes API access (like the K8s MCP server)
-        // to use a service account with appropriate permissions
-        // Other MCP servers will use the default service account (no K8s permissions)
-        ...(localConfig.serviceAccount
-          ? {
-              serviceAccountName:
-                config.orchestrator.kubernetes.mcpK8sServiceAccountName,
-            }
-          : {}),
-        containers: [
-          {
-            name: "mcp-server",
-            image: dockerImage,
-            env: this.createPodEnvFromConfig(),
-            /**
-             * Use the command from local config if provided
-             * If not provided, Kubernetes will use the Docker image's default CMD
-             */
-            ...(localConfig.command
-              ? {
-                  command: [localConfig.command],
-                }
-              : {}),
-            args: (localConfig.arguments || []).map((arg) => {
-              // Interpolate ${user_config.xxx} placeholders with actual values
-              // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
-              if (this.environmentValues || this.userConfigValues) {
-                return arg.replace(
-                  /\$\{user_config\.([^}]+)\}/g,
-                  (match, configKey) => {
-                    return (
-                      this.environmentValues?.[configKey] ||
-                      this.userConfigValues?.[configKey] ||
-                      match
-                    );
-                  },
-                );
+    nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
+  ): k8s.V1Deployment {
+    // Labels common to Deployment, RS, and Pods
+    const labels = K8sDeployment.sanitizeMetadataLabels({
+      app: "mcp-server",
+      "mcp-server-id": this.mcpServer.id,
+      "mcp-server-name": this.mcpServer.name,
+    });
+
+    const podSpec: k8s.V1PodSpec = {
+      // Fast shutdown for stateless MCP servers (default is 30s)
+      terminationGracePeriodSeconds: 5,
+      // Use dedicated service account if requested
+      ...(localConfig.serviceAccount
+        ? {
+            serviceAccountName:
+              config.orchestrator.kubernetes.mcpK8sServiceAccountName,
+          }
+        : {}),
+      // Apply nodeSelector if provided (e.g., inherited from archestra-platform pod)
+      ...(nodeSelector && Object.keys(nodeSelector).length > 0
+        ? { nodeSelector }
+        : {}),
+      containers: [
+        {
+          name: "mcp-server",
+          image: dockerImage,
+          env: this.createContainerEnvFromConfig(),
+          ...(localConfig.command
+            ? {
+                command: [localConfig.command],
               }
-              return arg;
-            }),
-            // For stdio-based MCP servers, we use stdin/stdout
-            stdin: true,
-            tty: false,
-            // For HTTP-based MCP servers, expose port
-            ports: needsHttp
-              ? [
-                  {
-                    containerPort: httpPort,
-                    protocol: "TCP",
-                  },
-                ]
-              : undefined,
-            // Set resource requests for the container
-            // It's needed to make k8s scheduler play nice with mcp server pods,
-            // since k8s schedules pods and nodes based on resource requests and limits.
-            resources: {
-              requests: {
-                memory: "128Mi",
-                cpu: "50m",
-              },
+            : {}),
+          args: (localConfig.arguments || []).map((arg) => {
+            // Interpolate ${user_config.xxx} placeholders with actual values
+            // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
+            if (this.environmentValues || this.userConfigValues) {
+              return arg.replace(
+                /\$\{user_config\.([^}]+)\}/g,
+                (match, configKey) => {
+                  return (
+                    this.environmentValues?.[configKey] ||
+                    this.userConfigValues?.[configKey] ||
+                    match
+                  );
+                },
+              );
+            }
+            return arg;
+          }),
+          // For stdio-based MCP servers, we use stdin/stdout
+          stdin: true,
+          tty: false,
+          // For HTTP-based MCP servers, expose port
+          ports: needsHttp
+            ? [
+                {
+                  containerPort: httpPort,
+                  protocol: "TCP",
+                },
+              ]
+            : undefined,
+          // Set resource requests for the container
+          resources: {
+            requests: {
+              memory: "128Mi",
+              cpu: "50m",
             },
           },
-        ],
-        restartPolicy: "Always",
+        },
+      ],
+      restartPolicy: "Always",
+    };
+
+    return {
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: {
+        name: this.deploymentName, // Use the same naming convention for the deployment
+        labels,
+      },
+      spec: {
+        replicas: 1,
+        selector: {
+          matchLabels: labels,
+        },
+        template: {
+          metadata: {
+            labels,
+          },
+          spec: podSpec,
+        },
       },
     };
   }
 
   /**
    * Rewrite localhost URLs to host.docker.internal for Docker Desktop Kubernetes.
-   * This allows pods to access services running on the host machine.
+   * This allows deployment pods to access services running on the host machine.
    *
    * Note: This assumes Docker Desktop. Other local K8s environments may need different
    * hostnames (e.g., host.minikube.internal for Minikube, or host-gateway for kind).
@@ -408,7 +608,7 @@ export default class K8sPod {
   }
 
   /**
-   * Create environment variables for the pod
+   * Create environment variables for the container
    *
    * This method processes environment variables from the local config and ensures
    * that values are properly formatted. It strips surrounding quotes (both single
@@ -425,7 +625,7 @@ export default class K8sPod {
    * For Docker Desktop Kubernetes environments, localhost URLs are automatically
    * rewritten to host.docker.internal to allow pods to access services on the host.
    */
-  createPodEnvFromConfig(): k8s.V1EnvVar[] {
+  createContainerEnvFromConfig(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
     const envMap = new Map<string, string>();
     const secretEnvVars = new Set<string>();
@@ -493,7 +693,9 @@ export default class K8sPod {
         if (!value || value.trim() === "") {
           return;
         }
-        const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+        const k8sSecretName = K8sDeployment.constructK8sSecretName(
+          this.mcpServer.id,
+        );
         env.push({
           name: key,
           valueFrom: {
@@ -537,77 +739,141 @@ export default class K8sPod {
   }
 
   /**
-   * Create or start the pod for this MCP server
+   * Ensure HTTP server configuration (Service and URL) is set up
    */
-  async startOrCreatePod(): Promise<void> {
-    try {
-      // Check if pod already exists
+  private async ensureHttpServerConfigured(): Promise<void> {
+    const needsHttp = await this.needsHttpPort();
+    if (!needsHttp) {
+      return;
+    }
+
+    const catalogItem = await this.getCatalogItem();
+    const httpPort = catalogItem?.localConfig?.httpPort || 8080;
+    const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+
+    // Ensure Service exists
+    await this.createServiceForHttpServer(httpPort);
+
+    // Resolve HTTP Endpoint URL
+    let baseUrl: string;
+    if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+      // In-cluster: use service DNS name
+      const serviceName = `${this.deploymentName}-service`;
+      baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
+    } else {
+      // Local dev: get NodePort from service
+      const serviceName = `${this.deploymentName}-service`;
       try {
-        const existingPod = await this.k8sApi.readNamespacedPod({
-          name: this.podName,
+        const service = await this.k8sApi.readNamespacedService({
+          name: serviceName,
           namespace: this.namespace,
         });
 
-        if (existingPod.status?.phase === "Running") {
+        const nodePort = service.spec?.ports?.[0]?.nodePort;
+        if (!nodePort) {
+          throw new Error(`Service ${serviceName} has no NodePort assigned`);
+        }
+
+        baseUrl = `http://localhost:${nodePort}`;
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Could not resolve NodePort for service ${serviceName}`,
+        );
+        return;
+      }
+    }
+
+    // Set the endpoint URL
+    this.httpEndpointUrl = `${baseUrl}${httpPath}`;
+
+    logger.info(
+      `HTTP endpoint URL for ${this.deploymentName}: ${this.httpEndpointUrl}`,
+    );
+  }
+
+  /**
+   * Create or start the deployment for this MCP server
+   */
+  async startOrCreateDeployment(): Promise<void> {
+    try {
+      /**
+       * MIGRATION STEP:
+       * Check if there's a bare pod with the same name.
+       * If it exists and is not controlled by a ReplicaSet, delete it.
+       */
+      try {
+        const existingPod = await this.k8sApi.readNamespacedPod({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        });
+
+        // Check if it's a bare pod (no owner references or owner is not a ReplicaSet)
+        const isBarePod =
+          !existingPod.metadata?.ownerReferences ||
+          existingPod.metadata.ownerReferences.length === 0 ||
+          !existingPod.metadata.ownerReferences.some(
+            (ref) => ref.kind === "ReplicaSet",
+          );
+
+        if (isBarePod) {
+          logger.info(
+            `Found legacy bare pod ${this.deploymentName}, deleting for migration to Deployment`,
+          );
+          await this.k8sApi.deleteNamespacedPod({
+            name: this.deploymentName,
+            namespace: this.namespace,
+          });
+        }
+      } catch (error: unknown) {
+        // Ignore 404, propagate others
+        if (!isK8s404Error(error)) {
+          logger.warn(
+            { err: error },
+            `Error checking for legacy pod ${this.deploymentName}`,
+          );
+        }
+      }
+
+      // Check if deployment already exists
+      try {
+        const existingDeployment =
+          await this.k8sAppsApi.readNamespacedDeployment({
+            name: this.deploymentName,
+            namespace: this.namespace,
+          });
+
+        if (existingDeployment.status?.availableReplicas) {
           this.state = "running";
-          await this.assignHttpPortIfNeeded(existingPod);
 
-          // Set HTTP endpoint URL if this is an HTTP server
-          const needsHttp = await this.needsHttpPort();
-          if (needsHttp) {
-            const catalogItem = await this.getCatalogItem();
-            const httpPort = catalogItem?.localConfig?.httpPort || 8080;
-            const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
-
-            // Use service DNS for in-cluster, localhost with NodePort for local dev
-            let baseUrl: string | undefined;
-            if (
-              config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
-            ) {
-              const serviceName = `${this.podName}-service`;
-              baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
-            } else {
-              // Local dev: get NodePort from service
-              const serviceName = `${this.podName}-service`;
-              try {
-                const service = await this.k8sApi.readNamespacedService({
-                  name: serviceName,
-                  namespace: this.namespace,
-                });
-
-                const nodePort = service.spec?.ports?.[0]?.nodePort;
-                if (nodePort) {
-                  baseUrl = `http://localhost:${nodePort}`;
-                }
-              } catch (error) {
-                logger.error(
-                  { err: error },
-                  `Could not read service ${serviceName} for existing pod`,
-                );
-              }
-            }
-
-            if (baseUrl) {
-              this.httpEndpointUrl = `${baseUrl}${httpPath}`;
-            }
+          // For running deployments, we need to find the pod to assign HTTP port
+          const pod = await this.findPodForDeployment();
+          if (pod) {
+            await this.assignHttpPortIfNeeded(pod);
           }
 
-          logger.info(`Pod ${this.podName} is already running`);
+          // Ensure HTTP configuration is set up
+          await this.ensureHttpServerConfigured();
+
+          logger.info(`Deployment ${this.deploymentName} is already running`);
           return;
         }
 
-        // If pod exists but not running, delete and recreate
-        if (existingPod.status?.phase === "Failed") {
-          logger.info(`Deleting failed pod ${this.podName}`);
-          await this.removePod();
-        }
-        // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-      } catch (error: any) {
-        // Pod doesn't exist, we'll create it below
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        // If deployment exists but is not ready, return to let waitForDeploymentReady handle it
+        logger.info(
+          `Deployment ${this.deploymentName} exists but is not yet ready`,
+        );
+        this.state = "pending";
+
+        // Even if pending, ensure HTTP configuration (Service + URL) is set up
+        await this.ensureHttpServerConfigured();
+        return;
+      } catch (error: unknown) {
+        // Deployment doesn't exist, we'll create it below
+        if (!isK8s404Error(error)) {
           throw error;
         }
-        // 404 means pod doesn't exist, which is fine - we'll create it
+        // 404 means deployment doesn't exist
       }
 
       // Get catalog item to get local config
@@ -619,20 +885,14 @@ export default class K8sPod {
         );
       }
 
-      // Create new pod
+      // Create new deployment
       logger.info(
-        `Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`,
+        `Creating deployment ${this.deploymentName} for MCP server ${this.mcpServer.name}`,
       );
-      if (catalogItem.localConfig.command) {
-        logger.info(
-          `Using command: ${catalogItem.localConfig.command} ${(catalogItem.localConfig.arguments || []).join(" ")}`,
-        );
-      } else {
-        logger.info("Using Docker image's default CMD");
-      }
+
       this.state = "pending";
 
-      // Use custom Docker image if provided, otherwise use the base image
+      // Use custom Docker image if provided
       const dockerImage =
         catalogItem.localConfig.dockerImage || mcpServerBaseImage;
       logger.info(`Using Docker image: ${dockerImage}`);
@@ -641,7 +901,7 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
-      // Normalize localConfig to ensure required and description have defaults
+      // Normalize localConfig to ensure fields have defaults
       const normalizedLocalConfig = {
         ...catalogItem.localConfig,
         environment: catalogItem.localConfig.environment?.map((env) => ({
@@ -651,68 +911,61 @@ export default class K8sPod {
         })),
       };
 
-      const createdPod = await this.k8sApi.createNamespacedPod({
+      // Get the cached nodeSelector from the platform pod (if available)
+      // This allows MCP servers to inherit the same scheduling constraints
+      const platformNodeSelector = getCachedPlatformNodeSelector();
+
+      await this.k8sAppsApi.createNamespacedDeployment({
         namespace: this.namespace,
-        body: this.generatePodSpec(
+        body: this.generateDeploymentSpec(
           dockerImage,
           normalizedLocalConfig,
           needsHttp,
           httpPort,
+          platformNodeSelector,
         ),
       });
 
-      logger.info(
-        `Pod ${this.podName} created, will check status asynchronously`,
-      );
+      logger.info(`Deployment ${this.deploymentName} created`);
 
-      // For HTTP servers, create a K8s Service and set endpoint URL
-      if (needsHttp) {
-        await this.createServiceForHttpServer(httpPort);
+      // Ensure HTTP configuration is set up
+      await this.ensureHttpServerConfigured();
 
-        // Get HTTP path from config (default to /mcp)
-        const httpPath = catalogItem.localConfig.httpPath || "/mcp";
-
-        // Use service DNS for in-cluster, localhost with NodePort for local dev
-        let baseUrl: string;
-        if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
-          // In-cluster: use service DNS name
-          const serviceName = `${this.podName}-service`;
-          baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
-        } else {
-          // Local dev: get NodePort from service
-          const serviceName = `${this.podName}-service`;
-          const service = await this.k8sApi.readNamespacedService({
-            name: serviceName,
-            namespace: this.namespace,
-          });
-
-          const nodePort = service.spec?.ports?.[0]?.nodePort;
-          if (!nodePort) {
-            throw new Error(`Service ${serviceName} has no NodePort assigned`);
-          }
-
-          baseUrl = `http://localhost:${nodePort}`;
-        }
-
-        // Append the HTTP path
-        this.httpEndpointUrl = `${baseUrl}${httpPath}`;
-
-        logger.info(
-          `HTTP endpoint URL for ${this.podName}: ${this.httpEndpointUrl}`,
-        );
-      }
-
-      // Assign HTTP port if needed
-      await this.assignHttpPortIfNeeded(createdPod);
-
-      this.state = "running";
-      logger.info(`Pod ${this.podName} is now running`);
+      // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
+      // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas
+      this.state = "pending";
+      logger.info(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {
       this.state = "failed";
       this.errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      logger.error({ err: error }, `Failed to start pod ${this.podName}:`);
+      logger.error(
+        { err: error },
+        `Failed to start deployment ${this.deploymentName}:`,
+      );
       throw error;
+    }
+  }
+
+  /**
+   * Helper to find the running pod for this deployment
+   */
+  private async findPodForDeployment(): Promise<k8s.V1Pod | undefined> {
+    try {
+      const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+      const pods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+        labelSelector: `mcp-server-id=${sanitizedId}`,
+      });
+
+      // Return the first running pod
+      return pods.items.find((pod) => pod.status?.phase === "Running");
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to list pods for ${this.deploymentName}`,
+      );
+      return undefined;
     }
   }
 
@@ -733,7 +986,7 @@ export default class K8sPod {
    * Create a K8s Service for HTTP-based MCP servers
    */
   private async createServiceForHttpServer(httpPort: number): Promise<void> {
-    const serviceName = `${this.podName}-service`;
+    const serviceName = `${this.deploymentName}-service`;
 
     try {
       // Check if service already exists
@@ -744,10 +997,9 @@ export default class K8sPod {
         });
         logger.info(`Service ${serviceName} already exists`);
         return;
-        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Service doesn't exist, we'll create it below
-        if (error?.code !== 404 && error?.statusCode !== 404) {
+        if (!isK8s404Error(error)) {
           throw error;
         }
       }
@@ -762,16 +1014,16 @@ export default class K8sPod {
       const serviceSpec: k8s.V1Service = {
         metadata: {
           name: serviceName,
-          labels: {
+          labels: K8sDeployment.sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
-          },
+          }),
         },
         spec: {
-          selector: {
+          selector: K8sDeployment.sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
-          },
+          }),
           ports: [
             {
               protocol: "TCP",
@@ -788,11 +1040,13 @@ export default class K8sPod {
         body: serviceSpec,
       });
 
-      logger.info(`Created service ${serviceName} for pod ${this.podName}`);
+      logger.info(
+        `Created service ${serviceName} for deployment ${this.deploymentName}`,
+      );
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to create service for pod ${this.podName}:`,
+        `Failed to create service for deployment ${this.deploymentName}:`,
       );
       throw error;
     }
@@ -809,63 +1063,73 @@ export default class K8sPod {
       // Use the container port directly with pod IP
       this.assignedHttpPort = httpPort;
       logger.info(
-        `Assigned HTTP port ${this.assignedHttpPort} for pod ${this.podName}`,
+        `Assigned HTTP port ${this.assignedHttpPort} for deployment ${this.deploymentName}`,
       );
     }
   }
 
   /**
-   * Wait for pod to be in running state
+   * Wait for deployment to be in ready state
    */
-  async waitForPodReady(maxAttempts = 60, intervalMs = 2000): Promise<void> {
+  async waitForDeploymentReady(
+    maxAttempts = 60,
+    intervalMs = 2000,
+  ): Promise<void> {
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const pod = await this.k8sApi.readNamespacedPod({
-          name: this.podName,
+        const deployment = await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
           namespace: this.namespace,
         });
 
-        // Check for failure states in container statuses
-        if (pod.status?.containerStatuses) {
-          for (const containerStatus of pod.status.containerStatuses) {
-            const waitingReason = containerStatus.state?.waiting?.reason;
-            if (waitingReason) {
-              const failureStates = [
-                "CrashLoopBackOff",
-                "ImagePullBackOff",
-                "ErrImagePull",
-                "CreateContainerConfigError",
-                "CreateContainerError",
-                "RunContainerError",
-              ];
-              if (failureStates.includes(waitingReason)) {
-                const message =
-                  containerStatus.state?.waiting?.message ||
-                  `Container in ${waitingReason} state`;
-                this.state = "failed";
-                this.errorMessage = message;
-                throw new Error(
-                  `Pod ${this.podName} failed: ${waitingReason} - ${message}`,
-                );
-              }
-            }
-          }
-        }
-
-        if (pod.status?.phase === "Running") {
-          // Check if all containers are ready
-          const allReady = pod.status.containerStatuses?.every(
-            (status) => status.ready,
-          );
-          if (allReady) {
+        if (
+          deployment.status?.availableReplicas &&
+          deployment.status.availableReplicas > 0
+        ) {
+          // Also check if we can find the pod
+          const pod = await this.findPodForDeployment();
+          if (pod && pod.status?.phase === "Running") {
+            await this.assignHttpPortIfNeeded(pod);
+            // Update state to running now that deployment is confirmed ready
+            this.state = "running";
             return;
           }
         }
 
-        if (pod.status?.phase === "Failed") {
-          this.state = "failed";
-          this.errorMessage = `Pod phase is Failed`;
-          throw new Error(`Pod ${this.podName} failed to start`);
+        // Check for failures in latest pods
+        const sanitizedId = K8sDeployment.sanitizeLabelValue(this.mcpServer.id);
+        const pods = await this.k8sApi.listNamespacedPod({
+          namespace: this.namespace,
+          labelSelector: `mcp-server-id=${sanitizedId}`,
+        });
+
+        for (const pod of pods.items) {
+          // Check for failure states in container statuses
+          if (pod.status?.containerStatuses) {
+            for (const containerStatus of pod.status.containerStatuses) {
+              const waitingReason = containerStatus.state?.waiting?.reason;
+              if (waitingReason) {
+                const failureStates = [
+                  "CrashLoopBackOff",
+                  "ImagePullBackOff",
+                  "ErrImagePull",
+                  "CreateContainerConfigError",
+                  "CreateContainerError",
+                  "RunContainerError",
+                ];
+                if (failureStates.includes(waitingReason)) {
+                  const message =
+                    containerStatus.state?.waiting?.message ||
+                    `Container in ${waitingReason} state`;
+                  this.state = "failed";
+                  this.errorMessage = message;
+                  throw new Error(
+                    `Deployment ${this.deploymentName} failed: ${waitingReason} - ${message}`,
+                  );
+                }
+              }
+            }
+          }
         }
       } catch (error: unknown) {
         if (
@@ -882,39 +1146,43 @@ export default class K8sPod {
     }
 
     throw new Error(
-      `Pod ${this.podName} did not become ready after ${maxAttempts} attempts`,
+      `Deployment ${this.deploymentName} did not become ready after ${maxAttempts} attempts`,
     );
   }
 
   /**
-   * Stop the pod (fire-and-forget - K8s handles cleanup in background)
+   * Stop the deployment (fire-and-forget - K8s handles cleanup in background)
    */
-  async stopPod(): Promise<void> {
+  async stopDeployment(): Promise<void> {
     try {
-      logger.info(`Stopping pod ${this.podName}`);
-      await this.k8sApi.deleteNamespacedPod({
-        name: this.podName,
+      logger.info(`Stopping deployment ${this.deploymentName}`);
+      await this.k8sAppsApi.deleteNamespacedDeployment({
+        name: this.deploymentName,
         namespace: this.namespace,
       });
-      logger.info(`Pod ${this.podName} deletion initiated`);
+      logger.info(`Deployment ${this.deploymentName} deletion initiated`);
       this.state = "not_created";
     } catch (error: unknown) {
-      if (error instanceof Error && error.message.includes("404")) {
-        // Pod already doesn't exist, that's fine
-        logger.info(`Pod ${this.podName} already deleted`);
+      // If deployment doesn't exist (404), that's okay - it may have been deleted already
+      if (isK8s404Error(error)) {
+        logger.info(`Deployment ${this.deploymentName} already deleted`);
         this.state = "not_created";
         return;
       }
-      logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
+      logger.error(
+        { err: error },
+        `Failed to stop deployment ${this.deploymentName}:`,
+      );
       throw error;
     }
   }
 
   /**
-   * Remove the pod completely
+   * Remove the deployment completely (including associated Service and Secret)
    */
-  async removePod(): Promise<void> {
-    await this.stopPod();
+  async removeDeployment(): Promise<void> {
+    await this.stopDeployment();
+    await this.deleteK8sService();
     await this.deleteK8sSecret();
   }
 
@@ -923,8 +1191,13 @@ export default class K8sPod {
    */
   async getRecentLogs(lines: number = 100): Promise<string> {
     try {
+      const pod = await this.findPodForDeployment();
+      if (!pod || !pod.metadata?.name) {
+        return "Pod not found or not running";
+      }
+
       const logs = await this.k8sApi.readNamespacedPodLog({
-        name: this.podName,
+        name: pod.metadata.name,
         namespace: this.namespace,
         tailLines: lines,
       });
@@ -933,9 +1206,11 @@ export default class K8sPod {
     } catch (error: unknown) {
       logger.error(
         { err: error },
-        `Failed to get logs for pod ${this.podName}:`,
+        `Failed to get logs for deployment ${this.deploymentName}:`,
       );
-      if (error instanceof Error && error.message.includes("404")) {
+
+      // If pod doesn't exist (404), return a helpful message
+      if (isK8s404Error(error)) {
         return "Pod not found";
       }
       throw error;
@@ -950,6 +1225,11 @@ export default class K8sPod {
     lines: number = 100,
   ): Promise<void> {
     try {
+      const pod = await this.findPodForDeployment();
+      if (!pod || !pod.metadata?.name) {
+        throw new Error("No running pod found for deployment");
+      }
+
       // Create a PassThrough stream to handle the log data
       const logStream = new PassThrough();
 
@@ -964,7 +1244,7 @@ export default class K8sPod {
       logStream.on("error", (error) => {
         logger.error(
           { err: error },
-          `Log stream error for pod ${this.podName}:`,
+          `Log stream error for pod ${pod.metadata?.name}:`,
         );
         if (!("destroyed" in responseStream) || !responseStream.destroyed) {
           if (
@@ -987,7 +1267,7 @@ export default class K8sPod {
       responseStream.on("error", (error) => {
         logger.error(
           { err: error },
-          `Response stream error for pod ${this.podName}:`,
+          `Response stream error for pod ${pod.metadata?.name}:`,
         );
         if (logStream.destroy) {
           logStream.destroy();
@@ -1003,7 +1283,7 @@ export default class K8sPod {
       // Use the Log client to stream logs with follow=true
       const req = await this.k8sLog.log(
         this.namespace,
-        this.podName,
+        pod.metadata.name,
         "mcp-server", // container name
         logStream,
         {
@@ -1023,7 +1303,7 @@ export default class K8sPod {
     } catch (error: unknown) {
       logger.error(
         { err: error },
-        `Failed to stream logs for pod ${this.podName}:`,
+        `Failed to stream logs for deployment ${this.deploymentName}:`,
       );
 
       if (!("destroyed" in responseStream) || !responseStream.destroyed) {
@@ -1040,27 +1320,28 @@ export default class K8sPod {
   }
 
   /**
-   * Get the pod's status summary
+   * Get the deployment's status summary
    */
-  get statusSummary(): K8sPodStatusSummary {
+  get statusSummary(): K8sDeploymentStatusSummary {
     return {
       state: this.state,
       message:
         this.state === "running"
-          ? "Pod is running"
+          ? "Deployment is running"
           : this.state === "pending"
-            ? "Pod is starting"
+            ? "Deployment is starting"
             : this.state === "failed"
-              ? "Pod failed"
-              : "Pod not created",
+              ? "Deployment failed"
+              : "Deployment not created",
       error: this.errorMessage,
-      podName: this.podName,
+      deploymentName: this.deploymentName,
       namespace: this.namespace,
     };
   }
 
   get containerName(): string {
-    return this.podName;
+    // Return the deployment name (label selector will find the pod)
+    return this.deploymentName;
   }
 
   /**
@@ -1078,10 +1359,10 @@ export default class K8sPod {
   }
 
   /**
-   * Get the pod name
+   * Get the deployment name
    */
-  get k8sPodName(): string {
-    return this.podName;
+  get k8sDeploymentName(): string {
+    return this.deploymentName;
   }
 
   /**
@@ -1089,6 +1370,15 @@ export default class K8sPod {
    */
   async usesStreamableHttp(): Promise<boolean> {
     return await this.needsHttpPort();
+  }
+
+  /**
+   * Get the name of the currently running pod for this deployment.
+   * Useful for attaching to the pod or streaming logs.
+   */
+  async getRunningPodName(): Promise<string | undefined> {
+    const pod = await this.findPodForDeployment();
+    return pod?.metadata?.name;
   }
 
   /**

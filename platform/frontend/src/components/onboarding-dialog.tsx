@@ -3,8 +3,13 @@
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Info, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
-import { CreateChatApiKeyForm } from "@/components/chat/create-chat-api-key-form";
+import {
+  ChatApiKeyForm,
+  type ChatApiKeyFormValues,
+  PROVIDER_CONFIG,
+} from "@/components/chat-api-key-form";
 import { ConnectionOptions } from "@/components/connection-options";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { useDefaultProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatApiKeys, useCreateChatApiKey } from "@/lib/chat-settings.query";
 import {
   useOrganizationOnboardingStatus,
   useUpdateOrganization,
@@ -28,6 +33,14 @@ import Divider from "./divider";
 interface OnboardingDialogProps {
   open: boolean;
 }
+
+const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+  name: "",
+  provider: "anthropic",
+  apiKey: "",
+  scope: "personal",
+  teamId: "",
+};
 
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -47,10 +60,33 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
     chatSettings: ["update"],
   });
 
+  // Form and mutation for chat API key
+  const chatApiKeyForm = useForm<ChatApiKeyFormValues>({
+    defaultValues: DEFAULT_FORM_VALUES,
+  });
+  const createChatApiKeyMutation = useCreateChatApiKey();
+
   // Check if any API key is configured (for any provider)
   const hasAnyApiKey = useMemo(() => {
     return chatApiKeys.some((k) => k.secretId);
   }, [chatApiKeys]);
+
+  // Validation for chat API key form
+  const formValues = chatApiKeyForm.watch();
+  const isFormValid =
+    formValues.apiKey && (formValues.scope !== "team" || formValues.teamId);
+
+  const handleChatApiKeySubmit = chatApiKeyForm.handleSubmit(async (values) => {
+    if (!values.apiKey) return;
+
+    await createChatApiKeyMutation.mutateAsync({
+      ...values,
+      name: `Default ${PROVIDER_CONFIG[values.provider].name} Key`,
+      teamId: values.scope === "team" ? values.teamId : undefined,
+    });
+
+    chatApiKeyForm.reset(DEFAULT_FORM_VALUES);
+  });
 
   const handleFinishOnboarding = useCallback(() => {
     completeOnboarding({
@@ -135,7 +171,27 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
               {/* Chat Setup section */}
               <div className="rounded-lg border p-4 space-y-4">
                 {canUpdateChatSettings ? (
-                  <CreateChatApiKeyForm variant="compact" showConsoleLink />
+                  <>
+                    <ChatApiKeyForm
+                      mode="compact"
+                      showConsoleLink
+                      form={chatApiKeyForm}
+                      existingKeys={chatApiKeys}
+                      isPending={createChatApiKeyMutation.isPending}
+                    />
+                    <Button
+                      onClick={handleChatApiKeySubmit}
+                      disabled={
+                        !isFormValid || createChatApiKeyMutation.isPending
+                      }
+                      size="sm"
+                    >
+                      {createChatApiKeyMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      {hasAnyApiKey ? "Update API Key" : "Save API Key"}
+                    </Button>
+                  </>
                 ) : (
                   <Alert>
                     <Info className="h-4 w-4" />

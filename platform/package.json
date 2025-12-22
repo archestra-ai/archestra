@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -19,7 +19,8 @@
     "test:e2e": "turbo test:e2e",
     "test:e2e:ui": "turbo test:e2e:ui",
     "check:ci": "turbo check:ci",
-    "codegen": "turbo codegen",
+    "license-check": "tsx standalone-scripts/license-check.ts",
+    "codegen": "CODEGEN=true turbo codegen",
     "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "tsx": "^4.21.0",
     "turbo": "^2.6.3",
     "typescript": "^5.9.2"
   },

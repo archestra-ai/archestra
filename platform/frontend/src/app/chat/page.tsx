@@ -4,7 +4,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
@@ -38,7 +38,11 @@ import {
   useCreateConversation,
   useUpdateConversation,
 } from "@/lib/chat.query";
-import { useChatApiKeys } from "@/lib/chat-settings.query";
+import { useChatModelsQuery } from "@/lib/chat-models.query";
+import {
+  type SupportedChatProvider,
+  useChatApiKeys,
+} from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
@@ -95,6 +99,7 @@ export default function ChatPage() {
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   const hasAnyApiKey =
     chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
@@ -124,6 +129,13 @@ export default function ChatPage() {
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+
+  // Derive current provider from selected model
+  const currentProvider = useMemo((): SupportedChatProvider | undefined => {
+    if (!conversation?.selectedModel) return undefined;
+    const model = chatModels.find((m) => m.id === conversation.selectedModel);
+    return model?.provider as SupportedChatProvider | undefined;
+  }, [conversation?.selectedModel, chatModels]);
 
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
@@ -670,6 +682,8 @@ export default function ChatPage() {
                   messageCount={messages.length}
                   agentId={conversation?.agent.id}
                   conversationId={conversation?.id}
+                  currentConversationChatApiKeyId={conversation?.chatApiKeyId}
+                  currentProvider={currentProvider}
                 />
               </div>
             </div>

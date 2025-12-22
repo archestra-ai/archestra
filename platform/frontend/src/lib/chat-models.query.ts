@@ -61,10 +61,13 @@ export function useModelsByProvider() {
  * Non-suspense version for fetching chat models.
  * Use in components without Suspense boundaries.
  */
-export function useChatModelsQuery() {
+export function useChatModelsQuery(conversationId?: string) {
   return useQuery({
-    queryKey: ["chat-models"],
+    queryKey: ["chat-models", conversationId],
     queryFn: async () => {
+      if (!conversationId) {
+        return [];
+      }
       const { data, error } = await getChatModels();
       if (error) {
         throw new Error(

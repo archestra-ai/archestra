@@ -51,8 +51,8 @@ const dependencies = {
     projectNames.firefox,
     projectNames.webkit,
   ],
-  // API tests only need authentication setup, not the full UI test suite
-  apiProject: [projectNames.setupTeams],
+  // API tests should run after all UI tests to avoid DB state conflicts
+  apiProject: [projectNames.sso],
 };
 
 /**

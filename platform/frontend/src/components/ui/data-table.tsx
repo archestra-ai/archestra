@@ -206,7 +206,8 @@ export function DataTable<TData, TValue>({
       {(pagination || !manualPagination) && (
         <DataTablePagination
           table={table}
-          totalRows={hideSelectedCount ? data.length : pagination?.total}
+          totalRows={pagination?.total}
+          hideSelectedCount={hideSelectedCount}
         />
       )}
     </div>

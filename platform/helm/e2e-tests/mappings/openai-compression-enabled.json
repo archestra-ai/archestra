@@ -4,9 +4,14 @@
     "urlPath": "/v1/chat/completions",
     "headers": {
       "Authorization": {
-        "contains": "openai-compression-test"
+        "contains": "openai-compression"
       }
-    }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
   },
   "response": {
     "status": 200,
@@ -14,7 +19,7 @@
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "id": "chatcmpl-compression-test",
+      "id": "chatcmpl-compression-enabled",
       "object": "chat.completion",
       "created": 1234567890,
       "model": "gpt-4",
@@ -23,7 +28,7 @@
           "index": 0,
           "message": {
             "role": "assistant",
-            "content": "I have processed the tool result.",
+            "content": "I have processed the TOON-compressed tool result.",
             "refusal": null
           },
           "finish_reason": "stop",
@@ -31,9 +36,9 @@
         }
       ],
       "usage": {
-        "prompt_tokens": 150,
+        "prompt_tokens": 100,
         "completion_tokens": 10,
-        "total_tokens": 160
+        "total_tokens": 110
       }
     }
   }

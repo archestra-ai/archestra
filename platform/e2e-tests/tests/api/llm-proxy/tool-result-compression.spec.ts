@@ -12,37 +12,29 @@ interface CompressionTestConfig {
   endpoint: (profileId: string) => string;
   headers: (wiremockStub: string) => Record<string, string>;
   buildRequestWithToolResult: () => object;
-  // Extract tool result content from the processedRequest for verification
-  extractToolResultContent: (processedRequest: unknown) => string | null;
 }
 
 // =============================================================================
-// Helper Functions
+// Shared Test Data
 // =============================================================================
 
 /**
- * Check if a string is valid JSON
+ * The tool result data used across all provider tests.
+ * WireMock stubs use body pattern matching to verify:
+ * - Compression enabled: matches "files[5]{name,size,type}" (TOON format)
+ * - Compression disabled: matches '{"files":[{"name":"README.md","size":1024' (JSON format)
  */
-function isValidJson(str: string): boolean {
-  try {
-    JSON.parse(str);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if content appears to be TOON-encoded (not valid JSON but contains data)
- * TOON format is a compact representation that is NOT valid JSON
- */
-function isToonEncoded(content: string): boolean {
-  // TOON-encoded content:
-  // 1. Should NOT be valid JSON
-  // 2. Should contain some content (not empty)
-  // 3. Should be shorter or similar length to original
-  return content.length > 0 && !isValidJson(content);
-}
+const TOOL_RESULT_DATA = {
+  files: [
+    { name: "README.md", size: 1024, type: "file" },
+    { name: "src", size: 4096, type: "directory" },
+    { name: "package.json", size: 512, type: "file" },
+    { name: "tsconfig.json", size: 256, type: "file" },
+    { name: "node_modules", size: 102400, type: "directory" },
+  ],
+  totalCount: 5,
+  directory: ".",
+};
 
 // =============================================================================
 // Test Configurations
@@ -57,15 +49,6 @@ const openaiConfig: CompressionTestConfig = {
     Authorization: `Bearer ${wiremockStub}`,
     "Content-Type": "application/json",
   }),
-
-  // OpenAI format: tool results are in "tool" role messages
-  extractToolResultContent: (processedRequest: unknown) => {
-    const req = processedRequest as {
-      messages?: Array<{ role: string; content?: string }>;
-    };
-    const toolMessage = req.messages?.find((m) => m.role === "tool");
-    return toolMessage?.content ?? null;
-  },
 
   // OpenAI format: tool results are sent as separate "tool" role messages
   buildRequestWithToolResult: () => ({
@@ -89,17 +72,7 @@ const openaiConfig: CompressionTestConfig = {
       {
         role: "tool",
         tool_call_id: "call_123",
-        content: JSON.stringify({
-          files: [
-            { name: "README.md", size: 1024, type: "file" },
-            { name: "src", size: 4096, type: "directory" },
-            { name: "package.json", size: 512, type: "file" },
-            { name: "tsconfig.json", size: 256, type: "file" },
-            { name: "node_modules", size: 102400, type: "directory" },
-          ],
-          totalCount: 5,
-          directory: ".",
-        }),
+        content: JSON.stringify(TOOL_RESULT_DATA),
       },
     ],
   }),
@@ -115,26 +88,6 @@ const anthropicConfig: CompressionTestConfig = {
     "Content-Type": "application/json",
     "anthropic-version": "2023-06-01",
   }),
-
-  // Anthropic format: tool results are in user messages as tool_result blocks
-  extractToolResultContent: (processedRequest: unknown) => {
-    const req = processedRequest as {
-      messages?: Array<{
-        role: string;
-        content?: Array<{ type: string; content?: string }>;
-      }>;
-    };
-    // Find user message with tool_result content
-    for (const msg of req.messages || []) {
-      if (msg.role === "user" && Array.isArray(msg.content)) {
-        const toolResult = msg.content.find((c) => c.type === "tool_result");
-        if (toolResult?.content) {
-          return toolResult.content;
-        }
-      }
-    }
-    return null;
-  },
 
   // Anthropic format: tool results are in user messages as tool_result blocks
   buildRequestWithToolResult: () => ({
@@ -159,17 +112,7 @@ const anthropicConfig: CompressionTestConfig = {
           {
             type: "tool_result",
             tool_use_id: "toolu_123",
-            content: JSON.stringify({
-              files: [
-                { name: "README.md", size: 1024, type: "file" },
-                { name: "src", size: 4096, type: "directory" },
-                { name: "package.json", size: 512, type: "file" },
-                { name: "tsconfig.json", size: 256, type: "file" },
-                { name: "node_modules", size: 102400, type: "directory" },
-              ],
-              totalCount: 5,
-              directory: ".",
-            }),
+            content: JSON.stringify(TOOL_RESULT_DATA),
           },
         ],
       },
@@ -187,42 +130,6 @@ const geminiConfig: CompressionTestConfig = {
     "x-goog-api-key": wiremockStub,
     "Content-Type": "application/json",
   }),
-
-  // Gemini format: tool results are functionResponse parts in user content
-  // When compressed, response becomes { toon: "compressed string" }
-  extractToolResultContent: (processedRequest: unknown) => {
-    const req = processedRequest as {
-      contents?: Array<{
-        role: string;
-        parts?: Array<{
-          functionResponse?: {
-            response?: unknown;
-          };
-        }>;
-      }>;
-    };
-    // Find user content with functionResponse
-    for (const content of req.contents || []) {
-      if (content.role === "user" && content.parts) {
-        for (const part of content.parts) {
-          if (part.functionResponse?.response) {
-            const response = part.functionResponse.response;
-            // When compressed, response is { toon: "..." }
-            if (
-              typeof response === "object" &&
-              response !== null &&
-              "toon" in response
-            ) {
-              return (response as { toon: string }).toon;
-            }
-            // When not compressed, response is the original object
-            return JSON.stringify(response);
-          }
-        }
-      }
-    }
-    return null;
-  },
 
   // Gemini format: tool results are functionResponse parts in user content
   buildRequestWithToolResult: () => ({
@@ -248,17 +155,7 @@ const geminiConfig: CompressionTestConfig = {
           {
             functionResponse: {
               name: "list_files",
-              response: {
-                files: [
-                  { name: "README.md", size: 1024, type: "file" },
-                  { name: "src", size: 4096, type: "directory" },
-                  { name: "package.json", size: 512, type: "file" },
-                  { name: "tsconfig.json", size: 256, type: "file" },
-                  { name: "node_modules", size: 102400, type: "directory" },
-                ],
-                totalCount: 5,
-                directory: ".",
-              },
+              response: TOOL_RESULT_DATA,
             },
           },
         ],
@@ -283,7 +180,8 @@ for (const config of testConfigs) {
     let originalCompressionEnabled: boolean;
     let originalCompressionScope: "organization" | "team";
 
-    const wiremockStub = `${config.providerName.toLowerCase()}-compression-test`;
+    // WireMock stubs match on this API key prefix
+    const wiremockStub = `${config.providerName.toLowerCase()}-compression`;
 
     test.beforeEach(async ({ request, getOrganization }) => {
       // Store original organization compression settings to restore later
@@ -297,7 +195,6 @@ for (const config of testConfigs) {
       request,
       createAgent,
       updateOrganization,
-      getInteractions,
       makeApiRequest,
     }) => {
       // 1. Enable compression at organization level
@@ -315,6 +212,9 @@ for (const config of testConfigs) {
       profileId = profile.id;
 
       // 3. Make request with tool result
+      // WireMock stub matches on body containing "files[5]{name,size,type}" (TOON format)
+      // If compression works correctly, request will match and return 200
+      // If compression fails, request won't match any stub and will fail
       const response = await makeApiRequest({
         request,
         method: "post",
@@ -324,37 +224,12 @@ for (const config of testConfigs) {
       });
 
       expect(response.ok()).toBeTruthy();
-
-      // 4. Wait for async interaction recording
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // 5. Query interactions to verify tool result content is compressed
-      const interactionsResponse = await getInteractions(request, {
-        profileId,
-        sortBy: "createdAt",
-        sortDirection: "desc",
-        limit: 1,
-      });
-      const interactions = await interactionsResponse.json();
-
-      expect(interactions.data.length).toBeGreaterThan(0);
-      const interaction = interactions.data[0];
-
-      // Verify tool result content was compressed in processedRequest
-      expect(interaction.processedRequest).not.toBeNull();
-      const toolResultContent = config.extractToolResultContent(
-        interaction.processedRequest,
-      );
-      expect(toolResultContent).not.toBeNull();
-      // TOON-encoded content should NOT be valid JSON
-      expect(isToonEncoded(toolResultContent!)).toBe(true);
     });
 
     test("does not compress tool results when compression is disabled", async ({
       request,
       createAgent,
       updateOrganization,
-      getInteractions,
       makeApiRequest,
     }) => {
       // 1. Disable compression at organization level
@@ -372,6 +247,9 @@ for (const config of testConfigs) {
       profileId = profile.id;
 
       // 3. Make request with tool result
+      // WireMock stub matches on body containing JSON format
+      // If compression is correctly disabled, request will match and return 200
+      // If compression incorrectly happens, request won't match and will fail
       const response = await makeApiRequest({
         request,
         method: "post",
@@ -381,30 +259,6 @@ for (const config of testConfigs) {
       });
 
       expect(response.ok()).toBeTruthy();
-
-      // 4. Wait for async interaction recording
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // 5. Query interactions to verify tool result content is not compressed
-      const interactionsResponse = await getInteractions(request, {
-        profileId,
-        sortBy: "createdAt",
-        sortDirection: "desc",
-        limit: 1,
-      });
-      const interactions = await interactionsResponse.json();
-
-      expect(interactions.data.length).toBeGreaterThan(0);
-      const interaction = interactions.data[0];
-
-      // Verify tool result content was NOT compressed in processedRequest
-      expect(interaction.processedRequest).not.toBeNull();
-      const toolResultContent = config.extractToolResultContent(
-        interaction.processedRequest,
-      );
-      expect(toolResultContent).not.toBeNull();
-      // Non-compressed content should be valid JSON
-      expect(isValidJson(toolResultContent!)).toBe(true);
     });
 
     test.afterEach(async ({ request, deleteAgent, updateOrganization }) => {

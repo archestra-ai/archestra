@@ -4,9 +4,14 @@
     "urlPath": "/v1/messages",
     "headers": {
       "x-api-key": {
-        "contains": "anthropic-compression-test"
+        "contains": "anthropic-compression"
       }
-    }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "{\\\"files\\\":[{\\\"name\\\":\\\"README.md\\\",\\\"size\\\":1024"
+      }
+    ]
   },
   "response": {
     "status": 200,
@@ -14,14 +19,14 @@
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "id": "msg_compression_test",
+      "id": "msg_compression_disabled",
       "type": "message",
       "role": "assistant",
       "model": "claude-3-5-sonnet-20241022",
       "content": [
         {
           "type": "text",
-          "text": "I have processed the tool result."
+          "text": "I have processed the JSON tool result."
         }
       ],
       "stop_reason": "end_turn",

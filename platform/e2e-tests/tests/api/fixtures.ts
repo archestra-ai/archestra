@@ -8,6 +8,7 @@ import {
   editorAuthFile,
   memberAuthFile,
   UI_BASE_URL,
+  WIREMOCK_BASE_URL,
 } from "../../consts";
 
 /**
@@ -44,6 +45,8 @@ export interface TestFixtures {
   getOrganization: typeof getOrganization;
   updateOrganization: typeof updateOrganization;
   getInteractions: typeof getInteractions;
+  getWiremockRequests: typeof getWiremockRequests;
+  clearWiremockRequests: typeof clearWiremockRequests;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -612,6 +615,72 @@ const getInteractions = async (
   });
 };
 
+/**
+ * WireMock request journal entry structure
+ */
+export interface WiremockRequest {
+  id: string;
+  request: {
+    url: string;
+    absoluteUrl: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+    loggedDate: number;
+    loggedDateString: string;
+  };
+  responseDefinition: {
+    status: number;
+  };
+}
+
+/**
+ * Get requests from WireMock's request journal
+ * Useful for verifying what was actually sent to mock LLM providers
+ */
+const getWiremockRequests = async (
+  request: APIRequestContext,
+  options?: {
+    limit?: number;
+    method?: string;
+    urlPattern?: string;
+  },
+): Promise<WiremockRequest[]> => {
+  const params = new URLSearchParams();
+  if (options?.limit) params.append("limit", String(options.limit));
+
+  const queryString = params.toString();
+  const response = await request.get(
+    `${WIREMOCK_BASE_URL}/__admin/requests${queryString ? `?${queryString}` : ""}`,
+  );
+  const data = await response.json();
+
+  let requests: WiremockRequest[] = data.requests || [];
+
+  // Filter by method if specified
+  if (options?.method) {
+    requests = requests.filter(
+      (r) => r.request.method.toUpperCase() === options.method?.toUpperCase(),
+    );
+  }
+
+  // Filter by URL pattern if specified
+  if (options?.urlPattern) {
+    const pattern = new RegExp(options.urlPattern);
+    requests = requests.filter((r) => pattern.test(r.request.url));
+  }
+
+  return requests;
+};
+
+/**
+ * Clear WireMock's request journal
+ * Useful for test isolation - call in beforeEach to ensure clean state
+ */
+const clearWiremockRequests = async (request: APIRequestContext) => {
+  await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
+};
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -700,6 +769,12 @@ export const test = base.extend<TestFixtures>({
   },
   getInteractions: async ({}, use) => {
     await use(getInteractions);
+  },
+  getWiremockRequests: async ({}, use) => {
+    await use(getWiremockRequests);
+  },
+  clearWiremockRequests: async ({}, use) => {
+    await use(clearWiremockRequests);
   },
   /**
    * Admin request - same auth as default `request` fixture

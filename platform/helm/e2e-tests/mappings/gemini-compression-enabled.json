@@ -4,9 +4,14 @@
     "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
     "headers": {
       "x-goog-api-key": {
-        "contains": "gemini-compression-test"
+        "contains": "gemini-compression"
       }
-    }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
   },
   "response": {
     "status": 200,
@@ -19,7 +24,7 @@
           "content": {
             "parts": [
               {
-                "text": "I have processed the tool result."
+                "text": "I have processed the TOON-compressed tool result."
               }
             ],
             "role": "model"
@@ -29,9 +34,9 @@
         }
       ],
       "usageMetadata": {
-        "promptTokenCount": 150,
+        "promptTokenCount": 100,
         "candidatesTokenCount": 10,
-        "totalTokenCount": 160
+        "totalTokenCount": 110
       }
     }
   }

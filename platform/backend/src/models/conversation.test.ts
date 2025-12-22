@@ -51,7 +51,11 @@ describe("ConversationModel", () => {
       selectedModel: "claude-3-opus-20240229",
     });
 
-    const found = await ConversationModel.findById({ id: created.id, userId: user.id, organizationId: org.id });
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found).toBeDefined();
     expect(found?.id).toBe(created.id);
@@ -152,7 +156,11 @@ describe("ConversationModel", () => {
 
     await ConversationModel.delete(created.id, user.id, org.id);
 
-    const found = await ConversationModel.findById({ id: created.id, userId: user.id, organizationId: org.id });
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
     expect(found).toBeNull();
   });
 
@@ -320,7 +328,11 @@ describe("ConversationModel", () => {
       selectedModel: "claude-3-haiku-20240307",
     });
 
-    const found = await ConversationModel.findById({ id: created.id, userId: user.id, organizationId: org.id });
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found?.messages).toBeDefined();
     expect(Array.isArray(found?.messages)).toBe(true);

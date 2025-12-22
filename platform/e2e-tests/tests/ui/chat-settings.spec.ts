@@ -96,7 +96,10 @@ test.describe("Chat API Keys", () => {
       await adminPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: adminPage, options: { name: "Test & Create" } });
+      await clickButton({
+        page: adminPage,
+        options: { name: "Test & Create" },
+      });
       await expect(
         adminPage.getByText("API key created successfully"),
       ).toBeVisible({

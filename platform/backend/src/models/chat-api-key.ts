@@ -1,14 +1,14 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ChatApiKey,
-  ChatApiKeyWithProfiles,
+  ChatApiKeyScope,
+  ChatApiKeyWithScopeInfo,
   InsertChatApiKey,
-  InsertProfileChatApiKey,
-  ProfileChatApiKey,
   SupportedChatProvider,
   UpdateChatApiKey,
 } from "@/types";
+import ConversationModel from "./conversation";
 
 class ChatApiKeyModel {
   /**
@@ -32,7 +32,7 @@ class ChatApiKeyModel {
       .from(schema.chatApiKeysTable)
       .where(eq(schema.chatApiKeysTable.id, id));
 
-    return apiKey;
+    return apiKey ?? null;
   }
 
   /**
@@ -51,72 +51,337 @@ class ChatApiKeyModel {
   }
 
   /**
-   * Find all chat API keys for an organization with their assigned profiles
+   * Get visible API keys for a user based on scope access.
+   *
+   * Visibility rules:
+   * - Users see: their personal keys + team keys for their teams + org-wide keys
+   * - Users with profile:admin: see all keys EXCEPT personal keys of other users
    */
-  static async findByOrganizationIdWithProfiles(
+  static async getVisibleKeys(
     organizationId: string,
-  ): Promise<ChatApiKeyWithProfiles[]> {
-    const apiKeys = await ChatApiKeyModel.findByOrganizationId(organizationId);
+    userId: string,
+    userTeamIds: string[],
+    isProfileAdmin: boolean,
+  ): Promise<ChatApiKeyWithScopeInfo[]> {
+    // Build conditions based on visibility rules
+    const conditions = [
+      eq(schema.chatApiKeysTable.organizationId, organizationId),
+    ];
 
-    if (apiKeys.length === 0) {
-      return [];
-    }
-
-    // Get all profile assignments for these API keys
-    const assignments = await db
-      .select({
-        chatApiKeyId: schema.profileChatApiKeysTable.chatApiKeyId,
-        agentId: schema.profileChatApiKeysTable.agentId,
-        agentName: schema.agentsTable.name,
-      })
-      .from(schema.profileChatApiKeysTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.profileChatApiKeysTable.agentId, schema.agentsTable.id),
-      )
-      .where(
-        inArray(
-          schema.profileChatApiKeysTable.chatApiKeyId,
-          apiKeys.map((k) => k.id),
+    if (isProfileAdmin) {
+      // Admins see all keys except other users' personal keys
+      const adminConditions = [
+        // Own personal keys
+        and(
+          eq(schema.chatApiKeysTable.scope, "personal"),
+          eq(schema.chatApiKeysTable.userId, userId),
         ),
-      );
+        // All team keys
+        eq(schema.chatApiKeysTable.scope, "team"),
+        // All org-wide keys
+        eq(schema.chatApiKeysTable.scope, "org_wide"),
+      ];
+      const adminOrCondition = or(...adminConditions);
+      if (adminOrCondition) {
+        conditions.push(adminOrCondition);
+      }
+    } else {
+      // Regular users see their personal + their teams + org-wide
+      const visibilityConditions = [
+        // Own personal keys
+        and(
+          eq(schema.chatApiKeysTable.scope, "personal"),
+          eq(schema.chatApiKeysTable.userId, userId),
+        ),
+        // Org-wide keys
+        eq(schema.chatApiKeysTable.scope, "org_wide"),
+      ];
 
-    // Group assignments by API key ID
-    const assignmentsByKeyId = new Map<
-      string,
-      { id: string; name: string }[]
-    >();
-    for (const assignment of assignments) {
-      const profiles = assignmentsByKeyId.get(assignment.chatApiKeyId) || [];
-      profiles.push({ id: assignment.agentId, name: assignment.agentName });
-      assignmentsByKeyId.set(assignment.chatApiKeyId, profiles);
+      // Team keys (only if user has teams)
+      if (userTeamIds.length > 0) {
+        visibilityConditions.push(
+          and(
+            eq(schema.chatApiKeysTable.scope, "team"),
+            inArray(schema.chatApiKeysTable.teamId, userTeamIds),
+          ),
+        );
+      }
+
+      const userOrCondition = or(...visibilityConditions);
+      if (userOrCondition) {
+        conditions.push(userOrCondition);
+      }
     }
 
-    return apiKeys.map((apiKey) => ({
-      ...apiKey,
-      profiles: assignmentsByKeyId.get(apiKey.id) || [],
-    }));
+    // Query with team and user name joins
+    const apiKeys = await db
+      .select({
+        id: schema.chatApiKeysTable.id,
+        organizationId: schema.chatApiKeysTable.organizationId,
+        name: schema.chatApiKeysTable.name,
+        provider: schema.chatApiKeysTable.provider,
+        secretId: schema.chatApiKeysTable.secretId,
+        scope: schema.chatApiKeysTable.scope,
+        userId: schema.chatApiKeysTable.userId,
+        teamId: schema.chatApiKeysTable.teamId,
+        createdAt: schema.chatApiKeysTable.createdAt,
+        updatedAt: schema.chatApiKeysTable.updatedAt,
+        teamName: schema.teamsTable.name,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.chatApiKeysTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.chatApiKeysTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.chatApiKeysTable.userId, schema.usersTable.id),
+      )
+      .where(and(...conditions))
+      .orderBy(schema.chatApiKeysTable.createdAt);
+
+    return apiKeys;
   }
 
   /**
-   * Find the organization default API key for a specific provider
+   * Get available API keys for a user to use in chat.
+   * Only returns keys the user has access to.
    */
-  static async findOrganizationDefault(
+  static async getAvailableKeysForUser(
     organizationId: string,
-    provider: SupportedChatProvider,
-  ): Promise<ChatApiKey | null> {
-    const [apiKey] = await db
+    userId: string,
+    userTeamIds: string[],
+    provider?: SupportedChatProvider,
+  ): Promise<ChatApiKeyWithScopeInfo[]> {
+    // Build conditions
+    const conditions = [
+      eq(schema.chatApiKeysTable.organizationId, organizationId),
+    ];
+
+    // User can only use: own personal + their teams + org-wide
+    const accessConditions = [
+      // Own personal keys
+      and(
+        eq(schema.chatApiKeysTable.scope, "personal"),
+        eq(schema.chatApiKeysTable.userId, userId),
+      ),
+      // Org-wide keys
+      eq(schema.chatApiKeysTable.scope, "org_wide"),
+    ];
+
+    // Team keys (only if user has teams)
+    if (userTeamIds.length > 0) {
+      accessConditions.push(
+        and(
+          eq(schema.chatApiKeysTable.scope, "team"),
+          inArray(schema.chatApiKeysTable.teamId, userTeamIds),
+        ),
+      );
+    }
+
+    const accessOrCondition = or(...accessConditions);
+    if (accessOrCondition) {
+      conditions.push(accessOrCondition);
+    }
+
+    // Filter by provider if specified
+    if (provider) {
+      conditions.push(eq(schema.chatApiKeysTable.provider, provider));
+    }
+
+    // Only return keys with configured secrets
+    conditions.push(sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`);
+
+    // Query with team and user name joins
+    const apiKeys = await db
+      .select({
+        id: schema.chatApiKeysTable.id,
+        organizationId: schema.chatApiKeysTable.organizationId,
+        name: schema.chatApiKeysTable.name,
+        provider: schema.chatApiKeysTable.provider,
+        secretId: schema.chatApiKeysTable.secretId,
+        scope: schema.chatApiKeysTable.scope,
+        userId: schema.chatApiKeysTable.userId,
+        teamId: schema.chatApiKeysTable.teamId,
+        createdAt: schema.chatApiKeysTable.createdAt,
+        updatedAt: schema.chatApiKeysTable.updatedAt,
+        teamName: schema.teamsTable.name,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.chatApiKeysTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.chatApiKeysTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.chatApiKeysTable.userId, schema.usersTable.id),
+      )
+      .where(and(...conditions))
+      .orderBy(schema.chatApiKeysTable.createdAt);
+
+    return apiKeys;
+  }
+
+  /**
+   * Resolve API key with priority: conversation > personal > team > org_wide
+   *
+   * @param organizationId - The organization ID
+   * @param userId - The current user's ID
+   * @param userTeamIds - Team IDs the user belongs to
+   * @param provider - The LLM provider to find a key for
+   * @param conversationApiKeyId - Optional API key ID explicitly selected for the conversation
+   * @returns The resolved API key or null if none available
+   */
+  static async getCurrentApiKey({
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+    conversationId,
+  }: {
+    organizationId: string;
+    userId: string;
+    userTeamIds: string[];
+    provider: SupportedChatProvider;
+    conversationId: string | null;
+  }): Promise<ChatApiKey | null> {
+    const conversation = conversationId
+      ? await ConversationModel.findById({
+          id: conversationId,
+          userId,
+          organizationId,
+        })
+      : null;
+
+    // 1. If conversation has an explicit API key set, use it (if user has access and it matches provider)
+    if (conversation?.chatApiKeyId) {
+      const conversationKey = await ChatApiKeyModel.findById(
+        conversation.chatApiKeyId,
+      );
+      if (
+        conversationKey &&
+        conversationKey.provider === provider &&
+        conversationKey.secretId &&
+        ChatApiKeyModel.userHasAccessToKey(conversationKey, userId, userTeamIds)
+      ) {
+        return conversationKey;
+      }
+    }
+
+    // 2. Try personal key
+    const [personalKey] = await db
       .select()
       .from(schema.chatApiKeysTable)
       .where(
         and(
           eq(schema.chatApiKeysTable.organizationId, organizationId),
           eq(schema.chatApiKeysTable.provider, provider),
-          eq(schema.chatApiKeysTable.isOrganizationDefault, true),
+          eq(schema.chatApiKeysTable.scope, "personal"),
+          eq(schema.chatApiKeysTable.userId, userId),
+          sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
         ),
-      );
+      )
+      .limit(1);
 
-    return apiKey ? (apiKey as ChatApiKey) : null;
+    if (personalKey) {
+      return personalKey;
+    }
+
+    // 3. Try team key (first available from user's teams)
+    if (userTeamIds.length > 0) {
+      const [teamKey] = await db
+        .select()
+        .from(schema.chatApiKeysTable)
+        .where(
+          and(
+            eq(schema.chatApiKeysTable.organizationId, organizationId),
+            eq(schema.chatApiKeysTable.provider, provider),
+            eq(schema.chatApiKeysTable.scope, "team"),
+            inArray(schema.chatApiKeysTable.teamId, userTeamIds),
+            sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+          ),
+        )
+        .limit(1);
+
+      if (teamKey) {
+        return teamKey;
+      }
+    }
+
+    // 4. Try org-wide key
+    const [orgWideKey] = await db
+      .select()
+      .from(schema.chatApiKeysTable)
+      .where(
+        and(
+          eq(schema.chatApiKeysTable.organizationId, organizationId),
+          eq(schema.chatApiKeysTable.provider, provider),
+          eq(schema.chatApiKeysTable.scope, "org_wide"),
+          sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
+        ),
+      )
+      .limit(1);
+
+    return orgWideKey ?? null;
+  }
+
+  /**
+   * Check if a user has access to a specific API key based on scope
+   */
+  private static userHasAccessToKey(
+    apiKey: ChatApiKey,
+    userId: string,
+    userTeamIds: string[],
+  ): boolean {
+    switch (apiKey.scope) {
+      case "personal":
+        return apiKey.userId === userId;
+      case "team":
+        return apiKey.teamId !== null && userTeamIds.includes(apiKey.teamId);
+      case "org_wide":
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Find a key by scope and provider.
+   * Primarily used to find org-wide keys for a specific provider.
+   *
+   * @param organizationId - The organization ID
+   * @param provider - The LLM provider (anthropic, openai, gemini)
+   * @param scope - The key scope (personal, team, org_wide)
+   * @param scopeId - For personal: userId, for team: teamId (optional)
+   * @returns The first matching API key or null
+   */
+  static async findByScope(
+    organizationId: string,
+    provider: SupportedChatProvider,
+    scope: ChatApiKeyScope,
+    scopeId?: string, // userId for personal, teamId for team
+  ): Promise<ChatApiKey | null> {
+    const conditions = [
+      eq(schema.chatApiKeysTable.organizationId, organizationId),
+      eq(schema.chatApiKeysTable.provider, provider),
+      eq(schema.chatApiKeysTable.scope, scope),
+    ];
+
+    if (scope === "personal" && scopeId) {
+      conditions.push(eq(schema.chatApiKeysTable.userId, scopeId));
+    } else if (scope === "team" && scopeId) {
+      conditions.push(eq(schema.chatApiKeysTable.teamId, scopeId));
+    }
+
+    const [apiKey] = await db
+      .select()
+      .from(schema.chatApiKeysTable)
+      .where(and(...conditions))
+      .limit(1);
+
+    return apiKey ?? null;
   }
 
   /**
@@ -132,7 +397,7 @@ class ChatApiKeyModel {
       .where(eq(schema.chatApiKeysTable.id, id))
       .returning();
 
-    return updated;
+    return updated ?? null;
   }
 
   /**
@@ -145,261 +410,6 @@ class ChatApiKeyModel {
       .returning({ id: schema.chatApiKeysTable.id });
 
     return result.length > 0;
-  }
-
-  /**
-   * Set an API key as the organization default for its provider.
-   * This will unset any existing default for the same org/provider.
-   */
-  static async setAsOrganizationDefault(
-    id: string,
-  ): Promise<ChatApiKey | null> {
-    const apiKey = await ChatApiKeyModel.findById(id);
-    if (!apiKey) {
-      return null;
-    }
-
-    // First, unset any existing default for this org/provider
-    await db
-      .update(schema.chatApiKeysTable)
-      .set({ isOrganizationDefault: false })
-      .where(
-        and(
-          eq(schema.chatApiKeysTable.organizationId, apiKey.organizationId),
-          eq(schema.chatApiKeysTable.provider, apiKey.provider),
-          eq(schema.chatApiKeysTable.isOrganizationDefault, true),
-        ),
-      );
-
-    // Then set this key as the default
-    const [updated] = await db
-      .update(schema.chatApiKeysTable)
-      .set({ isOrganizationDefault: true })
-      .where(eq(schema.chatApiKeysTable.id, id))
-      .returning();
-
-    return updated;
-  }
-
-  /**
-   * Unset the organization default status for an API key
-   */
-  static async unsetOrganizationDefault(
-    id: string,
-  ): Promise<ChatApiKey | null> {
-    const [updated] = await db
-      .update(schema.chatApiKeysTable)
-      .set({ isOrganizationDefault: false })
-      .where(eq(schema.chatApiKeysTable.id, id))
-      .returning();
-
-    return updated;
-  }
-
-  /**
-   * Assign an API key to a profile.
-   * Only one API key per provider is allowed per profile.
-   * If a key for the same provider already exists, it will be replaced.
-   */
-  static async assignToProfile(
-    data: InsertProfileChatApiKey,
-  ): Promise<ProfileChatApiKey> {
-    // Get the API key to determine its provider
-    const apiKey = await ChatApiKeyModel.findById(data.chatApiKeyId);
-    if (!apiKey) {
-      throw new Error("API key not found");
-    }
-
-    // Remove any existing assignment for the same provider from this profile
-    // This ensures only one API key per provider per profile
-    const existingKeys = await db
-      .select({
-        assignmentId: schema.profileChatApiKeysTable.id,
-        apiKeyId: schema.chatApiKeysTable.id,
-      })
-      .from(schema.profileChatApiKeysTable)
-      .innerJoin(
-        schema.chatApiKeysTable,
-        eq(
-          schema.profileChatApiKeysTable.chatApiKeyId,
-          schema.chatApiKeysTable.id,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.profileChatApiKeysTable.agentId, data.agentId),
-          eq(schema.chatApiKeysTable.provider, apiKey.provider),
-        ),
-      );
-
-    // Delete existing same-provider assignments (except if it's the same key)
-    for (const existing of existingKeys) {
-      if (existing.apiKeyId !== data.chatApiKeyId) {
-        await db
-          .delete(schema.profileChatApiKeysTable)
-          .where(eq(schema.profileChatApiKeysTable.id, existing.assignmentId));
-      }
-    }
-
-    const [assignment] = await db
-      .insert(schema.profileChatApiKeysTable)
-      .values(data)
-      .onConflictDoNothing()
-      .returning();
-
-    // If conflict (already exists), fetch the existing one
-    if (!assignment) {
-      const [existing] = await db
-        .select()
-        .from(schema.profileChatApiKeysTable)
-        .where(
-          and(
-            eq(schema.profileChatApiKeysTable.agentId, data.agentId),
-            eq(schema.profileChatApiKeysTable.chatApiKeyId, data.chatApiKeyId),
-          ),
-        );
-      return existing;
-    }
-
-    return assignment;
-  }
-
-  /**
-   * Unassign an API key from a profile
-   */
-  static async unassignFromProfile(
-    chatApiKeyId: string,
-    agentId: string,
-  ): Promise<boolean> {
-    const result = await db
-      .delete(schema.profileChatApiKeysTable)
-      .where(
-        and(
-          eq(schema.profileChatApiKeysTable.chatApiKeyId, chatApiKeyId),
-          eq(schema.profileChatApiKeysTable.agentId, agentId),
-        ),
-      )
-      .returning({ id: schema.profileChatApiKeysTable.id });
-
-    return result.length > 0;
-  }
-
-  /**
-   * Get all profiles assigned to an API key
-   */
-  static async getAssignedProfiles(
-    chatApiKeyId: string,
-  ): Promise<{ id: string; name: string }[]> {
-    const assignments = await db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-      })
-      .from(schema.profileChatApiKeysTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.profileChatApiKeysTable.agentId, schema.agentsTable.id),
-      )
-      .where(eq(schema.profileChatApiKeysTable.chatApiKeyId, chatApiKeyId));
-
-    return assignments;
-  }
-
-  /**
-   * Get the API key for a profile for a specific provider.
-   * Returns the profile's assigned key if exists, otherwise the org default.
-   */
-  static async getProfileApiKey(
-    agentId: string,
-    provider: SupportedChatProvider,
-    organizationId: string,
-  ): Promise<ChatApiKey | null> {
-    // First, try to find a profile-specific API key for this provider
-    const [profileKey] = await db
-      .select({
-        apiKey: schema.chatApiKeysTable,
-      })
-      .from(schema.profileChatApiKeysTable)
-      .innerJoin(
-        schema.chatApiKeysTable,
-        eq(
-          schema.profileChatApiKeysTable.chatApiKeyId,
-          schema.chatApiKeysTable.id,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.profileChatApiKeysTable.agentId, agentId),
-          eq(schema.chatApiKeysTable.provider, provider),
-        ),
-      );
-
-    if (profileKey) {
-      return profileKey.apiKey;
-    }
-
-    // Fall back to organization default
-    return ChatApiKeyModel.findOrganizationDefault(organizationId, provider);
-  }
-
-  /**
-   * Get all API keys assigned to a profile
-   */
-  static async getProfileApiKeys(agentId: string): Promise<ChatApiKey[]> {
-    const assignments = await db
-      .select({
-        apiKey: schema.chatApiKeysTable,
-      })
-      .from(schema.profileChatApiKeysTable)
-      .innerJoin(
-        schema.chatApiKeysTable,
-        eq(
-          schema.profileChatApiKeysTable.chatApiKeyId,
-          schema.chatApiKeysTable.id,
-        ),
-      )
-      .where(eq(schema.profileChatApiKeysTable.agentId, agentId));
-
-    return assignments.map((a) => a.apiKey);
-  }
-
-  /**
-   * Bulk assign profiles to an API key.
-   * Respects the one-key-per-provider-per-profile constraint by removing
-   * existing same-provider assignments.
-   */
-  static async bulkAssignProfiles(
-    chatApiKeyId: string,
-    agentIds: string[],
-  ): Promise<void> {
-    if (agentIds.length === 0) {
-      return;
-    }
-
-    // Use individual assignments to respect provider constraint
-    for (const agentId of agentIds) {
-      await ChatApiKeyModel.assignToProfile({ agentId, chatApiKeyId });
-    }
-  }
-
-  /**
-   * Replace all profile assignments for an API key.
-   * Respects the one-key-per-provider-per-profile constraint by removing
-   * existing same-provider assignments from newly assigned profiles.
-   */
-  static async replaceProfileAssignments(
-    chatApiKeyId: string,
-    agentIds: string[],
-  ): Promise<void> {
-    // Delete all existing assignments for this specific API key
-    await db
-      .delete(schema.profileChatApiKeysTable)
-      .where(eq(schema.profileChatApiKeysTable.chatApiKeyId, chatApiKeyId));
-
-    // Add new assignments (using bulk which respects provider constraint)
-    if (agentIds.length > 0) {
-      await ChatApiKeyModel.bulkAssignProfiles(chatApiKeyId, agentIds);
-    }
   }
 
   /**
@@ -429,6 +439,7 @@ class ChatApiKeyModel {
         and(
           eq(schema.chatApiKeysTable.organizationId, organizationId),
           eq(schema.chatApiKeysTable.provider, provider),
+          sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`,
         ),
       )
       .limit(1);

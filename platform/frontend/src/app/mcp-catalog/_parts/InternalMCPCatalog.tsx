@@ -19,6 +19,7 @@ import {
   useDeleteMcpServer,
   useInstallMcpServer,
   useMcpServers,
+  useRestartAllMcpServerInstallations,
 } from "@/lib/mcp-server.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
@@ -60,8 +61,8 @@ export function InternalMCPCatalog({
     hasInstallingServers: installingServerIds.size > 0,
   });
   const installMutation = useInstallMcpServer();
-
   const deleteMutation = useDeleteMcpServer();
+  const restartAllMutation = useRestartAllMcpServerInstallations();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
@@ -510,6 +511,12 @@ export function InternalMCPCatalog({
                   }
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
                   onReinstall={() => handleReinstall(item)}
+                  onRestartAll={() => {
+                    restartAllMutation.mutate({
+                      catalogId: item.id,
+                      name: item.name,
+                    });
+                  }}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
                     setDetailsServerName(item.name);

@@ -51,14 +51,8 @@ const dependencies = {
     projectNames.firefox,
     projectNames.webkit,
   ],
-  // API tests run after all UI tests (including SSO)
-  apiProject: [
-    projectNames.credentialsWithVault,
-    projectNames.chromium,
-    projectNames.firefox,
-    projectNames.webkit,
-    projectNames.sso,
-  ],
+  // API tests should run after all UI tests to avoid DB state conflicts
+  apiProject: [projectNames.sso],
 };
 
 /**
@@ -191,7 +185,7 @@ export default defineConfig({
       dependencies: dependencies.ssoProject,
     },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
-    // API tests run after all UI tests complete (including SSO tests)
+    // API tests only need authentication setup, not the full UI test suite
     {
       name: projectNames.api,
       testDir: "./tests/api",
@@ -200,7 +194,7 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run after all UI test projects complete (including SSO)
+      // Only depend on auth setup, not UI tests
       dependencies: dependencies.apiProject,
     },
   ],

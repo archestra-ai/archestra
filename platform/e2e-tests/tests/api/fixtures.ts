@@ -8,6 +8,7 @@ import {
   editorAuthFile,
   memberAuthFile,
   UI_BASE_URL,
+  WIREMOCK_BASE_URL,
 } from "../../consts";
 
 /**
@@ -41,6 +42,11 @@ export interface TestFixtures {
   createTokenPrice: typeof createTokenPrice;
   deleteTokenPrice: typeof deleteTokenPrice;
   getTokenPrices: typeof getTokenPrices;
+  getOrganization: typeof getOrganization;
+  updateOrganization: typeof updateOrganization;
+  getInteractions: typeof getInteractions;
+  getWiremockRequests: typeof getWiremockRequests;
+  clearWiremockRequests: typeof clearWiremockRequests;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -551,6 +557,130 @@ const getTokenPrices = async (request: APIRequestContext) =>
     urlSuffix: "/api/token-prices",
   });
 
+/**
+ * Get organization details
+ * (authnz is handled by the authenticated session)
+ */
+const getOrganization = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/organization",
+  });
+
+/**
+ * Update organization settings
+ * (authnz is handled by the authenticated session)
+ */
+const updateOrganization = async (
+  request: APIRequestContext,
+  updates: {
+    convertToolResultsToToon?: boolean;
+    compressionScope?: "organization" | "team";
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization",
+    data: updates,
+  });
+
+/**
+ * Get interactions with optional filtering by profileId
+ * (authnz is handled by the authenticated session)
+ */
+const getInteractions = async (
+  request: APIRequestContext,
+  options?: {
+    profileId?: string;
+    limit?: number;
+    offset?: number;
+    sortBy?: string;
+    sortDirection?: "asc" | "desc";
+  },
+) => {
+  const params = new URLSearchParams();
+  if (options?.profileId) params.append("profileId", options.profileId);
+  if (options?.limit) params.append("limit", String(options.limit));
+  if (options?.offset) params.append("offset", String(options.offset));
+  if (options?.sortBy) params.append("sortBy", options.sortBy);
+  if (options?.sortDirection)
+    params.append("sortDirection", options.sortDirection);
+  const queryString = params.toString();
+  return makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/interactions${queryString ? `?${queryString}` : ""}`,
+  });
+};
+
+/**
+ * WireMock request journal entry structure
+ */
+export interface WiremockRequest {
+  id: string;
+  request: {
+    url: string;
+    absoluteUrl: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+    loggedDate: number;
+    loggedDateString: string;
+  };
+  responseDefinition: {
+    status: number;
+  };
+}
+
+/**
+ * Get requests from WireMock's request journal
+ * Useful for verifying what was actually sent to mock LLM providers
+ */
+const getWiremockRequests = async (
+  request: APIRequestContext,
+  options?: {
+    limit?: number;
+    method?: string;
+    urlPattern?: string;
+  },
+): Promise<WiremockRequest[]> => {
+  const params = new URLSearchParams();
+  if (options?.limit) params.append("limit", String(options.limit));
+
+  const queryString = params.toString();
+  const response = await request.get(
+    `${WIREMOCK_BASE_URL}/__admin/requests${queryString ? `?${queryString}` : ""}`,
+  );
+  const data = await response.json();
+
+  let requests: WiremockRequest[] = data.requests || [];
+
+  // Filter by method if specified
+  if (options?.method) {
+    requests = requests.filter(
+      (r) => r.request.method.toUpperCase() === options.method?.toUpperCase(),
+    );
+  }
+
+  // Filter by URL pattern if specified
+  if (options?.urlPattern) {
+    const pattern = new RegExp(options.urlPattern);
+    requests = requests.filter((r) => pattern.test(r.request.url));
+  }
+
+  return requests;
+};
+
+/**
+ * Clear WireMock's request journal
+ * Useful for test isolation - call in beforeEach to ensure clean state
+ */
+const clearWiremockRequests = async (request: APIRequestContext) => {
+  await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
+};
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -630,6 +760,21 @@ export const test = base.extend<TestFixtures>({
   },
   getTokenPrices: async ({}, use) => {
     await use(getTokenPrices);
+  },
+  getOrganization: async ({}, use) => {
+    await use(getOrganization);
+  },
+  updateOrganization: async ({}, use) => {
+    await use(updateOrganization);
+  },
+  getInteractions: async ({}, use) => {
+    await use(getInteractions);
+  },
+  getWiremockRequests: async ({}, use) => {
+    await use(getWiremockRequests);
+  },
+  clearWiremockRequests: async ({}, use) => {
+    await use(clearWiremockRequests);
   },
   /**
    * Admin request - same auth as default `request` fixture

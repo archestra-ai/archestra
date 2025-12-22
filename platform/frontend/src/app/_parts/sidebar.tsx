@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bot,
   Bug,
+  Cable,
   DollarSign,
   Github,
   LogIn,
@@ -99,6 +100,11 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       title: "Cost & Limits",
       url: "/cost",
       icon: DollarSign,
+    },
+    {
+      title: "Connect",
+      url: "/connection",
+      icon: Cable,
     },
   ];
 };

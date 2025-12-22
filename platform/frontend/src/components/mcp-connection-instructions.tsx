@@ -36,7 +36,6 @@ export function McpConnectionInstructions({
     profile: ["admin"],
   });
 
-  const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedAuth, setCopiedAuth] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
@@ -60,13 +59,30 @@ export function McpConnectionInstructions({
     ? null
     : tokens?.find((t) => t.id === effectiveTokenId);
 
+  // Get display name for selected token
+  const getTokenDisplayName = () => {
+    if (isPersonalTokenSelected) {
+      return "Personal Token";
+    }
+    if (selectedTeamToken) {
+      if (selectedTeamToken.isOrganizationToken) {
+        return "Organization Token";
+      }
+      if (selectedTeamToken.team?.name) {
+        return `Team Token (${selectedTeamToken.team.name})`;
+      }
+      return selectedTeamToken.name;
+    }
+    return "Select token";
+  };
+
   // Determine display token based on selection
   const tokenForDisplay = isPersonalTokenSelected
     ? userToken
-      ? `${userToken.tokenStart}...`
+      ? `${userToken.tokenStart}***`
       : "ask-admin-for-access-token"
     : hasProfileAdminPermission && selectedTeamToken
-      ? `${selectedTeamToken.tokenStart}...`
+      ? `${selectedTeamToken.tokenStart}***`
       : "ask-admin-for-access-token";
 
   const mcpConfig = useMemo(
@@ -87,13 +103,6 @@ export function McpConnectionInstructions({
       ),
     [mcpUrl, tokenForDisplay],
   );
-
-  const handleCopyUrl = useCallback(async () => {
-    await navigator.clipboard.writeText(mcpUrl);
-    setCopiedUrl(true);
-    toast.success("URL copied to clipboard");
-    setTimeout(() => setCopiedUrl(false), 2000);
-  }, [mcpUrl]);
 
   const handleCopyAuthWithoutRealToken = async () => {
     await navigator.clipboard.writeText(
@@ -219,14 +228,42 @@ export function McpConnectionInstructions({
     <div className="space-y-6">
       <div className="space-y-3">
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">MCP Gateway URL:</p>
-          <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-            <CodeText className="text-sm break-all">{mcpUrl}</CodeText>
-            <Button variant="ghost" size="icon" onClick={handleCopyUrl}>
-              {copiedUrl ? (
-                <Check className="h-4 w-4 text-green-500" />
+          <p className="text-sm text-muted-foreground">
+            Configuration for MCP clients:
+          </p>
+
+          <div className="bg-muted rounded-md p-3 relative">
+            <pre className="text-xs whitespace-pre-wrap break-all">
+              <CodeText className="text-sm whitespace pre-wrap break-all">
+                {mcpConfig}
+              </CodeText>
+            </pre>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-2 right-2 gap-2"
+              onClick={
+                isPersonalTokenSelected || hasProfileAdminPermission
+                  ? handleCopyConfig
+                  : handleCopyConfigWithoutRealToken
+              }
+              disabled={isCopyingConfig}
+            >
+              {isCopyingConfig ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Copying...</span>
+                </>
+              ) : copiedConfig ? (
+                <>
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Copied!</span>
+                </>
               ) : (
-                <Copy className="h-4 w-4" />
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy with exposed token</span>
+                </>
               )}
             </Button>
           </div>
@@ -238,22 +275,55 @@ export function McpConnectionInstructions({
               Which token to connect with:
             </p>
             <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
-              <SelectTrigger className="w-[200px] h-8">
-                <SelectValue placeholder="Select token" />
+              <SelectTrigger className="w-[400px] min-h-[60px] py-2.5">
+                <SelectValue placeholder="Select token">
+                  {effectiveTokenId && (
+                    <div className="flex flex-col gap-0.5 items-start text-left">
+                      <div>{getTokenDisplayName()}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {isPersonalTokenSelected 
+                          ? "Best option. For Cursor, Claude etc"
+                          : selectedTeamToken?.isOrganizationToken
+                            ? "To share org-wide"
+                            : "To share with your teammates"}
+                      </div>
+                    </div>
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {userToken && (
                   <SelectItem value={PERSONAL_TOKEN_ID}>
-                    Personal Token
+                    <div className="flex flex-col gap-0.5 items-start">
+                      <div>Personal Token</div>
+                      <div className="text-xs text-muted-foreground">Best option. For Cursor, Claude etc</div>
+                    </div>
                   </SelectItem>
                 )}
-                {tokens?.map((token) => (
+                {/* Team tokens (non-organization) */}
+                {tokens?.filter(token => !token.isOrganizationToken).map((token) => (
                   <SelectItem key={token.id} value={token.id}>
-                    {token.isOrganizationToken
-                      ? "Organization Token"
-                      : token.team?.name
-                        ? `${token.team.name} Token`
-                        : token.name}
+                    <div className="flex flex-col gap-0.5 items-start">
+                      <div>
+                        {token.team?.name
+                          ? `Team Token (${token.team.name})`
+                          : token.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        To share with your teammates
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+                {/* Organization token */}
+                {tokens?.filter(token => token.isOrganizationToken).map((token) => (
+                  <SelectItem key={token.id} value={token.id}>
+                    <div className="flex flex-col gap-0.5 items-start">
+                      <div>Organization Token</div>
+                      <div className="text-xs text-muted-foreground">
+                        To share org-wide
+                      </div>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -265,93 +335,27 @@ export function McpConnectionInstructions({
             </CodeText>
             <Button
               variant="ghost"
-              size="icon"
+              size="sm"
               onClick={
                 isPersonalTokenSelected || hasProfileAdminPermission
                   ? handleCopyAuth
                   : handleCopyAuthWithoutRealToken
               }
+              className="gap-2"
             >
               {copiedAuth ? (
-                <Check className="h-4 w-4 text-green-500" />
+                <>
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Copied!</span>
+                </>
               ) : (
-                <Copy className="h-4 w-4" />
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy with exposed token</span>
+                </>
               )}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {isPersonalTokenSelected
-              ? "Your personal token to authenticate with the MCP Gateway for profiles you have access to through your team memberships."
-              : "Select a token above, then click Copy to get the full token value. Manage tokens in Settings → Teams."}
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Example configuration for MCP clients:
-          </p>
-
-          <div className="bg-muted rounded-md p-3 relative">
-            <pre className="text-xs whitespace-pre-wrap break-all">
-              <CodeText className="text-sm whitespace pre-wrap break-all">
-                {mcpConfig}
-              </CodeText>
-            </pre>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2"
-              onClick={
-                isPersonalTokenSelected || hasProfileAdminPermission
-                  ? handleCopyConfig
-                  : handleCopyConfigWithoutRealToken
-              }
-              disabled={isCopyingConfig}
-            >
-              {isCopyingConfig ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : copiedConfig ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            Connect using the{" "}
-            <a
-              href="https://modelcontextprotocol.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              Model Context Protocol (MCP)
-            </a>{" "}
-            to access tools assigned to this profile.
-          </p>
-
-          <p className="text-sm text-muted-foreground">
-            Use this endpoint in MCP-compatible applications like{" "}
-            <a
-              href="https://docs.cursor.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              Cursor
-            </a>
-            ,{" "}
-            <a
-              href="https://claude.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              Claude Desktop
-            </a>
-            , or any MCP client.
-          </p>
         </div>
 
         <p className="text-sm text-muted-foreground">

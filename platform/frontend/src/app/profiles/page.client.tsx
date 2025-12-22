@@ -4,10 +4,20 @@ import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
+  ArrowRight,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  DollarSign,
+  ExternalLink,
+  Eye,
+  Lock,
+  Network,
   Plus,
   Search,
+  Server,
+  Shield,
+  Sparkles,
   Tag,
   Wrench,
   X,
@@ -1111,25 +1121,82 @@ function EditProfileDialog({
 }
 
 function ProfileConnectionColumns({ agentId }: { agentId: string }) {
+  const [activeTab, setActiveTab] = useState<"proxy" | "mcp">("proxy");
+
   return (
-    <div className="grid grid-cols-2 gap-6">
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 pb-2 border-b">
-          <h3 className="font-medium">LLM Proxy</h3>
-          <h4 className="text-sm text-muted-foreground">
-            For security, observibility and enabling tools
-          </h4>
-        </div>
-        <ProxyConnectionInstructions agentId={agentId} />
+    <div className="space-y-6">
+      {/* Tab Selection with inline features */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab("proxy")}
+          className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
+            activeTab === "proxy"
+              ? "bg-blue-500/5 border-2 border-blue-500/30"
+              : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Network className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`} />
+            <span className="font-medium">LLM Proxy</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Lock className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
+              <span className="text-[10px]">Security</span>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+              <span className="text-[10px]">Observability</span>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+              <span className="text-[10px]">Cost</span>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("mcp")}
+          className={`flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 ${
+            activeTab === "mcp"
+              ? "bg-green-500/5 border-2 border-green-500/30"
+              : "bg-muted/30 border-2 border-transparent hover:bg-muted/50"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Shield className={`h-4 w-4 ${activeTab === "mcp" ? "text-green-500" : ""}`} />
+            <span className="font-medium">MCP Gateway</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Server className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+              <span className="text-[10px]">Unified MCP</span>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
+              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+              <span className="text-[10px]">Observability</span>
+            </div>
+          </div>
+        </button>
       </div>
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 pb-2 border-b">
-          <h3 className="font-medium">MCP Gateway</h3>
-          <h4 className="text-sm text-muted-foreground">
-            To enable tools for the profile
-          </h4>
-        </div>
-        <McpConnectionInstructions agentId={agentId} />
+
+      {/* Content */}
+      <div className="relative">
+        {activeTab === "proxy" ? (
+          <div className="animate-in fade-in-0 slide-in-from-left-2 duration-300">
+            <div className="p-4 rounded-lg border bg-card">
+              <ProxyConnectionInstructions agentId={agentId} />
+            </div>
+          </div>
+        ) : (
+          <div className="animate-in fade-in-0 slide-in-from-right-2 duration-300">
+            <div className="p-4 rounded-lg border bg-card">
+              <McpConnectionInstructions agentId={agentId} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1146,18 +1213,53 @@ function ConnectProfileDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[90vw] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>How to connect "{agent.name}" to Archestra</DialogTitle>
-        </DialogHeader>
-        <div className="py-4">
+      <DialogContent className="max-w-3xl p-0 overflow-hidden border-0">
+        {/* Header with gradient */}
+        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5">
+          <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
+          <div className="relative">
+            <DialogHeader>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-primary/10">
+                  <Network className="h-4 w-4 text-primary" />
+                </div>
+                <DialogTitle className="text-xl font-semibold">
+                  Connect via "{agent.name}"
+                </DialogTitle>
+              </div>
+            </DialogHeader>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-5">
           <ProfileConnectionColumns agentId={agent.id} />
         </div>
-        <DialogFooter>
-          <Button type="button" onClick={() => onOpenChange(false)}>
-            Close
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ExternalLink className="h-3.5 w-3.5" />
+            <span>Need help? Check our</span>
+            <a
+              href="https://archestra.ai/docs/platform-profiles"
+              target="_blank"
+              className="text-primary hover:underline font-medium"
+              rel="noopener"
+            >
+              documentation
+            </a>
+          </div>
+          <Button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            size="default"
+            className="min-w-[100px]"
+          >
+            Done
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

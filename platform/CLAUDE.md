@@ -87,8 +87,23 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 
-# Testing with WireMock
-tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
+# E2E setup
+Runs wiremock and seeds test data to database. Note that in development e2e use your development database. This means some of your local data may cause e2e to fail locally.
+tilt trigger e2e-test-dependencies   # Start e2e WireMock
+
+Check wiremock health at:
+http://localhost:9092/__admin/health
+
+ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/v1
+ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
+ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
+
+# Orlando WireMock (project-specific)
+tilt trigger orlando-wiremock 
+
+ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
+ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
+ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
 
 # E2E Testing
 pnpm test:e2e                        # Run Playwright tests

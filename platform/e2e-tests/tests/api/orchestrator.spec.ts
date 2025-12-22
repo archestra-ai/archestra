@@ -96,9 +96,16 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         createAgent,
         createMcpCatalogItem,
         installMcpServer,
+        getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent - Remote");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
 
         // Create a catalog item for context7 remote MCP server (no auth required)
         const catalogResponse = await createMcpCatalogItem(request, {
@@ -116,6 +123,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           const installResponse = await installMcpServer(request, {
             name: "Test Context7 Remote Server",
             catalogId: catalogId,
+            teamId: defaultTeam.id,
           });
           return installResponse.json();
         });
@@ -154,9 +162,16 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         createAgent,
         createMcpCatalogItem,
         installMcpServer,
+        getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent - NPX");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
 
         // Create a catalog item for context7 MCP server using npx
         const catalogResponse = await createMcpCatalogItem(request, {
@@ -173,10 +188,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;
 
-        // Install the MCP server (no environment values needed)
+        // Install the MCP server with team assignment
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 NPX Server",
           catalogId: catalogId,
+          teamId: defaultTeam.id,
         });
         const server = await installResponse.json();
         serverId = server.id;
@@ -217,9 +233,16 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         createAgent,
         createMcpCatalogItem,
         installMcpServer,
+        getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent - Docker");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
 
         // Create a catalog item for context7 MCP server using Docker image
         const catalogResponse = await createMcpCatalogItem(request, {
@@ -242,10 +265,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;
 
-        // Install the MCP server
+        // Install the MCP server with team assignment
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 Docker Server",
           catalogId: catalogId,
+          teamId: defaultTeam.id,
         });
         const server = await installResponse.json();
         serverId = server.id;

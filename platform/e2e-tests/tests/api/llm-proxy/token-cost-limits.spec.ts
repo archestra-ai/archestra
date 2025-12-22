@@ -134,16 +134,30 @@ for (const config of testConfigs) {
       createLimit,
       createTokenPrice,
       makeApiRequest,
+      deleteTokenPrice,
+      getTokenPrices,
     }) => {
-      // 0. Create token price for the model
+      // 0. Delete any existing token prices for this model and create fresh ones
+      const allPricesResponse = await getTokenPrices(request);
+      if (allPricesResponse.ok()) {
+        const allPrices = await allPricesResponse.json();
+        const existingPrice = allPrices.find(
+          (p: { provider: string; model: string; id: string }) =>
+            p.provider === config.tokenPrice.provider &&
+            p.model === config.tokenPrice.model,
+        );
+        if (existingPrice) {
+          await deleteTokenPrice(request, existingPrice.id).catch(() => {});
+        }
+      }
+
+      // Create fresh token price with exact values for our test
       const tokenPriceResponse = await createTokenPrice(
         request,
         config.tokenPrice,
       );
-      if (tokenPriceResponse.ok()) {
-        const tokenPrice = await tokenPriceResponse.json();
-        tokenPriceId = tokenPrice.id;
-      }
+      const tokenPrice = await tokenPriceResponse.json();
+      tokenPriceId = tokenPrice.id;
 
       // 1. Create a test profile
       const createResponse = await createAgent(
@@ -166,13 +180,18 @@ for (const config of testConfigs) {
       const limit = await limitResponse.json();
       limitId = limit.id;
 
-      // 3. Make first request to set up usage
+      // 3. Make first request to set up usage (with long content to bypass optimization rules)
+      const longContent =
+        "This is a very long message to bypass optimization rules that typically only apply to short content under 1000 tokens. ".repeat(
+          100,
+        );
+
       const initialResponse = await makeApiRequest({
         request,
         method: "post",
         urlSuffix: config.endpoint(profileId),
         headers: config.headers(wiremockStub),
-        data: config.buildRequest("Hello"),
+        data: config.buildRequest(longContent),
       });
 
       if (!initialResponse.ok()) {
@@ -184,7 +203,17 @@ for (const config of testConfigs) {
 
       // Wait for async usage tracking to complete
       // Usage tracking happens asynchronously after the response is sent
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // DEBUG: We are requesting usage limits between the two LLM requests
+      // to make sure the first LLM request counts against limits.
+      // This request is visible in Playwright UI and is helpful in debugging.
+      await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/limits`,
+        ignoreStatusCheck: true,
+      });
 
       // 4. Second request should be blocked (limit exceeded)
       const blockedResponse = await makeApiRequest({
@@ -192,7 +221,9 @@ for (const config of testConfigs) {
         method: "post",
         urlSuffix: config.endpoint(profileId),
         headers: config.headers(wiremockStub),
-        data: config.buildRequest("This should be blocked"),
+        data: config.buildRequest(
+          "This should be blocked because we exceeded the limit",
+        ),
         ignoreStatusCheck: true,
       });
 

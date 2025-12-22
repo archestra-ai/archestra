@@ -6,13 +6,18 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { testProviderApiKey } from "@/routes/chat-models";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
+import {
+  assertByosEnabled,
+  isByosEnabled,
+  secretManager,
+} from "@/secretsmanager";
 import {
   ApiError,
   ChatApiKeyScopeSchema,
   ChatApiKeyWithScopeInfoSchema,
   constructResponseSchema,
   SelectChatApiKeySchema,
+  type SelectSecret,
   SupportedChatProviderSchema,
 } from "@/types";
 
@@ -89,13 +94,26 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateChatApiKey,
         description: "Create a new chat API key with specified scope",
         tags: ["Chat API Keys"],
-        body: z.object({
-          name: z.string().min(1, "Name is required"),
-          provider: SupportedChatProviderSchema,
-          apiKey: z.string().min(1, "API key is required"),
-          scope: ChatApiKeyScopeSchema.default("personal"),
-          teamId: z.string().optional(),
-        }),
+        body: z
+          .object({
+            name: z.string().min(1, "Name is required"),
+            provider: SupportedChatProviderSchema,
+            apiKey: z.string().min(1).optional(),
+            scope: ChatApiKeyScopeSchema.default("personal"),
+            teamId: z.string().optional(),
+            vaultSecretPath: z.string().min(1).optional(),
+            vaultSecretKey: z.string().min(1).optional(),
+          })
+          .refine(
+            (data) =>
+              isByosEnabled()
+                ? data.vaultSecretPath && data.vaultSecretKey
+                : data.apiKey,
+            {
+              message:
+                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+            },
+          ),
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
     },
@@ -108,38 +126,70 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
-      // Test the API key before saving
-      try {
-        await testProviderApiKey(body.provider, body.apiKey);
-      } catch (_error) {
-        throw new ApiError(
-          400,
-          `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
+      let secret: SelectSecret | null = null;
+
+      // If readonly_vault is enabled
+      if (isByosEnabled()) {
+        if (!body.vaultSecretPath || !body.vaultSecretKey) {
+          throw new ApiError(400, "Vault secret path and key are required");
+        }
+        const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+        // first, get secret from vault path and key
+        const manager = assertByosEnabled();
+        const vaultData = await manager.getSecretFromPath(body.vaultSecretPath);
+        const apiKeyValue = vaultData[body.vaultSecretKey];
+
+        if (!apiKeyValue) {
+          throw new ApiError(
+            400,
+            `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
+          );
+        }
+        // then test the API key
+        try {
+          await testProviderApiKey(body.provider, apiKeyValue);
+        } catch (_error) {
+          throw new ApiError(
+            400,
+            `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
+          );
+        }
+        // then create the secret
+        secret = await secretManager().createSecret(
+          { apiKey: vaultReference },
+          "chatapikey",
+          false, // forceDB=false to store as vault reference
+        );
+      } else if (body.apiKey) {
+        // When readonly_vault is disabled
+        // Test the API key before saving
+        try {
+          await testProviderApiKey(body.provider, body.apiKey);
+        } catch (_error) {
+          throw new ApiError(
+            400,
+            `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
+          );
+        }
+
+        secret = await secretManager().createSecret(
+          { apiKey: body.apiKey },
+          "chatapikey",
         );
       }
 
-      // Use forceDB when BYOS is enabled because chat API keys are user-provided values
-      const forceDB = isByosEnabled();
-
-      // Create the secret for the API key
-      const secret = await secretManager().createSecret(
-        { apiKey: body.apiKey },
-        "chatapikey",
-        forceDB,
-      );
-
       // Create the API key record
-      const apiKey = await ChatApiKeyModel.create({
+      const createdApiKey = await ChatApiKeyModel.create({
         organizationId,
         name: body.name,
         provider: body.provider,
-        secretId: secret.id,
+        secretId: secret?.id ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
       });
 
-      return reply.send(apiKey);
+      return reply.send(createdApiKey);
     },
   );
 
@@ -199,12 +249,41 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        body: z.object({
-          name: z.string().min(1).optional(),
-          apiKey: z.string().min(1).optional(),
-          scope: ChatApiKeyScopeSchema.optional(),
-          teamId: z.string().uuid().nullable().optional(),
-        }),
+        body: z
+          .object({
+            name: z.string().min(1).optional(),
+            apiKey: z.string().min(1).optional(),
+            scope: ChatApiKeyScopeSchema.optional(),
+            teamId: z.string().uuid().nullable().optional(),
+            vaultSecretPath: z.string().min(1).optional(),
+            vaultSecretKey: z.string().min(1).optional(),
+          })
+          .refine(
+            (data) => {
+              // If no key-related fields are provided, that's fine (updating other fields)
+              if (
+                !data.apiKey &&
+                !data.vaultSecretPath &&
+                !data.vaultSecretKey
+              ) {
+                return true;
+              }
+              // If apiKey is provided, that's always valid
+              if (data.apiKey) {
+                return true;
+              }
+              // If BYOS is enabled and vault fields are provided, both must be present
+              if (isByosEnabled()) {
+                return data.vaultSecretPath && data.vaultSecretKey;
+              }
+              // If BYOS is disabled, vault fields are ignored, so we need apiKey
+              return false;
+            },
+            {
+              message:
+                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+            },
+          ),
         response: constructResponseSchema(SelectChatApiKeySchema),
       },
     },
@@ -221,6 +300,7 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // If scope is changing, validate the new scope
       const newScope = body.scope ?? apiKey.scope;
       const newTeamId = body.teamId !== undefined ? body.teamId : apiKey.teamId;
+      let newSecretId: string | null = null;
 
       if (body.scope !== undefined || body.teamId !== undefined) {
         await validateScopeAndAuthorization({
@@ -231,32 +311,59 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Test the API key before saving (only if a new key is provided)
-      if (body.apiKey) {
+      // Update the secret if a new API key is provided (via direct value or vault reference)
+      if (body.apiKey || (body.vaultSecretPath && body.vaultSecretKey)) {
+        let apiKeyValue: string;
+        let vaultReference: string | undefined;
+
+        if (isByosEnabled() && body.vaultSecretPath && body.vaultSecretKey) {
+          // Get secret from vault
+          const manager = assertByosEnabled();
+          const vaultData = await manager.getSecretFromPath(
+            body.vaultSecretPath,
+          );
+          apiKeyValue = vaultData[body.vaultSecretKey];
+
+          if (!apiKeyValue) {
+            throw new ApiError(
+              400,
+              `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
+            );
+          }
+
+          // Create vault reference for storage
+          vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+        } else if (body.apiKey) {
+          // Use direct API key value
+          apiKeyValue = body.apiKey;
+        } else {
+          // This shouldn't happen due to refine, but TypeScript needs this
+          throw new ApiError(400, "API key or vault reference is required");
+        }
+
+        // Test the API key before saving
         try {
-          await testProviderApiKey(apiKey.provider, body.apiKey);
+          await testProviderApiKey(apiKey.provider, apiKeyValue);
         } catch (_error) {
           throw new ApiError(
             400,
             `Invalid API key: Failed to connect to ${capitalize(apiKey.provider)}`,
           );
         }
-      }
 
-      // Update the secret if a new API key is provided
-      if (body.apiKey) {
+        // Update or create the secret
         if (apiKey.secretId) {
+          // Update with vault reference
           await secretManager().updateSecret(apiKey.secretId, {
-            apiKey: body.apiKey,
+            apiKey: vaultReference ?? apiKeyValue,
           });
         } else {
-          const forceDB = isByosEnabled();
+          // Create new secret
           const secret = await secretManager().createSecret(
-            { apiKey: body.apiKey },
+            { apiKey: isByosEnabled() ? vaultReference : apiKeyValue },
             "chatapikey",
-            forceDB,
           );
-          await ChatApiKeyModel.update(params.id, { secretId: secret.id });
+          newSecretId = secret.id;
         }
       }
 
@@ -266,10 +373,15 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: "personal" | "team" | "org_wide";
         userId: string | null;
         teamId: string | null;
+        secretId: string | null;
       }> = {};
 
       if (body.name) {
         updateData.name = body.name;
+      }
+
+      if (newSecretId) {
+        updateData.secretId = newSecretId;
       }
 
       if (body.scope !== undefined) {

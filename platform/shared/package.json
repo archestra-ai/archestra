@@ -24,11 +24,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-auth": "1.4.6-beta.3",
+    "better-auth": "1.4.7",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.88.1",
+    "@hey-api/openapi-ts": "^0.89.0",
     "@types/node": "^24",
     "knip": "^5.72.0",
     "tsx": "^4.21.0",

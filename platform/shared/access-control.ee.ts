@@ -303,6 +303,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.RestartMcpServer]: {
+    mcpServer: ["update"],
+  },
+  [RouteId.RestartAllMcpServerInstallations]: {
+    mcpServer: ["admin"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },

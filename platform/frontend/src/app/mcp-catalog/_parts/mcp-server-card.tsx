@@ -6,6 +6,7 @@ import {
   Info,
   MoreVertical,
   Pencil,
+  RefreshCcw,
   RefreshCw,
   Trash2,
   User,
@@ -89,7 +90,7 @@ export type McpServerCardProps = {
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
-  onRestart: () => void;
+  onRestartAll: () => void;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -111,7 +112,7 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
-  onRestart,
+  onRestartAll,
   onDetails,
   onEdit,
   onDelete,
@@ -261,26 +262,33 @@ export function McpServerCard({
               )}
             </Tooltip>
           </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <DropdownMenuItem
-                    onClick={onRestart}
-                    disabled={variant !== "local"}
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Restart
-                  </DropdownMenuItem>
-                </div>
-              </TooltipTrigger>
-              {variant !== "local" && (
+          <WithPermissions
+            permissions={{ mcpServer: ["admin"] }}
+            noPermissionHandle="hide"
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <DropdownMenuItem
+                      onClick={onRestartAll}
+                      disabled={variant !== "local"}
+                    >
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      Restart
+                    </DropdownMenuItem>
+                  </div>
+                </TooltipTrigger>
                 <TooltipContent>
-                  <p>Only available for local MCP servers</p>
+                  <p>
+                    {variant !== "local"
+                      ? "Only available for local MCP servers"
+                      : "Restarts all running instances of this MCP server."}
+                  </p>
                 </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+              </Tooltip>
+            </TooltipProvider>
+          </WithPermissions>
           <DropdownMenuItem onClick={onDetails}>
             <Info className="mr-2 h-4 w-4" />
             About

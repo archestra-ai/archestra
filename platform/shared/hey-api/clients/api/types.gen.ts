@@ -12608,6 +12608,97 @@ export type RestartMcpServerResponses = {
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
+export type RestartAllMcpServerInstallationsData = {
+    body?: never;
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{catalogId}/restart-all-installations';
+};
+
+export type RestartAllMcpServerInstallationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RestartAllMcpServerInstallationsError = RestartAllMcpServerInstallationsErrors[keyof RestartAllMcpServerInstallationsErrors];
+
+export type RestartAllMcpServerInstallationsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        message: string;
+        results: Array<{
+            serverId: string;
+            serverName: string;
+            success: boolean;
+            error?: string;
+        }>;
+        summary: {
+            total: number;
+            succeeded: number;
+            failed: number;
+        };
+    };
+};
+
+export type RestartAllMcpServerInstallationsResponse = RestartAllMcpServerInstallationsResponses[keyof RestartAllMcpServerInstallationsResponses];
+
 export type GetMcpToolCallsData = {
     body?: never;
     path?: never;

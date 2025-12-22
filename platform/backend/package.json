@@ -90,7 +90,7 @@
     "@electric-sql/pglite": "^0.3.14",
     "@sentry/cli": "^2.47.0",
     "@types/lodash-es": "^4.17.12",
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.0.2",
     "@types/pg": "^8.15.6",
     "@types/ws": "^8.18.1",
     "knip": "^5.72.0",

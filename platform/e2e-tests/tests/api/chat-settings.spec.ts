@@ -463,14 +463,15 @@ test.describe("Chat API Keys Scope Update", () => {
     makeApiRequest,
   }) => {
     // Create a personal key first
+    // Use gemini provider to avoid conflicts with other tests using openai personal keys
     const createResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Scope Update Test Key",
-        provider: "openai",
-        apiKey: "sk-openai-scope-update-test",
+        provider: "gemini",
+        apiKey: "gemini-scope-update-test",
         scope: "personal",
       },
     });

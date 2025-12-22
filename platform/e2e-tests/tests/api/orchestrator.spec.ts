@@ -153,6 +153,9 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   });
 
   test.describe("Local MCP Server - NPX Command", () => {
+    // Extend timeout for this describe block since MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
     let catalogId: string;
     let serverId: string;
 
@@ -255,6 +258,9 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   });
 
   test.describe("Local MCP Server - Docker Image", () => {
+    // Extend timeout for this describe block since Docker image pull and MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
     let catalogId: string;
     let serverId: string;
 

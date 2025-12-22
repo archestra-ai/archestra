@@ -204,6 +204,7 @@ for (const config of testConfigs) {
       // Poll for async usage tracking to complete
       // Usage tracking happens asynchronously after the response is sent
       // We need to wait until the usage is actually recorded before the second request
+      // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
       const maxPollingAttempts = 30;
       const pollingIntervalMs = 500;
       let usageTracked = false;
@@ -219,9 +220,18 @@ for (const config of testConfigs) {
         if (limitsResponse.ok()) {
           const limits = await limitsResponse.json();
           const targetLimit = limits.find(
-            (l: { id: string; currentUsage?: number }) => l.id === limitId,
+            (l: {
+              id: string;
+              modelUsage?: Array<{ model: string; cost: number }>;
+            }) => l.id === limitId,
           );
-          if (targetLimit?.currentUsage && targetLimit.currentUsage > 0) {
+          // Check if any model has recorded usage (cost > 0)
+          const totalCost =
+            targetLimit?.modelUsage?.reduce(
+              (sum: number, m: { cost: number }) => sum + m.cost,
+              0,
+            ) ?? 0;
+          if (totalCost > 0) {
             usageTracked = true;
             break;
           }

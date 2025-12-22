@@ -13,11 +13,11 @@ class ConversationModel {
       .values(data)
       .returning();
 
-    const conversationWithAgent = (await ConversationModel.findById(
-      conversation.id,
-      data.userId,
-      data.organizationId,
-    )) as Conversation;
+    const conversationWithAgent = (await ConversationModel.findById({
+      id: conversation.id,
+      userId: data.userId,
+      organizationId: data.organizationId,
+    })) as Conversation;
 
     return conversationWithAgent;
   }
@@ -82,11 +82,15 @@ class ConversationModel {
     return Array.from(conversationMap.values());
   }
 
-  static async findById(
-    id: string,
-    userId: string,
-    organizationId: string,
-  ): Promise<Conversation | null> {
+  static async findById({
+    id,
+    userId,
+    organizationId,
+  }: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<Conversation | null> {
     const rows = await db
       .select({
         conversation: getTableColumns(schema.conversationsTable),
@@ -160,11 +164,11 @@ class ConversationModel {
       return null;
     }
 
-    const updatedWithAgent = (await ConversationModel.findById(
-      updated.id,
-      userId,
-      organizationId,
-    )) as Conversation;
+    const updatedWithAgent = (await ConversationModel.findById({
+      id: updated.id,
+      userId: userId,
+      organizationId: organizationId,
+    })) as Conversation;
 
     return updatedWithAgent;
   }

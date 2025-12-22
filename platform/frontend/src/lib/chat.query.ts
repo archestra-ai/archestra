@@ -101,6 +101,9 @@ export function useUpdateConversation() {
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
       });
+      if (variables.chatApiKeyId) {
+        queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      }
     },
     onError: (error) => {
       toast.error(

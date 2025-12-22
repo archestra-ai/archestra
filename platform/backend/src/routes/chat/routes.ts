@@ -90,12 +90,13 @@ async function getSmartDefaultModel(
    * Try to find an available API key in order of preference
    */
   for (const provider of SupportedProviders) {
-    const resolvedKey = await ChatApiKeyModel.resolveApiKey(
-      organizationId,
-      userId,
-      userTeamIds,
-      provider,
-    );
+    const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
+      organizationId: organizationId,
+      userId: userId,
+      userTeamIds: userTeamIds,
+      provider: provider,
+      conversationId: null,
+    });
 
     if (resolvedKey?.secretId) {
       const secretValue = await getSecretValueForLlmProviderApiKey(
@@ -166,11 +167,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = getExternalAgentId(headers);
 
       // Get conversation
-      const conversation = await ConversationModel.findById(
-        conversationId,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -239,13 +240,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
       // Try scope-based resolution (checks conversation's chatApiKeyId first, then personal > team > org_wide)
-      const resolvedApiKey = await ChatApiKeyModel.resolveApiKey(
+      const resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
         organizationId,
-        user.id,
+        userId: user.id,
         userTeamIds,
         provider,
-        conversation.chatApiKeyId,
-      );
+        conversationId,
+      });
 
       if (resolvedApiKey?.secretId) {
         const secret = await secretManager().getSecret(resolvedApiKey.secretId);
@@ -506,11 +507,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -736,11 +737,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const regenerate = body?.regenerate ?? false;
 
       // Get conversation with messages
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -800,13 +801,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
 
       // Use resolveApiKey which handles priority: conversation key -> personal -> team -> org_wide
-      const resolvedKey = await ChatApiKeyModel.resolveApiKey(
-        organizationId,
-        user.id,
-        userTeamIds,
-        "anthropic",
-        conversation.chatApiKeyId,
-      );
+      const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: organizationId,
+        userId: user.id,
+        userTeamIds: userTeamIds,
+        provider: "anthropic",
+        conversationId: id,
+      });
 
       if (resolvedKey?.secretId) {
         const secret = await secretManager().getSecret(resolvedKey.secretId);
@@ -918,11 +919,11 @@ The title should capture the main topic or theme of the conversation. Respond wi
       }
 
       // Verify the user has access to the conversation
-      const conversation = await ConversationModel.findById(
-        message.conversationId,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: message.conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Message not found or access denied");
@@ -940,11 +941,11 @@ The title should capture the main topic or theme of the conversation. Respond wi
       );
 
       // Return updated conversation with all messages
-      const updatedConversation = await ConversationModel.findById(
-        message.conversationId,
-        user.id,
-        organizationId,
-      );
+      const updatedConversation = await ConversationModel.findById({
+        id: message.conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!updatedConversation) {
         throw new ApiError(500, "Failed to retrieve updated conversation");
@@ -974,11 +975,11 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
     async ({ params: { id }, user, organizationId }, reply) => {
       // Verify conversation exists and user owns it
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -1021,11 +1022,11 @@ The title should capture the main topic or theme of the conversation. Respond wi
       reply,
     ) => {
       // Verify conversation exists and user owns it
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -1054,11 +1055,11 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
     async ({ params: { id }, user, organizationId }, reply) => {
       // Verify conversation exists and user owns it
-      const conversation = await ConversationModel.findById(
-        id,
-        user.id,
-        organizationId,
-      );
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");

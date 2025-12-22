@@ -123,7 +123,6 @@ export function useUpdateChatApiKey() {
       toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
-      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
 }

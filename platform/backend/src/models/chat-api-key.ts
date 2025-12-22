@@ -8,6 +8,7 @@ import type {
   SupportedChatProvider,
   UpdateChatApiKey,
 } from "@/types";
+import ConversationModel from "./conversation";
 
 class ChatApiKeyModel {
   /**
@@ -233,17 +234,32 @@ class ChatApiKeyModel {
    * @param conversationApiKeyId - Optional API key ID explicitly selected for the conversation
    * @returns The resolved API key or null if none available
    */
-  static async resolveApiKey(
-    organizationId: string,
-    userId: string,
-    userTeamIds: string[],
-    provider: SupportedChatProvider,
-    conversationApiKeyId?: string | null,
-  ): Promise<ChatApiKey | null> {
+  static async getCurrentApiKey({
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+    conversationId,
+  }: {
+    organizationId: string;
+    userId: string;
+    userTeamIds: string[];
+    provider: SupportedChatProvider;
+    conversationId: string | null;
+  }): Promise<ChatApiKey | null> {
+    const conversation = conversationId
+      ? await ConversationModel.findById({
+          id: conversationId,
+          userId,
+          organizationId,
+        })
+      : null;
+
     // 1. If conversation has an explicit API key set, use it (if user has access and it matches provider)
-    if (conversationApiKeyId) {
-      const conversationKey =
-        await ChatApiKeyModel.findById(conversationApiKeyId);
+    if (conversation?.chatApiKeyId) {
+      const conversationKey = await ChatApiKeyModel.findById(
+        conversation.chatApiKeyId,
+      );
       if (
         conversationKey &&
         conversationKey.provider === provider &&
@@ -429,24 +445,6 @@ class ChatApiKeyModel {
       .limit(1);
 
     return !!result;
-  }
-
-  /**
-   * Check if a user has any available API key for a specific provider
-   */
-  static async hasAvailableKeyForProvider(
-    organizationId: string,
-    userId: string,
-    userTeamIds: string[],
-    provider: SupportedChatProvider,
-  ): Promise<boolean> {
-    const key = await ChatApiKeyModel.resolveApiKey(
-      organizationId,
-      userId,
-      userTeamIds,
-      provider,
-    );
-    return key !== null;
   }
 }
 

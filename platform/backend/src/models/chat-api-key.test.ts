@@ -420,12 +420,13 @@ describe("ChatApiKeyModel", () => {
         secretId: secret2.id,
       });
 
-      const resolved = await ChatApiKeyModel.resolveApiKey(
-        org.id,
-        user.id,
-        [],
-        "anthropic",
-      );
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationApiKeyId: null,
+      });
 
       expect(resolved?.id).toBe(personalKey.id);
     });
@@ -458,12 +459,13 @@ describe("ChatApiKeyModel", () => {
         secretId: secret2.id,
       });
 
-      const resolved = await ChatApiKeyModel.resolveApiKey(
-        org.id,
-        user.id,
-        [team.id],
-        "anthropic",
-      );
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [team.id],
+        provider: "anthropic",
+        conversationApiKeyId: null,
+      });
 
       expect(resolved?.id).toBe(teamKey.id);
     });
@@ -485,12 +487,13 @@ describe("ChatApiKeyModel", () => {
         secretId: secret.id,
       });
 
-      const resolved = await ChatApiKeyModel.resolveApiKey(
-        org.id,
-        user.id,
-        [],
-        "anthropic",
-      );
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationApiKeyId: null,
+      });
 
       expect(resolved?.id).toBe(orgWideKey.id);
     });
@@ -521,13 +524,13 @@ describe("ChatApiKeyModel", () => {
         secretId: secret2.id,
       });
 
-      const resolved = await ChatApiKeyModel.resolveApiKey(
-        org.id,
-        user.id,
-        [],
-        "anthropic",
-        conversationKey.id, // Explicit conversation key
-      );
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationApiKeyId: conversationKey.id,
+      });
 
       expect(resolved?.id).toBe(conversationKey.id);
     });
@@ -539,12 +542,13 @@ describe("ChatApiKeyModel", () => {
       const org = await makeOrganization();
       const user = await makeUser();
 
-      const resolved = await ChatApiKeyModel.resolveApiKey(
-        org.id,
-        user.id,
-        [],
-        "anthropic",
-      );
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationApiKeyId: null,
+      });
 
       expect(resolved).toBeNull();
     });

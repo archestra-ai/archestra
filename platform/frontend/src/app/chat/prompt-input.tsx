@@ -35,7 +35,7 @@ interface ArchestraPromptInputProps {
   agentId: string;
   conversationId: string;
   // API key selector props
-  chatApiKeyId?: string | null;
+  currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
 }
 
@@ -48,7 +48,7 @@ const PromptInputContent = ({
   messageCount,
   agentId,
   conversationId,
-  chatApiKeyId,
+  currentConversationChatApiKeyId,
   currentProvider,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
@@ -90,7 +90,9 @@ const PromptInputContent = ({
             <ChatApiKeySelector
               conversationId={conversationId}
               currentProvider={currentProvider}
-              selectedKeyId={chatApiKeyId ?? null}
+              currentConversationChatApiKeyId={
+                currentConversationChatApiKeyId ?? null
+              }
               messageCount={messageCount}
             />
           )}
@@ -115,7 +117,7 @@ const ArchestraPromptInput = ({
   messageCount = 0,
   agentId,
   conversationId,
-  chatApiKeyId,
+  currentConversationChatApiKeyId,
   currentProvider,
 }: ArchestraPromptInputProps) => {
   return (
@@ -129,7 +131,7 @@ const ArchestraPromptInput = ({
           messageCount={messageCount}
           agentId={agentId}
           conversationId={conversationId}
-          chatApiKeyId={chatApiKeyId}
+          currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
         />
       </PromptInputProvider>

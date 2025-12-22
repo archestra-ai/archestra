@@ -4,7 +4,7 @@ import { clickButton } from "../../utils";
 
 const TEST_API_KEY = "sk-ant-test-key-12345";
 
-test.describe("Chat Settings UI", () => {
+test.describe("Chat API Keys", () => {
   test.describe.configure({ mode: "serial" });
 
   test("Admin can CRUD API keys", async ({

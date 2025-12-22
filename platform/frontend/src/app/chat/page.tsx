@@ -99,7 +99,7 @@ export default function ChatPage() {
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useChatApiKeys();
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
-  const { data: chatModels = [] } = useChatModelsQuery();
+  const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   const hasAnyApiKey =
     chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
@@ -682,7 +682,7 @@ export default function ChatPage() {
                   messageCount={messages.length}
                   agentId={conversation?.agent.id}
                   conversationId={conversation?.id}
-                  chatApiKeyId={conversation?.chatApiKeyId}
+                  currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
                 />
               </div>

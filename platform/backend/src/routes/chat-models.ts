@@ -176,21 +176,23 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
-async function getProviderApiKey(
-  provider: SupportedProvider,
-  organizationId: string,
-  userId: string,
-): Promise<string | null> {
-  // Get user's team IDs for resolution
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-
-  // Use resolution logic: personal → team → org_wide
-  const apiKey = await ChatApiKeyModel.resolveApiKey(
+async function getProviderApiKey({
+  provider,
+  organizationId,
+  userId,
+}: {
+  provider: SupportedProvider;
+  organizationId: string;
+  userId: string;
+}): Promise<string | null> {
+  const apiKey = await ChatApiKeyModel.getCurrentApiKey({
     organizationId,
     userId,
-    userTeamIds,
+    userTeamIds: await TeamModel.getUserTeamIds(userId),
     provider,
-  );
+    // set null to autoresolve the api key
+    conversationId: null,
+  });
 
   if (apiKey?.secretId) {
     const secretValue = await getSecretValueForLlmProviderApiKey(
@@ -228,12 +230,20 @@ const modelFetchers: Record<
 /**
  * Fetch models for a single provider
  */
-async function fetchModelsForProvider(
-  provider: SupportedProvider,
-  organizationId: string,
-  userId: string,
-): Promise<ModelInfo[]> {
-  const apiKey = await getProviderApiKey(provider, organizationId, userId);
+async function fetchModelsForProvider({
+  provider,
+  organizationId,
+  userId,
+}: {
+  provider: SupportedProvider;
+  organizationId: string;
+  userId: string;
+}): Promise<ModelInfo[]> {
+  const apiKey = await getProviderApiKey({
+    provider,
+    organizationId,
+    userId,
+  });
 
   // For Gemini with Vertex AI, we might not have an API key
   if (!apiKey && !(provider === "gemini" && isVertexAiEnabled())) {
@@ -299,11 +309,11 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const results = await Promise.all(
         providersToFetch.map((p) =>
-          fetchModelsForProvider(
-            p as SupportedProvider,
+          fetchModelsForProvider({
+            provider: p as SupportedProvider,
             organizationId,
-            user.id,
-          ),
+            userId: user.id,
+          }),
         ),
       );
 

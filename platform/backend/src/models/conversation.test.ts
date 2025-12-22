@@ -390,11 +390,11 @@ describe("ConversationModel", () => {
       },
     });
 
-    const found = await ConversationModel.findById(
-      conversation.id,
-      user.id,
-      org.id,
-    );
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found).toBeDefined();
     expect(found?.messages).toHaveLength(1);

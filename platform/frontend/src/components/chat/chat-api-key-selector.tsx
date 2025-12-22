@@ -36,8 +36,8 @@ interface ChatApiKeySelectorProps {
   conversationId: string;
   /** Currently selected model (to filter API keys by provider) */
   currentProvider?: SupportedChatProvider;
-  /** Currently selected API key ID */
-  selectedKeyId: string | null;
+  /** Current Conversation Chat API key ID set on the backend */
+  currentConversationChatApiKeyId: string | null;
   /** Whether the selector should be disabled */
   disabled?: boolean;
   /** Number of messages in current conversation (for mid-conversation warning) */
@@ -59,7 +59,7 @@ const LOCAL_STORAGE_KEY = "selected-chat-api-key-id";
 export function ChatApiKeySelector({
   conversationId,
   currentProvider,
-  selectedKeyId,
+  currentConversationChatApiKeyId,
   disabled = false,
   messageCount = 0,
 }: ChatApiKeySelectorProps) {
@@ -85,9 +85,9 @@ export function ChatApiKeySelector({
   }, [availableKeys]);
 
   // Find selected key
-  const selectedKey = useMemo(() => {
-    return availableKeys.find((k) => k.id === selectedKeyId);
-  }, [availableKeys, selectedKeyId]);
+  const currentConversationChatApiKey = useMemo(() => {
+    return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
+  }, [availableKeys, currentConversationChatApiKeyId]);
 
   // Auto-select first key when no key is selected or current key is invalid
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
@@ -97,7 +97,8 @@ export function ChatApiKeySelector({
 
     // Check if current key is valid
     const currentKeyValid =
-      selectedKeyId && availableKeys.some((k) => k.id === selectedKeyId);
+      currentConversationChatApiKey &&
+      availableKeys.some((k) => k.id === currentConversationChatApiKeyId);
 
     const keyIdFromLocalStorage = localStorage.getItem(
       `${LOCAL_STORAGE_KEY}-${currentProvider}`,
@@ -110,9 +111,11 @@ export function ChatApiKeySelector({
       keysByScope.personal[0] ||
       keysByScope.team[0] ||
       keysByScope.org_wide[0];
+    const keyToSelectValid =
+      keyToSelect && availableKeys.some((k) => k.id === keyToSelect.id);
 
     // Auto-select first key if no valid key is selected
-    if (!currentKeyValid && keyToSelect) {
+    if (!currentKeyValid && keyToSelectValid) {
       updateConversationMutation.mutate({
         id: conversationId,
         chatApiKeyId: keyToSelect.id,
@@ -120,7 +123,7 @@ export function ChatApiKeySelector({
     }
   }, [
     availableKeys,
-    selectedKeyId,
+    currentConversationChatApiKeyId,
     isLoading,
     conversationId,
     currentProvider,
@@ -128,7 +131,7 @@ export function ChatApiKeySelector({
   ]);
 
   const handleSelectKey = (keyId: string) => {
-    if (keyId === selectedKeyId) {
+    if (keyId === currentConversationChatApiKeyId) {
       setOpen(false);
       return;
     }
@@ -147,7 +150,9 @@ export function ChatApiKeySelector({
       id: conversationId,
       chatApiKeyId: keyId,
     });
-    localStorage.setItem(`${LOCAL_STORAGE_KEY}-${currentProvider}`, keyId);
+    if (currentProvider) {
+      localStorage.setItem(`${LOCAL_STORAGE_KEY}-${currentProvider}`, keyId);
+    }
   };
 
   const handleConfirmChange = () => {
@@ -176,19 +181,6 @@ export function ChatApiKeySelector({
     return key.name;
   };
 
-  if (!currentProvider) {
-    return (
-      <PromptInputButton disabled={disabled}>
-        <Key className="h-3.5 w-3.5" />
-        <span className="truncate max-w-[200px]">
-          No valid API keys available
-        </span>
-      </PromptInputButton>
-    );
-  }
-
-  const providerConfig = PROVIDER_CONFIG[currentProvider];
-
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
@@ -196,8 +188,8 @@ export function ChatApiKeySelector({
           <PromptInputButton disabled={disabled}>
             <Key className="h-3.5 w-3.5" />
             <span className="truncate max-w-[120px]">
-              {selectedKey
-                ? getKeyDisplayName(selectedKey)
+              {currentConversationChatApiKey
+                ? getKeyDisplayName(currentConversationChatApiKey)
                 : isLoading
                   ? "Loading..."
                   : "Select key"}
@@ -206,10 +198,6 @@ export function ChatApiKeySelector({
         </PopoverTrigger>
         <PopoverContent className="w-64 p-2" align="start">
           <div className="space-y-2">
-            <div className="px-2 py-1 text-xs font-medium">
-              API Key for {providerConfig.name}
-            </div>
-
             {/* Personal keys */}
             {keysByScope.personal.length > 0 && (
               <>
@@ -223,21 +211,15 @@ export function ChatApiKeySelector({
                     variant="ghost"
                     className={cn(
                       "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
-                      selectedKeyId === key.id && "bg-accent",
+                      currentConversationChatApiKeyId === key.id && "bg-accent",
                     )}
                     onClick={() => handleSelectKey(key.id)}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Image
-                        src={providerConfig.icon}
-                        alt={providerConfig.name}
-                        width={16}
-                        height={16}
-                        className="rounded shrink-0"
-                      />
+                      <ProviderIcon src={PROVIDER_CONFIG[key.provider]?.icon} />
                       <span className="truncate">{key.name}</span>
                     </div>
-                    {selectedKeyId === key.id && (
+                    {currentConversationChatApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </Button>
@@ -258,18 +240,12 @@ export function ChatApiKeySelector({
                     variant="ghost"
                     className={cn(
                       "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
-                      selectedKeyId === key.id && "bg-accent",
+                      currentConversationChatApiKeyId === key.id && "bg-accent",
                     )}
                     onClick={() => handleSelectKey(key.id)}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Image
-                        src={providerConfig.icon}
-                        alt={providerConfig.name}
-                        width={16}
-                        height={16}
-                        className="rounded shrink-0"
-                      />
+                      <ProviderIcon src={PROVIDER_CONFIG[key.provider]?.icon} />
                       <div className="truncate">
                         <span>{key.name}</span>
                         {key.teamName && (
@@ -282,7 +258,7 @@ export function ChatApiKeySelector({
                         )}
                       </div>
                     </div>
-                    {selectedKeyId === key.id && (
+                    {currentConversationChatApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </Button>
@@ -303,21 +279,15 @@ export function ChatApiKeySelector({
                     variant="ghost"
                     className={cn(
                       "w-full justify-start gap-2 px-2 py-1.5 h-auto text-sm",
-                      selectedKeyId === key.id && "bg-accent",
+                      currentConversationChatApiKeyId === key.id && "bg-accent",
                     )}
                     onClick={() => handleSelectKey(key.id)}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Image
-                        src={providerConfig.icon}
-                        alt={providerConfig.name}
-                        width={16}
-                        height={16}
-                        className="rounded shrink-0"
-                      />
+                      <ProviderIcon src={PROVIDER_CONFIG[key.provider]?.icon} />
                       <span className="truncate">{key.name}</span>
                     </div>
-                    {selectedKeyId === key.id && (
+                    {currentConversationChatApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </Button>
@@ -353,5 +323,20 @@ export function ChatApiKeySelector({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function ProviderIcon({ src }: { src?: string }) {
+  if (!src) {
+    return null;
+  }
+  return (
+    <Image
+      src={src}
+      alt={"Provider icon"}
+      width={16}
+      height={16}
+      className="rounded shrink-0 dark:invert"
+    />
   );
 }

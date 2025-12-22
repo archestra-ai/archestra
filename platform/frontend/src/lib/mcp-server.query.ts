@@ -16,6 +16,7 @@ const {
   installMcpServer,
   getMcpServer,
   getMcpServerLogs,
+  restartMcpServer,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
@@ -145,6 +146,23 @@ export function useDeleteMcpServer() {
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
+    },
+  });
+}
+
+export function useRestartMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { id: string; name: string }) => {
+      const response = await restartMcpServer({ path: { id: data.id } });
+      return response.data;
+    },
+    onSuccess: async (_, variables) => {
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      toast.success(`Successfully restarted ${variables.name}`);
+    },
+    onError: (_error, variables) => {
+      toast.error(`Failed to restart ${variables.name}`);
     },
   });
 }

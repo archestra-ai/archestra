@@ -89,6 +89,7 @@ export type McpServerCardProps = {
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
+  onRestart: () => void;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -110,6 +111,7 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
+  onRestart,
   onDetails,
   onEdit,
   onDelete,
@@ -249,6 +251,26 @@ export function McpServerCard({
                   >
                     <FileText className="mr-2 h-4 w-4" />
                     Logs
+                  </DropdownMenuItem>
+                </div>
+              </TooltipTrigger>
+              {variant !== "local" && (
+                <TooltipContent>
+                  <p>Only available for local MCP servers</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <DropdownMenuItem
+                    onClick={onRestart}
+                    disabled={variant !== "local"}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Restart
                   </DropdownMenuItem>
                 </div>
               </TooltipTrigger>

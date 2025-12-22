@@ -4,43 +4,17 @@
  */
 import { type APIRequestContext, test as base } from "@playwright/test";
 import {
-  ADMIN_EMAIL,
-  ADMIN_PASSWORD,
   API_BASE_URL,
-  adminAuthFile,
-  EDITOR_EMAIL,
-  EDITOR_PASSWORD,
   editorAuthFile,
-  MEMBER_EMAIL,
-  MEMBER_PASSWORD,
   memberAuthFile,
   UI_BASE_URL,
 } from "../../consts";
-import {
-  cleanupWorkerAuthFile,
-  createWorkerAuthStorage,
-} from "../../worker-auth";
-
-/**
- * Worker-scoped fixtures that run once per worker.
- * Each worker gets its own authenticated session to avoid race conditions.
- */
-interface WorkerFixtures {
-  /** Path to worker-specific admin auth storage file */
-  workerAdminStoragePath: string;
-  /** Path to worker-specific editor auth storage file */
-  workerEditorStoragePath: string;
-  /** Path to worker-specific member auth storage file */
-  workerMemberStoragePath: string;
-}
 
 /**
  * Playwright test extension with fixtures
  * https://playwright.dev/docs/test-fixtures#creating-a-fixture
  */
 export interface TestFixtures {
-  /** Override default request to use worker-specific auth */
-  request: APIRequestContext;
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
   deleteAgent: typeof deleteAgent;
@@ -578,75 +552,7 @@ const getTokenPrices = async (request: APIRequestContext) =>
   });
 
 export * from "@playwright/test";
-export const test = base.extend<TestFixtures, WorkerFixtures>({
-  /**
-   * Worker-scoped fixture: Creates a fresh admin authenticated session per worker.
-   */
-  workerAdminStoragePath: [
-    async ({ browser }, use, workerInfo) => {
-      const storagePath = await createWorkerAuthStorage({
-        browser,
-        baseAuthFile: adminAuthFile,
-        workerIndex: workerInfo.workerIndex,
-        email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
-        userType: "admin",
-      });
-      await use(storagePath);
-      await cleanupWorkerAuthFile(storagePath);
-    },
-    { scope: "worker" },
-  ],
-
-  /**
-   * Worker-scoped fixture: Creates a fresh editor authenticated session per worker.
-   */
-  workerEditorStoragePath: [
-    async ({ browser }, use, workerInfo) => {
-      const storagePath = await createWorkerAuthStorage({
-        browser,
-        baseAuthFile: editorAuthFile,
-        workerIndex: workerInfo.workerIndex,
-        email: EDITOR_EMAIL,
-        password: EDITOR_PASSWORD,
-        userType: "editor",
-      });
-      await use(storagePath);
-      await cleanupWorkerAuthFile(storagePath);
-    },
-    { scope: "worker" },
-  ],
-
-  /**
-   * Worker-scoped fixture: Creates a fresh member authenticated session per worker.
-   */
-  workerMemberStoragePath: [
-    async ({ browser }, use, workerInfo) => {
-      const storagePath = await createWorkerAuthStorage({
-        browser,
-        baseAuthFile: memberAuthFile,
-        workerIndex: workerInfo.workerIndex,
-        email: MEMBER_EMAIL,
-        password: MEMBER_PASSWORD,
-        userType: "member",
-      });
-      await use(storagePath);
-      await cleanupWorkerAuthFile(storagePath);
-    },
-    { scope: "worker" },
-  ],
-
-  /**
-   * Override default request fixture to use worker-specific admin auth.
-   */
-  request: async ({ playwright, workerAdminStoragePath }, use) => {
-    const context = await playwright.request.newContext({
-      storageState: workerAdminStoragePath,
-    });
-    await use(context);
-    await context.dispose();
-  },
-
+export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
     await use(makeApiRequest);
   },
@@ -726,27 +632,28 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(getTokenPrices);
   },
   /**
-   * Admin request - uses worker-specific admin auth
+   * Admin request - same auth as default `request` fixture
    */
   adminRequest: async ({ request }, use) => {
+    // Default request is already admin (via storageState in config)
     await use(request);
   },
   /**
-   * Editor request - creates a new request context with worker-specific editor auth
+   * Editor request - creates a new request context with editor auth
    */
-  editorRequest: async ({ playwright, workerEditorStoragePath }, use) => {
+  editorRequest: async ({ playwright }, use) => {
     const context = await playwright.request.newContext({
-      storageState: workerEditorStoragePath,
+      storageState: editorAuthFile,
     });
     await use(context);
     await context.dispose();
   },
   /**
-   * Member request - creates a new request context with worker-specific member auth
+   * Member request - creates a new request context with member auth
    */
-  memberRequest: async ({ playwright, workerMemberStoragePath }, use) => {
+  memberRequest: async ({ playwright }, use) => {
     const context = await playwright.request.newContext({
-      storageState: workerMemberStoragePath,
+      storageState: memberAuthFile,
     });
     await use(context);
     await context.dispose();

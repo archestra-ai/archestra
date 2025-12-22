@@ -298,6 +298,7 @@ test.describe("Chat API Keys CRUD", () => {
 });
 
 test.describe("Chat API Keys Available Endpoint", () => {
+  // Use openai provider to avoid conflicts with CRUD tests that use anthropic
   test("should get available API keys for current user", async ({
     request,
     makeApiRequest,
@@ -309,8 +310,8 @@ test.describe("Chat API Keys Available Endpoint", () => {
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Available Test Key",
-        provider: "anthropic",
-        apiKey: "sk-ant-available-test",
+        provider: "openai",
+        apiKey: "sk-openai-available-test",
         scope: "personal",
       },
     });
@@ -342,38 +343,38 @@ test.describe("Chat API Keys Available Endpoint", () => {
     request,
     makeApiRequest,
   }) => {
-    // Create an anthropic key
-    const anthropicResponse = await makeApiRequest({
+    // Create an openai key
+    const openaiResponse = await makeApiRequest({
       request,
       method: "post",
       urlSuffix: "/api/chat-api-keys",
       data: {
-        name: "Filter Anthropic Key",
-        provider: "anthropic",
-        apiKey: "sk-ant-filter-test",
+        name: "Filter OpenAI Key",
+        provider: "openai",
+        apiKey: "sk-openai-filter-test",
         scope: "personal",
       },
     });
-    const anthropicKey = await anthropicResponse.json();
+    const openaiKey = await openaiResponse.json();
 
-    // Get available keys filtered by openai - should not include anthropic key
+    // Get available keys filtered by anthropic - should not include openai key
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/chat-api-keys/available?provider=openai",
+      urlSuffix: "/api/chat-api-keys/available?provider=anthropic",
     });
 
     expect(response.ok()).toBe(true);
     const availableKeys = await response.json();
     expect(
-      availableKeys.every((k: { provider: string }) => k.provider === "openai"),
+      availableKeys.every((k: { provider: string }) => k.provider === "anthropic"),
     ).toBe(true);
 
     // Cleanup
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/chat-api-keys/${anthropicKey.id}`,
+      urlSuffix: `/api/chat-api-keys/${openaiKey.id}`,
     });
   });
 });
@@ -405,8 +406,8 @@ test.describe("Chat API Keys Team Scope", () => {
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Team Test Key",
-        provider: "gemini",
-        apiKey: "gemini-team-test-key",
+        provider: "openai",
+        apiKey: "sk-openai-team-test-key",
         scope: "team",
         teamId,
       },
@@ -460,8 +461,8 @@ test.describe("Chat API Keys Scope Update", () => {
       urlSuffix: "/api/chat-api-keys",
       data: {
         name: "Scope Update Test Key",
-        provider: "gemini",
-        apiKey: "gemini-scope-update-test",
+        provider: "openai",
+        apiKey: "sk-openai-scope-update-test",
         scope: "personal",
       },
     });

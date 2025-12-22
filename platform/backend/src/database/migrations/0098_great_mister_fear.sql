@@ -30,13 +30,6 @@ JOIN team t ON at.team_id = t.id
 WHERE cak.is_organization_default = false
   AND cak.scope = 'personal';--> statement-breakpoint
 
--- 2c: Keys without profile assignments and not org default → set to org_wide
-UPDATE chat_api_keys
-SET scope = 'org_wide'
-WHERE scope = 'personal'
-  AND id NOT IN (SELECT DISTINCT chat_api_key_id FROM profile_chat_api_keys)
-  AND is_organization_default = false;--> statement-breakpoint
-
 -- STEP 3: Now safe to drop old table and column
 ALTER TABLE "profile_chat_api_keys" DISABLE ROW LEVEL SECURITY;--> statement-breakpoint
 DROP TABLE "profile_chat_api_keys" CASCADE;--> statement-breakpoint

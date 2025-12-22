@@ -367,7 +367,9 @@ test.describe("Chat API Keys Available Endpoint", () => {
     expect(response.ok()).toBe(true);
     const availableKeys = await response.json();
     expect(
-      availableKeys.every((k: { provider: string }) => k.provider === "anthropic"),
+      availableKeys.every(
+        (k: { provider: string }) => k.provider === "anthropic",
+      ),
     ).toBe(true);
 
     // Cleanup

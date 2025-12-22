@@ -16658,18 +16658,24 @@ export type GetTokensResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        tokenStart: string;
-        isOrganizationToken: boolean;
-        team: {
+    200: {
+        tokens: Array<{
             id: string;
             name: string;
-        } | null;
-        createdAt: string;
-        lastUsedAt: string | null;
-    }>;
+            tokenStart: string;
+            isOrganizationToken: boolean;
+            team: {
+                id: string;
+                name: string;
+            } | null;
+            createdAt: string;
+            lastUsedAt: string | null;
+        }>;
+        permissions: {
+            canAccessOrgToken: boolean;
+            canAccessTeamTokens: boolean;
+        };
+    };
 };
 
 export type GetTokensResponse = GetTokensResponses[keyof GetTokensResponses];

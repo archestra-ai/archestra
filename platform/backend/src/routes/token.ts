@@ -1,3 +1,4 @@
+import type { IncomingHttpHeaders } from "node:http";
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -6,14 +7,63 @@ import { TeamModel, TeamTokenModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
-  TeamTokenResponseSchema,
+  type SelectTeamToken,
   TeamTokenWithValueResponseSchema,
+  TokensListResponseSchema,
 } from "@/types";
+
+/**
+ * Check if user has access to a specific token based on permissions.
+ * - Org tokens: require ac:update permission
+ * - Team tokens: require team:admin OR (team:update AND team membership)
+ */
+async function checkTokenAccess(
+  token: SelectTeamToken,
+  userId: string,
+  headers: IncomingHttpHeaders,
+): Promise<void> {
+  if (token.isOrganizationToken) {
+    // Org tokens require ac:update permission
+    const { success: hasAcUpdate } = await hasPermission(
+      { ac: ["update"] },
+      headers,
+    );
+    if (!hasAcUpdate) {
+      throw new ApiError(403, "Not authorized to access organization token");
+    }
+  } else if (token.teamId) {
+    // Team tokens require team:admin OR (team:update AND team membership)
+    const { success: isTeamAdmin } = await hasPermission(
+      { team: ["admin"] },
+      headers,
+    );
+
+    if (!isTeamAdmin) {
+      const { success: hasTeamUpdate } = await hasPermission(
+        { team: ["update"] },
+        headers,
+      );
+      if (!hasTeamUpdate) {
+        throw new ApiError(403, "Not authorized to access this token");
+      }
+
+      const isMember = await TeamModel.isUserInTeam(token.teamId, userId);
+      if (!isMember) {
+        throw new ApiError(403, "Not authorized to access this token");
+      }
+    }
+  }
+}
 
 const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
-   * Get all tokens for the organization (org token + all team tokens)
-   * Creates org token if it doesn't exist
+   * Get tokens visible to the user based on their permissions:
+   * - ac:update: can see org-wide token
+   * - team:admin: can see all team tokens
+   * - team:update + team membership: can see own team tokens only
+   *
+   * Also returns permission flags so the UI can show disabled options
+   * for tokens the user doesn't have access to.
    */
   fastify.get(
     "/api/tokens",
@@ -21,20 +71,67 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetTokens,
         description:
-          "Get all tokens for the organization (org token + team tokens)",
+          "Get tokens visible to the user based on their permissions",
         tags: ["Tokens"],
-        response: constructResponseSchema(z.array(TeamTokenResponseSchema)),
+        response: constructResponseSchema(TokensListResponseSchema),
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
+      const { user, headers } = request;
+
+      // Check permissions
+      const { success: canAccessOrgToken } = await hasPermission(
+        { ac: ["update"] },
+        headers,
+      );
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+      const { success: hasTeamUpdate } = await hasPermission(
+        { team: ["update"] },
+        headers,
+      );
+
+      // User can access team tokens if they have team:admin OR team:update
+      const canAccessTeamTokens = isTeamAdmin || hasTeamUpdate;
+
       // Ensure org token exists
       await TeamTokenModel.ensureOrganizationToken();
 
       // Get all tokens with team details
-      const tokens = await TeamTokenModel.findAllWithTeam();
+      const allTokens = await TeamTokenModel.findAllWithTeam();
 
-      return reply.send(
-        tokens.map((token) => ({
+      // Filter tokens based on permissions
+      let visibleTokens = allTokens;
+
+      // Filter org tokens (only ac:update can see)
+      if (!canAccessOrgToken) {
+        visibleTokens = visibleTokens.filter(
+          (token) => !token.isOrganizationToken,
+        );
+      }
+
+      // Filter team tokens
+      if (!isTeamAdmin) {
+        if (!hasTeamUpdate) {
+          // No team:update permission = no team tokens visible
+          visibleTokens = visibleTokens.filter(
+            (token) => token.isOrganizationToken,
+          );
+        } else {
+          // Only own team tokens visible
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+          visibleTokens = visibleTokens.filter(
+            (token) =>
+              token.isOrganizationToken ||
+              (token.teamId && userTeamIds.includes(token.teamId)),
+          );
+        }
+      }
+
+      return reply.send({
+        tokens: visibleTokens.map((token) => ({
           id: token.id,
           name: token.name,
           tokenStart: token.tokenStart,
@@ -43,7 +140,11 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: token.createdAt,
           lastUsedAt: token.lastUsedAt,
         })),
-      );
+        permissions: {
+          canAccessOrgToken,
+          canAccessTeamTokens,
+        },
+      });
     },
   );
 
@@ -73,19 +174,8 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Token not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
-        headers,
-      );
-
-      // If not team admin, verify user is member of the token's team
-      if (!isTeamAdmin && token.teamId) {
-        const isMember = await TeamModel.isUserInTeam(token.teamId, user.id);
-        if (!isMember) {
-          throw new ApiError(403, "Not authorized to access this token");
-        }
-      }
+      // Check user has access to this token
+      await checkTokenAccess(token, user.id, headers);
 
       // Get the decrypted token value
       const tokenValue = await TeamTokenModel.getTokenValue(tokenId);
@@ -124,22 +214,8 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Token not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
-        headers,
-      );
-
-      // If not team admin, verify user is member of the token's team
-      if (!isTeamAdmin && existingToken.teamId) {
-        const isMember = await TeamModel.isUserInTeam(
-          existingToken.teamId,
-          user.id,
-        );
-        if (!isMember) {
-          throw new ApiError(403, "Not authorized to rotate this token");
-        }
-      }
+      // Check user has access to this token
+      await checkTokenAccess(existingToken, user.id, headers);
 
       // Rotate the token
       const result = await TeamTokenModel.rotate(tokenId);

@@ -55822,69 +55822,95 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Get all tokens for the organization (org token + team tokens)",
+        "description": "Get tokens visible to the user based on their permissions",
         "responses": {
           "200": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "tokenStart": {
-                        "type": "string"
-                      },
-                      "isOrganizationToken": {
-                        "type": "boolean"
-                      },
-                      "team": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "tokens": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "tokenStart": {
+                            "type": "string"
+                          },
+                          "isOrganizationToken": {
+                            "type": "boolean"
+                          },
+                          "team": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastUsedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "tokenStart",
+                          "isOrganizationToken",
+                          "team",
+                          "createdAt",
+                          "lastUsedAt"
                         ],
                         "additionalProperties": false
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "lastUsedAt": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "date-time"
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "tokenStart",
-                      "isOrganizationToken",
-                      "team",
-                      "createdAt",
-                      "lastUsedAt"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "permissions": {
+                      "type": "object",
+                      "properties": {
+                        "canAccessOrgToken": {
+                          "type": "boolean"
+                        },
+                        "canAccessTeamTokens": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "canAccessOrgToken",
+                        "canAccessTeamTokens"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "tokens",
+                    "permissions"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

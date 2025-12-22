@@ -1146,7 +1146,7 @@ export const updateTokenPrice = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
- * Get all tokens for the organization (org token + team tokens)
+ * Get tokens visible to the user based on their permissions
  */
 export const getTokens = <ThrowOnError extends boolean = false>(options?: Options<GetTokensData, ThrowOnError>) => (options?.client ?? client).get<GetTokensResponses, GetTokensErrors, ThrowOnError>({ url: '/api/tokens', ...options });
 

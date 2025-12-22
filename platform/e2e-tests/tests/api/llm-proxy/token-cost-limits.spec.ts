@@ -33,17 +33,17 @@ const openaiConfig: TokenCostLimitTestConfig = {
   }),
 
   buildRequest: (content) => ({
-    model: "gpt-4",
+    model: "test-gpt-4-cost-limit",
     messages: [{ role: "user", content }],
   }),
 
-  modelName: "gpt-4",
+  modelName: "test-gpt-4-cost-limit",
 
   // WireMock returns: prompt_tokens: 100, completion_tokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "openai",
-    model: "gpt-4",
+    model: "test-gpt-4-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -61,18 +61,18 @@ const anthropicConfig: TokenCostLimitTestConfig = {
   }),
 
   buildRequest: (content) => ({
-    model: "claude-3-5-sonnet-20241022",
+    model: "test-claude-cost-limit",
     max_tokens: 1024,
     messages: [{ role: "user", content }],
   }),
 
-  modelName: "claude-3-5-sonnet-20241022",
+  modelName: "test-claude-cost-limit",
 
   // WireMock returns: input_tokens: 100, output_tokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "anthropic",
-    model: "claude-3-5-sonnet-20241022",
+    model: "test-claude-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -82,7 +82,7 @@ const geminiConfig: TokenCostLimitTestConfig = {
   providerName: "Gemini",
 
   endpoint: (profileId) =>
-    `/v1/gemini/${profileId}/v1beta/models/gemini-2.5-pro:generateContent`,
+    `/v1/gemini/${profileId}/v1beta/models/test-gemini-cost-limit:generateContent`,
 
   headers: (wiremockStub) => ({
     "x-goog-api-key": wiremockStub,
@@ -98,13 +98,13 @@ const geminiConfig: TokenCostLimitTestConfig = {
     ],
   }),
 
-  modelName: "gemini-2.5-pro",
+  modelName: "test-gemini-cost-limit",
 
   // WireMock returns: promptTokenCount: 100, candidatesTokenCount: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "gemini",
-    model: "gemini-2.5-pro",
+    model: "test-gemini-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },

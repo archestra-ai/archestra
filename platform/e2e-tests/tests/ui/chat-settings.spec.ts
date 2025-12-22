@@ -296,14 +296,12 @@ test.describe("Chat API Keys", () => {
       });
 
       // Every user can see it
-      await Promise.all(
-        [adminPage, editorPage, memberPage].map(async (page) => {
-          await goToPage(page, "/settings/chat");
-          await expect(
-            page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
-          ).toBeVisible();
-        }),
-      );
+      for (const p of [adminPage, editorPage, memberPage]) {
+        await goToPage(p, "/settings/chat");
+        await expect(
+          p.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
+        ).toBeVisible();
+      }
 
       // Second org-wide key cannot be created
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -313,11 +311,13 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // Cleanup: delete the created key
-      await goToPage(adminPage, "/settings/chat");
-      await adminPage
-        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
-        .click();
-      await clickButton({ page: adminPage, options: { name: "Delete" } });
+      test.afterAll(async () => {
+        await goToPage(adminPage, "/settings/chat");
+        await adminPage
+          .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
+          .click();
+        await clickButton({ page: adminPage, options: { name: "Delete" } });
+      });
     });
   });
 });

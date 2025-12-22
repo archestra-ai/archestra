@@ -1,6 +1,6 @@
 {
-  "id": "1ff913e4-d59a-411b-902a-3c6f0f46b00a",
-  "prevId": "94e538ac-bc19-4c0b-a5e9-32fe697de9d6",
+  "id": "99e471a1-1720-4831-a39f-fe1e6cf33807",
+  "prevId": "1ff913e4-d59a-411b-902a-3c6f0f46b00a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -682,12 +682,24 @@
           "primaryKey": false,
           "notNull": false
         },
-        "is_organization_default": {
-          "name": "is_organization_default",
-          "type": "boolean",
+        "scope": {
+          "name": "scope",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": "'personal'"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -741,8 +753,52 @@
           "method": "btree",
           "with": {}
         },
-        "chat_api_keys_org_provider_default_unique": {
-          "name": "chat_api_keys_org_provider_default_unique",
+        "chat_api_keys_personal_unique": {
+          "name": "chat_api_keys_personal_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"chat_api_keys\".\"scope\" = 'personal' AND \"chat_api_keys\".\"user_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chat_api_keys_team_unique": {
+          "name": "chat_api_keys_team_unique",
+          "columns": [
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"chat_api_keys\".\"scope\" = 'team' AND \"chat_api_keys\".\"team_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chat_api_keys_org_wide_unique": {
+          "name": "chat_api_keys_org_wide_unique",
           "columns": [
             {
               "expression": "organization_id",
@@ -758,7 +814,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"chat_api_keys\".\"is_organization_default\" = true",
+          "where": "\"chat_api_keys\".\"scope\" = 'org_wide'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -776,6 +832,32 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "chat_api_keys_user_id_user_id_fk": {
+          "name": "chat_api_keys_user_id_user_id_fk",
+          "tableFrom": "chat_api_keys",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chat_api_keys_team_id_team_id_fk": {
+          "name": "chat_api_keys_team_id_team_id_fk",
+          "tableFrom": "chat_api_keys",
+          "tableTo": "team",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -880,6 +962,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "chat_api_key_id": {
+          "name": "chat_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "title": {
           "name": "title",
           "type": "text",
@@ -929,6 +1017,19 @@
           "tableTo": "prompts",
           "columnsFrom": [
             "prompt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "conversations_chat_api_key_id_chat_api_keys_id_fk": {
+          "name": "conversations_chat_api_key_id_chat_api_keys_id_fk",
+          "tableFrom": "conversations",
+          "tableTo": "chat_api_keys",
+          "columnsFrom": [
+            "chat_api_key_id"
           ],
           "columnsTo": [
             "id"
@@ -2699,81 +2800,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.profile_chat_api_keys": {
-      "name": "profile_chat_api_keys",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "chat_api_key_id": {
-          "name": "chat_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "profile_chat_api_keys_agent_id_agents_id_fk": {
-          "name": "profile_chat_api_keys_agent_id_agents_id_fk",
-          "tableFrom": "profile_chat_api_keys",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "profile_chat_api_keys_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "profile_chat_api_keys_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "profile_chat_api_keys",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "chat_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "profile_chat_api_keys_agent_key_unique": {
-          "name": "profile_chat_api_keys_agent_key_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "agent_id",
-            "chat_api_key_id"
           ]
         }
       },

@@ -115,3 +115,7 @@ button, div[role="menuitem"] {
 button:disabled {
   cursor: not-allowed;
 }
+
+div[role="option"] {
+  cursor: pointer;
+}

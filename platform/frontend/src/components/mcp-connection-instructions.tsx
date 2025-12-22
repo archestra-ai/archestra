@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -30,11 +32,14 @@ const PERSONAL_TOKEN_ID = "__personal_token__";
 export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
-  const { data: tokens } = useTokens();
+  const { data: tokensData } = useTokens();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
+
+  const tokens = tokensData?.tokens;
+  const permissions = tokensData?.permissions;
 
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedAuth, setCopiedAuth] = useState(false);
@@ -238,15 +243,18 @@ export function McpConnectionInstructions({
               Which token to connect with:
             </p>
             <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
-              <SelectTrigger className="w-[200px] h-8">
+              <SelectTrigger className="w-[240px] h-8">
                 <SelectValue placeholder="Select token" />
               </SelectTrigger>
               <SelectContent>
+                {/* Personal Token - always available if user has one */}
                 {userToken && (
                   <SelectItem value={PERSONAL_TOKEN_ID}>
                     Personal Token
                   </SelectItem>
                 )}
+
+                {/* Available tokens */}
                 {tokens?.map((token) => (
                   <SelectItem key={token.id} value={token.id}>
                     {token.isOrganizationToken
@@ -256,6 +264,22 @@ export function McpConnectionInstructions({
                         : token.name}
                   </SelectItem>
                 ))}
+
+                {/* Disabled options for tokens user doesn't have access to */}
+                {permissions && !permissions.canAccessOrgToken && (
+                  <SelectGroup>
+                    <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1.5">
+                      Organization Token — Requires Admin role
+                    </SelectLabel>
+                  </SelectGroup>
+                )}
+                {permissions && !permissions.canAccessTeamTokens && (
+                  <SelectGroup>
+                    <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1.5">
+                      Team Tokens — Requires team:update permission
+                    </SelectLabel>
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
           </div>

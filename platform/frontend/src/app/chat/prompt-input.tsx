@@ -16,9 +16,11 @@ import {
   PromptInputTools,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ModelSelector } from "@/components/chat/model-selector";
 import Divider from "@/components/divider";
+import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -32,6 +34,9 @@ interface ArchestraPromptInputProps {
   // Tools integration props
   agentId: string;
   conversationId: string;
+  // API key selector props
+  currentConversationChatApiKeyId?: string | null;
+  currentProvider?: SupportedChatProvider;
 }
 
 // Inner component that has access to the controller context
@@ -43,6 +48,8 @@ const PromptInputContent = ({
   messageCount,
   agentId,
   conversationId,
+  currentConversationChatApiKeyId,
+  currentProvider,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -79,6 +86,16 @@ const PromptInputContent = ({
             onModelChange={onModelChange}
             messageCount={messageCount}
           />
+          {conversationId && (
+            <ChatApiKeySelector
+              conversationId={conversationId}
+              currentProvider={currentProvider}
+              currentConversationChatApiKeyId={
+                currentConversationChatApiKeyId ?? null
+              }
+              messageCount={messageCount}
+            />
+          )}
         </PromptInputTools>
         <div className="flex items-center gap-2">
           <PromptInputSpeechButton
@@ -100,6 +117,8 @@ const ArchestraPromptInput = ({
   messageCount = 0,
   agentId,
   conversationId,
+  currentConversationChatApiKeyId,
+  currentProvider,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -112,6 +131,8 @@ const ArchestraPromptInput = ({
           messageCount={messageCount}
           agentId={agentId}
           conversationId={conversationId}
+          currentConversationChatApiKeyId={currentConversationChatApiKeyId}
+          currentProvider={currentProvider}
         />
       </PromptInputProvider>
     </div>

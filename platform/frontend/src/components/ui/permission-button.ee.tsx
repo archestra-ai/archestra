@@ -75,7 +75,7 @@ export function PermissionButton({
       </TooltipTrigger>
       <TooltipContent className="max-w-60">
         <p>
-          Missing permissions: {permissionsToStrings(permissions).join(", ")}.
+          Required permissions: {permissionsToStrings(permissions).join(", ")}.
         </p>
       </TooltipContent>
     </Tooltip>

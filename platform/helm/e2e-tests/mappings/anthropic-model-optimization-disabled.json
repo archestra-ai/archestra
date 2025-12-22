@@ -6,7 +6,12 @@
       "x-api-key": {
         "contains": "anthropic-model-optimization-disabled"
       }
-    }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-anthropic-baseline"
+      }
+    ]
   },
   "response": {
     "status": 200,
@@ -17,7 +22,7 @@
       "id": "msg-model-opt-disabled",
       "type": "message",
       "role": "assistant",
-      "model": "claude-3-5-sonnet-20241022",
+      "model": "e2e-test-anthropic-baseline",
       "content": [
         {
           "type": "text",
@@ -27,7 +32,7 @@
       "stop_reason": "end_turn",
       "stop_sequence": null,
       "usage": {
-        "input_tokens": 10,
+        "input_tokens": 1500,
         "output_tokens": 15
       }
     }

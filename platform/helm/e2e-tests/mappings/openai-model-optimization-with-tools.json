@@ -6,7 +6,12 @@
       "Authorization": {
         "contains": "openai-model-optimization-with-tools"
       }
-    }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-openai-baseline"
+      }
+    ]
   },
   "response": {
     "status": 200,
@@ -17,7 +22,7 @@
       "id": "chatcmpl-model-opt-tools",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "gpt-4",
+      "model": "e2e-test-openai-baseline",
       "choices": [
         {
           "index": 0,
@@ -31,9 +36,9 @@
         }
       ],
       "usage": {
-        "prompt_tokens": 50,
+        "prompt_tokens": 1500,
         "completion_tokens": 15,
-        "total_tokens": 65
+        "total_tokens": 1515
       }
     }
   }

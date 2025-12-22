@@ -70,7 +70,7 @@ const openaiConfig: ModelOptimizationTestConfig = {
 
   buildRequest: (content, tools) => {
     const request: Record<string, unknown> = {
-      model: "gpt-4",
+      model: "e2e-test-openai-baseline",
       messages: [{ role: "user", content }],
     };
     if (tools && tools.length > 0) {
@@ -86,8 +86,8 @@ const openaiConfig: ModelOptimizationTestConfig = {
     return request;
   },
 
-  baselineModel: "gpt-4",
-  optimizedModel: "gpt-4o-mini",
+  baselineModel: "e2e-test-openai-baseline",
+  optimizedModel: "e2e-test-openai-optimized",
 
   getModelFromResponse: (response) => response.model,
 };
@@ -106,7 +106,7 @@ const anthropicConfig: ModelOptimizationTestConfig = {
 
   buildRequest: (content, tools) => {
     const request: Record<string, unknown> = {
-      model: "claude-3-5-sonnet-20241022",
+      model: "e2e-test-anthropic-baseline",
       max_tokens: 1024,
       messages: [{ role: "user", content }],
     };
@@ -120,8 +120,8 @@ const anthropicConfig: ModelOptimizationTestConfig = {
     return request;
   },
 
-  baselineModel: "claude-3-5-sonnet-20241022",
-  optimizedModel: "claude-3-5-haiku-20241022",
+  baselineModel: "e2e-test-anthropic-baseline",
+  optimizedModel: "e2e-test-anthropic-optimized",
 
   getModelFromResponse: (response) => response.model,
 };
@@ -131,7 +131,7 @@ const geminiConfig: ModelOptimizationTestConfig = {
   provider: "gemini",
 
   endpoint: (agentId) =>
-    `/v1/gemini/${agentId}/v1beta/models/gemini-2.0-flash:generateContent`,
+    `/v1/gemini/${agentId}/v1beta/models/e2e-test-gemini-baseline:generateContent`,
 
   headers: (wiremockStub) => ({
     "x-goog-api-key": wiremockStub,
@@ -161,8 +161,8 @@ const geminiConfig: ModelOptimizationTestConfig = {
     return request;
   },
 
-  baselineModel: "gemini-2.0-flash",
-  optimizedModel: "gemini-2.0-flash-lite",
+  baselineModel: "e2e-test-gemini-baseline",
+  optimizedModel: "e2e-test-gemini-optimized",
 
   getModelFromResponse: (response) => response.modelVersion,
 };
@@ -171,27 +171,62 @@ const geminiConfig: ModelOptimizationTestConfig = {
 // Helper Functions
 // =============================================================================
 
+// Token thresholds for test isolation:
+// - Default org-level rules use maxLength: 1000
+// - Our test rules use maxLength: 2000
+// - "test " is ~1 token, so repeat count ≈ token count
+
 /**
- * Generate a long message that exceeds typical maxLength thresholds.
- * We need enough content to exceed token limits (e.g., 1000 tokens).
- * Average English word is ~1.3 tokens, so ~800 words should exceed 1000 tokens.
+ * Generate a "short" message with ~1500 tokens (> 1000 AND < 2000).
+ * This exceeds the default org-level rule threshold (1000) but stays under
+ * our test rule threshold (2000), ensuring only test rules match.
  */
-function generateLongMessage(): string {
-  const baseText =
-    "This is a test message to verify that model optimization rules do not apply when the message length exceeds the configured threshold. ";
-  // Repeat to create a message with many tokens
-  return baseText.repeat(100);
+function generateShortMessage(): string {
+  return "test ".repeat(1500); // ~1501 tokens
 }
 
 /**
- * Generate a short message that stays under typical maxLength thresholds.
+ * Generate a long message with ~2100 tokens (> 2000).
+ * This exceeds ALL maxLength thresholds, so no optimization rules match.
  */
-function generateShortMessage(): string {
-  return "Hello, this is a short test message.";
+function generateLongMessage(): string {
+  return "test ".repeat(2100); // ~2101 tokens
 }
 
 // =============================================================================
 // Test Suite
+// =============================================================================
+//
+// HOW THESE TESTS WORK:
+//
+// These tests verify that the LLM Proxy correctly swaps models based on
+// optimization rules (maxLength and hasTools conditions).
+//
+// Test Flow:
+// 1. Test creates an optimization rule (e.g., swap to "optimized" model when
+//    message length < 2000 tokens)
+// 2. Test sends a request through LLM Proxy with the "baseline" model
+// 3. LLM Proxy evaluates the optimization rules and either:
+//    - Swaps the model to "optimized" (if conditions match)
+//    - Keeps the "baseline" model (if conditions don't match)
+// 4. LLM Proxy forwards the request to WireMock (mocked LLM provider)
+//
+// WireMock Request Validation:
+// The WireMock stubs are configured to match BOTH the API key AND the model
+// in the request:
+// - OpenAI/Anthropic: `bodyPatterns` checks the model in the request body
+// - Gemini: `urlPathPattern` checks the model in the URL path
+//
+// This ensures the test actually validates the optimization logic:
+// - If the proxy sends the WRONG model → WireMock won't match → HTTP 404 → test fails
+// - If the proxy sends the CORRECT model → WireMock matches → returns mock response
+//
+// Token Threshold Strategy:
+// Default optimization rules use maxLength=1000. Our test rules use maxLength=2000.
+// - "Short" messages: 1001-1999 tokens (exceeds default threshold, matches test threshold)
+// - "Long" messages: 2001+ tokens (exceeds both thresholds, no rule matches)
+// This isolation prevents default rules from interfering with our tests.
+//
 // =============================================================================
 
 const testConfigs: ModelOptimizationTestConfig[] = [
@@ -199,6 +234,9 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   anthropicConfig,
   geminiConfig,
 ];
+
+// All optimization tests must run serially because they create org-level rules that can interfere
+test.describe.configure({ mode: "serial" });
 
 for (const config of testConfigs) {
   test.describe(`LLMProxy-ModelOptimization-${config.providerName}`, () => {
@@ -228,7 +266,7 @@ for (const config of testConfigs) {
         entityType: "organization",
         entityId: organizationId,
         provider: config.provider,
-        conditions: [{ maxLength: 1000 }], // Short messages (< 1000 tokens) should be optimized
+        conditions: [{ maxLength: 2000 }], // Messages < 2000 tokens should be optimized (above default 1000 threshold)
         targetModel: config.optimizedModel,
         enabled: true,
       });
@@ -284,7 +322,7 @@ for (const config of testConfigs) {
         entityType: "organization",
         entityId: organizationId,
         provider: config.provider,
-        conditions: [{ maxLength: 1000 }], // Only short messages should be optimized
+        conditions: [{ maxLength: 2000 }], // Messages < 2000 tokens should be optimized (above default 1000 threshold)
         targetModel: config.optimizedModel,
         enabled: true,
       });
@@ -450,7 +488,7 @@ for (const config of testConfigs) {
         entityType: "organization",
         entityId: organizationId,
         provider: config.provider,
-        conditions: [{ maxLength: 1000 }], // Would match, but rule is disabled
+        conditions: [{ maxLength: 2000 }], // Would match, but rule is disabled
         targetModel: config.optimizedModel,
         enabled: false, // Rule is disabled
       });

@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
+    "urlPathPattern": "/v1beta/models/e2e-test-gemini-optimized:generateContent",
     "headers": {
       "x-goog-api-key": {
         "contains": "gemini-model-optimization-short"
@@ -47,10 +47,11 @@
         }
       ],
       "usageMetadata": {
-        "promptTokenCount": 10,
+        "promptTokenCount": 1500,
         "candidatesTokenCount": 15,
-        "totalTokenCount": 25
-      }
+        "totalTokenCount": 1515
+      },
+      "modelVersion": "e2e-test-gemini-optimized"
     }
   }
 }

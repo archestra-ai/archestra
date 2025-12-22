@@ -425,7 +425,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
         userTeamIds: [],
         provider: "anthropic",
-        conversationApiKeyId: null,
+        conversationId: null,
       });
 
       expect(resolved?.id).toBe(personalKey.id);
@@ -464,7 +464,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
         userTeamIds: [team.id],
         provider: "anthropic",
-        conversationApiKeyId: null,
+        conversationId: null,
       });
 
       expect(resolved?.id).toBe(teamKey.id);
@@ -492,7 +492,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
         userTeamIds: [],
         provider: "anthropic",
-        conversationApiKeyId: null,
+        conversationId: null,
       });
 
       expect(resolved?.id).toBe(orgWideKey.id);
@@ -502,11 +502,14 @@ describe("ChatApiKeyModel", () => {
       makeOrganization,
       makeUser,
       makeSecret,
+      makeAgent,
+      makeConversation,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
       const secret1 = await makeSecret();
       const secret2 = await makeSecret();
+      const agent = await makeAgent({ name: "Test Agent", teams: [] });
 
       await ChatApiKeyModel.create({
         organizationId: org.id,
@@ -524,12 +527,19 @@ describe("ChatApiKeyModel", () => {
         secretId: secret2.id,
       });
 
+      // Create a conversation with the org-wide key as its chatApiKeyId
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: org.id,
+        chatApiKeyId: conversationKey.id,
+      });
+
       const resolved = await ChatApiKeyModel.getCurrentApiKey({
         organizationId: org.id,
         userId: user.id,
         userTeamIds: [],
         provider: "anthropic",
-        conversationApiKeyId: conversationKey.id,
+        conversationId: conversation.id,
       });
 
       expect(resolved?.id).toBe(conversationKey.id);
@@ -547,7 +557,7 @@ describe("ChatApiKeyModel", () => {
         userId: user.id,
         userTeamIds: [],
         provider: "anthropic",
-        conversationApiKeyId: null,
+        conversationId: null,
       });
 
       expect(resolved).toBeNull();

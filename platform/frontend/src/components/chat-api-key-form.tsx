@@ -4,7 +4,7 @@ import { type archestraApiTypes, E2eTestId } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { lazy, useEffect, useMemo } from "react";
+import { lazy, useEffect, useMemo, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -194,16 +194,23 @@ export function ChatApiKeyForm({
   // Disable team scope if no teams are available
   const isTeamScopeDisabled = availableTeams.length === 0;
 
+  // Track previous provider to detect changes
+  const prevProviderRef = useRef(provider);
+
   // Auto-select first available scope when provider changes and current scope is disabled
   useEffect(() => {
     if (isEditMode) return;
+
+    const providerChanged = prevProviderRef.current !== provider;
+    prevProviderRef.current = provider;
 
     const currentScopeDisabled =
       (scope === "personal" && disabledScopes.personal) ||
       (scope === "org_wide" && disabledScopes.org_wide) ||
       (scope === "team" && isTeamScopeDisabled);
 
-    if (currentScopeDisabled) {
+    // Re-evaluate scope selection when provider changes or current scope becomes disabled
+    if (providerChanged || currentScopeDisabled) {
       // Find first non-disabled scope
       if (!disabledScopes.personal) {
         form.setValue("scope", "personal");
@@ -213,7 +220,7 @@ export function ChatApiKeyForm({
         form.setValue("scope", "org_wide");
       }
     }
-  }, [disabledScopes, isTeamScopeDisabled, scope, form, isEditMode]);
+  }, [provider, disabledScopes, isTeamScopeDisabled, scope, form, isEditMode]);
 
   // Clear teamId when switching to team scope if current selection is invalid
   useEffect(() => {

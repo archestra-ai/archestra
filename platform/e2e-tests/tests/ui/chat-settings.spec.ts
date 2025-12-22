@@ -38,7 +38,7 @@ test.describe("Chat API Keys", () => {
     await page.getByRole("textbox", { name: /API Key/i }).fill(TEST_API_KEY);
 
     // Click Create button
-    await clickButton({ page, options: { name: "Create" } });
+    await clickButton({ page, options: { name: "Test & Create" } });
 
     // Wait for the dialog to close and table to update
     await expect(page.getByText("API key created successfully")).toBeVisible({
@@ -58,7 +58,7 @@ test.describe("Chat API Keys", () => {
     // Update the name
     await page.getByLabel(/Name/i).clear();
     await page.getByLabel(/Name/i).fill(updatedName);
-    await clickButton({ page, options: { name: "Save" } });
+    await clickButton({ page, options: { name: "Test & Save" } });
 
     // Verify the name was updated
     await expect(page.getByText("API key updated successfully")).toBeVisible({
@@ -96,7 +96,7 @@ test.describe("Chat API Keys", () => {
       await adminPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: adminPage, options: { name: "Create" } });
+      await clickButton({ page: adminPage, options: { name: "Test & Create" } });
       await expect(
         adminPage.getByText("API key created successfully"),
       ).toBeVisible({
@@ -128,7 +128,10 @@ test.describe("Chat API Keys", () => {
       await adminPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: adminPage, options: { name: "Create" } });
+      await clickButton({
+        page: adminPage,
+        options: { name: "Test & Create" },
+      });
       await expect(
         adminPage.getByText("API key created successfully"),
       ).toBeVisible({
@@ -142,7 +145,10 @@ test.describe("Chat API Keys", () => {
       await editorPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: editorPage, options: { name: "Create" } });
+      await clickButton({
+        page: editorPage,
+        options: { name: "Test & Create" },
+      });
       await expect(
         editorPage.getByText("API key created successfully"),
       ).toBeVisible({
@@ -174,7 +180,10 @@ test.describe("Chat API Keys", () => {
       await editorPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: editorPage, options: { name: "Create" } });
+      await clickButton({
+        page: editorPage,
+        options: { name: "Test & Create" },
+      });
       await expect(
         editorPage.getByText("API key created successfully"),
       ).toBeVisible({
@@ -211,7 +220,10 @@ test.describe("Chat API Keys", () => {
       await editorPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: editorPage, options: { name: "Create" } });
+      await clickButton({
+        page: editorPage,
+        options: { name: "Test & Create" },
+      });
       await expect(
         editorPage.getByText("API key created successfully"),
       ).toBeVisible({
@@ -270,7 +282,10 @@ test.describe("Chat API Keys", () => {
       await adminPage
         .getByRole("textbox", { name: /API Key/i })
         .fill(TEST_API_KEY);
-      await clickButton({ page: adminPage, options: { name: "Create" } });
+      await clickButton({
+        page: adminPage,
+        options: { name: "Test & Create" },
+      });
       await expect(
         adminPage.getByText("API key created successfully"),
       ).toBeVisible({

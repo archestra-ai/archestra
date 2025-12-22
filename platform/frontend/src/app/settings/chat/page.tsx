@@ -2,7 +2,6 @@
 
 import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { capitalize } from "lodash-es";
 import {
   Building2,
   CheckCircle2,

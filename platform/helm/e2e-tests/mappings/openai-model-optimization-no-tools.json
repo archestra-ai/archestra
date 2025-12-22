@@ -4,12 +4,12 @@
     "urlPath": "/v1/chat/completions",
     "headers": {
       "Authorization": {
-        "contains": "openai-model-optimization-with-tools"
+        "contains": "openai-model-optimization-no-tools"
       }
     },
     "bodyPatterns": [
       {
-        "contains": "e2e-test-openai-optimized"
+        "contains": "e2e-test-openai-baseline"
       }
     ]
   },
@@ -19,16 +19,16 @@
       "Content-Type": "application/json"
     },
     "jsonBody": {
-      "id": "chatcmpl-model-opt-tools",
+      "id": "chatcmpl-model-opt-no-tools",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "e2e-test-openai-optimized",
+      "model": "e2e-test-openai-baseline",
       "choices": [
         {
           "index": 0,
           "message": {
             "role": "assistant",
-            "content": "This is a response for a request with tools.",
+            "content": "This is a response for a request without tools.",
             "refusal": null
           },
           "finish_reason": "stop",
@@ -36,9 +36,9 @@
         }
       ],
       "usage": {
-        "prompt_tokens": 1500,
+        "prompt_tokens": 1200,
         "completion_tokens": 15,
-        "total_tokens": 1515
+        "total_tokens": 1215
       }
     }
   }

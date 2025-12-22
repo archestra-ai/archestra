@@ -1,10 +1,10 @@
 {
   "request": {
     "method": "POST",
-    "urlPathPattern": "/v1beta/models/e2e-test-gemini-optimized:generateContent",
+    "urlPathPattern": "/v1beta/models/e2e-test-gemini-baseline:generateContent",
     "headers": {
       "x-goog-api-key": {
-        "contains": "gemini-model-optimization-with-tools"
+        "contains": "gemini-model-optimization-no-tools"
       }
     }
   },
@@ -19,7 +19,7 @@
           "content": {
             "parts": [
               {
-                "text": "This is a response for a request with tools."
+                "text": "This is a response for a request without tools."
               }
             ],
             "role": "model"
@@ -47,11 +47,11 @@
         }
       ],
       "usageMetadata": {
-        "promptTokenCount": 1500,
+        "promptTokenCount": 1200,
         "candidatesTokenCount": 15,
-        "totalTokenCount": 1515
+        "totalTokenCount": 1215
       },
-      "modelVersion": "e2e-test-gemini-optimized"
+      "modelVersion": "e2e-test-gemini-baseline"
     }
   }
 }

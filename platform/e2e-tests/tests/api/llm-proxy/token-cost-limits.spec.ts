@@ -201,19 +201,40 @@ for (const config of testConfigs) {
         );
       }
 
-      // Wait for async usage tracking to complete
+      // Poll for async usage tracking to complete
       // Usage tracking happens asynchronously after the response is sent
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // We need to wait until the usage is actually recorded before the second request
+      const maxPollingAttempts = 30;
+      const pollingIntervalMs = 500;
+      let usageTracked = false;
 
-      // DEBUG: We are requesting usage limits between the two LLM requests
-      // to make sure the first LLM request counts against limits.
-      // This request is visible in Playwright UI and is helpful in debugging.
-      await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/limits`,
-        ignoreStatusCheck: true,
-      });
+      for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
+        const limitsResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: `/api/limits?entityType=agent&entityId=${profileId}`,
+          ignoreStatusCheck: true,
+        });
+
+        if (limitsResponse.ok()) {
+          const limits = await limitsResponse.json();
+          const targetLimit = limits.find(
+            (l: { id: string; currentUsage?: number }) => l.id === limitId,
+          );
+          if (targetLimit?.currentUsage && targetLimit.currentUsage > 0) {
+            usageTracked = true;
+            break;
+          }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollingIntervalMs));
+      }
+
+      if (!usageTracked) {
+        throw new Error(
+          `Usage was not tracked after ${maxPollingAttempts * pollingIntervalMs}ms`,
+        );
+      }
 
       // 4. Second request should be blocked (limit exceeded)
       const blockedResponse = await makeApiRequest({

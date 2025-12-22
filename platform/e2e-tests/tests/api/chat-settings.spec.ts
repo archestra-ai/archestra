@@ -298,6 +298,8 @@ test.describe("Chat API Keys CRUD", () => {
 });
 
 test.describe("Chat API Keys Available Endpoint", () => {
+  test.describe.configure({ mode: "serial" });
+
   // Use openai provider to avoid conflicts with CRUD tests that use anthropic
   test("should get available API keys for current user", async ({
     request,
@@ -382,6 +384,8 @@ test.describe("Chat API Keys Available Endpoint", () => {
 });
 
 test.describe("Chat API Keys Team Scope", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("should create a team-scoped API key", async ({
     request,
     makeApiRequest,
@@ -452,6 +456,8 @@ test.describe("Chat API Keys Team Scope", () => {
 });
 
 test.describe("Chat API Keys Scope Update", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("should update scope from personal to org_wide", async ({
     request,
     makeApiRequest,
@@ -495,6 +501,8 @@ test.describe("Chat API Keys Scope Update", () => {
 });
 
 test.describe("Chat API Keys Access Control", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("member should be able to read chat API keys", async ({
     memberRequest,
     makeApiRequest,

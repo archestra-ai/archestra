@@ -77,7 +77,7 @@ if is_prod:
 else:
   local_resource(
     dev_resource_name,
-    serve_cmd='pnpm dev',
+    serve_cmd='ARCHESTRA_LOGGING_LEVEL=debug pnpm dev',
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],

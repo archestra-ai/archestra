@@ -61,6 +61,7 @@ export const E2eTestId = {
   ChatApiKeysTable: "chat-api-keys-table",
   AddChatApiKeyButton: "add-chat-api-key-button",
   ChatApiKeyRow: "chat-api-key-row",
+  ChatApiKeyForm: "chat-api-key-form",
   EditChatApiKeyButton: "edit-chat-api-key-button",
   DeleteChatApiKeyButton: "delete-chat-api-key-button",
   SetDefaultChatApiKeyButton: "set-default-chat-api-key-button",

@@ -135,8 +135,8 @@ export function ModelSelector({
   // If no providers configured, show disabled state
   if (availableProviders.length === 0) {
     return (
-      <PromptInputButton disabled>
-        <ModelSelectorName>No API keys configured</ModelSelectorName>
+      <PromptInputButton disabled className="min-w-40">
+        <ModelSelectorName>No models available</ModelSelectorName>
       </PromptInputButton>
     );
   }

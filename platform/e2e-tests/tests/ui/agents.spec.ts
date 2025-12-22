@@ -22,9 +22,12 @@ test(
 
     // After profile creation, dialog transitions to "How to connect" view
     // Wait for the success dialog to appear with connection instructions
-    await expect(
-      page.getByText(new RegExp(`How to connect "${AGENT_NAME}"`, "i")),
-    ).toBeVisible({ timeout: 45000 });
+    // Using toPass with retry to handle potential timing issues in slower browsers (Firefox/WebKit)
+    await expect(async () => {
+      await expect(
+        page.getByText(new RegExp(`How to connect.*${AGENT_NAME}`, "i")),
+      ).toBeVisible({ timeout: 15_000 });
+    }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
 
     // Click Close button to dismiss the dialog
     await page

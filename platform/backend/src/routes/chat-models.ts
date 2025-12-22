@@ -9,7 +9,7 @@ import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel } from "@/models";
+import { ChatApiKeyModel, TeamModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getSecretValueForLlmProviderApiKey } from "@/secretsmanager";
 import { constructResponseSchema, SupportedChatProviderSchema } from "@/types";
@@ -26,7 +26,7 @@ const ChatModelSchema = z.object({
   createdAt: z.string().optional(),
 });
 
-interface ModelInfo {
+export interface ModelInfo {
   id: string;
   displayName: string;
   provider: SupportedProvider;
@@ -174,21 +174,29 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
- * Get API key for a provider (from org default or environment)
+ * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
-async function getProviderApiKey(
-  provider: SupportedProvider,
-  organizationId: string,
-): Promise<string | null> {
-  // Try organization default first
-  const orgDefault = await ChatApiKeyModel.findOrganizationDefault(
+async function getProviderApiKey({
+  provider,
+  organizationId,
+  userId,
+}: {
+  provider: SupportedProvider;
+  organizationId: string;
+  userId: string;
+}): Promise<string | null> {
+  const apiKey = await ChatApiKeyModel.getCurrentApiKey({
     organizationId,
+    userId,
+    userTeamIds: await TeamModel.getUserTeamIds(userId),
     provider,
-  );
+    // set null to autoresolve the api key
+    conversationId: null,
+  });
 
-  if (orgDefault?.secretId) {
+  if (apiKey?.secretId) {
     const secretValue = await getSecretValueForLlmProviderApiKey(
-      orgDefault.secretId,
+      apiKey.secretId,
     );
 
     if (secretValue) {
@@ -220,13 +228,33 @@ const modelFetchers: Record<
 };
 
 /**
+ * Test if an API key is valid by attempting to fetch models from the provider.
+ * Throws an error if the key is invalid or the provider is unreachable.
+ */
+export async function testProviderApiKey(
+  provider: SupportedProvider,
+  apiKey: string,
+): Promise<void> {
+  await modelFetchers[provider](apiKey);
+}
+
+/**
  * Fetch models for a single provider
  */
-async function fetchModelsForProvider(
-  provider: SupportedProvider,
-  organizationId: string,
-): Promise<ModelInfo[]> {
-  const apiKey = await getProviderApiKey(provider, organizationId);
+async function fetchModelsForProvider({
+  provider,
+  organizationId,
+  userId,
+}: {
+  provider: SupportedProvider;
+  organizationId: string;
+  userId: string;
+}): Promise<ModelInfo[]> {
+  const apiKey = await getProviderApiKey({
+    provider,
+    organizationId,
+    userId,
+  });
 
   // For Gemini with Vertex AI, we might not have an API key
   if (!apiKey && !(provider === "gemini" && isVertexAiEnabled())) {
@@ -238,7 +266,7 @@ async function fetchModelsForProvider(
   }
 
   const cacheKey =
-    `${CacheKey.GetChatModels}-${provider}-${organizationId}-${apiKey?.slice(0, 6)}` as const;
+    `${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const;
   const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
 
   if (cachedModels) {
@@ -286,13 +314,17 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ChatModelSchema)),
       },
     },
-    async ({ query, organizationId }, reply) => {
+    async ({ query, organizationId, user }, reply) => {
       const { provider } = query;
       const providersToFetch = provider ? [provider] : SupportedProviders;
 
       const results = await Promise.all(
         providersToFetch.map((p) =>
-          fetchModelsForProvider(p as SupportedProvider, organizationId),
+          fetchModelsForProvider({
+            provider: p as SupportedProvider,
+            organizationId,
+            userId: user.id,
+          }),
         ),
       );
 

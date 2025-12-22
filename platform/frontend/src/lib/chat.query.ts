@@ -1,5 +1,6 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const {
   getChatConversations,
@@ -81,14 +82,16 @@ export function useUpdateConversation() {
       id,
       title,
       selectedModel,
+      chatApiKeyId,
     }: {
       id: string;
       title?: string | null;
       selectedModel?: string;
+      chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel },
+        body: { title, selectedModel, chatApiKeyId },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;
@@ -98,6 +101,14 @@ export function useUpdateConversation() {
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
       });
+      if (variables.chatApiKeyId) {
+        queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      }
+    },
+    onError: (error) => {
+      toast.error(
+        `Failed to update conversation: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     },
   });
 }

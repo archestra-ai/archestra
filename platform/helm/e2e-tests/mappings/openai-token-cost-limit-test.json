@@ -17,7 +17,7 @@
       "id": "chatcmpl-token-limit-test",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "gpt-4",
+      "model": "test-gpt-4-cost-limit",
       "choices": [
         {
           "index": 0,

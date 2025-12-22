@@ -65,7 +65,7 @@ export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
-
+  ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),
   plugins: [
     organization({
       requireEmailVerificationOnInvitation: false,

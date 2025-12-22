@@ -41,6 +41,7 @@ test.describe("MCP Install", () => {
       .getByLabel("Add MCP Server to the Private")
       .getByText(CONTEXT7_CATALOG_ITEM_NAME)
       .waitFor({ state: "visible" });
+    await adminPage.waitForLoadState("networkidle");
     await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
     await adminPage.waitForLoadState("networkidle");
 

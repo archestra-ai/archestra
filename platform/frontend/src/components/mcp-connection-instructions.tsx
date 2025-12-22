@@ -1,11 +1,13 @@
 "use client";
 
 import { archestraApiSdk } from "@shared";
-import { Check, Copy, Loader2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { Check, Copy, Loader2, Package, Server, User } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,8 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTokens } from "@/lib/team-token.query";
 import { useUserToken } from "@/lib/user-token.query";
 
@@ -30,19 +34,55 @@ const PERSONAL_TOKEN_ID = "__personal_token__";
 export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
+  const { data: profiles } = useProfiles();
+  const { data: mcpServers } = useMcpServers();
   const { data: tokens } = useTokens();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
 
-  const [copiedAuth, setCopiedAuth] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
 
-  // Use the new URL format with profile ID
-  const mcpUrl = `${apiBaseUrl}/mcp/${agentId}`;
+  // Update selected profile when agentId changes
+  useEffect(() => {
+    setSelectedProfileId(agentId);
+  }, [agentId]);
+
+  // Get the selected profile
+  const selectedProfile = profiles?.find((p) => p.id === selectedProfileId);
+
+  // Group tools by MCP server for the selected profile
+  const mcpServerToolCounts = useMemo(() => {
+    if (!selectedProfile || !mcpServers) return new Map();
+
+    const counts = new Map<
+      string,
+      { server: (typeof mcpServers)[0]; toolCount: number }
+    >();
+
+    selectedProfile.tools.forEach((tool) => {
+      if (tool.mcpServerId) {
+        const server = mcpServers.find((s) => s.id === tool.mcpServerId);
+        if (server) {
+          const existing = counts.get(tool.mcpServerId);
+          if (existing) {
+            existing.toolCount++;
+          } else {
+            counts.set(tool.mcpServerId, { server, toolCount: 1 });
+          }
+        }
+      }
+    });
+
+    return counts;
+  }, [selectedProfile, mcpServers]);
+
+  // Use the new URL format with selected profile ID
+  const mcpUrl = `${apiBaseUrl}/mcp/${selectedProfileId}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -103,51 +143,6 @@ export function McpConnectionInstructions({
       ),
     [mcpUrl, tokenForDisplay],
   );
-
-  const handleCopyAuthWithoutRealToken = async () => {
-    await navigator.clipboard.writeText(
-      `Authorization: Bearer ${tokenForDisplay}`,
-    );
-    setCopiedAuth(true);
-    toast.success("Authorization header copied (preview only)");
-    setTimeout(() => setCopiedAuth(false), 2000);
-  };
-
-  const handleCopyAuth = useCallback(async () => {
-    try {
-      let tokenValue: string;
-
-      if (isPersonalTokenSelected) {
-        // Fetch personal token value
-        const response = await archestraApiSdk.getUserTokenValue();
-        if (response.error || !response.data) {
-          throw new Error("Failed to fetch personal token value");
-        }
-        tokenValue = (response.data as { value: string }).value;
-      } else {
-        // Fetch team token value
-        if (!selectedTeamToken) {
-          return;
-        }
-        const response = await archestraApiSdk.getTokenValue({
-          path: { tokenId: selectedTeamToken.id },
-        });
-        if (response.error || !response.data) {
-          throw new Error("Failed to fetch token value");
-        }
-        tokenValue = (response.data as { value: string }).value;
-      }
-
-      await navigator.clipboard.writeText(
-        `Authorization: Bearer ${tokenValue}`,
-      );
-      setCopiedAuth(true);
-      toast.success("Authorization header copied");
-      setTimeout(() => setCopiedAuth(false), 2000);
-    } catch {
-      toast.error("Failed to copy authorization header");
-    }
-  }, [isPersonalTokenSelected, selectedTeamToken]);
 
   const handleCopyConfigWithoutRealToken = async () => {
     const fullConfig = JSON.stringify(
@@ -226,6 +221,167 @@ export function McpConnectionInstructions({
 
   return (
     <div className="space-y-6">
+      {/* Profile Selector */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Select Profile</Label>
+        <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a profile">
+              {selectedProfile && (
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  <span>{selectedProfile.name}</span>
+                  <span className="text-muted-foreground ml-auto">
+                    {selectedProfile.tools.length} tools
+                  </span>
+                </div>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {profiles?.map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <span>{profile.name}</span>
+                  </div>
+                  <span className="text-sm text-muted-foreground ml-4">
+                    {profile.tools.length} tools
+                  </span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* MCP Server Tiles */}
+      {selectedProfile && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">
+              MCP servers assigned to this profile and accessible via gateway
+            </Label>
+            <span className="text-xs text-muted-foreground">
+              {mcpServerToolCounts.size}{" "}
+              {mcpServerToolCounts.size === 1 ? "server" : "servers"}
+            </span>
+          </div>
+
+          {mcpServerToolCounts.size > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+              {Array.from(mcpServerToolCounts.entries()).map(
+                ([serverId, { server, toolCount }]) => (
+                  <Card
+                    key={serverId}
+                    className="p-3 hover:shadow-sm transition-all duration-200 border-border/40 bg-card/50"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
+                        <Server className="h-3.5 w-3.5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-xs truncate">
+                          {server.name}
+                        </h4>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Package className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-[11px] text-muted-foreground">
+                            {toolCount} {toolCount === 1 ? "tool" : "tools"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                ),
+              )}
+            </div>
+          ) : (
+            <Card className="p-6 text-center border-dashed bg-muted/5">
+              <div className="flex flex-col items-center gap-2">
+                <div className="p-2 rounded-full bg-muted/30">
+                  <Server className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    No MCP servers assigned
+                  </p>
+                  <p className="text-[11px] text-muted-foreground max-w-xs">
+                    Assign servers from Tools or MCP Catalog sections
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Token Selector */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Select token</Label>
+        <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
+          <SelectTrigger className="w-full min-h-[60px] py-2.5">
+            <SelectValue placeholder="Select token">
+              {effectiveTokenId && (
+                <div className="flex flex-col gap-0.5 items-start text-left">
+                  <div>{getTokenDisplayName()}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {isPersonalTokenSelected
+                      ? "Best option. For Cursor, Claude etc"
+                      : selectedTeamToken?.isOrganizationToken
+                        ? "To share org-wide"
+                        : "To share with your teammates"}
+                  </div>
+                </div>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {userToken && (
+              <SelectItem value={PERSONAL_TOKEN_ID}>
+                <div className="flex flex-col gap-0.5 items-start">
+                  <div>Personal Token</div>
+                  <div className="text-xs text-muted-foreground">
+                    Best option. For Cursor, Claude etc
+                  </div>
+                </div>
+              </SelectItem>
+            )}
+            {/* Team tokens (non-organization) */}
+            {tokens
+              ?.filter((token) => !token.isOrganizationToken)
+              .map((token) => (
+                <SelectItem key={token.id} value={token.id}>
+                  <div className="flex flex-col gap-0.5 items-start">
+                    <div>
+                      {token.team?.name
+                        ? `Team Token (${token.team.name})`
+                        : token.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      To share with your teammates
+                    </div>
+                  </div>
+                </SelectItem>
+              ))}
+            {/* Organization token */}
+            {tokens
+              ?.filter((token) => token.isOrganizationToken)
+              .map((token) => (
+                <SelectItem key={token.id} value={token.id}>
+                  <div className="flex flex-col gap-0.5 items-start">
+                    <div>Organization Token</div>
+                    <div className="text-xs text-muted-foreground">
+                      To share org-wide
+                    </div>
+                  </div>
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="space-y-3">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
@@ -255,95 +411,6 @@ export function McpConnectionInstructions({
                   <span>Copying...</span>
                 </>
               ) : copiedConfig ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy with exposed token</span>
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Which token to connect with:
-            </p>
-            <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
-              <SelectTrigger className="w-[400px] min-h-[60px] py-2.5">
-                <SelectValue placeholder="Select token">
-                  {effectiveTokenId && (
-                    <div className="flex flex-col gap-0.5 items-start text-left">
-                      <div>{getTokenDisplayName()}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {isPersonalTokenSelected 
-                          ? "Best option. For Cursor, Claude etc"
-                          : selectedTeamToken?.isOrganizationToken
-                            ? "To share org-wide"
-                            : "To share with your teammates"}
-                      </div>
-                    </div>
-                  )}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {userToken && (
-                  <SelectItem value={PERSONAL_TOKEN_ID}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>Personal Token</div>
-                      <div className="text-xs text-muted-foreground">Best option. For Cursor, Claude etc</div>
-                    </div>
-                  </SelectItem>
-                )}
-                {/* Team tokens (non-organization) */}
-                {tokens?.filter(token => !token.isOrganizationToken).map((token) => (
-                  <SelectItem key={token.id} value={token.id}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>
-                        {token.team?.name
-                          ? `Team Token (${token.team.name})`
-                          : token.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        To share with your teammates
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-                {/* Organization token */}
-                {tokens?.filter(token => token.isOrganizationToken).map((token) => (
-                  <SelectItem key={token.id} value={token.id}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>Organization Token</div>
-                      <div className="text-xs text-muted-foreground">
-                        To share org-wide
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-            <CodeText className="text-sm break-all">
-              Authorization: Bearer {tokenForDisplay}
-            </CodeText>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={
-                isPersonalTokenSelected || hasProfileAdminPermission
-                  ? handleCopyAuth
-                  : handleCopyAuthWithoutRealToken
-              }
-              className="gap-2"
-            >
-              {copiedAuth ? (
                 <>
                   <Check className="h-4 w-4 text-green-500" />
                   <span>Copied!</span>

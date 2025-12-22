@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArrowRight,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   DollarSign,
@@ -17,7 +16,6 @@ import {
   Search,
   Server,
   Shield,
-  Sparkles,
   Tag,
   Wrench,
   X,
@@ -536,6 +534,10 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           <CreateProfileDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
+            onProfileCreated={(profile) => {
+              setIsCreateDialogOpen(false);
+              setConnectingProfile(profile);
+            }}
           />
 
           {connectingProfile && (
@@ -580,9 +582,11 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
 function CreateProfileDialog({
   open,
   onOpenChange,
+  onProfileCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onProfileCreated?: (profile: { id: string; name: string }) => void;
 }) {
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
@@ -598,10 +602,6 @@ function CreateProfileDialog({
   });
   const { data: availableKeys = [] } = useLabelKeys();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const [createdProfile, setCreatedProfile] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
   const createProfile = useCreateProfile();
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const { data: isProfileAdmin } = useHasPermissions({ profile: ["admin"] });
@@ -639,6 +639,15 @@ function CreateProfileDialog({
     [teams],
   );
 
+  const handleClose = useCallback(() => {
+    setName("");
+    setAssignedTeamIds([]);
+    setLabels([]);
+    setSelectedTeamId("");
+    setConsiderContextUntrusted(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -668,7 +677,11 @@ function CreateProfileDialog({
           throw new Error("Failed to create profile");
         }
         toast.success("Profile created successfully");
-        setCreatedProfile({ id: agent.id, name: agent.name });
+        if (onProfileCreated) {
+          onProfileCreated({ id: agent.id, name: agent.name });
+        } else {
+          handleClose();
+        }
       } catch (_error) {
         toast.error("Failed to create profile");
       }
@@ -680,185 +693,149 @@ function CreateProfileDialog({
       considerContextUntrusted,
       createProfile,
       isProfileAdmin,
+      onProfileCreated,
+      handleClose,
     ],
   );
-
-  const handleClose = useCallback(() => {
-    setName("");
-    setAssignedTeamIds([]);
-    setLabels([]);
-    setSelectedTeamId("");
-    setCreatedProfile(null);
-    setConsiderContextUntrusted(false);
-    onOpenChange(false);
-  }, [onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className={
-          createdProfile
-            ? "max-w-[90vw] max-h-[90vh] flex flex-col"
-            : "max-w-4xl max-h-[90vh] flex flex-col"
-        }
+        className="max-w-4xl max-h-[90vh] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        {!createdProfile ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Create new profile</DialogTitle>
-              <DialogDescription>
-                Create a new profile to use with the Archestra Platform proxy.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col flex-1 overflow-hidden"
-            >
-              <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Profile Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="My AI Profile"
-                    autoFocus
-                  />
-                </div>
+        <DialogHeader>
+          <DialogTitle>Create new profile</DialogTitle>
+          <DialogDescription>
+            Create a new profile to use with the Archestra Platform proxy.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col flex-1 overflow-hidden"
+        >
+          <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Profile Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My AI Profile"
+                autoFocus
+              />
+            </div>
 
-                <div className="grid gap-2">
-                  <Label>
-                    Team Access
-                    {!isProfileAdmin && (
-                      <span className="text-destructive ml-1">(required)</span>
-                    )}
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Assign teams to grant their members access to this profile.
-                  </p>
-                  <Select value={selectedTeamId} onValueChange={handleAddTeam}>
-                    <SelectTrigger id="assign-team">
-                      <SelectValue placeholder="Select a team to assign" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams?.length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          No teams available
-                        </div>
-                      ) : getUnassignedTeams().length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          All teams are already assigned
-                        </div>
-                      ) : (
-                        getUnassignedTeams().map((team) => (
-                          <SelectItem key={team.id} value={team.id}>
-                            {team.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {assignedTeamIds.length > 0 ? (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {assignedTeamIds.map((teamId) => {
-                        const team = getTeamById(teamId);
-                        return (
-                          <Badge
-                            key={teamId}
-                            variant="secondary"
-                            className="flex items-center gap-1 pr-1"
-                          >
-                            <span>{team?.name || teamId}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTeam(teamId)}
-                              className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        );
-                      })}
+            <div className="grid gap-2">
+              <Label>
+                Team Access
+                {!isProfileAdmin && (
+                  <span className="text-destructive ml-1">(required)</span>
+                )}
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Assign teams to grant their members access to this profile.
+              </p>
+              <Select value={selectedTeamId} onValueChange={handleAddTeam}>
+                <SelectTrigger id="assign-team">
+                  <SelectValue placeholder="Select a team to assign" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams?.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No teams available
+                    </div>
+                  ) : getUnassignedTeams().length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      All teams are already assigned
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {isProfileAdmin
-                        ? "No teams assigned yet. Admins have access to all profiles."
-                        : hasNoAvailableTeams
-                          ? "You are not a member of any team. Contact an admin to be added to a team."
-                          : "No teams assigned yet."}
-                    </p>
+                    getUnassignedTeams().map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))
                   )}
+                </SelectContent>
+              </Select>
+              {assignedTeamIds.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {assignedTeamIds.map((teamId) => {
+                    const team = getTeamById(teamId);
+                    return (
+                      <Badge
+                        key={teamId}
+                        variant="secondary"
+                        className="flex items-center gap-1 pr-1"
+                      >
+                        <span>{team?.name || teamId}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTeam(teamId)}
+                          className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
                 </div>
-
-                <ProfileLabels
-                  ref={agentLabelsRef}
-                  labels={labels}
-                  onLabelsChange={setLabels}
-                  availableKeys={availableKeys}
-                />
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="consider-context-untrusted"
-                    checked={considerContextUntrusted}
-                    onCheckedChange={(checked) =>
-                      setConsiderContextUntrusted(checked === true)
-                    }
-                  />
-                  <div className="grid gap-1">
-                    <Label
-                      htmlFor="consider-context-untrusted"
-                      className="text-sm font-medium cursor-pointer"
-                    >
-                      Treat user context as untrusted
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enable when user prompts may contain untrusted and
-                      sensitive data.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter className="mt-4">
-                <Button type="button" variant="outline" onClick={handleClose}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    createProfile.isPending ||
-                    requiresTeamSelection ||
-                    (!isProfileAdmin && hasNoAvailableTeams)
-                  }
-                >
-                  {createProfile.isPending ? "Creating..." : "Create profile"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>
-                How to connect "{createdProfile.name}" to Archestra
-              </DialogTitle>
-            </DialogHeader>
-            <div className="overflow-y-auto py-4 flex-1">
-              <ProfileConnectionColumns agentId={createdProfile.id} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {isProfileAdmin
+                    ? "No teams assigned yet. Admins have access to all profiles."
+                    : hasNoAvailableTeams
+                      ? "You are not a member of any team. Contact an admin to be added to a team."
+                      : "No teams assigned yet."}
+                </p>
+              )}
             </div>
-            <DialogFooter className="shrink-0">
-              <Button
-                type="button"
-                onClick={handleClose}
-                data-testid={E2eTestId.CreateAgentCloseHowToConnectButton}
-              >
-                Close
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+
+            <ProfileLabels
+              ref={agentLabelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+              availableKeys={availableKeys}
+            />
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="consider-context-untrusted"
+                checked={considerContextUntrusted}
+                onCheckedChange={(checked) =>
+                  setConsiderContextUntrusted(checked === true)
+                }
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor="consider-context-untrusted"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Treat user context as untrusted
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable when user prompts may contain untrusted and sensitive
+                  data.
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                createProfile.isPending ||
+                requiresTeamSelection ||
+                (!isProfileAdmin && hasNoAvailableTeams)
+              }
+            >
+              {createProfile.isPending ? "Creating..." : "Create profile"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -1137,7 +1114,9 @@ function ProfileConnectionColumns({ agentId }: { agentId: string }) {
           }`}
         >
           <div className="flex items-center gap-2">
-            <Network className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`} />
+            <Network
+              className={`h-4 w-4 ${activeTab === "proxy" ? "text-blue-500" : ""}`}
+            />
             <span className="font-medium">LLM Proxy</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -1166,7 +1145,9 @@ function ProfileConnectionColumns({ agentId }: { agentId: string }) {
           }`}
         >
           <div className="flex items-center gap-2">
-            <Shield className={`h-4 w-4 ${activeTab === "mcp" ? "text-green-500" : ""}`} />
+            <Shield
+              className={`h-4 w-4 ${activeTab === "mcp" ? "text-green-500" : ""}`}
+            />
             <span className="font-medium">MCP Gateway</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -1213,9 +1194,9 @@ function ConnectProfileDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl p-0 overflow-hidden border-0">
+      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col border-0">
         {/* Header with gradient */}
-        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5">
+        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-6 pt-6 pb-5 shrink-0">
           <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
           <div className="relative">
             <DialogHeader>
@@ -1232,12 +1213,12 @@ function ConnectProfileDialog({
         </div>
 
         {/* Content */}
-        <div className="px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
           <ProfileConnectionColumns agentId={agent.id} />
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30 shrink-0">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ExternalLink className="h-3.5 w-3.5" />
             <span>Need help? Check our</span>

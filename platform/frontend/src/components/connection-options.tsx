@@ -1,6 +1,6 @@
 "use client";
 
-import { Network, Shield, Lock, Eye, DollarSign, Server } from "lucide-react";
+import { DollarSign, Eye, Lock, Network, Server, Shield } from "lucide-react";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 

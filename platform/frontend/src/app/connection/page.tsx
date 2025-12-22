@@ -11,9 +11,9 @@ export default function ConnectionPage() {
   const { data: defaultProfile } = useDefaultProfile();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  
+
   const [activeTab, setActiveTab] = useState<"proxy" | "mcp">(
-    tabParam === "mcp" ? "mcp" : "proxy"
+    tabParam === "mcp" ? "mcp" : "proxy",
   );
 
   useEffect(() => {

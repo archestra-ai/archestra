@@ -347,7 +347,7 @@ export async function clickButton({
 
 /**
  * Login via API (bypasses UI form for reliability).
- * Handles rate limiting with exponential backoff retry.
+ * Handles rate limiting and transient errors with exponential backoff retry.
  *
  * @param page - Playwright page (uses page.request for API calls)
  * @param email - User email
@@ -364,32 +364,54 @@ export async function loginViaApi(
   let delay = 1000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await page.request.post(
-      `${UI_BASE_URL}/api/auth/sign-in/email`,
-      {
-        data: { email, password },
-        headers: { Origin: UI_BASE_URL },
-      },
-    );
+    try {
+      const response = await page.request.post(
+        `${UI_BASE_URL}/api/auth/sign-in/email`,
+        {
+          data: { email, password },
+          headers: { Origin: UI_BASE_URL },
+        },
+      );
 
-    if (response.ok()) {
-      return true;
+      if (response.ok()) {
+        return true;
+      }
+
+      const status = response.status();
+      // Retry on rate limiting (429), server errors (5xx), or conflict (409 - session conflict)
+      const isRetryable = status === 429 || status >= 500 || status === 409;
+
+      if (isRetryable && attempt < maxRetries) {
+        console.log(
+          `[loginViaApi] Attempt ${attempt + 1}/${maxRetries + 1} failed with status ${status} for ${email}, retrying in ${delay}ms...`,
+        );
+        await page.waitForTimeout(delay);
+        delay *= 2; // Exponential backoff
+        continue;
+      }
+
+      // Non-retryable error or out of retries
+      console.error(
+        `[loginViaApi] Failed for ${email} with status ${status} after ${attempt + 1} attempts`,
+      );
+      return false;
+    } catch (error) {
+      // Network errors or other exceptions
+      if (attempt < maxRetries) {
+        console.log(
+          `[loginViaApi] Attempt ${attempt + 1}/${maxRetries + 1} threw error for ${email}, retrying in ${delay}ms...`,
+          error,
+        );
+        await page.waitForTimeout(delay);
+        delay *= 2;
+        continue;
+      }
+      console.error(
+        `[loginViaApi] Failed for ${email} with exception after ${attempt + 1} attempts`,
+        error,
+      );
+      return false;
     }
-
-    // If rate limited or server error, wait and retry
-    if (
-      (response.status() === 429 || response.status() >= 500) &&
-      attempt < maxRetries
-    ) {
-      await page.waitForTimeout(delay);
-      delay *= 2; // Exponential backoff
-      continue;
-    }
-
-    if (!response.ok()) {
-    }
-
-    return false;
   }
 
   return false;

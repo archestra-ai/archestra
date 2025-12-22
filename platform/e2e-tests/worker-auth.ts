@@ -7,8 +7,19 @@ import { UI_BASE_URL } from "./consts";
 import { loginViaApi } from "./utils";
 
 /**
+ * Sleep for a specified duration
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Creates a worker-specific authenticated storage file.
  * Each worker authenticates independently and saves to its own storage file.
+ *
+ * Implements staggered authentication to prevent rate limiting when many
+ * workers start simultaneously. Each worker waits (workerIndex * 500ms)
+ * before attempting to authenticate.
  */
 export async function createWorkerAuthStorage(params: {
   browser: Browser;
@@ -22,12 +33,19 @@ export async function createWorkerAuthStorage(params: {
     params;
   const workerStoragePath = `${baseAuthFile}.worker${workerIndex}`;
 
+  // Stagger authentication attempts to prevent rate limiting
+  // Each worker waits workerIndex * 500ms before starting
+  const staggerDelay = workerIndex * 500;
+  if (staggerDelay > 0) {
+    await sleep(staggerDelay);
+  }
+
   // Create a fresh context and authenticate for this worker
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  // Authenticate via API
-  const signedIn = await loginViaApi(page, email, password);
+  // Authenticate via API with increased retries for CI stability
+  const signedIn = await loginViaApi(page, email, password, 5);
   if (!signedIn) {
     await context.close();
     throw new Error(

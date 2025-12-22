@@ -26,7 +26,7 @@ const ChatModelSchema = z.object({
   createdAt: z.string().optional(),
 });
 
-interface ModelInfo {
+export interface ModelInfo {
   id: string;
   displayName: string;
   provider: SupportedProvider;
@@ -226,6 +226,17 @@ const modelFetchers: Record<
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
 };
+
+/**
+ * Test if an API key is valid by attempting to fetch models from the provider.
+ * Throws an error if the key is invalid or the provider is unreachable.
+ */
+export async function testProviderApiKey(
+  provider: SupportedProvider,
+  apiKey: string,
+): Promise<void> {
+  await modelFetchers[provider](apiKey);
+}
 
 /**
  * Fetch models for a single provider

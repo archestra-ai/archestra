@@ -82,6 +82,9 @@ export function useCreateChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
       toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
@@ -119,6 +122,9 @@ export function useUpdateChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
       toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
@@ -142,6 +148,9 @@ export function useDeleteChatApiKey() {
         throw new Error(msg);
       }
       return responseData;
+    },
+    onError: (error) => {
+      toast.error(error.message);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });

@@ -236,7 +236,9 @@ function ChatSettingsContent() {
                   <span>
                     {row.original.scope === "team"
                       ? row.original.teamName
-                      : capitalize(row.original.scope)}
+                      : row.original.scope === "personal"
+                        ? "Personal"
+                        : "Whole Organization"}
                   </span>
                 </Badge>
               </TooltipTrigger>
@@ -384,7 +386,7 @@ function ChatSettingsContent() {
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Create
+              Test & Create
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -425,7 +427,7 @@ function ChatSettingsContent() {
               {updateMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Save
+              Test & Save
             </Button>
           </DialogFooter>
         </DialogContent>

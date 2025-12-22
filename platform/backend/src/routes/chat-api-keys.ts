@@ -1,9 +1,11 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { ChatApiKeyModel, TeamModel } from "@/models";
+import { testProviderApiKey } from "@/routes/chat-models";
 import { isByosEnabled, secretManager } from "@/secretsmanager";
 import {
   ApiError,
@@ -105,6 +107,16 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         headers,
       });
+
+      // Test the API key before saving
+      try {
+        await testProviderApiKey(body.provider, body.apiKey);
+      } catch (_error) {
+        throw new ApiError(
+          400,
+          `Invalid API key: Failed to connect to ${capitalize(body.provider)}`,
+        );
+      }
 
       // Use forceDB when BYOS is enabled because chat API keys are user-provided values
       const forceDB = isByosEnabled();
@@ -217,6 +229,18 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           headers,
         });
+      }
+
+      // Test the API key before saving (only if a new key is provided)
+      if (body.apiKey) {
+        try {
+          await testProviderApiKey(apiKey.provider, body.apiKey);
+        } catch (_error) {
+          throw new ApiError(
+            400,
+            `Invalid API key: Failed to connect to ${capitalize(apiKey.provider)}`,
+          );
+        }
       }
 
       // Update the secret if a new API key is provided

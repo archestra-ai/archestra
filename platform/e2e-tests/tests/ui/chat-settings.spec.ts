@@ -298,6 +298,7 @@ test.describe("Chat API Keys", () => {
       // Every user can see it
       for (const p of [adminPage, editorPage, memberPage]) {
         await goToPage(p, "/settings/chat");
+        await p.waitForLoadState("networkidle");
         await expect(
           p.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
         ).toBeVisible();
@@ -311,13 +312,11 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // Cleanup: delete the created key
-      test.afterAll(async () => {
-        await goToPage(adminPage, "/settings/chat");
-        await adminPage
-          .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
-          .click();
-        await clickButton({ page: adminPage, options: { name: "Delete" } });
-      });
+      await goToPage(adminPage, "/settings/chat");
+      await adminPage
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
+        .click();
+      await clickButton({ page: adminPage, options: { name: "Delete" } });
     });
   });
 });

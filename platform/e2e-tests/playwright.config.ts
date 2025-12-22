@@ -66,7 +66,8 @@ export default defineConfig({
   forbidOnly: IS_CI,
   /* Retry on CI only */
   retries: IS_CI ? 2 : 0,
-  workers: IS_CI ? 6 : 3,
+  // Worker-scoped fixtures give each worker its own session, eliminating race conditions
+  workers: IS_CI ? 18 : 3,
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
@@ -134,8 +135,7 @@ export default defineConfig({
       testIgnore: browserTestIgnore,
       use: {
         ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
+        // Worker-scoped fixtures handle authentication per worker
       },
       // Run all setup projects before tests
       dependencies: dependencies.browserProjects,
@@ -146,8 +146,7 @@ export default defineConfig({
       testIgnore: browserTestIgnore,
       use: {
         ...devices["Desktop Firefox"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
+        // Worker-scoped fixtures handle authentication per worker
       },
       // Run all setup projects before tests
       dependencies: dependencies.browserProjects,
@@ -159,8 +158,7 @@ export default defineConfig({
       testIgnore: browserTestIgnore,
       use: {
         ...devices["Desktop Safari"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
+        // Worker-scoped fixtures handle authentication per worker
       },
       // Run all setup projects before tests
       dependencies: dependencies.browserProjects,
@@ -190,8 +188,7 @@ export default defineConfig({
       testDir: "./tests/api",
       use: {
         ...devices["Desktop Chrome"],
-        // Use the stored authentication state
-        storageState: adminAuthFile,
+        // Worker-scoped fixtures handle authentication per worker
       },
       // Only depend on auth setup, not UI tests
       dependencies: dependencies.apiProject,

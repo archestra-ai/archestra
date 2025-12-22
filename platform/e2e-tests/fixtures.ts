@@ -8,10 +8,35 @@ import {
   test as base,
   type Page,
 } from "@playwright/test";
-import { editorAuthFile, memberAuthFile, UI_BASE_URL } from "./consts";
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  adminAuthFile,
+  EDITOR_EMAIL,
+  EDITOR_PASSWORD,
+  editorAuthFile,
+  MEMBER_EMAIL,
+  MEMBER_PASSWORD,
+  memberAuthFile,
+  UI_BASE_URL,
+} from "./consts";
+import { cleanupWorkerAuthFile, createWorkerAuthStorage } from "./worker-auth";
 
 /** Type for user-specific navigation function */
 type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
+
+/**
+ * Worker-scoped fixtures that run once per worker.
+ * Each worker gets its own authenticated session to avoid race conditions.
+ */
+interface WorkerFixtures {
+  /** Path to worker-specific admin auth storage file */
+  workerAdminStoragePath: string;
+  /** Path to worker-specific editor auth storage file */
+  workerEditorStoragePath: string;
+  /** Path to worker-specific member auth storage file */
+  workerMemberStoragePath: string;
+}
 
 /**
  * Playwright test extension with fixtures
@@ -21,7 +46,9 @@ interface TestFixtures {
   goToPage: typeof goToPage;
   makeRandomString: typeof makeRandomString;
   extractCookieHeaders: (page: Page) => Promise<string>;
-  /** Page authenticated as admin (same as default `page`) */
+  /** Overridden page fixture with worker-specific auth */
+  page: Page;
+  /** Page authenticated as admin (alias for page) */
   adminPage: Page;
   /** Page authenticated as editor */
   editorPage: Page;
@@ -58,7 +85,64 @@ async function createAuthenticatedPage(
 }
 
 export * from "@playwright/test";
-export const test = base.extend<TestFixtures>({
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  /**
+   * Worker-scoped fixture: Creates a fresh admin authenticated session per worker.
+   */
+  workerAdminStoragePath: [
+    async ({ browser }, use, workerInfo) => {
+      const storagePath = await createWorkerAuthStorage({
+        browser,
+        baseAuthFile: adminAuthFile,
+        workerIndex: workerInfo.workerIndex,
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        userType: "admin",
+      });
+      await use(storagePath);
+      await cleanupWorkerAuthFile(storagePath);
+    },
+    { scope: "worker" },
+  ],
+
+  /**
+   * Worker-scoped fixture: Creates a fresh editor authenticated session per worker.
+   */
+  workerEditorStoragePath: [
+    async ({ browser }, use, workerInfo) => {
+      const storagePath = await createWorkerAuthStorage({
+        browser,
+        baseAuthFile: editorAuthFile,
+        workerIndex: workerInfo.workerIndex,
+        email: EDITOR_EMAIL,
+        password: EDITOR_PASSWORD,
+        userType: "editor",
+      });
+      await use(storagePath);
+      await cleanupWorkerAuthFile(storagePath);
+    },
+    { scope: "worker" },
+  ],
+
+  /**
+   * Worker-scoped fixture: Creates a fresh member authenticated session per worker.
+   */
+  workerMemberStoragePath: [
+    async ({ browser }, use, workerInfo) => {
+      const storagePath = await createWorkerAuthStorage({
+        browser,
+        baseAuthFile: memberAuthFile,
+        workerIndex: workerInfo.workerIndex,
+        email: MEMBER_EMAIL,
+        password: MEMBER_PASSWORD,
+        userType: "member",
+      });
+      await use(storagePath);
+      await cleanupWorkerAuthFile(storagePath);
+    },
+    { scope: "worker" },
+  ],
+
   goToPage: async ({}, use) => {
     await use(goToPage);
   },
@@ -74,30 +158,42 @@ export const test = base.extend<TestFixtures>({
     });
   },
   /**
-   * Admin page - same auth as default `page` fixture
+   * Override default page fixture to use worker-specific auth.
+   * This ensures each worker has its own authenticated session,
+   * preventing race conditions when multiple workers share the same session.
    */
-  adminPage: async ({ page }, use) => {
-    // Default page is already admin (via storageState in config)
-    await use(page);
-  },
-  /**
-   * Editor page - creates a new browser context with editor auth
-   */
-  editorPage: async ({ browser }, use) => {
+  page: async ({ browser, workerAdminStoragePath }, use) => {
     const { context, page } = await createAuthenticatedPage(
       browser,
-      editorAuthFile,
+      workerAdminStoragePath,
     );
     await use(page);
     await context.close();
   },
   /**
-   * Member page - creates a new browser context with member auth
+   * Admin page - alias for page (uses worker-specific auth storage)
    */
-  memberPage: async ({ browser }, use) => {
+  adminPage: async ({ page }, use) => {
+    await use(page);
+  },
+  /**
+   * Editor page - uses worker-specific auth storage
+   */
+  editorPage: async ({ browser, workerEditorStoragePath }, use) => {
     const { context, page } = await createAuthenticatedPage(
       browser,
-      memberAuthFile,
+      workerEditorStoragePath,
+    );
+    await use(page);
+    await context.close();
+  },
+  /**
+   * Member page - uses worker-specific auth storage
+   */
+  memberPage: async ({ browser, workerMemberStoragePath }, use) => {
+    const { context, page } = await createAuthenticatedPage(
+      browser,
+      workerMemberStoragePath,
     );
     await use(page);
     await context.close();

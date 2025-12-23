@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uuid,index } from "drizzle-orm/pg-core";
 import conversationsTable from "./conversation";
 
 const messagesTable = pgTable("messages", {
@@ -10,6 +10,10 @@ const messagesTable = pgTable("messages", {
   // biome-ignore lint/suspicious/noExplicitAny: Stores complete UIMessage structure from AI SDK which is dynamic
   content: jsonb("content").$type<any>().notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+},
+ (table) => ({
+    conversationIdIdx: index("con_idx").on(table.conversationId),
+  }),
+);
 
 export default messagesTable;

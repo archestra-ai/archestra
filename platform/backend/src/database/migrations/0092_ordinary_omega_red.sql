@@ -1,0 +1,1 @@
+CREATE INDEX "con_idx" ON "messages" USING btree ("conversation_id");

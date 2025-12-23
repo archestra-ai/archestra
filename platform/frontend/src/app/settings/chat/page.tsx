@@ -200,9 +200,9 @@ function ChatSettingsContent() {
     createFormValues.apiKey !== PLACEHOLDER_KEY &&
     createFormValues.name &&
     (createFormValues.scope !== "team" || createFormValues.teamId) &&
-    byosEnabled
+    (byosEnabled
       ? createFormValues.vaultSecretPath && createFormValues.vaultSecretKey
-      : createFormValues.apiKey;
+      : createFormValues.apiKey);
 
   // Validation for edit form
   const editFormValues = editForm.watch();

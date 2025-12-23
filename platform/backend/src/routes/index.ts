@@ -21,9 +21,11 @@ export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 export { default as promptRoutes } from "./prompts";
-export { default as anthropicProxyRoutes } from "./proxy/anthropic";
+// Legacy anthropic routes disabled - using unified handler instead
+// export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";
 export { default as openAiProxyRoutes } from "./proxy/openai";
+export { default as unifiedProxyRoutes } from "./proxy/unified";
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

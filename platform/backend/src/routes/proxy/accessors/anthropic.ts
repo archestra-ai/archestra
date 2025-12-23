@@ -7,10 +7,12 @@
  */
 
 import AnthropicProvider from "@anthropic-ai/sdk";
+import logger from "@/logging";
 import type {
   Anthropic,
   ChunkProcessingResult,
   CommonMessage,
+  CommonToolResult,
   LLMProviderAdapterFactory,
   LLMRequestAccessor,
   LLMResponseAccessor,
@@ -24,7 +26,8 @@ import type {
   UsageView,
 } from "@/types";
 import { MockAnthropicClient } from "../mock-anthropic-client";
-import * as anthropicAdapter from "../utils/adapters/anthropic";
+// TODO: Make convertToolResultsToToon unified across providers (currently has tokenizer/pricing dependencies)
+import { convertToolResultsToToon } from "../utils/adapters/anthropic";
 
 // =============================================================================
 // TYPE ALIASES
@@ -65,7 +68,7 @@ class AnthropicRequestAccessor
   }
 
   getMessagesForPolicyEvaluation(): CommonMessage[] {
-    return anthropicAdapter.toCommonFormat(this.request.messages);
+    return this.toCommonFormat(this.request.messages);
   }
 
   getToolResults(): ToolResultView[] {
@@ -160,10 +163,7 @@ class AnthropicRequestAccessor
 
   async applyToonCompression(model: string): Promise<ToonCompressionResult> {
     const { messages: compressedMessages, stats } =
-      await anthropicAdapter.convertToolResultsToToon(
-        this.request.messages,
-        model,
-      );
+      await convertToolResultsToToon(this.request.messages, model);
     // Update internal messages state
     this.request = {
       ...this.request,
@@ -185,10 +185,7 @@ class AnthropicRequestAccessor
 
     // Apply tool result updates if any
     if (Object.keys(this.toolResultUpdates).length > 0) {
-      messages = anthropicAdapter.applyUpdates(
-        messages,
-        this.toolResultUpdates,
-      );
+      messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
 
     return {
@@ -218,6 +215,160 @@ class AnthropicRequestAccessor
       }
     }
     return null;
+  }
+
+  /**
+   * Convert Anthropic messages to common format for policy evaluation
+   */
+  private toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
+    logger.debug(
+      { messageCount: messages.length },
+      "[AnthropicAccessor] toCommonFormat: starting conversion",
+    );
+    const commonMessages: CommonMessage[] = [];
+
+    for (const message of messages) {
+      const commonMessage: CommonMessage = {
+        role: message.role as CommonMessage["role"],
+      };
+
+      // Handle user messages that may contain tool results
+      if (message.role === "user" && Array.isArray(message.content)) {
+        const toolCalls: CommonToolResult[] = [];
+
+        for (const contentBlock of message.content) {
+          if (contentBlock.type === "tool_result") {
+            // Find the tool name from previous assistant messages
+            const toolName = this.findToolNameInMessages(
+              messages,
+              contentBlock.tool_use_id,
+            );
+
+            if (toolName) {
+              logger.debug(
+                { toolUseId: contentBlock.tool_use_id, toolName },
+                "[AnthropicAccessor] toCommonFormat: found tool result",
+              );
+              // Parse the tool result
+              let toolResult: unknown;
+              if (typeof contentBlock.content === "string") {
+                try {
+                  toolResult = JSON.parse(contentBlock.content);
+                } catch {
+                  toolResult = contentBlock.content;
+                }
+              } else {
+                toolResult = contentBlock.content;
+              }
+
+              toolCalls.push({
+                id: contentBlock.tool_use_id,
+                name: toolName,
+                content: toolResult,
+                isError: false,
+              });
+            }
+          }
+        }
+
+        if (toolCalls.length > 0) {
+          commonMessage.toolCalls = toolCalls;
+          logger.debug(
+            { toolCallCount: toolCalls.length },
+            "[AnthropicAccessor] toCommonFormat: attached tool calls to message",
+          );
+        }
+      }
+
+      commonMessages.push(commonMessage);
+    }
+
+    logger.debug(
+      { inputCount: messages.length, outputCount: commonMessages.length },
+      "[AnthropicAccessor] toCommonFormat: conversion complete",
+    );
+    return commonMessages;
+  }
+
+  /**
+   * Extract tool name from messages by finding the assistant message
+   * that contains the tool_use_id
+   */
+  private findToolNameInMessages(
+    messages: AnthropicMessages,
+    toolUseId: string,
+  ): string | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (
+        message.role === "assistant" &&
+        Array.isArray(message.content) &&
+        message.content.length > 0
+      ) {
+        for (const content of message.content) {
+          if (content.type === "tool_use" && content.id === toolUseId) {
+            return content.name;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Apply tool result updates back to Anthropic messages
+   */
+  private applyUpdates(
+    messages: AnthropicMessages,
+    updates: Record<string, string>,
+  ): AnthropicMessages {
+    const updateCount = Object.keys(updates).length;
+    logger.debug(
+      { messageCount: messages.length, updateCount },
+      "[AnthropicAccessor] applyUpdates: starting",
+    );
+
+    if (updateCount === 0) {
+      logger.debug("[AnthropicAccessor] applyUpdates: no updates to apply");
+      return messages;
+    }
+
+    let appliedCount = 0;
+    const result = messages.map((message) => {
+      // Only process user messages with content arrays
+      if (message.role === "user" && Array.isArray(message.content)) {
+        const updatedContent = message.content.map((contentBlock) => {
+          if (
+            contentBlock.type === "tool_result" &&
+            updates[contentBlock.tool_use_id]
+          ) {
+            appliedCount++;
+            logger.debug(
+              { toolUseId: contentBlock.tool_use_id },
+              "[AnthropicAccessor] applyUpdates: applying update to tool result",
+            );
+            return {
+              ...contentBlock,
+              content: updates[contentBlock.tool_use_id],
+            };
+          }
+          return contentBlock;
+        });
+
+        return {
+          ...message,
+          content: updatedContent,
+        };
+      }
+
+      return message;
+    });
+
+    logger.debug(
+      { updateCount, appliedCount },
+      "[AnthropicAccessor] applyUpdates: complete",
+    );
+    return result;
   }
 }
 

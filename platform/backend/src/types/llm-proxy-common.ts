@@ -43,7 +43,7 @@
  * Accessors preserve original data while providing uniform business logic API.
  */
 
-import type { SupportedProvider } from "./llm-providers";
+import type { SupportedProvider } from "@shared";
 
 // =============================================================================
 // EXISTING TYPES (re-exported for business logic use)

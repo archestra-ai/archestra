@@ -5,17 +5,13 @@
  * requests and responses in a uniform way. The original provider data is
  * preserved and can be reconstructed after modifications.
  *
- * ## Architecture
- *
+ * Usage flow:
  * ```
  * Provider Request
  *       ↓
  * RequestAdapter (wraps original, provides uniform read/modify API)
  *       ↓
  * [Business Logic operates via adapter methods]
- * - Trusted data policies: adapter.getToolResults(), adapter.updateToolResult()
- * - Cost optimization: adapter.getModel(), adapter.setModel()
- * - TOON compression: adapter.updateToolResult()
  *       ↓
  * adapter.toProviderRequest() → Modified Provider Request
  *       ↓
@@ -26,21 +22,10 @@
  * ResponseAdapter (wraps original, provides uniform read API)
  *       ↓
  * [Business Logic operates via adapter methods]
- * - Tool invocation policies: adapter.getToolCalls()
- * - Metrics: adapter.getUsage()
  *       ↓
  * adapter.toProviderResponse() or adapter.toRefusalResponse()
  * ```
- *
- * ## Why Adapter Pattern?
- *
- * Provider schemas are fundamentally different (not just field names):
- * - Anthropic: flat content[] with type discriminators
- * - OpenAI: choices[] with nested message, separate tool role
- * - Gemini: candidates[] with content.parts[]
- *
- * A unified data structure would either lose data or be extremely complex.
- * Adapters preserve original data while providing uniform business logic API.
+
  */
 
 import type { SupportedProvider } from "@shared";
@@ -48,7 +33,7 @@ import type { SupportedProvider } from "@shared";
 // =============================================================================
 // EXISTING TYPES (re-exported for business logic use)
 // =============================================================================
-
+// TODO: ikonstantinov: move these to the llm-proxy-common.ts file
 // These minimal types are used by business logic (trusted data, tool invocation)
 export type { CommonMessage, ToolResultUpdates } from "./llm-proxy";
 export type {
@@ -185,6 +170,11 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * Apply TOON compression to tool results
    * @param model - Model name for token counting
    * @returns Compression statistics
+   *
+   * TODO: Refactor to remove TOON logic from adapter. Instead:
+   * 1. Calculate TOON updates externally: calculateToonUpdates(adapter.getToolResults(), model) → { updates, stats }
+   * 2. Apply via existing applyToolResultUpdates(updates)
+   * This keeps adapters simple (just apply updates) and makes TOON logic provider-agnostic.
    */
   applyToonCompression(model: string): Promise<ToonCompressionResult>;
 

@@ -37,3 +37,18 @@ export function parseVaultReference(value: string): {
     key: value.substring(hashIndex + 1),
   };
 }
+
+export function formatSecretStorageType(
+  storageType: "vault" | "external_vault" | "database" | "none" | undefined,
+): string {
+  switch (storageType) {
+    case "vault":
+      return "Vault";
+    case "external_vault":
+      return "External Vault";
+    case "database":
+      return "Database";
+    default:
+      return "None";
+  }
+}

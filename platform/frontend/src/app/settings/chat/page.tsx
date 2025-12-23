@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId, formatSecretStorageType } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -58,23 +58,6 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   team: <Users className="h-3 w-3" />,
   org_wide: <Building2 className="h-3 w-3" />,
 };
-
-type SecretStorageType = "vault" | "external_vault" | "database" | "none";
-
-function formatSecretStorageType(
-  storageType: SecretStorageType | undefined,
-): string {
-  switch (storageType) {
-    case "vault":
-      return "Vault";
-    case "external_vault":
-      return "External Vault";
-    case "database":
-      return "Database";
-    default:
-      return "None";
-  }
-}
 
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",

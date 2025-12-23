@@ -196,7 +196,6 @@ function ChatSettingsContent() {
 
   // Validation for create form
   const createFormValues = createForm.watch();
-  console.log({ createFormValues });
   const isCreateValid =
     createFormValues.apiKey !== PLACEHOLDER_KEY &&
     createFormValues.name &&

@@ -74,8 +74,8 @@ export async function getOrgTokenForProfile(
     method: "get",
     urlSuffix: "/api/tokens",
   });
-  const tokens = await tokensResponse.json();
-  const orgToken = tokens.find(
+  const tokensData = await tokensResponse.json();
+  const orgToken = tokensData.tokens.find(
     (t: { isOrganizationToken: boolean }) => t.isOrganizationToken,
   );
 
@@ -207,10 +207,10 @@ export async function getTeamTokenForProfile(
     method: "get",
     urlSuffix: "/api/tokens",
   });
-  const tokens = await tokensResponse.json();
+  const tokensData = await tokensResponse.json();
 
   // Find the team token by team name
-  const teamToken = tokens.find(
+  const teamToken = tokensData.tokens.find(
     (t: { isOrganizationToken: boolean; team?: { name: string } }) =>
       !t.isOrganizationToken && t.team?.name === teamName,
   );

@@ -462,6 +462,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const stream = anthropicClient.messages.stream({
               // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
               ...(body as any),
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
             });
@@ -929,6 +930,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await anthropicClient.messages.create({
               // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
               ...(body as any),
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,

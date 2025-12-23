@@ -51,8 +51,8 @@ const dependencies = {
     projectNames.firefox,
     projectNames.webkit,
   ],
-  // API tests only need authentication setup, not the full UI test suite
-  apiProject: [projectNames.setupTeams],
+  // API tests should run after all UI tests to avoid DB state conflicts
+  apiProject: [projectNames.sso],
 };
 
 /**
@@ -66,8 +66,7 @@ export default defineConfig({
   forbidOnly: IS_CI,
   /* Retry on CI only */
   retries: IS_CI ? 2 : 0,
-  /* Reduce workers in CI to avoid resource contention */
-  workers: IS_CI ? 18 : 3,
+  workers: IS_CI ? 12 : 3,
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */

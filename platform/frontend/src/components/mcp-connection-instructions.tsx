@@ -11,7 +11,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -36,12 +38,14 @@ export function McpConnectionInstructions({
 }: McpConnectionInstructionsProps) {
   const { data: profiles } = useProfiles();
   const { data: mcpServers } = useMcpServers();
-  const { data: tokens } = useTokens();
+  const { data: tokensData } = useTokens();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
 
+  const tokens = tokensData?.tokens;
+  const permissions = tokensData?.permissions;
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);

@@ -1,22 +1,27 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-type SupportedChatProvider =
+export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
+
+export type ChatApiKeyScope =
+  archestraApiTypes.GetChatApiKeysResponses["200"][number]["scope"];
+
+export type ChatApiKey =
+  archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
 const {
   getChatApiKeys,
+  getAvailableChatApiKeys,
   createChatApiKey,
   updateChatApiKey,
   deleteChatApiKey,
-  setChatApiKeyDefault,
-  unsetChatApiKeyDefault,
-  updateChatApiKeyProfiles,
-  bulkAssignChatApiKeysToProfiles,
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
@@ -36,6 +41,25 @@ export function useChatApiKeys() {
   });
 }
 
+export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
+  return useQuery({
+    queryKey: ["available-chat-api-keys", provider],
+    queryFn: async () => {
+      const { data, error } = await getAvailableChatApiKeys({
+        query: provider ? { provider } : undefined,
+      });
+      if (error) {
+        throw new Error(
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Failed to fetch available chat API keys",
+        );
+      }
+      return data ?? [];
+    },
+  });
+}
+
 export function useCreateChatApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -43,7 +67,8 @@ export function useCreateChatApiKey() {
       name: string;
       provider: SupportedChatProvider;
       apiKey: string;
-      isOrganizationDefault?: boolean;
+      scope?: ChatApiKeyScope;
+      teamId?: string;
     }) => {
       const { data: responseData, error } = await createChatApiKey({
         body: data,
@@ -57,9 +82,13 @@ export function useCreateChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
+      toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-      // Invalidate chat models so the model picker refetches available models
+      queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
@@ -76,6 +105,8 @@ export function useUpdateChatApiKey() {
       data: {
         name?: string;
         apiKey?: string;
+        scope?: ChatApiKeyScope;
+        teamId?: string | null;
       };
     }) => {
       const { data: responseData, error } = await updateChatApiKey({
@@ -91,10 +122,13 @@ export function useUpdateChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
+      toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-      // Invalidate chat models so the model picker refetches available models
-      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
     },
   });
 }
@@ -115,112 +149,13 @@ export function useDeleteChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-      // Invalidate chat models so the model picker refetches available models
+      queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["chat-models"] });
-    },
-  });
-}
-
-export function useSetChatApiKeyDefault() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: responseData, error } = await setChatApiKeyDefault({
-        path: { id },
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to set API key as default";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-    },
-  });
-}
-
-export function useUnsetChatApiKeyDefault() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: responseData, error } = await unsetChatApiKeyDefault({
-        path: { id },
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to unset API key as default";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-    },
-  });
-}
-
-export function useUpdateChatApiKeyProfiles() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      id,
-      profileIds,
-    }: {
-      id: string;
-      profileIds: string[];
-    }) => {
-      const { data: responseData, error } = await updateChatApiKeyProfiles({
-        path: { id },
-        body: { profileIds },
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to update API key profiles";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-    },
-  });
-}
-
-export function useBulkAssignChatApiKeysToProfiles() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      chatApiKeyIds,
-      profileIds,
-    }: {
-      chatApiKeyIds: string[];
-      profileIds: string[];
-    }) => {
-      const { data: responseData, error } =
-        await bulkAssignChatApiKeysToProfiles({
-          body: { chatApiKeyIds, profileIds },
-        });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to bulk assign API keys";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
     },
   });
 }

@@ -51,7 +51,11 @@ describe("ConversationModel", () => {
       selectedModel: "claude-3-opus-20240229",
     });
 
-    const found = await ConversationModel.findById(created.id, user.id, org.id);
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found).toBeDefined();
     expect(found?.id).toBe(created.id);
@@ -152,7 +156,11 @@ describe("ConversationModel", () => {
 
     await ConversationModel.delete(created.id, user.id, org.id);
 
-    const found = await ConversationModel.findById(created.id, user.id, org.id);
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
     expect(found).toBeNull();
   });
 
@@ -202,11 +210,11 @@ describe("ConversationModel", () => {
     const user = await makeUser();
     const org = await makeOrganization();
 
-    const found = await ConversationModel.findById(
-      "550e8400-e29b-41d4-a716-446655440000",
-      user.id,
-      org.id,
-    );
+    const found = await ConversationModel.findById({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found).toBeNull();
   });
@@ -320,7 +328,11 @@ describe("ConversationModel", () => {
       selectedModel: "claude-3-haiku-20240307",
     });
 
-    const found = await ConversationModel.findById(created.id, user.id, org.id);
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found?.messages).toBeDefined();
     expect(Array.isArray(found?.messages)).toBe(true);
@@ -390,11 +402,11 @@ describe("ConversationModel", () => {
       },
     });
 
-    const found = await ConversationModel.findById(
-      conversation.id,
-      user.id,
-      org.id,
-    );
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found).toBeDefined();
     expect(found?.messages).toHaveLength(1);
@@ -503,11 +515,11 @@ describe("ConversationModel", () => {
       },
     });
 
-    const found = await ConversationModel.findById(
-      conversation.id,
-      user.id,
-      org.id,
-    );
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
 
     expect(found).toBeDefined();
     expect(found?.messages).toHaveLength(3);

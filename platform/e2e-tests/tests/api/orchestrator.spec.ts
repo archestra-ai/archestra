@@ -32,12 +32,13 @@ async function withRetry<T>(
 test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   /**
    * It can take some time to pull the Docker images and start the MCP server.. hence the polling
+   * In CI environments with parallel workers, this can take longer due to resource contention
    */
   const waitForMcpServerReady = async (
     request: APIRequestContext,
     makeApiRequest: TestFixtures["makeApiRequest"],
     serverId: string,
-    maxRetries = 30,
+    maxRetries = 60,
   ) => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const statusResponse = await makeApiRequest({
@@ -96,9 +97,16 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         createAgent,
         createMcpCatalogItem,
         installMcpServer,
+        getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent - Remote");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
 
         // Create a catalog item for context7 remote MCP server (no auth required)
         const catalogResponse = await createMcpCatalogItem(request, {
@@ -116,6 +124,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           const installResponse = await installMcpServer(request, {
             name: "Test Context7 Remote Server",
             catalogId: catalogId,
+            teamId: defaultTeam.id,
           });
           return installResponse.json();
         });
@@ -144,6 +153,9 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   });
 
   test.describe("Local MCP Server - NPX Command", () => {
+    // Extend timeout for this describe block since MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
     let catalogId: string;
     let serverId: string;
 
@@ -154,9 +166,16 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         createAgent,
         createMcpCatalogItem,
         installMcpServer,
+        getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent - NPX");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
 
         // Create a catalog item for context7 MCP server using npx
         const catalogResponse = await createMcpCatalogItem(request, {
@@ -173,10 +192,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;
 
-        // Install the MCP server (no environment values needed)
+        // Install the MCP server with team assignment
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 NPX Server",
           catalogId: catalogId,
+          teamId: defaultTeam.id,
         });
         const server = await installResponse.json();
         serverId = server.id;
@@ -204,9 +224,43 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       // Should have discovered tools from the NPX server
       expect(tools.length).toBeGreaterThan(0);
     });
+
+    test("should restart local MCP server successfully", async ({
+      request,
+      makeApiRequest,
+      restartMcpServer,
+    }) => {
+      // Get tools count before restart
+      const toolsBefore = await getMcpServerTools(
+        request,
+        makeApiRequest,
+        serverId,
+      );
+      const toolsCountBefore = toolsBefore.length;
+
+      // Restart the MCP server
+      const restartResponse = await restartMcpServer(request, serverId);
+      expect(restartResponse.status()).toBe(200);
+      const restartResult = await restartResponse.json();
+      expect(restartResult.success).toBe(true);
+
+      // Wait for the server to be ready after restart
+      await waitForMcpServerReady(request, makeApiRequest, serverId);
+
+      // Verify tools are still available after restart
+      const toolsAfter = await getMcpServerTools(
+        request,
+        makeApiRequest,
+        serverId,
+      );
+      expect(toolsAfter.length).toBe(toolsCountBefore);
+    });
   });
 
   test.describe("Local MCP Server - Docker Image", () => {
+    // Extend timeout for this describe block since Docker image pull and MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
     let catalogId: string;
     let serverId: string;
 
@@ -217,9 +271,16 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         createAgent,
         createMcpCatalogItem,
         installMcpServer,
+        getTeamByName,
       }) => {
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent - Docker");
+
+        // Get the Default Team (required for MCP server installation when Vault is enabled)
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
 
         // Create a catalog item for context7 MCP server using Docker image
         const catalogResponse = await createMcpCatalogItem(request, {
@@ -242,10 +303,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const catalogItem = await catalogResponse.json();
         catalogId = catalogItem.id;
 
-        // Install the MCP server
+        // Install the MCP server with team assignment
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 Docker Server",
           catalogId: catalogId,
+          teamId: defaultTeam.id,
         });
         const server = await installResponse.json();
         serverId = server.id;

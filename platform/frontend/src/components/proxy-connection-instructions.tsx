@@ -60,92 +60,101 @@ export function ProxyConnectionInstructions({
           </SelectContent>
         </Select>
       </div>
-      <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-        <CodeText className="text-sm break-all">{proxyUrl}</CodeText>
-        <Button variant="ghost" size="icon" onClick={handleCopy}>
-          {copied ? (
-            <Check className="h-4 w-4 text-green-500" />
-          ) : (
-            <Copy className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
       {selectedProvider === "openai" && (
-        <>
+        <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Default should be https://api.openai.com/v1/
+            Replace your OpenAI base URL:
           </p>
-          <p className="text-sm text-muted-foreground">
-            OpenAI provides{" "}
-            <CodeText className="text-xs">/chat/completions</CodeText> and{" "}
-            <CodeText className="text-xs">/responses</CodeText> API's. Archestra
-            doesn't support <CodeText className="text-xs">/responses</CodeText>{" "}
-            yet.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            We're working on it (
-            <a
-              href="https://github.com/archestra-ai/archestra/issues/720"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              GitHub issue
-            </a>
-            ), meanwhile please make sure that your agent uses{" "}
-            <CodeText className="text-xs">/chat/completions</CodeText>, check{" "}
-            <a
-              href="https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              this
-            </a>{" "}
-            for an example
-          </p>
-        </>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30">
+              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+                https://api.openai.com/v1/
+              </CodeText>
+            </div>
+            <span className="text-muted-foreground flex-shrink-0">→</span>
+            <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary break-all flex-1">
+                {proxyUrl}
+              </CodeText>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 flex-shrink-0"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
       {selectedProvider === "gemini" && (
-        <>
+        <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Configure your agents to use this endpoint instead of directly
-            calling Google Gemini (default should be
-            https://generativelanguage.googleapis.com/v1/)
+            Replace your Gemini base URL:
           </p>
-          <p className="text-sm text-muted-foreground">
-            Archestra supports{" "}
-            <a
-              href="https://ai.google.dev/api/generate-content"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              Gemini generateContent API
-            </a>{" "}
-            so make sure to use it when connecting to Archestra.
-          </p>
-        </>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30">
+              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+                https://generativelanguage.googleapis.com/v1/
+              </CodeText>
+            </div>
+            <span className="text-muted-foreground flex-shrink-0">→</span>
+            <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary break-all flex-1">
+                {proxyUrl}
+              </CodeText>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 flex-shrink-0"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
       {selectedProvider === "anthropic" && (
-        <>
+        <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Configure your agents to use this endpoint instead of directly
-            calling Anthropic (default should be https://api.anthropic.com/v1/)
+            Replace your Anthropic base URL:
           </p>
-          <p className="text-sm text-muted-foreground">
-            Archestra supports{" "}
-            <a
-              href="https://docs.anthropic.com/en/api/messages"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
-              Anthropic messages API
-            </a>{" "}
-            so make sure to use it when connecting to Archestra.
-          </p>
-        </>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 bg-muted/50 rounded-md px-3 py-2 border border-dashed border-muted-foreground/30">
+              <CodeText className="text-xs line-through opacity-50 whitespace-nowrap">
+                https://api.anthropic.com/v1/
+              </CodeText>
+            </div>
+            <span className="text-muted-foreground flex-shrink-0">→</span>
+            <div className="flex-1 min-w-0 bg-primary/5 rounded-md px-3 py-2 border border-primary/20 flex items-center gap-2">
+              <CodeText className="text-xs text-primary break-all flex-1">
+                {proxyUrl}
+              </CodeText>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 flex-shrink-0"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
       <p className="text-sm text-muted-foreground">
         The host/port is configurable via the{" "}

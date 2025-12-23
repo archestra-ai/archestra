@@ -819,6 +819,110 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+
+  fastify.post(
+    "/api/mcp_catalog/:catalogId/restart-all-installations",
+    {
+      schema: {
+        operationId: RouteId.RestartAllMcpServerInstallations,
+        description:
+          "Restart all MCP server installations for a given catalog item",
+        tags: ["MCP Server"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            message: z.string(),
+            results: z.array(
+              z.object({
+                serverId: z.string(),
+                serverName: z.string(),
+                success: z.boolean(),
+                error: z.string().optional(),
+              }),
+            ),
+            summary: z.object({
+              total: z.number(),
+              succeeded: z.number(),
+              failed: z.number(),
+            }),
+          }),
+        ),
+      },
+    },
+    async ({ params: { catalogId } }, reply) => {
+      // Verify the catalog item exists
+      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+      if (!catalogItem) {
+        throw new ApiError(404, `Catalog item ${catalogId} not found`);
+      }
+
+      // Find all MCP server installations for this catalog item
+      const servers = await McpServerModel.findByCatalogId(catalogId);
+
+      if (servers.length === 0) {
+        return reply.send({
+          success: true,
+          message: "No installations found for this catalog item",
+          results: [],
+          summary: { total: 0, succeeded: 0, failed: 0 },
+        });
+      }
+
+      // Restart each server sequentially
+      const results: Array<{
+        serverId: string;
+        serverName: string;
+        success: boolean;
+        error?: string;
+      }> = [];
+
+      for (const server of servers) {
+        try {
+          await McpServerRuntimeManager.restartServer(server.id);
+          results.push({
+            serverId: server.id,
+            serverName: server.name,
+            success: true,
+          });
+          logger.info(
+            `Restarted MCP server ${server.id} (${server.name}) as part of restart-all for catalog ${catalogId}`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          results.push({
+            serverId: server.id,
+            serverName: server.name,
+            success: false,
+            error: errorMessage,
+          });
+          logger.error(
+            `Failed to restart MCP server ${server.id} (${server.name}): ${errorMessage}`,
+          );
+        }
+      }
+
+      const succeeded = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).length;
+
+      return reply.send({
+        success: failed === 0,
+        message:
+          failed === 0
+            ? `Successfully restarted all ${succeeded} installation(s)`
+            : `Restarted ${succeeded} of ${servers.length} installation(s), ${failed} failed`,
+        results,
+        summary: {
+          total: servers.length,
+          succeeded,
+          failed,
+        },
+      });
+    },
+  );
 };
 
 export default mcpServerRoutes;

@@ -20,13 +20,15 @@ Docker deployment provides the fastest way to get started with Archestra Platfor
 
 - **Docker** - Container runtime ([Install Docker](https://docs.docker.com/get-docker/))
 
-### Basic Deployment
+### Quickstart Deployment
 
 Run the platform with a single command:
 
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
+   -e ARCHESTRA_QUICKSTART \
+   -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
    archestra/platform;
@@ -37,6 +39,22 @@ This will start the platform with:
 - **Admin UI** available at <http://localhost:3000>
 - **API** available at <http://localhost:9000>
 - **Auth Secret** auto-generated and saved to `/app/data/.auth_secret` (persisted across restarts)
+- **MCP Kubernetes Orchestrator** via KinD
+
+**Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
+
+ If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
+
+```diff
+docker run -p 9000:9000 -p 3000:3000 \
+-  -e ARCHESTRA_QUICKSTART \
+-  -v /var/run/docker.sock:/var/run/docker.sock \
+   -v archestra-postgres-data:/var/lib/postgresql/data \
+   -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+ Running the platform without Kubernetes (or its alternatives) is also possible. This just makes MCP orchestrator unavailable in the app.
 
 ### Using External PostgreSQL
 

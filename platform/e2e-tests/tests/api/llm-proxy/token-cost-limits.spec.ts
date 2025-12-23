@@ -33,17 +33,17 @@ const openaiConfig: TokenCostLimitTestConfig = {
   }),
 
   buildRequest: (content) => ({
-    model: "gpt-4",
+    model: "test-gpt-4-cost-limit",
     messages: [{ role: "user", content }],
   }),
 
-  modelName: "gpt-4",
+  modelName: "test-gpt-4-cost-limit",
 
   // WireMock returns: prompt_tokens: 100, completion_tokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "openai",
-    model: "gpt-4",
+    model: "test-gpt-4-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -61,18 +61,18 @@ const anthropicConfig: TokenCostLimitTestConfig = {
   }),
 
   buildRequest: (content) => ({
-    model: "claude-3-5-sonnet-20241022",
+    model: "test-claude-cost-limit",
     max_tokens: 1024,
     messages: [{ role: "user", content }],
   }),
 
-  modelName: "claude-3-5-sonnet-20241022",
+  modelName: "test-claude-cost-limit",
 
   // WireMock returns: input_tokens: 100, output_tokens: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "anthropic",
-    model: "claude-3-5-sonnet-20241022",
+    model: "test-claude-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -82,7 +82,7 @@ const geminiConfig: TokenCostLimitTestConfig = {
   providerName: "Gemini",
 
   endpoint: (profileId) =>
-    `/v1/gemini/${profileId}/v1beta/models/gemini-2.5-pro:generateContent`,
+    `/v1/gemini/${profileId}/v1beta/models/test-gemini-cost-limit:generateContent`,
 
   headers: (wiremockStub) => ({
     "x-goog-api-key": wiremockStub,
@@ -98,13 +98,13 @@ const geminiConfig: TokenCostLimitTestConfig = {
     ],
   }),
 
-  modelName: "gemini-2.5-pro",
+  modelName: "test-gemini-cost-limit",
 
   // WireMock returns: promptTokenCount: 100, candidatesTokenCount: 20
   // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
   tokenPrice: {
     provider: "gemini",
-    model: "gemini-2.5-pro",
+    model: "test-gemini-cost-limit",
     pricePerMillionInput: "20000.00",
     pricePerMillionOutput: "30000.00",
   },
@@ -134,16 +134,30 @@ for (const config of testConfigs) {
       createLimit,
       createTokenPrice,
       makeApiRequest,
+      deleteTokenPrice,
+      getTokenPrices,
     }) => {
-      // 0. Create token price for the model
+      // 0. Delete any existing token prices for this model and create fresh ones
+      const allPricesResponse = await getTokenPrices(request);
+      if (allPricesResponse.ok()) {
+        const allPrices = await allPricesResponse.json();
+        const existingPrice = allPrices.find(
+          (p: { provider: string; model: string; id: string }) =>
+            p.provider === config.tokenPrice.provider &&
+            p.model === config.tokenPrice.model,
+        );
+        if (existingPrice) {
+          await deleteTokenPrice(request, existingPrice.id).catch(() => {});
+        }
+      }
+
+      // Create fresh token price with exact values for our test
       const tokenPriceResponse = await createTokenPrice(
         request,
         config.tokenPrice,
       );
-      if (tokenPriceResponse.ok()) {
-        const tokenPrice = await tokenPriceResponse.json();
-        tokenPriceId = tokenPrice.id;
-      }
+      const tokenPrice = await tokenPriceResponse.json();
+      tokenPriceId = tokenPrice.id;
 
       // 1. Create a test profile
       const createResponse = await createAgent(
@@ -166,13 +180,18 @@ for (const config of testConfigs) {
       const limit = await limitResponse.json();
       limitId = limit.id;
 
-      // 3. Make first request to set up usage
+      // 3. Make first request to set up usage (with long content to bypass optimization rules)
+      const longContent =
+        "This is a very long message to bypass optimization rules that typically only apply to short content under 1000 tokens. ".repeat(
+          100,
+        );
+
       const initialResponse = await makeApiRequest({
         request,
         method: "post",
         urlSuffix: config.endpoint(profileId),
         headers: config.headers(wiremockStub),
-        data: config.buildRequest("Hello"),
+        data: config.buildRequest(longContent),
       });
 
       if (!initialResponse.ok()) {
@@ -182,9 +201,50 @@ for (const config of testConfigs) {
         );
       }
 
-      // Wait for async usage tracking to complete
+      // Poll for async usage tracking to complete
       // Usage tracking happens asynchronously after the response is sent
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // We need to wait until the usage is actually recorded before the second request
+      // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
+      const maxPollingAttempts = 30;
+      const pollingIntervalMs = 500;
+      let usageTracked = false;
+
+      for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
+        const limitsResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: `/api/limits?entityType=agent&entityId=${profileId}`,
+          ignoreStatusCheck: true,
+        });
+
+        if (limitsResponse.ok()) {
+          const limits = await limitsResponse.json();
+          const targetLimit = limits.find(
+            (l: {
+              id: string;
+              modelUsage?: Array<{ model: string; cost: number }>;
+            }) => l.id === limitId,
+          );
+          // Check if any model has recorded usage (cost > 0)
+          const totalCost =
+            targetLimit?.modelUsage?.reduce(
+              (sum: number, m: { cost: number }) => sum + m.cost,
+              0,
+            ) ?? 0;
+          if (totalCost > 0) {
+            usageTracked = true;
+            break;
+          }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollingIntervalMs));
+      }
+
+      if (!usageTracked) {
+        throw new Error(
+          `Usage was not tracked after ${maxPollingAttempts * pollingIntervalMs}ms`,
+        );
+      }
 
       // 4. Second request should be blocked (limit exceeded)
       const blockedResponse = await makeApiRequest({
@@ -192,7 +252,9 @@ for (const config of testConfigs) {
         method: "post",
         urlSuffix: config.endpoint(profileId),
         headers: config.headers(wiremockStub),
-        data: config.buildRequest("This should be blocked"),
+        data: config.buildRequest(
+          "This should be blocked because we exceeded the limit",
+        ),
         ignoreStatusCheck: true,
       });
 

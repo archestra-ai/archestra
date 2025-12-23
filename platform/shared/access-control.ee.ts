@@ -303,6 +303,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.RestartMcpServer]: {
+    mcpServer: ["update"],
+  },
+  [RouteId.RestartAllMcpServerInstallations]: {
+    mcpServer: ["admin"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },
@@ -456,6 +462,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatApiKeys]: {
     chatSettings: ["read"],
   },
+  [RouteId.GetAvailableChatApiKeys]: {
+    chatSettings: ["read"],
+  },
   [RouteId.CreateChatApiKey]: {
     chatSettings: ["create"],
   },
@@ -467,18 +476,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
-  },
-  [RouteId.SetChatApiKeyDefault]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.UnsetChatApiKeyDefault]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.UpdateChatApiKeyProfiles]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.BulkAssignChatApiKeysToProfiles]: {
-    chatSettings: ["update"],
   },
   [RouteId.GetPrompts]: {
     prompt: ["read"],

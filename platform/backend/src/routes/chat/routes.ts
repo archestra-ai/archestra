@@ -27,6 +27,7 @@ import {
   ConversationModel,
   MessageModel,
   PromptModel,
+  TeamModel,
 } from "@/models";
 import { getExternalAgentId } from "@/routes/proxy/utils/external-agent-id";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
@@ -74,27 +75,36 @@ function detectProviderFromModel(model: string): SupportedChatProvider {
 }
 
 /**
- * Get a smart default model based on available API keys for the agent/organization.
- * Priority: profile-specific key > org default key > env var > fallback
+ * Get a smart default model based on available API keys for the user.
+ * Priority: personal key > team key > org-wide key > env var > fallback
  */
 async function getSmartDefaultModel(
-  agentId: string,
+  userId: string,
   organizationId: string,
 ): Promise<string> {
+  // Get user's team IDs for resolution
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
   /**
-   * Check what API keys are available (profile-specific or org defaults)
+   * Check what API keys are available using the new scope-based resolution
    * Try to find an available API key in order of preference
    */
   for (const provider of SupportedProviders) {
-    const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-      agentId,
-      provider,
-      organizationId,
-    );
+    const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
+      organizationId: organizationId,
+      userId: userId,
+      userTeamIds: userTeamIds,
+      provider: provider,
+      conversationId: null,
+    });
 
-    if (profileApiKey?.secretId) {
+    if (resolvedKey?.secretId) {
       const secretValue = await getSecretValueForLlmProviderApiKey(
+<<<<<<< HEAD
         profileApiKey.secretId as any,
+=======
+        resolvedKey.secretId,
+>>>>>>> upstream/main
       );
 
       if (secretValue) {
@@ -161,11 +171,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = getExternalAgentId(headers);
 
       // Get conversation
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         conversationId,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -226,10 +244,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Resolve API key: profile-specific -> org default -> env var
+      // Resolve API key using priority: conversation > personal > team > org_wide > env var
       let providerApiKey: string | undefined;
       let apiKeySource = "environment";
 
+<<<<<<< HEAD
       // Try profile-specific API key first (getProfileApiKey already falls back to org default)
       const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
         conversation.agentId as any,
@@ -274,6 +293,31 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providerApiKey = secretValue as string;
             apiKeySource = "organization default";
           }
+=======
+      // Get user's team IDs for API key resolution
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      // Try scope-based resolution (checks conversation's chatApiKeyId first, then personal > team > org_wide)
+      const resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId,
+        userId: user.id,
+        userTeamIds,
+        provider,
+        conversationId,
+      });
+
+      if (resolvedApiKey?.secretId) {
+        const secret = await secretManager().getSecret(resolvedApiKey.secretId);
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ??
+          secret?.secret?.anthropicApiKey ??
+          secret?.secret?.geminiApiKey ??
+          secret?.secret?.openaiApiKey;
+        if (secretValue) {
+          providerApiKey = secretValue as string;
+          apiKeySource = resolvedApiKey.scope;
+>>>>>>> upstream/main
         }
       }
 
@@ -522,11 +566,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         id,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -602,15 +654,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId: true,
           title: true,
           selectedModel: true,
+          chatApiKeyId: true,
         })
           .required({ agentId: true })
-          .partial({ promptId: true, title: true, selectedModel: true }),
+          .partial({
+            promptId: true,
+            title: true,
+            selectedModel: true,
+            chatApiKeyId: true,
+          }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
       {
-        body: { agentId, promptId, title, selectedModel },
+        body: { agentId, promptId, title, selectedModel, chatApiKeyId },
         user,
         organizationId,
         headers,
@@ -630,9 +688,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Validate chatApiKeyId if provided
+      if (chatApiKeyId) {
+        await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
+      }
+
       // Determine smart default model if none specified
       const modelToUse =
-        selectedModel || (await getSmartDefaultModel(agentId, organizationId));
+        selectedModel || (await getSmartDefaultModel(user.id, organizationId));
 
       logger.info(
         {
@@ -640,6 +703,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           selectedModel,
           modelToUse,
+          chatApiKeyId,
           wasSmartDefault: !selectedModel,
         },
         "Creating conversation with model",
@@ -654,6 +718,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
+          chatApiKeyId,
         }),
       );
     },
@@ -664,7 +729,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatConversation,
-        description: "Update conversation title or model",
+        description: "Update conversation title, model, or API key",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
@@ -672,6 +737,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Validate chatApiKeyId if provided
+      if (body.chatApiKeyId) {
+        await validateChatApiKeyAccess(
+          body.chatApiKeyId,
+          user.id,
+          organizationId,
+        );
+      }
+
       const conversation = await ConversationModel.update(
         id,
         user.id as any,
@@ -730,11 +804,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const regenerate = body?.regenerate ?? false;
 
       // Get conversation with messages
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         id,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -787,9 +869,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Resolve API key: profile-specific -> org default -> env var
+      // Resolve API key using scope-based priority: personal -> team -> org_wide -> env var
       let anthropicApiKey: string | undefined;
 
+<<<<<<< HEAD
       // Try profile-specific API key first (if conversation has an agent)
       if (conversation.agentId) {
         const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
@@ -827,6 +910,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (secretValue) {
             anthropicApiKey = secretValue as string;
           }
+=======
+      // Get user's team IDs for resolution
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      // Use resolveApiKey which handles priority: conversation key -> personal -> team -> org_wide
+      const resolvedKey = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: organizationId,
+        userId: user.id,
+        userTeamIds: userTeamIds,
+        provider: "anthropic",
+        conversationId: id,
+      });
+
+      if (resolvedKey?.secretId) {
+        const secret = await secretManager().getSecret(resolvedKey.secretId);
+        // Support both old format (anthropicApiKey) and new format (apiKey)
+        const secretValue =
+          secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+        if (secretValue) {
+          anthropicApiKey = secretValue as string;
+>>>>>>> upstream/main
         }
       }
 
@@ -930,11 +1034,19 @@ The title should capture the main topic or theme of the conversation. Respond wi
       }
 
       // Verify the user has access to the conversation
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         message.conversationId as any,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: message.conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Message not found or access denied");
@@ -952,11 +1064,19 @@ The title should capture the main topic or theme of the conversation. Respond wi
       );
 
       // Return updated conversation with all messages
+<<<<<<< HEAD
       const updatedConversation = await ConversationModel.findById(
         message.conversationId as any,
         user.id as any,
         organizationId,
       );
+=======
+      const updatedConversation = await ConversationModel.findById({
+        id: message.conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!updatedConversation) {
         throw new ApiError(500, "Failed to retrieve updated conversation");
@@ -986,11 +1106,19 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
     async ({ params: { id }, user, organizationId }, reply) => {
       // Verify conversation exists and user owns it
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         id,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -1033,11 +1161,19 @@ The title should capture the main topic or theme of the conversation. Respond wi
       reply,
     ) => {
       // Verify conversation exists and user owns it
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         id,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -1066,11 +1202,19 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
     async ({ params: { id }, user, organizationId }, reply) => {
       // Verify conversation exists and user owns it
+<<<<<<< HEAD
       const conversation = await ConversationModel.findById(
         id,
         user.id as any,
         organizationId,
       );
+=======
+      const conversation = await ConversationModel.findById({
+        id: id,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+>>>>>>> upstream/main
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -1082,5 +1226,34 @@ The title should capture the main topic or theme of the conversation. Respond wi
     },
   );
 };
+
+/**
+ * Validates that a chat API key exists, belongs to the organization,
+ * and the user has access to it based on scope.
+ * Throws ApiError if validation fails.
+ */
+async function validateChatApiKeyAccess(
+  chatApiKeyId: string,
+  userId: string,
+  organizationId: string,
+): Promise<void> {
+  const apiKey = await ChatApiKeyModel.findById(chatApiKeyId);
+  if (!apiKey || apiKey.organizationId !== organizationId) {
+    throw new ApiError(404, "Chat API key not found");
+  }
+
+  // Verify user has access to the API key based on scope
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const canAccessKey =
+    apiKey.scope === "org_wide" ||
+    (apiKey.scope === "personal" && apiKey.userId === userId) ||
+    (apiKey.scope === "team" &&
+      apiKey.teamId &&
+      userTeamIds.includes(apiKey.teamId));
+
+  if (!canAccessKey) {
+    throw new ApiError(403, "You do not have access to this API key");
+  }
+}
 
 export default chatRoutes;

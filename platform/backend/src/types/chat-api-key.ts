@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SecretStorageTypeSchema } from "./mcp-server";
 
 // Supported chat providers
 export const SupportedChatProviderSchema = z.enum([
@@ -14,11 +15,16 @@ export const SupportedChatProviderSchema = z.enum([
 ]);
 export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;
 
+// Chat API Key scope
+export const ChatApiKeyScopeSchema = z.enum(["personal", "team", "org_wide"]);
+export type ChatApiKeyScope = z.infer<typeof ChatApiKeyScopeSchema>;
+
 // Chat API Key schemas
 export const SelectChatApiKeySchema = createSelectSchema(
   schema.chatApiKeysTable,
 ).extend({
   provider: SupportedChatProviderSchema,
+  scope: ChatApiKeyScopeSchema,
 });
 
 export const InsertChatApiKeySchema = createInsertSchema(
@@ -31,6 +37,7 @@ export const InsertChatApiKeySchema = createInsertSchema(
   })
   .extend({
     provider: SupportedChatProviderSchema,
+    scope: ChatApiKeyScopeSchema,
   });
 
 export const UpdateChatApiKeySchema = createUpdateSchema(
@@ -44,39 +51,24 @@ export const UpdateChatApiKeySchema = createUpdateSchema(
   })
   .extend({
     provider: SupportedChatProviderSchema.optional(),
+    scope: ChatApiKeyScopeSchema.optional(),
   });
 
 export type ChatApiKey = z.infer<typeof SelectChatApiKeySchema>;
 export type InsertChatApiKey = z.infer<typeof InsertChatApiKeySchema>;
 export type UpdateChatApiKey = z.infer<typeof UpdateChatApiKeySchema>;
 
-// Profile Chat API Key schemas (junction table)
-export const SelectProfileChatApiKeySchema = createSelectSchema(
-  schema.profileChatApiKeysTable,
-);
-
-export const InsertProfileChatApiKeySchema = createInsertSchema(
-  schema.profileChatApiKeysTable,
-).omit({
-  id: true,
-  createdAt: true,
+// Response schema with scope display info
+export const ChatApiKeyWithScopeInfoSchema = SelectChatApiKeySchema.extend({
+  teamName: z.string().nullable().optional(),
+  userName: z.string().nullable().optional(),
+  // BYOS vault reference info (only populated when BYOS is enabled and secret is a vault reference)
+  vaultSecretPath: z.string().nullable().optional(),
+  vaultSecretKey: z.string().nullable().optional(),
+  // Secret storage type (database, vault, external_vault, or none)
+  secretStorageType: SecretStorageTypeSchema.optional(),
 });
 
-export type ProfileChatApiKey = z.infer<typeof SelectProfileChatApiKeySchema>;
-export type InsertProfileChatApiKey = z.infer<
-  typeof InsertProfileChatApiKeySchema
->;
-
-// Response schemas with relations
-export const ChatApiKeyWithProfilesSchema = SelectChatApiKeySchema.extend({
-  profiles: z.array(
-    z.object({
-      id: z.string().uuid(),
-      name: z.string(),
-    }),
-  ),
-});
-
-export type ChatApiKeyWithProfiles = z.infer<
-  typeof ChatApiKeyWithProfilesSchema
+export type ChatApiKeyWithScopeInfo = z.infer<
+  typeof ChatApiKeyWithScopeInfoSchema
 >;

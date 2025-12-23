@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "openai-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "{\\\"files\\\":[{\\\"name\\\":\\\"README.md\\\",\\\"size\\\":1024"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-compression-disabled",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "gpt-4",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "I have processed the JSON tool result.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 150,
+        "completion_tokens": 10,
+        "total_tokens": 160
+      }
+    }
+  }
+}

@@ -1,10 +1,17 @@
+import { defaultStatements } from "better-auth/plugins/organization/access";
 import type { Permissions } from "./permission.types";
 import type { RouteId } from "./routes";
-export const allAvailableActions: Permissions = {};
 
-export const editorPermissions: Permissions = {};
+// Include better-auth's default permissions for organization operations
+// This ensures basic operations like invitations work in non-EE mode
+export const allAvailableActions: Permissions = defaultStatements;
 
-export const memberPermissions: Permissions = {};
+export const editorPermissions: Permissions = defaultStatements;
+
+export const memberPermissions: Permissions = {
+  organization: ["read"],
+  team: ["read"],
+};
 
 // Allows all endpoints
 export const requiredEndpointPermissionsMap = new Proxy(

@@ -77,7 +77,8 @@ if is_prod:
 else:
   local_resource(
     dev_resource_name,
-    serve_cmd='ARCHESTRA_LOGGING_LEVEL=debug pnpm dev',
+    # Trap ensures all child processes are killed when Tilt stops, preventing orphaned processes from blocking port 3000
+    serve_cmd='trap "kill -TERM -$$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev & wait $!',
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],

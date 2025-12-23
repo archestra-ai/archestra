@@ -12,25 +12,6 @@ import type {
 } from "@/types";
 import ConversationModel from "./conversation";
 
-/**
- * Helper to parse vault reference from a secret value
- * For chat API keys, the secret contains { apiKey: "path#key" } format
- */
-function parseVaultReferenceFromSecret(
-  secret: SecretValue | null,
-): { vaultSecretPath: string; vaultSecretKey: string } | null {
-  if (!secret || typeof secret !== "object") return null;
-  const apiKeyValue = (secret as Record<string, unknown>).apiKey;
-  if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
-    const parsed = parseVaultReference(apiKeyValue);
-    return {
-      vaultSecretPath: parsed.path,
-      vaultSecretKey: parsed.key,
-    };
-  }
-  return null;
-}
-
 class ChatApiKeyModel {
   /**
    * Create a new chat API key
@@ -170,7 +151,6 @@ class ChatApiKeyModel {
     // Parse vault references from secrets
     return apiKeys.map((key) => {
       const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { secret: _secret, ...rest } = key;
       return {
         ...rest,
@@ -265,7 +245,6 @@ class ChatApiKeyModel {
     // Parse vault references from secrets
     return apiKeys.map((key) => {
       const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { secret: _secret, ...rest } = key;
       return {
         ...rest,
@@ -497,6 +476,25 @@ class ChatApiKeyModel {
 
     return !!result;
   }
+}
+
+/**
+ * Helper to parse vault reference from a secret value
+ * For chat API keys, the secret contains { apiKey: "path#key" } format
+ */
+function parseVaultReferenceFromSecret(
+  secret: SecretValue | null,
+): { vaultSecretPath: string; vaultSecretKey: string } | null {
+  if (!secret || typeof secret !== "object") return null;
+  const apiKeyValue = (secret as Record<string, unknown>).apiKey;
+  if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
+    const parsed = parseVaultReference(apiKeyValue);
+    return {
+      vaultSecretPath: parsed.path,
+      vaultSecretKey: parsed.key,
+    };
+  }
+  return null;
 }
 
 export default ChatApiKeyModel;

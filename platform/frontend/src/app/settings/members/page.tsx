@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 import {
   organizationKeys,

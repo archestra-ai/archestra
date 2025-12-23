@@ -91,12 +91,6 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
     },
     {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings,
-      customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-    },
-    {
       title: "Cost & Limits",
       url: "/cost",
       icon: DollarSign,
@@ -105,6 +99,12 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       title: "Connect",
       url: "/connection",
       icon: Cable,
+    },
+    {
+      title: "Settings",
+      url: "/settings",
+      icon: Settings,
+      customIsActive: (pathname: string) => pathname.startsWith("/settings"),
     },
   ];
 };

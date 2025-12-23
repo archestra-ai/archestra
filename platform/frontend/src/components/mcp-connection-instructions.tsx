@@ -1,7 +1,7 @@
 "use client";
 
 import { archestraApiSdk } from "@shared";
-import { Check, Copy, Loader2, Package, Server, User } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Loader2, Package, Server, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
@@ -46,11 +46,20 @@ export function McpConnectionInstructions({
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
+  const [showExposedToken, setShowExposedToken] = useState(false);
+  const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(null);
+  const [isLoadingToken, setIsLoadingToken] = useState(false);
 
   // Update selected profile when agentId changes
   useEffect(() => {
     setSelectedProfileId(agentId);
   }, [agentId]);
+
+  // Reset exposed token when token selection changes
+  useEffect(() => {
+    setShowExposedToken(false);
+    setExposedTokenValue(null);
+  }, [selectedTokenId]);
 
   // Get the selected profile
   const selectedProfile = profiles?.find((p) => p.id === selectedProfileId);
@@ -117,7 +126,9 @@ export function McpConnectionInstructions({
   };
 
   // Determine display token based on selection
-  const tokenForDisplay = isPersonalTokenSelected
+  const tokenForDisplay = showExposedToken && exposedTokenValue
+    ? exposedTokenValue
+    : isPersonalTokenSelected
     ? userToken
       ? `${userToken.tokenStart}***`
       : "ask-admin-for-access-token"
@@ -143,6 +154,50 @@ export function McpConnectionInstructions({
       ),
     [mcpUrl, tokenForDisplay],
   );
+
+  const handleExposeToken = useCallback(async () => {
+    if (showExposedToken) {
+      // Hide token
+      setShowExposedToken(false);
+      setExposedTokenValue(null);
+      return;
+    }
+
+    setIsLoadingToken(true);
+    try {
+      let tokenValue: string;
+
+      if (isPersonalTokenSelected) {
+        // Fetch personal token value
+        const response = await archestraApiSdk.getUserTokenValue();
+        if (response.error || !response.data) {
+          throw new Error("Failed to fetch personal token value");
+        }
+        tokenValue = (response.data as { value: string }).value;
+      } else {
+        // Fetch team token value
+        if (!selectedTeamToken) {
+          setIsLoadingToken(false);
+          return;
+        }
+        const response = await archestraApiSdk.getTokenValue({
+          path: { tokenId: selectedTeamToken.id },
+        });
+        if (response.error || !response.data) {
+          throw new Error("Failed to fetch token value");
+        }
+        tokenValue = (response.data as { value: string }).value;
+      }
+
+      setExposedTokenValue(tokenValue);
+      setShowExposedToken(true);
+    } catch (error) {
+      toast.error("Failed to fetch token");
+      console.error(error);
+    } finally {
+      setIsLoadingToken(false);
+    }
+  }, [isPersonalTokenSelected, selectedTeamToken, showExposedToken]);
 
   const handleCopyConfigWithoutRealToken = async () => {
     const fullConfig = JSON.stringify(
@@ -328,7 +383,7 @@ export function McpConnectionInstructions({
                   <div>{getTokenDisplayName()}</div>
                   <div className="text-xs text-muted-foreground">
                     {isPersonalTokenSelected
-                      ? "Best option. For Cursor, Claude etc"
+                      ? "The most secure option."
                       : selectedTeamToken?.isOrganizationToken
                         ? "To share org-wide"
                         : "To share with your teammates"}
@@ -343,7 +398,7 @@ export function McpConnectionInstructions({
                 <div className="flex flex-col gap-0.5 items-start">
                   <div>Personal Token</div>
                   <div className="text-xs text-muted-foreground">
-                    Best option. For Cursor, Claude etc
+                    The most secure option.
                   </div>
                 </div>
               </SelectItem>
@@ -394,34 +449,60 @@ export function McpConnectionInstructions({
                 {mcpConfig}
               </CodeText>
             </pre>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute top-2 right-2 gap-2"
-              onClick={
-                isPersonalTokenSelected || hasProfileAdminPermission
-                  ? handleCopyConfig
-                  : handleCopyConfigWithoutRealToken
-              }
-              disabled={isCopyingConfig}
-            >
-              {isCopyingConfig ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Copying...</span>
-                </>
-              ) : copiedConfig ? (
-                <>
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy with exposed token</span>
-                </>
-              )}
-            </Button>
+            <div className="absolute top-2 right-2 flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={handleExposeToken}
+                disabled={isLoadingToken || (!isPersonalTokenSelected && !hasProfileAdminPermission)}
+              >
+                {isLoadingToken ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Loading...</span>
+                  </>
+                ) : showExposedToken ? (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    <span>Hide token</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    <span>Expose token</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={
+                  isPersonalTokenSelected || hasProfileAdminPermission
+                    ? handleCopyConfig
+                    : handleCopyConfigWithoutRealToken
+                }
+                disabled={isCopyingConfig}
+              >
+                {isCopyingConfig ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Copying...</span>
+                  </>
+                ) : copiedConfig ? (
+                  <>
+                    <Check className="h-4 w-4 text-green-500" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy with exposed token</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 

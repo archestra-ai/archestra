@@ -3,6 +3,7 @@
 import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  AlertTriangle,
   Building2,
   CheckCircle2,
   Loader2,
@@ -23,6 +24,7 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -56,6 +58,23 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   team: <Users className="h-3 w-3" />,
   org_wide: <Building2 className="h-3 w-3" />,
 };
+
+type SecretStorageType = "vault" | "external_vault" | "database" | "none";
+
+function formatSecretStorageType(
+  storageType: SecretStorageType | undefined,
+): string {
+  switch (storageType) {
+    case "vault":
+      return "Vault";
+    case "external_vault":
+      return "External Vault";
+    case "database":
+      return "Database";
+    default:
+      return "None";
+  }
+}
 
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
@@ -278,6 +297,15 @@ function ChatSettingsContent() {
         ),
       },
       {
+        accessorKey: "secretStorageType",
+        header: "Storage",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {formatSecretStorageType(row.original.secretStorageType)}
+          </span>
+        ),
+      },
+      {
         accessorKey: "secretId",
         header: "Status",
         cell: ({ row }) => (
@@ -364,6 +392,19 @@ function ChatSettingsContent() {
           Add API Key
         </Button>
       </div>
+
+      {byosEnabled &&
+        apiKeys.some((key) => key.secretStorageType === "database") && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Database-stored API keys detected</AlertTitle>
+            <AlertDescription>
+              External Vault storage is enabled, but some of your API keys are
+              still stored in the database. To migrate them to the vault, delete
+              the existing keys and recreate them with vault references.
+            </AlertDescription>
+          </Alert>
+        )}
 
       <div data-testid={E2eTestId.ChatApiKeysTable}>
         <DataTable

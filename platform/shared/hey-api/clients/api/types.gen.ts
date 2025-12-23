@@ -5805,6 +5805,7 @@ export type GetChatApiKeysResponses = {
         userName?: string | null;
         vaultSecretPath?: string | null;
         vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
 
@@ -5991,6 +5992,7 @@ export type GetAvailableChatApiKeysResponses = {
         userName?: string | null;
         vaultSecretPath?: string | null;
         vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
 
@@ -6162,6 +6164,7 @@ export type GetChatApiKeyResponses = {
         userName?: string | null;
         vaultSecretPath?: string | null;
         vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
 

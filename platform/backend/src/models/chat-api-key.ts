@@ -1,6 +1,7 @@
 import { isVaultReference, parseVaultReference } from "@shared";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { computeSecretStorageType } from "@/secretmanager.utils";
 import type {
   ChatApiKey,
   ChatApiKeyScope,
@@ -131,6 +132,8 @@ class ChatApiKeyModel {
         teamName: schema.teamsTable.name,
         userName: schema.usersTable.name,
         secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.chatApiKeysTable)
       .leftJoin(
@@ -148,14 +151,25 @@ class ChatApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.chatApiKeysTable.createdAt);
 
-    // Parse vault references from secrets
+    // Parse vault references from secrets and compute storage type
     return apiKeys.map((key) => {
       const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const { secret: _secret, ...rest } = key;
+      const secretStorageType = computeSecretStorageType(
+        key.secretId,
+        key.secretIsVault,
+        key.secretIsByosVault,
+      );
+      const {
+        secret: _secret,
+        secretIsVault: _isVault,
+        secretIsByosVault: _isByosVault,
+        ...rest
+      } = key;
       return {
         ...rest,
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+        secretStorageType,
       };
     });
   }
@@ -225,6 +239,8 @@ class ChatApiKeyModel {
         teamName: schema.teamsTable.name,
         userName: schema.usersTable.name,
         secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.chatApiKeysTable)
       .leftJoin(
@@ -242,14 +258,25 @@ class ChatApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.chatApiKeysTable.createdAt);
 
-    // Parse vault references from secrets
+    // Parse vault references from secrets and compute storage type
     return apiKeys.map((key) => {
       const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const { secret: _secret, ...rest } = key;
+      const secretStorageType = computeSecretStorageType(
+        key.secretId,
+        key.secretIsVault,
+        key.secretIsByosVault,
+      );
+      const {
+        secret: _secret,
+        secretIsVault: _isVault,
+        secretIsByosVault: _isByosVault,
+        ...rest
+      } = key;
       return {
         ...rest,
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+        secretStorageType,
       };
     });
   }

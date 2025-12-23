@@ -206,12 +206,7 @@ function ChatSettingsContent() {
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid =
-    Boolean(editFormValues.name) &&
-    (!byosEnabled ||
-      (byosEnabled &&
-        editFormValues.vaultSecretPath &&
-        editFormValues.vaultSecretKey));
+  const isEditValid = Boolean(editFormValues.name);
 
   const columns: ColumnDef<ChatApiKeyResponse>[] = useMemo(
     () => [

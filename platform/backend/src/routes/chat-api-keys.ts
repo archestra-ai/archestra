@@ -185,12 +185,19 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (!secret) {
+        throw new ApiError(
+          400,
+          "Secret creation failed, cannot create API key",
+        );
+      }
+
       // Create the API key record
       const createdApiKey = await ChatApiKeyModel.create({
         organizationId,
         name: body.name,
         provider: body.provider,
-        secretId: secret?.id ?? null,
+        secretId: secret.id,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,

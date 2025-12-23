@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-model-optimization-with-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-anthropic-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg-model-opt-tools",
+      "type": "message",
+      "role": "assistant",
+      "model": "e2e-test-anthropic-optimized",
+      "content": [
+        {
+          "type": "text",
+          "text": "This is a response for a request with tools."
+        }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 1500,
+        "output_tokens": 15
+      }
+    }
+  }
+}

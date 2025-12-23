@@ -80,6 +80,7 @@ export default function ChatPage() {
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -443,6 +444,15 @@ export default function ChatPage() {
     status,
   ]);
 
+  useEffect(() => {
+    if (status === "ready" && textareaRef.current) {
+      // Use requestAnimationFrame for more reliable focusing
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  }, [status]);
+
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
     if (status === "submitted" || status === "streaming") {
@@ -461,6 +471,11 @@ export default function ChatPage() {
     sendMessage?.({
       role: "user",
       parts: [{ type: "text", text: message.text }],
+    });
+
+    // Auto-focus the textarea after sending
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
     });
   };
 

@@ -1,9 +1,67 @@
 "use client";
 
-import Link from "next/link";
 import { MermaidDiagram } from "@/components/mermaid-wrapper";
 
-export function ArchestraArchitectureDiagram() {
+interface ArchestraArchitectureDiagramProps {
+  activeTab?: "proxy" | "mcp";
+}
+
+export function ArchestraArchitectureDiagram({
+  activeTab,
+}: ArchestraArchitectureDiagramProps = {}) {
+  const getLLMHighlightStyles = () => {
+    if (activeTab === "proxy") {
+      // Edge indices for proxy path (0-based), counting from diagram definition order:
+      // 0: GW --> Orch (internal)
+      // 1: A1 --> GW
+      // 2: A2 --> GW
+      // 3: A2 --> LLM ✓
+      // 4: A3 --> LLM ✓
+      // 5: GW --> R1
+      // 6: Orch --> S1
+      // 7: Orch --> S2
+      // 8: Orch --> S3
+      // 9: LLM --> O ✓
+      // 10: LLM --> G ✓
+      // 11: LLM --> C ✓
+      return `
+    classDef highlightNode fill:#3b82f6,stroke:#2563eb,stroke-width:3px,color:#fff
+    class LLM highlightNode
+    class A2,A3,O,G,C highlightNode`;
+    }
+    return "";
+  };
+
+  const getMCPHighlightStyles = () => {
+    if (activeTab === "mcp") {
+      // Edge indices for MCP path (0-based), counting from diagram definition order:
+      // 0: GW --> Orch ✓
+      // 1: A1 --> GW ✓
+      // 2: A2 --> GW ✓
+      // 3: A2 --> LLM
+      // 4: A3 --> LLM
+      // 5: GW --> R1 ✓
+      // 6: Orch --> S1 ✓
+      // 7: Orch --> S2 ✓
+      // 8: Orch --> S3 ✓
+      // 9: LLM --> O
+      // 10: LLM --> G
+      // 11: LLM --> C
+      return `
+    classDef highlightNode fill:#10b981,stroke:#059669,stroke-width:3px,color:#fff
+    class GW highlightNode
+    class A1,A2,Orch,R1,S1,S2,S3 highlightNode`;
+    }
+    return "";
+  };
+
+  const highlightStyles =
+    activeTab === "proxy"
+      ? getLLMHighlightStyles()
+      : activeTab === "mcp"
+        ? getMCPHighlightStyles()
+        : "";
+
   const mermaidChart = `flowchart LR
     subgraph Agents
         A1[Developer's Cursor]
@@ -65,28 +123,15 @@ export function ArchestraArchitectureDiagram() {
 
     style RightSide fill:transparent,stroke:none
     style TopRow fill:transparent,stroke:none
-    style BottomRow fill:transparent,stroke:none`;
+    style BottomRow fill:transparent,stroke:none
+${highlightStyles}`;
 
   return (
-    <>
-      <p className="text-sm text-muted-foreground mb-8">
-        Archestra provides two ways to connect your agent: via LLM Proxy (for AI
-        conversations) or MCP Gateway (for tool access). It will collect
-        information about your agent, tools, and data from the traffic.
-        <br />
-        <br />
-        Below are instructions for how to connect to Archestra using a default
-        profile. If you'd like to configure a specific profile, you can do so in
-        the{" "}
-        <Link href="/profiles" className="text-blue-500">
-          Profiles
-        </Link>{" "}
-        page.
-      </p>
-
-      <div className="mb-8 max-w-3xl mx-auto aspect-[3/2] flex items-center justify-center">
-        <MermaidDiagram chart={mermaidChart} id="gateway-diagram" />
-      </div>
-    </>
+    <div className="mb-8 max-w-3xl mx-auto aspect-[3/2] flex items-center justify-center">
+      <MermaidDiagram
+        chart={mermaidChart}
+        id={`gateway-diagram-${activeTab || "default"}`}
+      />
+    </div>
   );
 }

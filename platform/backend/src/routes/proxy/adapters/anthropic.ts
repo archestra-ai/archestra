@@ -1,8 +1,8 @@
 /**
- * Anthropic Accessor Implementation
+ * Anthropic Adapter Implementation
  *
  * Implements the LLMProviderAdapterFactory interface for Anthropic.
- * Provides accessor objects that wrap Anthropic-specific request/response data
+ * Provides adapter objects that wrap Anthropic-specific request/response data
  * while exposing a uniform API for business logic.
  */
 
@@ -14,9 +14,9 @@ import type {
   CommonMessage,
   CommonToolResult,
   LLMProviderAdapterFactory,
-  LLMRequestAccessor,
-  LLMResponseAccessor,
-  LLMStreamAccessor,
+  LLMRequestAdapter,
+  LLMResponseAdapter,
+  LLMStreamAdapter,
   StopReasonView,
   StreamAccumulatorState,
   ToolCallView,
@@ -40,11 +40,11 @@ type AnthropicHeaders = Anthropic.Types.MessagesHeaders;
 type AnthropicStreamChunk = AnthropicProvider.Messages.MessageStreamEvent;
 
 // =============================================================================
-// REQUEST ACCESSOR
+// REQUEST ADAPTER
 // =============================================================================
 
-class AnthropicRequestAccessor
-  implements LLMRequestAccessor<AnthropicRequest, AnthropicMessages>
+class AnthropicRequestAdapter
+  implements LLMRequestAdapter<AnthropicRequest, AnthropicMessages>
 {
   readonly provider = "anthropic" as const;
   private request: AnthropicRequest;
@@ -223,7 +223,7 @@ class AnthropicRequestAccessor
   private toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
     logger.debug(
       { messageCount: messages.length },
-      "[AnthropicAccessor] toCommonFormat: starting conversion",
+      "[AnthropicAdapter] toCommonFormat: starting conversion",
     );
     const commonMessages: CommonMessage[] = [];
 
@@ -247,7 +247,7 @@ class AnthropicRequestAccessor
             if (toolName) {
               logger.debug(
                 { toolUseId: contentBlock.tool_use_id, toolName },
-                "[AnthropicAccessor] toCommonFormat: found tool result",
+                "[AnthropicAdapter] toCommonFormat: found tool result",
               );
               // Parse the tool result
               let toolResult: unknown;
@@ -275,7 +275,7 @@ class AnthropicRequestAccessor
           commonMessage.toolCalls = toolCalls;
           logger.debug(
             { toolCallCount: toolCalls.length },
-            "[AnthropicAccessor] toCommonFormat: attached tool calls to message",
+            "[AnthropicAdapter] toCommonFormat: attached tool calls to message",
           );
         }
       }
@@ -285,7 +285,7 @@ class AnthropicRequestAccessor
 
     logger.debug(
       { inputCount: messages.length, outputCount: commonMessages.length },
-      "[AnthropicAccessor] toCommonFormat: conversion complete",
+      "[AnthropicAdapter] toCommonFormat: conversion complete",
     );
     return commonMessages;
   }
@@ -325,11 +325,11 @@ class AnthropicRequestAccessor
     const updateCount = Object.keys(updates).length;
     logger.debug(
       { messageCount: messages.length, updateCount },
-      "[AnthropicAccessor] applyUpdates: starting",
+      "[AnthropicAdapter] applyUpdates: starting",
     );
 
     if (updateCount === 0) {
-      logger.debug("[AnthropicAccessor] applyUpdates: no updates to apply");
+      logger.debug("[AnthropicAdapter] applyUpdates: no updates to apply");
       return messages;
     }
 
@@ -345,7 +345,7 @@ class AnthropicRequestAccessor
             appliedCount++;
             logger.debug(
               { toolUseId: contentBlock.tool_use_id },
-              "[AnthropicAccessor] applyUpdates: applying update to tool result",
+              "[AnthropicAdapter] applyUpdates: applying update to tool result",
             );
             return {
               ...contentBlock,
@@ -366,18 +366,18 @@ class AnthropicRequestAccessor
 
     logger.debug(
       { updateCount, appliedCount },
-      "[AnthropicAccessor] applyUpdates: complete",
+      "[AnthropicAdapter] applyUpdates: complete",
     );
     return result;
   }
 }
 
 // =============================================================================
-// RESPONSE ACCESSOR
+// RESPONSE ADAPTER
 // =============================================================================
 
-class AnthropicResponseAccessor
-  implements LLMResponseAccessor<AnthropicResponse>
+class AnthropicResponseAdapter
+  implements LLMResponseAdapter<AnthropicResponse>
 {
   readonly provider = "anthropic" as const;
   private response: AnthropicResponse;
@@ -460,11 +460,11 @@ class AnthropicResponseAccessor
 }
 
 // =============================================================================
-// STREAM ACCESSOR
+// STREAM ADAPTER
 // =============================================================================
 
-class AnthropicStreamAccessor
-  implements LLMStreamAccessor<AnthropicStreamChunk, AnthropicResponse>
+class AnthropicStreamAdapter
+  implements LLMStreamAdapter<AnthropicStreamChunk, AnthropicResponse>
 {
   readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
@@ -705,8 +705,8 @@ class AnthropicStreamAccessor
     return events.join("");
   }
 
-  toResponseAccessor(): LLMResponseAccessor<AnthropicResponse> {
-    return new AnthropicResponseAccessor(this.toProviderResponse());
+  toResponseAdapter(): LLMResponseAdapter<AnthropicResponse> {
+    return new AnthropicResponseAdapter(this.toProviderResponse());
   }
 
   toProviderResponse(): AnthropicResponse {
@@ -825,22 +825,22 @@ export const anthropicAdapterFactory: LLMProviderAdapterFactory<
   provider: "anthropic",
   interactionType: "anthropic:messages",
 
-  createRequestAccessor(
+  createRequestAdapter(
     request: AnthropicRequest,
-  ): LLMRequestAccessor<AnthropicRequest, AnthropicMessages> {
-    return new AnthropicRequestAccessor(request);
+  ): LLMRequestAdapter<AnthropicRequest, AnthropicMessages> {
+    return new AnthropicRequestAdapter(request);
   },
 
-  createResponseAccessor(
+  createResponseAdapter(
     response: AnthropicResponse,
-  ): LLMResponseAccessor<AnthropicResponse> {
-    return new AnthropicResponseAccessor(response);
+  ): LLMResponseAdapter<AnthropicResponse> {
+    return new AnthropicResponseAdapter(response);
   },
 
-  createStreamAccessor(
+  createStreamAdapter(
     model: string,
-  ): LLMStreamAccessor<AnthropicStreamChunk, AnthropicResponse> {
-    return new AnthropicStreamAccessor(model);
+  ): LLMStreamAdapter<AnthropicStreamChunk, AnthropicResponse> {
+    return new AnthropicStreamAdapter(model);
   },
 
   extractApiKey(headers: AnthropicHeaders): string | undefined {

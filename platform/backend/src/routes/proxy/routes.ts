@@ -1,21 +1,14 @@
-/**
- * Unified LLM Proxy Routes
- *
- * Routes that use the unified handleLLMProxy handler with provider-specific accessors.
- * This file replaces legacy provider-specific route handlers.
- */
-
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
-import { anthropicAdapterFactory } from "./accessors";
+import { anthropicAdapterFactory } from "./adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
-import { handleLLMProxy } from "./handlers";
+import { handleLLMProxy } from "./llm-proxy-handler";
 import * as utils from "./utils";
 
-const unifiedProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const routes: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
 
@@ -106,4 +99,4 @@ const unifiedProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default unifiedProxyRoutes;
+export default routes;

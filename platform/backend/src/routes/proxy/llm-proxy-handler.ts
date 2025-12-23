@@ -1,7 +1,7 @@
 /**
  * Generic LLM Proxy Handler
  *
- * A reusable handler that works with any LLM provider through the accessor pattern.
+ * A reusable handler that works with any LLM provider through the adapter pattern.
  * Routes choose which adapter factory to use based on URL.
  */
 
@@ -29,10 +29,10 @@ import type {
   InteractionRequest,
   InteractionResponse,
   LLMProviderAdapterFactory,
-  LLMStreamAccessor,
+  LLMStreamAdapter,
   ToonCompressionResult,
 } from "@/types";
-import * as utils from "../utils";
+import * as utils from "./utils";
 
 // =============================================================================
 // TYPES
@@ -49,7 +49,7 @@ export interface HandleLLMProxyContext {
 // =============================================================================
 
 /**
- * Generic LLM proxy handler that works with any provider through accessors
+ * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
   TRequest,
@@ -73,21 +73,21 @@ export async function handleLLMProxy<
   const { agentId, externalAgentId } = context;
   const provider = adapterFactory.provider;
 
-  // Create request accessor
-  const requestAccessor = adapterFactory.createRequestAccessor(body);
+  // Create request adapter
+  const requestAdapter = adapterFactory.createRequestAdapter(body);
 
-  // Create stream accessor early (for SSE formatting, even for non-streaming)
-  const streamAccessor = adapterFactory.createStreamAccessor(
-    requestAccessor.getModel(),
+  // Create stream adapter early (for SSE formatting, even for non-streaming)
+  const streamAdapter = adapterFactory.createStreamAdapter(
+    requestAdapter.getModel(),
   );
 
   logger.debug(
     {
       agentId,
-      model: requestAccessor.getModel(),
-      stream: requestAccessor.isStreaming(),
-      messagesCount: requestAccessor.getProviderMessages(),
-      toolsCount: requestAccessor.getTools().length,
+      model: requestAdapter.getModel(),
+      stream: requestAdapter.isStreaming(),
+      messagesCount: requestAdapter.getProviderMessages(),
+      toolsCount: requestAdapter.getTools().length,
     },
     `[${provider}Proxy] handleLLMProxy: request received`,
   );
@@ -155,7 +155,7 @@ export async function handleLLMProxy<
     logger.debug({ resolvedAgentId }, `[${provider}Proxy] Limit check passed`);
 
     // Persist tools declared by client
-    const tools = requestAccessor.getTools();
+    const tools = requestAdapter.getTools();
     if (tools.length > 0) {
       logger.debug(
         { toolCount: tools.length },
@@ -172,13 +172,13 @@ export async function handleLLMProxy<
     }
 
     // Cost optimization - potentially switch to cheaper model
-    const baselineModel = requestAccessor.getModel();
-    const hasTools = requestAccessor.hasTools();
+    const baselineModel = requestAdapter.getModel();
+    const hasTools = requestAdapter.hasTools();
     // Cast messages since getOptimizedModel expects specific provider types
-    // but our generic accessor provides the correct type at runtime
+    // but our generic adapter provides the correct type at runtime
     const optimizedModel = await utils.costOptimization.getOptimizedModel(
       resolvedAgent,
-      requestAccessor.getProviderMessages() as Parameters<
+      requestAdapter.getProviderMessages() as Parameters<
         typeof utils.costOptimization.getOptimizedModel
       >[1],
       provider as Parameters<
@@ -188,7 +188,7 @@ export async function handleLLMProxy<
     );
 
     if (optimizedModel) {
-      requestAccessor.setModel(optimizedModel);
+      requestAdapter.setModel(optimizedModel);
       logger.info(
         { resolvedAgentId, optimizedModel },
         "Optimized model selected",
@@ -200,7 +200,7 @@ export async function handleLLMProxy<
       );
     }
 
-    const actualModel = requestAccessor.getModel();
+    const actualModel = requestAdapter.getModel();
 
     // Ensure token prices exist
     const baselinePricing = getDefaultPricing(baselineModel);
@@ -218,9 +218,9 @@ export async function handleLLMProxy<
     }
 
     // Set SSE headers early if streaming
-    if (requestAccessor.isStreaming()) {
+    if (requestAdapter.isStreaming()) {
       logger.debug(`[${provider}Proxy] Setting up streaming response headers`);
-      const sseHeaders = streamAccessor.getSSEHeaders();
+      const sseHeaders = streamAdapter.getSSEHeaders();
       for (const [key, value] of Object.entries(sseHeaders)) {
         reply.header(key, value);
       }
@@ -235,7 +235,7 @@ export async function handleLLMProxy<
       `[${provider}Proxy] Evaluating trusted data policies`,
     );
 
-    const commonMessages = requestAccessor.getMessagesForPolicyEvaluation();
+    const commonMessages = requestAdapter.getMessagesForPolicyEvaluation();
     const { toolResultUpdates, contextIsTrusted } =
       await utils.trustedData.evaluateIfContextIsTrusted(
         commonMessages,
@@ -244,20 +244,20 @@ export async function handleLLMProxy<
         provider,
         resolvedAgent.considerContextUntrusted,
         // Streaming callbacks for dual LLM progress
-        requestAccessor.isStreaming()
+        requestAdapter.isStreaming()
           ? () => {
               reply.raw.write(
-                streamAccessor.formatTextSSE("Analyzing with Dual LLM:\n\n"),
+                streamAdapter.formatTextSSE("Analyzing with Dual LLM:\n\n"),
               );
             }
           : undefined,
-        requestAccessor.isStreaming()
-          ? (progress) => {
+        requestAdapter.isStreaming()
+          ? (progress: { question: string; options: string[]; answer: string }) => {
               const optionsText = progress.options
-                .map((opt, idx) => `  ${idx}: ${opt}`)
+                .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                 .join("\n");
               reply.raw.write(
-                streamAccessor.formatTextSSE(
+                streamAdapter.formatTextSSE(
                   `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
                 ),
               );
@@ -266,7 +266,7 @@ export async function handleLLMProxy<
       );
 
     // Apply tool result updates
-    requestAccessor.applyToolResultUpdates(toolResultUpdates);
+    requestAdapter.applyToolResultUpdates(toolResultUpdates);
 
     logger.info(
       {
@@ -288,7 +288,7 @@ export async function handleLLMProxy<
       await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
 
     if (shouldApplyToonCompression) {
-      toonStats = await requestAccessor.applyToonCompression(actualModel);
+      toonStats = await requestAdapter.applyToonCompression(actualModel);
     }
 
     logger.info(
@@ -309,20 +309,20 @@ export async function handleLLMProxy<
     });
 
     // Build final request
-    const finalRequest = requestAccessor.toProviderRequest();
+    const finalRequest = requestAdapter.toProviderRequest();
 
-    if (requestAccessor.isStreaming()) {
+    if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
         finalRequest,
         reply,
         adapterFactory,
-        streamAccessor,
+        streamAdapter,
         resolvedAgent,
         contextIsTrusted,
         baselineModel,
         actualModel,
-        requestAccessor.getOriginalRequest(),
+        requestAdapter.getOriginalRequest(),
         toonStats,
         externalAgentId,
       );
@@ -336,13 +336,13 @@ export async function handleLLMProxy<
         contextIsTrusted,
         baselineModel,
         actualModel,
-        requestAccessor.getOriginalRequest(),
+        requestAdapter.getOriginalRequest(),
         toonStats,
         externalAgentId,
       );
     }
   } catch (error) {
-    return handleError(error, reply, provider, requestAccessor.isStreaming());
+    return handleError(error, reply, provider, requestAdapter.isStreaming());
   }
 }
 
@@ -367,7 +367,7 @@ async function handleStreaming<
     TChunk,
     THeaders
   >,
-  streamAccessor: LLMStreamAccessor<TChunk, TResponse>,
+  streamAdapter: LLMStreamAdapter<TChunk, TResponse>,
   agent: Agent,
   contextIsTrusted: boolean,
   baselineModel: string,
@@ -415,7 +415,7 @@ async function handleStreaming<
         );
       }
 
-      const result = streamAccessor.processChunk(chunk);
+      const result = streamAdapter.processChunk(chunk);
 
       // Stream non-tool-call data immediately
       if (result.sseData) {
@@ -430,7 +430,7 @@ async function handleStreaming<
     logger.info("Stream loop completed, processing final events");
 
     // Evaluate tool invocation policies
-    const toolCalls = streamAccessor.state.toolCalls;
+    const toolCalls = streamAdapter.state.toolCalls;
     let toolInvocationRefusal: [string, string] | null = null;
 
     if (toolCalls.length > 0) {
@@ -474,7 +474,7 @@ async function handleStreaming<
       const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
       // Stream refusal
-      const refusalEvents = streamAccessor.formatRefusalSSE(
+      const refusalEvents = streamAdapter.formatRefusalSSE(
         _refusalMessage,
         contentMessage,
       );
@@ -496,18 +496,18 @@ async function handleStreaming<
         "Tool calls allowed, streaming them now",
       );
 
-      const rawEvents = streamAccessor.getRawToolCallEvents();
+      const rawEvents = streamAdapter.getRawToolCallEvents();
       for (const event of rawEvents) {
         reply.raw.write(event);
       }
     }
 
     // Stream end events
-    reply.raw.write(streamAccessor.formatEndSSE());
+    reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
     // Record interaction and report metrics
-    const usage = streamAccessor.state.usage;
+    const usage = streamAdapter.state.usage;
     if (usage) {
       reportLLMTokens(
         provider,
@@ -550,7 +550,7 @@ async function handleStreaming<
         request: originalRequest as unknown as InteractionRequest,
         processedRequest: request as unknown as InteractionRequest,
         response:
-          streamAccessor.toProviderResponse() as unknown as InteractionResponse,
+          streamAdapter.toProviderResponse() as unknown as InteractionResponse,
         model: actualModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
@@ -611,17 +611,17 @@ async function handleNonStreaming<
     actualModel,
     false,
     agent,
-    async (llmSpan) => {
+    async (llmSpan: { end: () => void }) => {
       const result = await adapterFactory.execute(client, request);
       llmSpan.end();
       return result;
     },
   );
 
-  // Create response accessor
-  const responseAccessor = adapterFactory.createResponseAccessor(response);
+  // Create response adapter
+  const responseAdapter = adapterFactory.createResponseAdapter(response);
 
-  const toolCalls = responseAccessor.getToolCalls();
+  const toolCalls = responseAdapter.getToolCalls();
   logger.debug(
     { toolCallCount: toolCalls.length },
     `[${provider}Proxy] Non-streaming response received, checking tool invocation policies`,
@@ -648,7 +648,7 @@ async function handleNonStreaming<
         `[${provider}Proxy] Tool invocation blocked by policy`,
       );
 
-      const refusalResponse = responseAccessor.toRefusalResponse(
+      const refusalResponse = responseAdapter.toRefusalResponse(
         refusalMessage,
         contentMessage,
       );
@@ -662,7 +662,7 @@ async function handleNonStreaming<
       );
 
       // Record interaction with refusal
-      const usage = responseAccessor.getUsage();
+      const usage = responseAdapter.getUsage();
       const baselineCost = await utils.costOptimization.calculateCost(
         baselineModel,
         usage.inputTokens,
@@ -699,7 +699,7 @@ async function handleNonStreaming<
   }
 
   // Tool calls allowed (or no tool calls) - return response
-  const usage = responseAccessor.getUsage();
+  const usage = responseAdapter.getUsage();
 
   reportLLMTokens(
     provider,
@@ -730,7 +730,7 @@ async function handleNonStreaming<
     request: originalRequest as unknown as InteractionRequest,
     processedRequest: request as unknown as InteractionRequest,
     response:
-      responseAccessor.getOriginalResponse() as unknown as InteractionResponse,
+      responseAdapter.getOriginalResponse() as unknown as InteractionResponse,
     model: actualModel,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
@@ -741,7 +741,7 @@ async function handleNonStreaming<
     toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
   });
 
-  return reply.send(responseAccessor.getOriginalResponse());
+  return reply.send(responseAdapter.getOriginalResponse());
 }
 
 // =============================================================================

@@ -1,7 +1,7 @@
 /**
  * LLM Proxy Common Types
  *
- * These types define accessor interfaces for working with provider-specific
+ * These types define adapter interfaces for working with provider-specific
  * requests and responses in a uniform way. The original provider data is
  * preserved and can be reconstructed after modifications.
  *
@@ -10,29 +10,29 @@
  * ```
  * Provider Request
  *       ↓
- * RequestAccessor (wraps original, provides uniform read/modify API)
+ * RequestAdapter (wraps original, provides uniform read/modify API)
  *       ↓
- * [Business Logic operates via accessor methods]
- * - Trusted data policies: accessor.getToolResults(), accessor.updateToolResult()
- * - Cost optimization: accessor.getModel(), accessor.setModel()
- * - TOON compression: accessor.updateToolResult()
+ * [Business Logic operates via adapter methods]
+ * - Trusted data policies: adapter.getToolResults(), adapter.updateToolResult()
+ * - Cost optimization: adapter.getModel(), adapter.setModel()
+ * - TOON compression: adapter.updateToolResult()
  *       ↓
- * accessor.toProviderRequest() → Modified Provider Request
+ * adapter.toProviderRequest() → Modified Provider Request
  *       ↓
  * LLM Provider
  *       ↓
  * Provider Response
  *       ↓
- * ResponseAccessor (wraps original, provides uniform read API)
+ * ResponseAdapter (wraps original, provides uniform read API)
  *       ↓
- * [Business Logic operates via accessor methods]
- * - Tool invocation policies: accessor.getToolCalls()
- * - Metrics: accessor.getUsage()
+ * [Business Logic operates via adapter methods]
+ * - Tool invocation policies: adapter.getToolCalls()
+ * - Metrics: adapter.getUsage()
  *       ↓
- * accessor.toProviderResponse() or accessor.toRefusalResponse()
+ * adapter.toProviderResponse() or adapter.toRefusalResponse()
  * ```
  *
- * ## Why Accessor Pattern?
+ * ## Why Adapter Pattern?
  *
  * Provider schemas are fundamentally different (not just field names):
  * - Anthropic: flat content[] with type discriminators
@@ -40,7 +40,7 @@
  * - Gemini: candidates[] with content.parts[]
  *
  * A unified data structure would either lose data or be extremely complex.
- * Accessors preserve original data while providing uniform business logic API.
+ * Adapters preserve original data while providing uniform business logic API.
  */
 
 import type { SupportedProvider } from "@shared";
@@ -117,11 +117,11 @@ export type StopReasonView =
   | "unknown";
 
 // =============================================================================
-// REQUEST ACCESSOR INTERFACE
+// REQUEST ADAPTER INTERFACE
 // =============================================================================
 
 /**
- * Accessor interface for LLM requests
+ * Adapter interface for LLM requests
  *
  * Wraps provider-specific request and provides uniform API for business logic.
  * Original data is preserved and can be reconstructed after modifications.
@@ -129,7 +129,7 @@ export type StopReasonView =
  * @typeParam TRequest - Provider-specific request type
  * @typeParam TMessages - Provider-specific messages type
  */
-export interface LLMRequestAccessor<TRequest, TMessages = unknown> {
+export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   /** Provider name */
   readonly provider: SupportedProvider;
 
@@ -200,17 +200,17 @@ export interface LLMRequestAccessor<TRequest, TMessages = unknown> {
 }
 
 // =============================================================================
-// RESPONSE ACCESSOR INTERFACE
+// RESPONSE ADAPTER INTERFACE
 // =============================================================================
 
 /**
- * Accessor interface for LLM responses
+ * Adapter interface for LLM responses
  *
  * Wraps provider-specific response and provides uniform API for business logic.
  *
  * @typeParam TResponse - Provider-specific response type
  */
-export interface LLMResponseAccessor<TResponse> {
+export interface LLMResponseAdapter<TResponse> {
   /** Provider name */
   readonly provider: SupportedProvider;
 
@@ -255,7 +255,7 @@ export interface LLMResponseAccessor<TResponse> {
 }
 
 // =============================================================================
-// STREAMING ACCESSOR INTERFACE
+// STREAMING ADAPTER INTERFACE
 // =============================================================================
 
 /**
@@ -293,7 +293,7 @@ export interface ChunkProcessingResult {
 }
 
 /**
- * Accessor interface for streaming LLM responses
+ * Adapter interface for streaming LLM responses
  *
  * Handles parsing provider-specific chunks, accumulating state,
  * and formatting SSE events.
@@ -301,7 +301,7 @@ export interface ChunkProcessingResult {
  * @typeParam TChunk - Provider-specific stream chunk type
  * @typeParam TResponse - Provider-specific response type
  */
-export interface LLMStreamAccessor<TChunk, TResponse> {
+export interface LLMStreamAdapter<TChunk, TResponse> {
   /** Provider name */
   readonly provider: SupportedProvider;
 
@@ -348,8 +348,8 @@ export interface LLMStreamAccessor<TChunk, TResponse> {
   // Build Response
   // ---------------------------------------------------------------------------
 
-  /** Build a response accessor from accumulated state */
-  toResponseAccessor(): LLMResponseAccessor<TResponse>;
+  /** Build a response adapter from accumulated state */
+  toResponseAdapter(): LLMResponseAdapter<TResponse>;
 
   /** Build provider response from accumulated state */
   toProviderResponse(): TResponse;
@@ -366,9 +366,9 @@ export interface LLMStreamAccessor<TChunk, TResponse> {
 // =============================================================================
 
 /**
- * Factory for creating accessors for a specific provider
+ * Factory for creating adapters for a specific provider
  *
- * Each provider implements this interface to create accessors for their
+ * Each provider implements this interface to create adapters for their
  * request/response types.
  *
  * @typeParam TRequest - Provider-specific request type
@@ -394,19 +394,19 @@ export interface LLMProviderAdapterFactory<
     | "anthropic:messages";
 
   // ---------------------------------------------------------------------------
-  // Accessor Creation
+  // Adapter Creation
   // ---------------------------------------------------------------------------
 
-  /** Create a request accessor */
-  createRequestAccessor(
+  /** Create a request adapter */
+  createRequestAdapter(
     request: TRequest,
-  ): LLMRequestAccessor<TRequest, TMessages>;
+  ): LLMRequestAdapter<TRequest, TMessages>;
 
-  /** Create a response accessor */
-  createResponseAccessor(response: TResponse): LLMResponseAccessor<TResponse>;
+  /** Create a response adapter */
+  createResponseAdapter(response: TResponse): LLMResponseAdapter<TResponse>;
 
-  /** Create a stream accessor */
-  createStreamAccessor(model: string): LLMStreamAccessor<TChunk, TResponse>;
+  /** Create a stream adapter */
+  createStreamAdapter(model: string): LLMStreamAdapter<TChunk, TResponse>;
 
   // ---------------------------------------------------------------------------
   // Client & Headers

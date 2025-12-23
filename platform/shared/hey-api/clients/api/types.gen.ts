@@ -5803,6 +5803,8 @@ export type GetChatApiKeysResponses = {
         updatedAt: string;
         teamName?: string | null;
         userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
     }>;
 };
 
@@ -5987,6 +5989,8 @@ export type GetAvailableChatApiKeysResponses = {
         updatedAt: string;
         teamName?: string | null;
         userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
     }>;
 };
 
@@ -6156,6 +6160,8 @@ export type GetChatApiKeyResponses = {
         updatedAt: string;
         teamName?: string | null;
         userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
     };
 };
 

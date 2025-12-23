@@ -25,7 +25,7 @@ import {
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
 } from "@/lib/team-vault-folder.query.ee";
-import Divider from "./divider";
+import { CurrentVaultSecret } from "./current-vault-secret.ee";
 
 interface ExternalSecretSelectorProps {
   selectedTeamId: string | null;
@@ -105,35 +105,16 @@ export default function ExternalSecretSelector({
     }
   };
 
-  // Check if we have a saved vault reference (from edit mode) but no team selected
-  const hasSavedVaultReference =
-    !selectedTeamId && selectedSecretPath && selectedSecretKey;
-
   return (
     <div
       className="space-y-4 rounded-lg border p-4 bg-muted/30"
       data-testid={E2eTestId.ExternalSecretSelector}
     >
       {/* Show saved vault reference when editing without team selected */}
-      {hasSavedVaultReference && (
-        <div className="space-y-2 p-3 rounded border bg-muted/50">
-          <div className="flex items-center gap-2 text-sm">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span className="font-medium">Current Vault Secret:</span>
-          </div>
-          <div className="space-y-1 text-sm font-mono">
-            <div>
-              <span className="text-muted-foreground">Path: </span>
-              {selectedSecretPath}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Key: </span>
-              {selectedSecretKey}
-            </div>
-          </div>
-          <Divider />
-        </div>
-      )}
+      <CurrentVaultSecret
+        selectedSecretPath={selectedSecretPath}
+        selectedSecretKey={selectedSecretKey}
+      />
       <p className="font-medium">Select external secret from Vault</p>
       {/* Team selector */}
       <div className="space-y-2">

@@ -17770,6 +17770,14 @@
                       "userName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "vaultSecretPath": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "vaultSecretKey": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -18436,6 +18444,14 @@
                       "userName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "vaultSecretPath": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "vaultSecretKey": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -18750,6 +18766,14 @@
                       "type": "string"
                     },
                     "userName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretPath": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretKey": {
                       "nullable": true,
                       "type": "string"
                     }

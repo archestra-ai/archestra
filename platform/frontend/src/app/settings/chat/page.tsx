@@ -106,6 +106,9 @@ function ChatSettingsContent() {
         apiKey: PLACEHOLDER_KEY,
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
+        // Include vault secret info for BYOS mode
+        vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
+        vaultSecretKey: selectedApiKey.vaultSecretKey ?? null,
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);

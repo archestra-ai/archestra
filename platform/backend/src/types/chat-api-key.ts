@@ -61,6 +61,9 @@ export type UpdateChatApiKey = z.infer<typeof UpdateChatApiKeySchema>;
 export const ChatApiKeyWithScopeInfoSchema = SelectChatApiKeySchema.extend({
   teamName: z.string().nullable().optional(),
   userName: z.string().nullable().optional(),
+  // BYOS vault reference info (only populated when BYOS is enabled and secret is a vault reference)
+  vaultSecretPath: z.string().nullable().optional(),
+  vaultSecretKey: z.string().nullable().optional(),
 });
 
 export type ChatApiKeyWithScopeInfo = z.infer<

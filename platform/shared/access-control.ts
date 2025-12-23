@@ -4,9 +4,20 @@ import type { RouteId } from "./routes";
 
 // Include better-auth's default permissions for organization operations
 // This ensures basic operations like invitations work in non-EE mode
-export const allAvailableActions: Permissions = defaultStatements;
+// We need to convert readonly arrays to mutable arrays for TypeScript compatibility
+export const allAvailableActions: Permissions = Object.fromEntries(
+  Object.entries(defaultStatements).map(([key, value]) => [
+    key,
+    [...value], // Convert readonly array to mutable array
+  ]),
+);
 
-export const editorPermissions: Permissions = defaultStatements;
+export const editorPermissions: Permissions = Object.fromEntries(
+  Object.entries(defaultStatements).map(([key, value]) => [
+    key,
+    [...value], // Convert readonly array to mutable array
+  ]),
+);
 
 export const memberPermissions: Permissions = {
   organization: ["read"],

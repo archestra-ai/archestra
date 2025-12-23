@@ -131,13 +131,7 @@ export default function InlineVaultSecretSelector({
 
   return (
     <div className="space-y-3">
-      {/* Show saved vault reference when editing */}
-      <CurrentVaultSecret
-        selectedSecretPath={selectedSecretPath}
-        selectedSecretKey={selectedSecretKey}
-      />
-
-      <div className="flex gap-2 items-start">
+      <div className="flex gap-4 items-start">
         {/* Secret selector */}
         <Select
           value={selectedSecretPath || "none"}
@@ -210,6 +204,12 @@ export default function InlineVaultSecretSelector({
               </SelectContent>
             </Select>
           ))}
+      </div>
+      <div className="mt-4">
+        <CurrentVaultSecret
+          selectedSecretPath={selectedSecretPath}
+          selectedSecretKey={selectedSecretKey}
+        />
       </div>
     </div>
   );

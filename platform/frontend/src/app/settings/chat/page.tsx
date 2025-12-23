@@ -348,7 +348,7 @@ function ChatSettingsContent() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-lg font-semibold">LLM Provider API Keys</h2>
@@ -376,14 +376,14 @@ function ChatSettingsContent() {
 
       {/* Create Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add API Key</DialogTitle>
             <DialogDescription>
               Add a new LLM provider API key for use in Chat
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-2">
             <ChatApiKeyForm
               mode="full"
               showConsoleLink={false}
@@ -414,7 +414,7 @@ function ChatSettingsContent() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit API Key</DialogTitle>
             <DialogDescription>

@@ -4,7 +4,7 @@ import { type archestraApiTypes, E2eTestId } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { lazy, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -244,6 +244,14 @@ export function ChatApiKeyForm({
     }
   }, [scope, teamId, usedTeamIds, form]);
 
+  // Clean vault secret values when changing scope
+  useEffect(() => {
+    if (scope !== "team") {
+      form.setValue("vaultSecretPath", null);
+      form.setValue("vaultSecretKey", null);
+    }
+  }, [scope, form]);
+
   const vaultSecretSelector =
     scope === "team" ? (
       <InlineVaultSecretSelector
@@ -266,7 +274,7 @@ export function ChatApiKeyForm({
 
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Name field - only in full mode */}
         {mode === "full" && (
           <div className="space-y-2">
@@ -279,7 +287,6 @@ export function ChatApiKeyForm({
             />
           </div>
         )}
-
         {/* Provider selector */}
         <div className="space-y-2">
           <Label htmlFor="chat-api-key-provider">Provider</Label>
@@ -405,7 +412,13 @@ export function ChatApiKeyForm({
 
         {/* API Key input */}
         {byosEnabled ? (
-          vaultSecretSelector
+          <Suspense
+            fallback={
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            }
+          >
+            {vaultSecretSelector}
+          </Suspense>
         ) : (
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-value">

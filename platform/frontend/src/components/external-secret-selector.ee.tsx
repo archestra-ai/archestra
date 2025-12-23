@@ -1,7 +1,7 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { AlertCircle, CheckCircle2, Key, Loader2 } from "lucide-react";
+import { AlertCircle, Key, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import {
@@ -110,11 +110,6 @@ export default function ExternalSecretSelector({
       className="space-y-4 rounded-lg border p-4 bg-muted/30"
       data-testid={E2eTestId.ExternalSecretSelector}
     >
-      {/* Show saved vault reference when editing without team selected */}
-      <CurrentVaultSecret
-        selectedSecretPath={selectedSecretPath}
-        selectedSecretKey={selectedSecretKey}
-      />
       <p className="font-medium">Select external secret from Vault</p>
       {/* Team selector */}
       <div className="space-y-2">
@@ -280,12 +275,13 @@ export default function ExternalSecretSelector({
                   ))}
                 </SelectContent>
               </Select>
-              {selectedSecretKey && (
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Key selected
-                </div>
-              )}
+              {/* Show saved vault reference when editing without team selected */}
+              <div className="mt-4">
+                <CurrentVaultSecret
+                  selectedSecretPath={selectedSecretPath}
+                  selectedSecretKey={selectedSecretKey}
+                />
+              </div>
             </>
           ) : (
             <Alert variant="default">

@@ -51,7 +51,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
-## Helm Deployment (Recommended for Production)
+## Helm Deployment
 
 Helm deployment is our recommended approach for deploying Archestra Platform to production environments.
 
@@ -70,6 +70,7 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
+  --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
 ```
@@ -82,7 +83,7 @@ This command will:
 
 ### Configuration
 
-The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/values.yaml).
+The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/archestra/values.yaml).
 
 #### Core Configuration
 
@@ -127,12 +128,17 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.kubeconfig.secretName` - Name of secret containing kubeconfig file
 - `archestra.orchestrator.kubernetes.kubeconfig.mountPath` - Path where kubeconfig will be mounted
 - `archestra.orchestrator.kubernetes.serviceAccount.create` - Create a service account (default: true)
-- `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations to add to the service account
+- `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations for cloud integrations (e.g., [GKE Workload Identity](/docs/platform-supported-llm-providers#gke-with-workload-identity-recommended), AWS IRSA)
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
 
-#### Service & Ingress Configuration
+#### Service, Deployment, & Ingress Configuration
+
+**Deployment Settings**:
+
+- `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
+- `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
 
@@ -144,50 +150,44 @@ openssl rand -base64 32
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
 
+**GKE BackendConfig Settings** (Google Cloud only):
+
+- `archestra.gkeBackendConfig.enabled` - Enable or disable GKE BackendConfig resources (default: false)
+- `archestra.gkeBackendConfig.backend.timeoutSec` - Request timeout for backend API (recommended: 600 for streaming)
+- `archestra.gkeBackendConfig.backend.connectionDraining.drainingTimeoutSec` - Connection draining timeout for backend
+- `archestra.gkeBackendConfig.backend.healthCheck` - Health check configuration for backend (port 9000)
+- `archestra.gkeBackendConfig.frontend.timeoutSec` - Request timeout for frontend
+- `archestra.gkeBackendConfig.frontend.connectionDraining.drainingTimeoutSec` - Connection draining timeout for frontend
+- `archestra.gkeBackendConfig.frontend.healthCheck` - Health check configuration for frontend (port 3000)
+
 #### Cloud Provider Configuration (Streaming Timeout Settings)
 
 **⚠️ IMPORTANT:** Archestra Platform requires proper timeout settings on the upstream load balancer. **Without longer timeouts, streaming responses may end prematurely**, resulting in a “network error”
 
 ##### Google Cloud Platform (GKE)
 
-For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts using a BackendConfig resource. **BackendConfig is cloud-provider-specific and should be managed through your infrastructure-as-code** (Terraform, Pulumi, etc.) rather than the Helm chart.
+For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts and health checks using BackendConfig resources. The Helm chart can create and manage these resources for you.
 
-**Create BackendConfig Resource**:
-
-The BackendConfig should be created in the same namespace as your Archestra Platform deployment:
-
-```yaml
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata:
-  name: archestra-platform-backend-config
-  namespace: archestra # Same namespace as Helm release
-spec:
-  timeoutSec: 600 # 10 minutes for streaming responses and long-running MCP operations
-  connectionDraining:
-    drainingTimeoutSec: 60
-  healthCheck:
-    checkIntervalSec: 10
-    timeoutSec: 5
-    healthyThreshold: 1
-    unhealthyThreshold: 3
-    type: HTTP
-    requestPath: /health
-    port: 9000
-```
-
-**Reference BackendConfig in Service**:
-
-After creating the BackendConfig resource, configure the Helm chart to reference it via service annotations:
+Enable the `gkeBackendConfig` section in your values:
 
 ```yaml
 archestra:
+  gkeBackendConfig:
+    enabled: true
+    backend:
+      timeoutSec: 600 # 10 minutes for streaming responses
+      connectionDraining:
+        drainingTimeoutSec: 60
+    frontend:
+      timeoutSec: 600
+      connectionDraining:
+        drainingTimeoutSec: 60
   service:
     annotations:
-      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+      cloud.google.com/backend-config: '{"ports": {"9000":"RELEASE_NAME-archestra-platform-backend-config", "3000":"RELEASE_NAME-archestra-platform-frontend-config"}}'
 ```
 
-Apply via Helm:
+Apply via Helm (replace `RELEASE_NAME` with your actual release name, e.g., `archestra-platform`):
 
 ```bash
 helm upgrade archestra-platform \
@@ -195,9 +195,17 @@ helm upgrade archestra-platform \
   --install \
   --namespace archestra \
   --create-namespace \
-  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-backend-config"}}' \
+  --set archestra.gkeBackendConfig.enabled=true \
+  --set archestra.gkeBackendConfig.backend.timeoutSec=600 \
+  --set archestra.gkeBackendConfig.frontend.timeoutSec=600 \
+  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-archestra-platform-backend-config", "3000":"archestra-platform-archestra-platform-frontend-config"}}' \
   --wait
 ```
+
+The Helm chart creates two BackendConfig resources with health checks tuned for deployments:
+
+- `<release>-archestra-platform-backend-config` - For the API backend (port 9000)
+- `<release>-archestra-platform-frontend-config` - For the frontend (port 3000)
 
 ##### Amazon Web Services (AWS EKS)
 
@@ -275,6 +283,79 @@ archestra:
       # Configure timeout via Traefik IngressRoute or Middleware
 ```
 
+#### Scaling & High Availability Configuration
+
+**HorizontalPodAutoscaler Settings**:
+
+- `archestra.horizontalPodAutoscaler.enabled` - Enable or disable HorizontalPodAutoscaler creation (default: false)
+- `archestra.horizontalPodAutoscaler.minReplicas` - Minimum number of replicas (default: 1)
+- `archestra.horizontalPodAutoscaler.maxReplicas` - Maximum number of replicas (default: 10)
+- `archestra.horizontalPodAutoscaler.metrics` - Metrics configuration for scaling decisions
+- `archestra.horizontalPodAutoscaler.behavior` - Scaling behavior configuration
+
+**Example with CPU-based autoscaling**:
+
+```yaml
+archestra:
+  horizontalPodAutoscaler:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 80
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
+```
+
+**PodDisruptionBudget Settings**:
+
+- `archestra.podDisruptionBudget.enabled` - Enable or disable PodDisruptionBudget creation (default: false)
+- `archestra.podDisruptionBudget.minAvailable` - Minimum number of pods that must remain available (integer or percentage)
+- `archestra.podDisruptionBudget.maxUnavailable` - Maximum number of pods that can be unavailable (integer or percentage)
+- `archestra.podDisruptionBudget.unhealthyPodEvictionPolicy` - Policy for evicting unhealthy pods (IfHealthyBudget or AlwaysAllow)
+
+**Note**: Only one of `minAvailable` or `maxUnavailable` can be set.
+
+**Example with minAvailable**:
+
+```yaml
+archestra:
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    unhealthyPodEvictionPolicy: IfHealthyBudget
+```
+
+**Example with maxUnavailable percentage**:
+
+```yaml
+archestra:
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: "25%"
+```
+
+See the Kubernetes documentation for more details:
+
+- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+
 #### Database Configuration
 
 **PostgreSQL Settings**:
@@ -310,11 +391,58 @@ Then visit:
 - **Admin UI**: <http://localhost:3000>
 - **API**: <http://localhost:9000>
 
+### Production Recommendations
+
+#### PostgreSQL Infrastructure
+
+For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the bundled PostgreSQL instance. Cloud-managed databases provide:
+
+- **High availability** with automatic failover
+- **Automated backups** and point-in-time recovery
+- **Scaling** without downtime
+- **Security** with encryption at rest and in transit
+- **Monitoring** and alerting out of the box
+
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
+
 ## Infrastructure as Code
 
 ### Terraform
 
 For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
+
+**Provider Configuration**:
+
+```terraform
+terraform {
+  required_providers {
+    archestra = {
+      source = "archestra-ai/archestra"
+    }
+  }
+}
+
+provider "archestra" {
+  base_url = "http://localhost:9000" # Your Archestra API URL
+  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+}
+```
+
+**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
+
+**Configuring `base_url`**:
+
+The `base_url` should match your `ARCHESTRA_API_BASE_URL` environment variable — this is where your Archestra Platform API is accessible:
+
+- **Local development**: `http://localhost:9000` (default)
+- **Production**: Your externally-accessible API URL (e.g., `https://api.archestra.example.com`)
+
+You can also set these values via environment variables instead of hardcoding them:
+
+```bash
+export ARCHESTRA_API_KEY="your-api-key-here"
+export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+```
 
 For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
 
@@ -363,7 +491,7 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
-  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
+  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/docs/platform-single-sign-on) for SSO configuration.
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
 
@@ -371,6 +499,47 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
+- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
+
+  - Default: `https://api.openai.com/v1`
+  - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_ANTHROPIC_BASE_URL`** - Override the Anthropic API base URL.
+
+  - Default: `https://api.anthropic.com`
+  - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
+
+  - Default: `https://generativelanguage.googleapis.com`
+  - Use this to point to your own proxy or other custom endpoints
+  - Note: This is only used when Vertex AI mode is disabled
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
+
+  - Default: `false`
+  - Set to `true` to use Vertex AI instead of the Google AI Studio API
+  - When enabled, uses Application Default Credentials (ADC) for authentication instead of API keys
+  - Requires `ARCHESTRA_GEMINI_VERTEX_AI_PROJECT` to be set
+  - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`** - Google Cloud project ID for Vertex AI.
+
+  - Required when: `ARCHESTRA_GEMINI_VERTEX_AI_ENABLED=true`
+  - Example: `my-gcp-project-123`
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`** - Google Cloud location/region for Vertex AI.
+
+  - Default: `us-central1`
+  - Example: `us-central1`, `europe-west1`, `asia-northeast1`
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
+
+  - Optional: Only needed when running outside of GCP or without Workload Identity
+  - Example: `/path/to/service-account-key.json`
+  - When not set, uses [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
+  - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
@@ -391,6 +560,13 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME`** - Kubernetes ServiceAccount name for MCP server pods that need K8s API access.
+
+  - Default: `archestra-platform-mcp-k8s-operator`
+  - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-mcp-k8s-operator`
+    So, default value matches it when using `archestra-platform` as the release name.
+  - Customize if using a different Helm release name or managing ServiceAccounts manually
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
 
@@ -432,16 +608,22 @@ The following environment variables can be used to configure Archestra Platform:
   - Options: `DB` or `Vault`
   - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
 
-- **`HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
+- **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
-- **`HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
+
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`
+  - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
   - Please reach out to sales@archestra.ai to learn more about the license.

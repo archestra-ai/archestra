@@ -1,7 +1,13 @@
-import type { Integration, TracesSamplerSamplingContext } from "@sentry/core";
+import type {
+  ErrorEvent,
+  EventHint,
+  Integration,
+  TracesSamplerSamplingContext,
+} from "@sentry/core";
 import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
+import { ApiError } from "@/types";
 
 const {
   api: { version },
@@ -86,6 +92,38 @@ const initSentry = async (): Promise<void> => {
      * https://docs.sentry.io/platforms/javascript/guides/express/opentelemetry/custom-setup/
      */
     skipOpenTelemetrySetup: true,
+
+    /**
+     * Filter out expected client errors (4xx) from being sent to Sentry.
+     * These are expected application errors (not found, validation errors, etc.)
+     * that don't indicate bugs and would just create noise in Sentry.
+     *
+     * https://docs.sentry.io/platforms/javascript/configuration/filtering/
+     */
+    beforeSend(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
+      const error = hint.originalException;
+
+      // Filter out ApiError instances with 4xx status codes
+      if (error instanceof ApiError) {
+        if (error.statusCode >= 400 && error.statusCode < 500) {
+          return null;
+        }
+      }
+
+      // Also check for statusCode property on generic errors (e.g., from Fastify)
+      if (
+        error &&
+        typeof error === "object" &&
+        "statusCode" in error &&
+        typeof error.statusCode === "number" &&
+        error.statusCode >= 400 &&
+        error.statusCode < 500
+      ) {
+        return null;
+      }
+
+      return event;
+    },
 
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({ normalizedRequest }: TracesSamplerSamplingContext) => {

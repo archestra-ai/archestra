@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/v1/models"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-4o",
+          "object": "model",
+          "created": 1686935002,
+          "owned_by": "openai"
+        }
+      ]
+    }
+  }
+}

@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -10,6 +20,7 @@ import type {
   Interaction,
   PaginationQuery,
   SortingQuery,
+  UserInfo,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
@@ -36,22 +47,25 @@ class InteractionModel {
   }
 
   /**
-   * Find all interactions with pagination and sorting support
+   * Find all interactions with pagination, sorting, and filtering support
    */
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: SortingQuery,
-    userId?: string,
+    requestingUserId?: string,
     isAgentAdmin?: boolean,
+    filters?: { profileId?: string; externalAgentId?: string; userId?: string },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
 
-    // Build where clause for access control
-    let whereClause: SQL | undefined;
-    if (userId && !isAgentAdmin) {
+    // Build where clauses
+    const conditions: SQL[] = [];
+
+    // Access control filter
+    if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
+        requestingUserId,
         false,
       );
 
@@ -59,11 +73,31 @@ class InteractionModel {
         return createPaginatedResult([], 0, pagination);
       }
 
-      whereClause = inArray(
-        schema.interactionsTable.agentId,
-        accessibleAgentIds,
+      conditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
       );
     }
+
+    // Profile filter (internal Archestra profile ID)
+    if (filters?.profileId) {
+      conditions.push(
+        eq(schema.interactionsTable.profileId, filters.profileId),
+      );
+    }
+
+    // External agent ID filter (from X-Archestra-Agent-Id header)
+    if (filters?.externalAgentId) {
+      conditions.push(
+        eq(schema.interactionsTable.externalAgentId, filters.externalAgentId),
+      );
+    }
+
+    // User ID filter (from X-Archestra-User-Id header)
+    if (filters?.userId) {
+      conditions.push(eq(schema.interactionsTable.userId, filters.userId));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
       db
@@ -95,8 +129,12 @@ class InteractionModel {
     switch (sorting?.sortBy) {
       case "createdAt":
         return direction(schema.interactionsTable.createdAt);
-      case "agentId":
-        return direction(schema.interactionsTable.agentId);
+      case "profileId":
+        return direction(schema.interactionsTable.profileId);
+      case "externalAgentId":
+        return direction(schema.interactionsTable.externalAgentId);
+      case "userId":
+        return direction(schema.interactionsTable.userId);
       case "model":
         // Extract model from the JSONB request column
         // Wrap in parentheses to ensure correct precedence for the JSON operator
@@ -127,7 +165,7 @@ class InteractionModel {
     if (userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
-        interaction.agentId,
+        interaction.profileId,
         false,
       );
       if (!hasAccess) {
@@ -138,8 +176,8 @@ class InteractionModel {
     return interaction as Interaction;
   }
 
-  static async getAllInteractionsForAgent(
-    agentId: string,
+  static async getAllInteractionsForProfile(
+    profileId: string,
     whereClauses?: SQL[],
   ) {
     return db
@@ -147,7 +185,7 @@ class InteractionModel {
       .from(schema.interactionsTable)
       .where(
         and(
-          eq(schema.interactionsTable.agentId, agentId),
+          eq(schema.interactionsTable.profileId, profileId),
           ...(whereClauses ?? []),
         ),
       )
@@ -155,16 +193,16 @@ class InteractionModel {
   }
 
   /**
-   * Get all interactions for an agent with pagination and sorting support
+   * Get all interactions for a profile with pagination and sorting support
    */
-  static async getAllInteractionsForAgentPaginated(
-    agentId: string,
+  static async getAllInteractionsForProfilePaginated(
+    profileId: string,
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     whereClauses?: SQL[],
   ): Promise<PaginatedResult<Interaction>> {
     const whereCondition = and(
-      eq(schema.interactionsTable.agentId, agentId),
+      eq(schema.interactionsTable.profileId, profileId),
       ...(whereClauses ?? []),
     );
 
@@ -199,6 +237,98 @@ class InteractionModel {
   }
 
   /**
+   * Get all unique external agent IDs
+   * Used for filtering dropdowns in the UI
+   */
+  static async getUniqueExternalAgentIds(
+    requestingUserId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<string[]> {
+    // Build where clause for access control
+    const conditions: SQL[] = [
+      isNotNull(schema.interactionsTable.externalAgentId),
+    ];
+
+    if (requestingUserId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        requestingUserId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      conditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
+      );
+    }
+
+    const result = await db
+      .selectDistinct({
+        externalAgentId: schema.interactionsTable.externalAgentId,
+      })
+      .from(schema.interactionsTable)
+      .where(and(...conditions))
+      .orderBy(asc(schema.interactionsTable.externalAgentId));
+
+    return result
+      .map((r) => r.externalAgentId)
+      .filter((id): id is string => id !== null);
+  }
+
+  /**
+   * Get all unique user IDs with user names
+   * Used for filtering dropdowns in the UI
+   * Returns user info (id and name) for the dropdown to display names but filter by id
+   */
+  static async getUniqueUserIds(
+    requestingUserId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<UserInfo[]> {
+    // Build where clause for access control
+    const conditions: SQL[] = [isNotNull(schema.interactionsTable.userId)];
+
+    if (requestingUserId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        requestingUserId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      conditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
+      );
+    }
+
+    // Get distinct user IDs from interactions and join with users table to get names
+    const result = await db
+      .selectDistinct({
+        userId: schema.interactionsTable.userId,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.interactionsTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.interactionsTable.userId, schema.usersTable.id),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(schema.usersTable.name));
+
+    return result
+      .filter(
+        (r): r is { userId: string; userName: string } => r.userId !== null,
+      )
+      .map((r) => ({
+        id: r.userId,
+        name: r.userName,
+      }));
+  }
+
+  /**
    * Update usage limits after an interaction is created
    */
   static async updateUsageAfterInteraction(
@@ -224,14 +354,14 @@ class InteractionModel {
 
       // Get agent's teams to update team and organization limits
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.agentId,
+        interaction.profileId,
       );
 
       const updatePromises: Promise<void>[] = [];
 
       if (agentTeamIds.length === 0) {
         logger.warn(
-          `Agent ${interaction.agentId} has no team assignments for interaction ${interaction.id}`,
+          `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
         );
 
         // Even if agent has no teams, we should still try to update organization limits
@@ -294,11 +424,11 @@ class InteractionModel {
         }
       }
 
-      // Update agent-level token cost limits (if any exist)
+      // Update profile-level token cost limits (if any exist)
       updatePromises.push(
         LimitModel.updateTokenLimitUsage(
           "agent",
-          interaction.agentId,
+          interaction.profileId,
           model,
           inputTokens,
           outputTokens,

@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1beta/models.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "models": [
+        {
+          "name": "models/gemini-2.5-pro",
+          "displayName": "Gemini 2.5 Pro",
+          "description": "Gemini 2.5 Pro model"
+        },
+        {
+          "name": "models/gemini-2.5-flash",
+          "displayName": "Gemini 2.5 Flash",
+          "description": "Gemini 2.5 Flash model"
+        }
+      ]
+    }
+  }
+}

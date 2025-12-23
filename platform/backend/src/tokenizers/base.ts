@@ -1,8 +1,9 @@
-import type { Anthropic, OpenAi } from "@/types";
+import type { Anthropic, Gemini, OpenAi } from "@/types";
 
 export type ProviderMessage =
   | OpenAi.Types.ChatCompletionsRequest["messages"][number]
-  | Anthropic.Types.MessagesRequest["messages"][number];
+  | Anthropic.Types.MessagesRequest["messages"][number]
+  | Gemini.Types.GenerateContentRequest["contents"][number];
 
 /**
  * Base interface for tokenizers
@@ -43,14 +44,46 @@ export abstract class BaseTokenizer implements Tokenizer {
    * Extract text content from a message, which can be a string or a collection of objects
    */
   protected getMessageText(message: ProviderMessage): string {
-    if (typeof message.content === "string") {
-      return message.content;
+    // OpenAI/Anthropic format: content property
+    if ("content" in message) {
+      if (typeof message.content === "string") {
+        return message.content;
+      }
+
+      if (Array.isArray(message.content)) {
+        const text = message.content.reduce((text, block) => {
+          if (block.type === "text" && typeof block.text === "string") {
+            text += block.text;
+          }
+          return text;
+        }, "");
+
+        return text;
+      }
     }
 
-    if (Array.isArray(message.content)) {
-      const text = message.content.reduce((text, block) => {
-        if (block.type === "text" && typeof block.text === "string") {
-          text += block.text;
+    // Gemini format: parts property
+    if ("parts" in message && Array.isArray(message.parts)) {
+      const text = message.parts.reduce((text, part) => {
+        if ("text" in part && typeof part.text === "string") {
+          text += part.text;
+        }
+        // Handle function call/response by serializing args/response
+        if (
+          "functionCall" in part &&
+          part.functionCall &&
+          typeof part.functionCall === "object"
+        ) {
+          const fc = part.functionCall;
+          text += `function_call:${fc.name || "unknown"}(${JSON.stringify(fc.args || {})})`;
+        }
+        if (
+          "functionResponse" in part &&
+          part.functionResponse &&
+          typeof part.functionResponse === "object"
+        ) {
+          const fr = part.functionResponse;
+          text += `function_response:${fr.name || "unknown"}(${JSON.stringify(fr.response || {})})`;
         }
         return text;
       }, "");

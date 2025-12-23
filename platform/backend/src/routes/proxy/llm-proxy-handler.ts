@@ -129,8 +129,8 @@ export async function handleLLMProxy<
   // Extract API key
   const apiKey = adapterFactory.extractApiKey(headers);
 
+  // Check usage limits
   try {
-    // Check usage limits
     logger.debug(
       { resolvedAgentId },
       `[${provider}Proxy] Checking usage limits`,

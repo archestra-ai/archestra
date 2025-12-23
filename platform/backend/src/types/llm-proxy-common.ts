@@ -30,10 +30,9 @@
 
 import type { SupportedProvider } from "@shared";
 
-// =============================================================================
-// COMMON TYPES (re-exported for business logic use)
-// =============================================================================
 
+// Common... types are reused, since all existing business logic operates on these types
+// TODO: ikonstantinov: move these to this file
 export type { CommonMessage, ToolResultUpdates } from "./llm-proxy";
 export type {
   CommonMcpToolDefinition,
@@ -383,34 +382,6 @@ export interface LLMProviderAdapterFactory<
     client: unknown,
     request: TRequest,
   ): Promise<AsyncIterable<TChunk>>;
-}
-
-// =============================================================================
-// PROCESSING CONTEXT
-// =============================================================================
-
-/**
- * Context for request processing pipeline
- */
-export interface ProxyContext {
-  /** Provider name */
-  provider: SupportedProvider;
-
-  /** Resolved profile/agent */
-  profileId: string;
-  profileName: string;
-
-  /** External agent ID from X-Archestra-Agent-Id header */
-  externalAgentId?: string;
-
-  /** Whether profile has considerContextUntrusted enabled */
-  considerContextUntrusted: boolean;
-
-  /** API key for the provider */
-  apiKey?: string;
-
-  /** Profile labels (for metrics) */
-  labels?: Array<{ key: string; value: string }>;
 }
 
 // =============================================================================

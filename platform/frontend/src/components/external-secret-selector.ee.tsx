@@ -131,10 +131,9 @@ export default function ExternalSecretSelector({
               {selectedSecretKey}
             </div>
           </div>
+          <Divider />
         </div>
       )}
-
-      <Divider />
       <p className="font-medium">Select external secret from Vault</p>
       {/* Team selector */}
       <div className="space-y-2">

@@ -37,9 +37,11 @@ interface OnboardingDialogProps {
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
   provider: "anthropic",
-  apiKey: "",
+  apiKey: null,
   scope: "personal",
-  teamId: "",
+  teamId: null,
+  vaultSecretPath: null,
+  vaultSecretKey: null,
 };
 
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
@@ -81,8 +83,12 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 
     await createChatApiKeyMutation.mutateAsync({
       ...values,
+      apiKey: values.apiKey ?? undefined,
       name: `Default ${PROVIDER_CONFIG[values.provider].name} Key`,
-      teamId: values.scope === "team" ? values.teamId : undefined,
+      teamId:
+        values.scope === "team" && values.teamId ? values.teamId : undefined,
+      vaultSecretPath: values.vaultSecretPath ?? undefined,
+      vaultSecretKey: values.vaultSecretKey ?? undefined,
     });
 
     chatApiKeyForm.reset(DEFAULT_FORM_VALUES);

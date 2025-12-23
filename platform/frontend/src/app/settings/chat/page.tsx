@@ -49,6 +49,7 @@ import {
   useDeleteChatApiKey,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
+import { useFeatureFlag } from "@/lib/features.hook";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -59,9 +60,11 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
   provider: "anthropic",
-  apiKey: "",
+  apiKey: null,
   scope: "personal",
-  teamId: "",
+  teamId: null,
+  vaultSecretPath: null,
+  vaultSecretKey: null,
 };
 
 function ChatSettingsContent() {
@@ -69,6 +72,7 @@ function ChatSettingsContent() {
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
+  const byosEnabled = useFeatureFlag("byosEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -108,17 +112,21 @@ function ChatSettingsContent() {
 
   // Submit handlers
   const handleCreate = createForm.handleSubmit(async (values) => {
-    if (!values.apiKey || values.apiKey === PLACEHOLDER_KEY) {
-      toast.error("API key is required");
-      return;
-    }
-
     await createMutation.mutateAsync({
       name: values.name,
       provider: values.provider,
-      apiKey: values.apiKey,
+      apiKey: values.apiKey ?? undefined,
       scope: values.scope,
-      teamId: values.scope === "team" ? values.teamId : undefined,
+      teamId:
+        values.scope === "team" && values.teamId ? values.teamId : undefined,
+      vaultSecretPath:
+        byosEnabled && values.vaultSecretPath
+          ? values.vaultSecretPath
+          : undefined,
+      vaultSecretKey:
+        byosEnabled && values.vaultSecretKey
+          ? values.vaultSecretKey
+          : undefined,
     });
 
     createForm.reset(DEFAULT_FORM_VALUES);
@@ -139,13 +147,21 @@ function ChatSettingsContent() {
       id: selectedApiKey.id,
       data: {
         name: values.name || undefined,
-        apiKey: apiKeyChanged ? values.apiKey : undefined,
+        apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
         scope: scopeChanged ? values.scope : undefined,
         teamId:
           scopeChanged || teamIdChanged
             ? values.scope === "team"
               ? values.teamId
               : null
+            : undefined,
+        vaultSecretPath:
+          byosEnabled && values.vaultSecretPath
+            ? values.vaultSecretPath
+            : undefined,
+        vaultSecretKey:
+          byosEnabled && values.vaultSecretKey
+            ? values.vaultSecretKey
             : undefined,
       },
     });
@@ -180,15 +196,23 @@ function ChatSettingsContent() {
 
   // Validation for create form
   const createFormValues = createForm.watch();
+  console.log({ createFormValues });
   const isCreateValid =
-    createFormValues.apiKey &&
     createFormValues.apiKey !== PLACEHOLDER_KEY &&
     createFormValues.name &&
-    (createFormValues.scope !== "team" || createFormValues.teamId);
+    (createFormValues.scope !== "team" || createFormValues.teamId) &&
+    byosEnabled
+      ? createFormValues.vaultSecretPath && createFormValues.vaultSecretKey
+      : createFormValues.apiKey;
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid = Boolean(editFormValues.name);
+  const isEditValid =
+    Boolean(editFormValues.name) &&
+    (!byosEnabled ||
+      (byosEnabled &&
+        editFormValues.vaultSecretPath &&
+        editFormValues.vaultSecretKey));
 
   const columns: ColumnDef<ChatApiKeyResponse>[] = useMemo(
     () => [

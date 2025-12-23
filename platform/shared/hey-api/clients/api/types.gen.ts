@@ -5812,9 +5812,11 @@ export type CreateChatApiKeyData = {
     body: {
         name: string;
         provider: 'anthropic' | 'openai' | 'gemini';
-        apiKey: string;
+        apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
     };
     path?: never;
     query?: never;
@@ -6165,6 +6167,8 @@ export type UpdateChatApiKeyData = {
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string | null;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
     };
     path: {
         id: string;

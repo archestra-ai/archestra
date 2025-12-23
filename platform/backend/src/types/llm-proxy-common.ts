@@ -31,55 +31,15 @@
 import type { SupportedProvider } from "@shared";
 
 // =============================================================================
-// EXISTING TYPES (re-exported for business logic use)
+// COMMON TYPES (re-exported for business logic use)
 // =============================================================================
-// TODO: ikonstantinov: move these to the llm-proxy-common.ts file
-// These minimal types are used by business logic (trusted data, tool invocation)
+
 export type { CommonMessage, ToolResultUpdates } from "./llm-proxy";
 export type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
 } from "./tool-execution";
-
-// =============================================================================
-// COMMON VIEW TYPES (for business logic)
-// =============================================================================
-
-/**
- * Tool definition as seen by business logic
- */
-export interface ToolDefinitionView {
-  name: string;
-  description?: string;
-  parameters: Record<string, unknown>;
-}
-
-/**
- * Tool result in a message (for trusted data evaluation)
- */
-export interface ToolResultView {
-  /** Tool call ID (to match with tool_use) */
-  id: string;
-  /** Tool name */
-  name: string;
-  /** Result content (parsed if JSON, otherwise string) */
-  content: unknown;
-  /** Whether this was an error result */
-  isError: boolean;
-}
-
-/**
- * Tool call from LLM response (for tool invocation policies)
- */
-export interface ToolCallView {
-  /** Tool call ID */
-  id: string;
-  /** Tool name */
-  name: string;
-  /** Arguments (parsed object or raw string) */
-  arguments: Record<string, unknown> | string;
-}
 
 /**
  * Token usage from response
@@ -132,10 +92,10 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   getMessagesForPolicyEvaluation(): import("./llm-proxy").CommonMessage[];
 
   /** Get tool results from messages (for trusted data evaluation) */
-  getToolResults(): ToolResultView[];
+  getToolResults(): import("./tool-execution").CommonToolResult[];
 
   /** Get tool definitions (for persistence, hasTools check) */
-  getTools(): ToolDefinitionView[];
+  getTools(): import("./tool-execution").CommonMcpToolDefinition[];
 
   /** Check if request has tools */
   hasTools(): boolean;
@@ -218,7 +178,7 @@ export interface LLMResponseAdapter<TResponse> {
   getText(): string;
 
   /** Get tool calls from response (for tool invocation policies) */
-  getToolCalls(): ToolCallView[];
+  getToolCalls(): import("./tool-execution").CommonToolCall[];
 
   /** Check if response has tool calls */
   hasToolCalls(): boolean;
@@ -568,17 +528,14 @@ ${reason}`;
 }
 
 /**
- * Convert ToolCallView[] to format expected by tool invocation policies
+ * Convert CommonToolCall[] to format expected by tool invocation policies
  */
 export function toolCallsForPolicyEvaluation(
-  toolCalls: ToolCallView[],
+  toolCalls: import("./tool-execution").CommonToolCall[],
 ): Array<{ toolCallName: string; toolCallArgs: string }> {
   return toolCalls.map((tc) => ({
     toolCallName: tc.name,
-    toolCallArgs:
-      typeof tc.arguments === "string"
-        ? tc.arguments
-        : JSON.stringify(tc.arguments),
+    toolCallArgs: JSON.stringify(tc.arguments),
   }));
 }
 

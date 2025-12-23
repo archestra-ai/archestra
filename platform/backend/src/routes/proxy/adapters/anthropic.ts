@@ -11,7 +11,9 @@ import logger from "@/logging";
 import type {
   Anthropic,
   ChunkProcessingResult,
+  CommonMcpToolDefinition,
   CommonMessage,
+  CommonToolCall,
   CommonToolResult,
   LLMProviderAdapterFactory,
   LLMRequestAdapter,
@@ -19,9 +21,6 @@ import type {
   LLMStreamAdapter,
   StopReasonView,
   StreamAccumulatorState,
-  ToolCallView,
-  ToolDefinitionView,
-  ToolResultView,
   ToonCompressionResult,
   UsageView,
 } from "@/types";
@@ -71,8 +70,8 @@ class AnthropicRequestAdapter
     return this.toCommonFormat(this.request.messages);
   }
 
-  getToolResults(): ToolResultView[] {
-    const results: ToolResultView[] = [];
+  getToolResults(): CommonToolResult[] {
+    const results: CommonToolResult[] = [];
 
     for (const message of this.request.messages) {
       if (message.role === "user" && Array.isArray(message.content)) {
@@ -106,10 +105,10 @@ class AnthropicRequestAdapter
     return results;
   }
 
-  getTools(): ToolDefinitionView[] {
+  getTools(): CommonMcpToolDefinition[] {
     if (!this.request.tools) return [];
 
-    const result: ToolDefinitionView[] = [];
+    const result: CommonMcpToolDefinition[] = [];
     for (const tool of this.request.tools) {
       // Only process custom tools (not bash, text_editor, etc.)
       if (
@@ -126,7 +125,7 @@ class AnthropicRequestAdapter
         result.push({
           name: customTool.name,
           description: customTool.description,
-          parameters: customTool.input_schema,
+          inputSchema: customTool.input_schema,
         });
       }
     }
@@ -401,7 +400,7 @@ class AnthropicResponseAdapter
     return textBlocks.map((block) => block.text).join("");
   }
 
-  getToolCalls(): ToolCallView[] {
+  getToolCalls(): CommonToolCall[] {
     return this.response.content
       .filter((block) => block.type === "tool_use")
       .map((block) => ({

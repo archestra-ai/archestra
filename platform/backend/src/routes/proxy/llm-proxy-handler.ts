@@ -164,7 +164,7 @@ export async function handleLLMProxy<
       await utils.tools.persistTools(
         tools.map((t) => ({
           toolName: t.name,
-          toolParameters: t.parameters,
+          toolParameters: t.inputSchema,
           toolDescription: t.description,
         })),
         resolvedAgentId,
@@ -252,7 +252,11 @@ export async function handleLLMProxy<
             }
           : undefined,
         requestAdapter.isStreaming()
-          ? (progress: { question: string; options: string[]; answer: string }) => {
+          ? (progress: {
+              question: string;
+              options: string[];
+              answer: string;
+            }) => {
               const optionsText = progress.options
                 .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                 .join("\n");

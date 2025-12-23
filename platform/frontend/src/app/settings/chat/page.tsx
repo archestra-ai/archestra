@@ -401,7 +401,7 @@ function ChatSettingsContent() {
             <AlertDescription>
               External Vault storage is enabled, but some of your API keys are
               still stored in the database. To migrate them to the vault, delete
-              the existing keys and recreate them with vault references.
+              them and create new ones with vault references.
             </AlertDescription>
           </Alert>
         )}

@@ -403,3 +403,15 @@ export function assertByosEnabled(): ReadonlyVaultSecretManager {
   // When BYOS is enabled, secretManager is guaranteed to be a BYOSVaultSecretManager
   return secretManager() as ReadonlyVaultSecretManager;
 }
+
+export async function getSecretValueForLlmProviderApiKey(
+  secretId: string,
+): Promise<string | unknown> {
+  const secret = await secretManager().getSecret(secretId);
+  return (
+    secret?.secret?.apiKey ??
+    secret?.secret?.anthropicApiKey ??
+    secret?.secret?.geminiApiKey ??
+    secret?.secret?.openaiApiKey
+  );
+}

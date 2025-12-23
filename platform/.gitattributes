@@ -31,7 +31,8 @@ Dockerfile text eol=lf
 *.eot binary
 *.tgz binary
 
-# Hide Drizzle ORM snapshots in GitHub pull requests
+# Generated files - hide from GitHub statistics and diffs
+# Drizzle ORM migration snapshots
 backend/src/database/migrations/meta/** linguist-generated=true
 backend/src/database/migrations/meta/** -diff
 backend/src/database/migrations/meta/*.json linguist-generated=true

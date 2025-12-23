@@ -10,6 +10,7 @@ const messagesTable = pgTable("messages", {
   // biome-ignore lint/suspicious/noExplicitAny: Stores complete UIMessage structure from AI SDK which is dynamic
   content: jsonb("content").$type<any>().notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }),
 });
 
 export default messagesTable;

@@ -4,12 +4,17 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
-const { getInteraction, getInteractions, getUniqueExternalAgentIds } =
-  archestraApiSdk;
+const {
+  getInteraction,
+  getInteractions,
+  getUniqueExternalAgentIds,
+  getUniqueUserIds,
+} = archestraApiSdk;
 
 export function useInteractions({
   profileId,
   externalAgentId,
+  userId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -18,6 +23,7 @@ export function useInteractions({
 }: {
   profileId?: string;
   externalAgentId?: string;
+  userId?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -31,6 +37,7 @@ export function useInteractions({
       "interactions",
       profileId,
       externalAgentId,
+      userId,
       limit,
       offset,
       sortBy,
@@ -41,6 +48,7 @@ export function useInteractions({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(externalAgentId ? { externalAgentId } : {}),
+          ...(userId ? { userId } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -56,7 +64,8 @@ export function useInteractions({
       sortBy === "createdAt" &&
       sortDirection === "desc" &&
       !profileId &&
-      !externalAgentId
+      !externalAgentId &&
+      !userId
         ? initialData
         : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
@@ -88,6 +97,16 @@ export function useUniqueExternalAgentIds() {
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
+      return response.data;
+    },
+  });
+}
+
+export function useUniqueUserIds() {
+  return useSuspenseQuery({
+    queryKey: ["interactions", "userIds"],
+    queryFn: async () => {
+      const response = await getUniqueUserIds();
       return response.data;
     },
   });

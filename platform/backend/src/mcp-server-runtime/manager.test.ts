@@ -42,6 +42,7 @@ vi.mock("@kubernetes/client-node", () => {
   return {
     KubeConfig: MockKubeConfig,
     CoreV1Api: vi.fn(),
+    AppsV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
   };
@@ -72,7 +73,7 @@ vi.mock("@/models/mcp-server", () => ({
   default: {},
 }));
 
-vi.mock("./k8s-pod", () => ({
+vi.mock("./k8s-deployment", () => ({
   default: vi.fn(),
 }));
 
@@ -309,6 +310,122 @@ describe("McpServerRuntimeManager", () => {
       expect(manager.isEnabled).toBe(false);
 
       mockLoadFromDefault.mockRestore();
+    });
+  });
+
+  describe("stopServer", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    test("should call stopDeployment, deleteK8sService, and deleteK8sSecret when deployment exists", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Create mock deployment with all cleanup methods
+      const mockStopDeployment = vi.fn().mockResolvedValue(undefined);
+      const mockDeleteK8sService = vi.fn().mockResolvedValue(undefined);
+      const mockDeleteK8sSecret = vi.fn().mockResolvedValue(undefined);
+
+      const mockDeployment = {
+        stopDeployment: mockStopDeployment,
+        deleteK8sService: mockDeleteK8sService,
+        deleteK8sSecret: mockDeleteK8sSecret,
+      };
+
+      // Access internal map and add mock deployment
+      // @ts-expect-error - accessing private property for testing
+      manager.mcpServerIdToDeploymentMap.set("test-server-id", mockDeployment);
+
+      // Call stopServer
+      await manager.stopServer("test-server-id");
+
+      // Verify all cleanup methods were called
+      expect(mockStopDeployment).toHaveBeenCalledTimes(1);
+      expect(mockDeleteK8sService).toHaveBeenCalledTimes(1);
+      expect(mockDeleteK8sSecret).toHaveBeenCalledTimes(1);
+
+      // Verify deployment was removed from map
+      // @ts-expect-error - accessing private property for testing
+      expect(manager.mcpServerIdToDeploymentMap.has("test-server-id")).toBe(
+        false,
+      );
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("should do nothing when deployment does not exist", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Call stopServer with non-existent server ID - should not throw
+      await expect(
+        manager.stopServer("non-existent-server"),
+      ).resolves.toBeUndefined();
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("should call cleanup methods in correct order", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Track call order
+      const callOrder: string[] = [];
+
+      const mockDeployment = {
+        stopDeployment: vi.fn().mockImplementation(async () => {
+          callOrder.push("stopDeployment");
+        }),
+        deleteK8sService: vi.fn().mockImplementation(async () => {
+          callOrder.push("deleteK8sService");
+        }),
+        deleteK8sSecret: vi.fn().mockImplementation(async () => {
+          callOrder.push("deleteK8sSecret");
+        }),
+      };
+
+      // @ts-expect-error - accessing private property for testing
+      manager.mcpServerIdToDeploymentMap.set("test-server-id", mockDeployment);
+
+      await manager.stopServer("test-server-id");
+
+      // Verify order: stopDeployment -> deleteK8sService -> deleteK8sSecret
+      expect(callOrder).toEqual([
+        "stopDeployment",
+        "deleteK8sService",
+        "deleteK8sSecret",
+      ]);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
     });
   });
 });

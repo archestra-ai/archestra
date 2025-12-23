@@ -22,8 +22,11 @@ export const memberAuthFile = path.join(
   "playwright/.auth/member.json",
 );
 
+export const IS_CI = process.env.CI === "true";
+
 export const UI_BASE_URL = "http://localhost:3000";
 export const API_BASE_URL = "http://localhost:9000";
+export const WIREMOCK_BASE_URL = "http://localhost:9092";
 
 export const METRICS_BASE_URL = "http://localhost:9050";
 export const METRICS_BEARER_TOKEN = "foo-bar";
@@ -61,7 +64,7 @@ export const DEFAULT_TEAM_NAME = "Default Team";
 export const ENGINEERING_TEAM_NAME = "Engineering Team";
 export const MARKETING_TEAM_NAME = "Marketing Team";
 
-export const DEFAULT_PROFILE_NAME = "Default Agent";
+export const DEFAULT_PROFILE_NAME = "Default Profile";
 
 export {
   E2eTestId,

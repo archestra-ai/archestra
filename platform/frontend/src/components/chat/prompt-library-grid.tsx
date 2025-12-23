@@ -59,7 +59,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
-import { McpToolsDisplay } from "./mcp-tools-display";
+import { AssignToolsToProfile } from "./assign-tools-to-profile";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -231,8 +231,9 @@ export function PromptLibraryGrid({
                   permissions={{ profile: ["read"] }}
                   noPermissionHandle="hide"
                 >
-                  <McpToolsDisplay
+                  <AssignToolsToProfile
                     agentId={selectedProfileId}
+                    showAssignedToolsList
                     className="text-xs text-muted-foreground"
                   />
                 </WithPermissions>

@@ -116,8 +116,9 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
 {{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
-{{- if $isSensitive }}
-{{/* Sensitive env vars are stored in the Secret and referenced via secretKeyRef */}}
+{{/* Only use secretKeyRef for sensitive vars with non-empty values; empty values are set as regular env vars */}}
+{{- if and $isSensitive $value }}
+{{/* Sensitive env vars with values are stored in the Secret and referenced via secretKeyRef */}}
 - name: {{ $key }}
   valueFrom:
     secretKeyRef:

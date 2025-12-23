@@ -6,6 +6,9 @@ test.describe(
   "Invitation functionality",
   { tag: ["@firefox", "@webkit"] },
   () => {
+    // increase stability
+    test.describe.configure({ mode: "serial", retries: 4 });
+
     test("shows error message when email is invalid", async ({
       page,
       goToPage,

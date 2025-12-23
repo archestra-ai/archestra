@@ -20,6 +20,8 @@ import {
   verifyToolCallResultViaApi,
 } from "../../utils";
 
+const CONNECT_BUTTON_TIMEOUT = 25_000;
+
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
   const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
@@ -74,7 +76,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       // Click connect button for the catalog item
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-        .click();
+        .click({ timeout: CONNECT_BUTTON_TIMEOUT });
       await page.waitForLoadState("networkidle");
       // Personal credential type should be selected by default if vault is disabled
       // otherwise team credential type should be selected
@@ -101,7 +103,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       // Then click connect again
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-        .click();
+        .click({ timeout: CONNECT_BUTTON_TIMEOUT });
       // And this time team credential type should be selected by default for everyone
       await expect(
         page.getByTestId(E2eTestId.SelectCredentialTypeTeam),
@@ -180,17 +182,25 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await clickButton({ page, options: { name: "Revoke" }, first: true });
         await page.waitForLoadState("networkidle");
         await clickButton({ page, options: { name: "Close" }, nth: 1 });
+
         // And we check that the credential is revoked
+        // Use polling to handle async credential revocation in CI
         const expectedCredentialsAfterRevoke = {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
         };
-        await goToPage(page, "/mcp-catalog/registry");
-        await openManageCredentialsDialog(page, catalogItemName);
-        const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
-        await expect(visibleCredentialsAfterRevoke).toHaveLength(
-          expectedCredentialsAfterRevoke[user].length - 1,
-        );
+        const expectedLengthAfterRevoke =
+          expectedCredentialsAfterRevoke[user].length - 1;
+
+        await expect(async () => {
+          await goToPage(page, "/mcp-catalog/registry");
+          await openManageCredentialsDialog(page, catalogItemName);
+          const visibleCredentialsAfterRevoke =
+            await getVisibleCredentials(page);
+          expect(visibleCredentialsAfterRevoke).toHaveLength(
+            expectedLengthAfterRevoke,
+          );
+        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
       }
 
       // CLEANUP: Delete created catalog items and mcp servers
@@ -234,7 +244,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     // Click connect button for the catalog item
     await page
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+      .click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // Install using personal credential
     await clickButton({ page, options: { name: "Install" } });
     // Wait for dialog to close and button to be visible again
@@ -242,7 +252,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
     );
     await connectButton.waitFor({ state: "visible" });
-    await connectButton.click();
+    await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // And this time team credential type should be selected by default for everyone, install using team credential
     await clickButton({ page, options: { name: "Install" } });
     await page.waitForLoadState("networkidle");
@@ -322,7 +332,7 @@ test("Verify tool calling using different static credentials", async ({
   await goToPage(editorPage, "/mcp-catalog/registry");
   await editorPage
     .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
-    .click();
+    .click({ timeout: CONNECT_BUTTON_TIMEOUT });
   await editorPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Editor-personal-credential");

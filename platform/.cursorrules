@@ -34,3 +34,8 @@
 - Use workspace-relative imports within each workspace
 - Run `pnpm type-check` before committing to catch type errors
 - Use `tilt up` for the best development experience with hot reload
+
+## Function Parameters
+
+- **If a function accepts more than 2 parameters**, use a single object parameter instead of multiple positional parameters
+- This improves readability, makes parameters self-documenting, and allows for easier future extension

@@ -5,7 +5,6 @@ description: "Role-based access control (RBAC) system for managing user permissi
 order: 4
 lastUpdated: 2025-12-17
 ---
-
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 

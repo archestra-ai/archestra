@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsdown && pnpm run sentry:sourcemaps",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
-    "dev": "tsdown --watch",
+    "dev": "rm -rf dist && tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
     "lint": "biome check",
@@ -64,6 +64,7 @@
     "@toon-format/toon": "^2.1.0",
     "ai": "^5.0.108",
     "better-auth": "1.4.6-beta.3",
+    "cache-manager": "^7.2.7",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.0",

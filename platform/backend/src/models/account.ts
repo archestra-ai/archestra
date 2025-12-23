@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 
 class AccountModel {
@@ -39,6 +39,35 @@ class AccountModel {
       "AccountModel.getAllByUserId: completed",
     );
     return accounts;
+  }
+
+  /**
+   * Delete all accounts with a specific providerId.
+   * This is used to clean up SSO accounts when an SSO provider is deleted,
+   * preventing orphaned accounts that could cause issues with future SSO logins.
+   *
+   * @param providerId - The provider ID to delete accounts for
+   * @param tx - Optional transaction to use for deletion
+   * @returns The number of accounts deleted
+   */
+  static async deleteByProviderId(
+    providerId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    logger.debug(
+      { providerId },
+      "AccountModel.deleteByProviderId: deleting accounts",
+    );
+    const dbOrTx = tx || db;
+    const deleted = await dbOrTx
+      .delete(schema.accountsTable)
+      .where(eq(schema.accountsTable.providerId, providerId))
+      .returning({ id: schema.accountsTable.id });
+    logger.debug(
+      { providerId, count: deleted.length },
+      "AccountModel.deleteByProviderId: completed",
+    );
+    return deleted.length;
   }
 }
 

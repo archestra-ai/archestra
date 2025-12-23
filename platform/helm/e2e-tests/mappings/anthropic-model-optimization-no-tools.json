@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-model-optimization-no-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-anthropic-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg-model-opt-no-tools",
+      "type": "message",
+      "role": "assistant",
+      "model": "e2e-test-anthropic-baseline",
+      "content": [
+        {
+          "type": "text",
+          "text": "This is a response for a request without tools."
+        }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 1200,
+        "output_tokens": 15
+      }
+    }
+  }
+}

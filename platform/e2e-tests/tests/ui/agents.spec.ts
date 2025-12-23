@@ -28,7 +28,9 @@ test(
     // A new dialog opens with connection instructions
     // Wait for the "Connect via" dialog to appear
     await expect(
-      page.getByRole("heading", { name: new RegExp(`Connect via.*${AGENT_NAME}`, "i") }),
+      page.getByRole("heading", {
+        name: new RegExp(`Connect via.*${AGENT_NAME}`, "i"),
+      }),
     ).toBeVisible({ timeout: 15_000 });
 
     // Close the connection dialog by clicking the "Done" button

@@ -4525,174 +4525,6 @@ export type UpdateAgentToolResponses = {
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
 
-export type AnthropicMessagesWithDefaultAgentData = {
-    body?: AnthropicMessagesRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        'anthropic-version': string;
-        'x-api-key': string;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/v1/messages';
-};
-
-export type AnthropicMessagesWithDefaultAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type AnthropicMessagesWithDefaultAgentError = AnthropicMessagesWithDefaultAgentErrors[keyof AnthropicMessagesWithDefaultAgentErrors];
-
-export type AnthropicMessagesWithDefaultAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: AnthropicMessagesResponse;
-};
-
-export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
-
-export type AnthropicMessagesWithAgentData = {
-    body?: AnthropicMessagesRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        'anthropic-version': string;
-        'x-api-key': string;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{agentId}/v1/messages';
-};
-
-export type AnthropicMessagesWithAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type AnthropicMessagesWithAgentError = AnthropicMessagesWithAgentErrors[keyof AnthropicMessagesWithAgentErrors];
-
-export type AnthropicMessagesWithAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: AnthropicMessagesResponse;
-};
-
-export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
-
 export type GetDefaultCredentialsStatusData = {
     body?: never;
     path?: never;
@@ -16952,6 +16784,174 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type AnthropicMessagesWithDefaultAgentData = {
+    body?: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/v1/messages';
+};
+
+export type AnthropicMessagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AnthropicMessagesWithDefaultAgentError = AnthropicMessagesWithDefaultAgentErrors[keyof AnthropicMessagesWithDefaultAgentErrors];
+
+export type AnthropicMessagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
+
+export type AnthropicMessagesWithAgentData = {
+    body?: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        'x-api-key': string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{agentId}/v1/messages';
+};
+
+export type AnthropicMessagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AnthropicMessagesWithAgentError = AnthropicMessagesWithAgentErrors[keyof AnthropicMessagesWithAgentErrors];
+
+export type AnthropicMessagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
 
 export type GetUserTokenData = {
     body?: never;

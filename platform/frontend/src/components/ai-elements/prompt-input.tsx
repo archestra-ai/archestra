@@ -56,6 +56,7 @@ type AttachmentsContext = {
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
   textareaKey: number;
+  status?: ChatStatus;
 };
 
 const AttachmentsContext = createContext<AttachmentsContext | null>(null);
@@ -216,6 +217,7 @@ export type PromptInputProps = Omit<
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
   ) => void;
+  status?: ChatStatus;
 };
 
 export const PromptInput = ({
@@ -228,6 +230,7 @@ export const PromptInput = ({
   maxFileSize,
   onError,
   onSubmit,
+  status,
   children,
   ...props
 }: PromptInputProps) => {
@@ -417,6 +420,11 @@ export const PromptInput = ({
   const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
 
+    // Don't submit if status is "streaming" or "submitted"
+    if (status === "streaming" || status === "submitted") {
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
     const text = (formData.get("message") as string) || "";
     const form = event.currentTarget;
@@ -452,8 +460,9 @@ export const PromptInput = ({
       openFileDialog,
       fileInputRef: inputRef,
       textareaKey,
+      status,
     }),
-    [items, add, remove, clear, openFileDialog, textareaKey],
+    [items, add, remove, clear, openFileDialog, textareaKey, status],
   );
 
   return (
@@ -490,15 +499,20 @@ export const PromptInputBody = ({
   <div className={cn(className, "flex flex-col")} {...props} />
 );
 
-export type PromptInputTextareaProps = ComponentProps<typeof Textarea>;
+export type PromptInputTextareaProps = ComponentProps<typeof Textarea> & {
+  status?: ChatStatus;
+};
 
 export const PromptInputTextarea = ({
   onChange,
   className,
   placeholder = "What would you like to know?",
+  status: statusProp,
   ...props
 }: PromptInputTextareaProps) => {
   const attachments = usePromptInputAttachments();
+  // Use prop status if provided, otherwise fall back to context status
+  const status = statusProp ?? attachments.status;
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === "Enter") {
@@ -509,6 +523,17 @@ export const PromptInputTextarea = ({
 
       if (e.shiftKey) {
         // Allow newline
+        return;
+      }
+
+      // Don't submit if status is "streaming" or "submitted"
+      if (status === "streaming" || status === "submitted") {
+        e.preventDefault();
+        return;
+      }
+
+      // Submit on Enter (without Shift) only when status is "ready" (or undefined, which defaults to ready)
+      if (status && status !== "ready") {
         return;
       }
 

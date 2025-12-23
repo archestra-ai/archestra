@@ -1,7 +1,16 @@
 "use client";
 
 import { archestraApiSdk } from "@shared";
-import { Check, Copy, Eye, EyeOff, Loader2, Package, Server, User } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
+  Loader2,
+  Package,
+  Server,
+  User,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
@@ -11,9 +20,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -45,25 +52,20 @@ export function McpConnectionInstructions({
   });
 
   const tokens = tokensData?.tokens;
-  const permissions = tokensData?.permissions;
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
   const [showExposedToken, setShowExposedToken] = useState(false);
-  const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(null);
+  const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
+    null,
+  );
   const [isLoadingToken, setIsLoadingToken] = useState(false);
 
   // Update selected profile when agentId changes
   useEffect(() => {
     setSelectedProfileId(agentId);
   }, [agentId]);
-
-  // Reset exposed token when token selection changes
-  useEffect(() => {
-    setShowExposedToken(false);
-    setExposedTokenValue(null);
-  }, [selectedTokenId]);
 
   // Get the selected profile
   const selectedProfile = profiles?.find((p) => p.id === selectedProfileId);
@@ -130,15 +132,16 @@ export function McpConnectionInstructions({
   };
 
   // Determine display token based on selection
-  const tokenForDisplay = showExposedToken && exposedTokenValue
-    ? exposedTokenValue
-    : isPersonalTokenSelected
-    ? userToken
-      ? `${userToken.tokenStart}***`
-      : "ask-admin-for-access-token"
-    : hasProfileAdminPermission && selectedTeamToken
-      ? `${selectedTeamToken.tokenStart}***`
-      : "ask-admin-for-access-token";
+  const tokenForDisplay =
+    showExposedToken && exposedTokenValue
+      ? exposedTokenValue
+      : isPersonalTokenSelected
+        ? userToken
+          ? `${userToken.tokenStart}***`
+          : "ask-admin-for-access-token"
+        : hasProfileAdminPermission && selectedTeamToken
+          ? `${selectedTeamToken.tokenStart}***`
+          : "ask-admin-for-access-token";
 
   const mcpConfig = useMemo(
     () =>
@@ -459,7 +462,10 @@ export function McpConnectionInstructions({
                 size="sm"
                 className="gap-2"
                 onClick={handleExposeToken}
-                disabled={isLoadingToken || (!isPersonalTokenSelected && !hasProfileAdminPermission)}
+                disabled={
+                  isLoadingToken ||
+                  (!isPersonalTokenSelected && !hasProfileAdminPermission)
+                }
               >
                 {isLoadingToken ? (
                   <>

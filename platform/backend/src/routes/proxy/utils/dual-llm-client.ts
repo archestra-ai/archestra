@@ -243,7 +243,7 @@ export class GeminiDualLlmClient implements DualLlmClient {
    * @param apiKey - API key (optional when Vertex AI is enabled)
    * @param model - Model to use
    */
-  constructor(apiKey: string | undefined, model = "gemini-2.5-pro") {
+  constructor(apiKey: string | undefined, model = "gemini-2.5-flash") {
     this.client = createGoogleGenAIClient(apiKey, "[dualLlmClient] Gemini:");
     this.model = model;
   }

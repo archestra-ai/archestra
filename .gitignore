@@ -1,15 +1,26 @@
-# Local Claude settings
-**/.claude/settings.local.json
+# Seguridad: NUNCA subir las variables de entorno
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
 
-# Editor directories and files
-.idea
+# Bases de datos y archivos locales (Limpieza de Git)
+platform/backend/dev.db
+platform/backend/dev.db-journal
+platform/backend/dev.db-shm
+platform/backend/dev.db-wal
+**/*.db
+**/*.sqlite
+
+# Dependencias y compilados
+node_modules/
+dist/
+.next/
+platform/frontend/.next/
+platform/backend/dist/
+
+# Archivos de sistema
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-*.log
-
-platform/CLAUDE_LOCAL.md
+Thumbs.db
+*.logs

@@ -1,0 +1,36 @@
+/* --- ESTILO ARTÍSTICO PARA TABLAS MCP --- */
+
+/* Contenedor con efecto de cristal (Glassmorphism) */
+.mcp-ui-table-container {
+  @apply my-6 overflow-hidden rounded-xl border border-white/10 shadow-2xl;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.9) 100%);
+  backdrop-filter: blur(12px);
+}
+
+/* Header con gradiente sutil y texto elegante */
+.mcp-ui-table-header {
+  @apply bg-white/5 text-primary font-bold tracking-widest uppercase text-[10px] border-b border-white/10;
+}
+
+/* Filas con efecto de iluminación al pasar el mouse */
+.mcp-ui-table-row {
+  @apply transition-all duration-300 hover:bg-primary/5 border-b border-white/5 last:border-0;
+}
+
+/* Celdas con tipografía limpia */
+.mcp-ui-table-cell {
+  @apply py-4 px-5 text-sm font-light text-slate-300/90;
+}
+
+/* El Badge "Glow" que pediste */
+.mcp-live-badge {
+  @apply bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white font-black text-[9px] px-2.5 py-1 rounded-full uppercase tracking-tighter;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0% { opacity: 0.8; box-shadow: 0 0 5px rgb(163, 68, 211); }
+  50% { opacity: 1; box-shadow: 0 0 15px rgba(168, 85, 247, 0.7); }
+  100% { opacity: 0.8; box-shadow: 0 0 5px rgba(168, 85, 247, 0.4); }
+}

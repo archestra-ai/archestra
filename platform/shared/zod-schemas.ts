@@ -305,3 +305,30 @@ export const SsoProviderFormSchema = z
 export type SsoProviderOidcConfig = z.infer<typeof SsoProviderOidcConfigSchema>;
 export type SsoProviderSamlConfig = z.infer<typeof SsoProviderSamlConfigSchema>;
 export type SsoProviderFormValues = z.infer<typeof SsoProviderFormSchema>;
+
+/**
+ * ==========================================
+ * MCP-UI SECTION (Issue #1301)
+ * ==========================================
+ */
+
+export const McpUiMetadataSchema = z.object({
+  componentName: z.string(),
+  props: z.record(z.string(), z.any()),
+  viewType: z.enum(["card", "full", "inline"]).optional(),
+});
+
+export const McpToolResponseSchema = z.object({
+  content: z.array(
+    z.object({
+      type: z.string(),
+      text: z.string().optional(),
+      data: z.any().optional(),
+    }),
+  ),
+  ui: McpUiMetadataSchema.optional(),
+  isError: z.boolean().optional(),
+});
+
+export type McpToolResponse = z.infer<typeof McpToolResponseSchema>;
+export type McpUiMetadata = z.infer<typeof McpUiMetadataSchema>;

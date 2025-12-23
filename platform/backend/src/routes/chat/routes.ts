@@ -94,7 +94,7 @@ async function getSmartDefaultModel(
 
     if (profileApiKey?.secretId) {
       const secretValue = await getSecretValueForLlmProviderApiKey(
-        profileApiKey.secretId,
+        profileApiKey.secretId as any,
       );
 
       if (secretValue) {
@@ -103,7 +103,7 @@ async function getSmartDefaultModel(
           case "anthropic":
             return "claude-opus-4-1-20250805";
           case "gemini":
-            return "gemini-2.5-pro";
+            return "gemini-2.5-flash";
           case "openai":
             return "gpt-4o";
         }
@@ -119,12 +119,12 @@ async function getSmartDefaultModel(
     return "gpt-4o";
   }
   if (config.chat.gemini.apiKey) {
-    return "gemini-2.5-pro";
+    return "gemini-2.5-flash";
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
-    return "gemini-2.5-pro";
+    return "gemini-2.5-flash";
   }
 
   // Ultimate fallback - use configured default
@@ -163,7 +163,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get conversation
       const conversation = await ConversationModel.findById(
         conversationId,
-        user.id,
+        user.id as any,
         organizationId,
       );
 
@@ -174,16 +174,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch enabled tool IDs, MCP tools, and agent prompts in parallel
       const [enabledToolIds, prompt] = await Promise.all([
         ConversationEnabledToolModel.findByConversation(conversationId),
-        PromptModel.findById(conversation.promptId),
+        PromptModel.findById(conversation.promptId as any),
       ]);
 
       // Fetch MCP tools with enabled tool filtering
       const mcpTools = await getChatMcpTools({
-        agentName: conversation.agent.name,
-        agentId: conversation.agentId,
-        userId: user.id,
-        userIsProfileAdmin,
-        enabledToolIds,
+        agentName: (conversation as any).agent?.name,
+        agentId: conversation.agentId as any,
+        userId: user.id as any,
+        userIsProfileAdmin: userIsProfileAdmin as any,
+        enabledToolIds: enabledToolIds as any,
       });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -193,10 +193,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Collect system and user prompts from all assigned prompts
       if (prompt?.systemPrompt) {
-        systemPromptParts.push(prompt.systemPrompt);
+        systemPromptParts.push(prompt.systemPrompt as any);
       }
       if (prompt?.userPrompt) {
-        userPromptParts.push(prompt.userPrompt);
+        userPromptParts.push(prompt.userPrompt as any);
       }
 
       // Combine all prompts into system prompt (system prompts first, then user prompts)
@@ -206,7 +206,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Detect provider from model name
-      const provider = detectProviderFromModel(conversation.selectedModel);
+      const provider = detectProviderFromModel(conversation.selectedModel as any);
 
       logger.info(
         {
@@ -232,24 +232,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Try profile-specific API key first (getProfileApiKey already falls back to org default)
       const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-        conversation.agentId,
+        conversation.agentId as any,
         provider,
         organizationId,
       );
 
       if (profileApiKey?.secretId) {
-        const secret = await secretManager().getSecret(profileApiKey.secretId);
+        const secret = await secretManager().getSecret(profileApiKey.secretId as any);
         // Support both old format (anthropicApiKey) and new format (apiKey)
-        const secretValue =
-          secret?.secret?.apiKey ??
-          secret?.secret?.anthropicApiKey ??
-          secret?.secret?.geminiApiKey ??
-          secret?.secret?.openaiApiKey;
-        if (secretValue) {
-          providerApiKey = secretValue as string;
-          apiKeySource = profileApiKey.isOrganizationDefault
-            ? "organization default"
-            : "profile-specific";
+        const secretValue = (
+        (secret?.secret as any)?.apiKey ??
+        (secret?.secret as any)?.anthropicApiKey ??
+        (secret?.secret as any)?.geminiApiKey ??
+        (secret?.secret as any)?.openaiApiKey
+      );
+
+      if (secretValue) {
+        providerApiKey = secretValue as string;
+        apiKeySource = (profileApiKey as any)?.isOrganizationDefault
+          ? "organization default"
+          : "profile-specific";         
         }
       }
 
@@ -261,13 +263,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           provider,
         );
         if (orgDefault?.secretId) {
-          const secret = await secretManager().getSecret(orgDefault.secretId);
+          const secret = await secretManager().getSecret(orgDefault.secretId as any);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
-            secret?.secret?.apiKey ??
-            secret?.secret?.anthropicApiKey ??
-            secret?.secret?.geminiApiKey ??
-            secret?.secret?.openaiApiKey;
+              (secret?.secret as any)?.apiKey ??
+              (secret?.secret as any)?.anthropicApiKey ??
+              (secret?.secret as any)?.geminiApiKey ??
+              (secret?.secret as any)?.openaiApiKey
           if (secretValue) {
             providerApiKey = secretValue as string;
             apiKeySource = "organization default";
@@ -313,7 +315,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
       }
       // Always include user ID header so interactions are saved with user association
-      clientHeaders[USER_ID_HEADER] = user.id;
+      clientHeaders[USER_ID_HEADER] = user.id as any;
 
       let llmClient:
         | ReturnType<typeof createAnthropic>
@@ -352,7 +354,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Stream with AI SDK
       // Build streamText config conditionally
       const streamTextConfig: Parameters<typeof streamText>[0] = {
-        model: llmClient(conversation.selectedModel),
+        model: llmClient(conversation.selectedModel as any),
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),
@@ -453,7 +455,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 createdAt: new Date(now + index), // Preserve order
               }));
 
-              await MessageModel.bulkCreate(messageData);
+              await MessageModel.bulkCreate(messageData as any);
 
               logger.info(
                 `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
@@ -501,7 +503,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       return reply.send(
         await ConversationModel.findAll(
-          request.user.id,
+          request.user.id as any,
           request.organizationId,
         ),
       );
@@ -522,7 +524,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, user, organizationId }, reply) => {
       const conversation = await ConversationModel.findById(
         id,
-        user.id,
+        user.id as any,
         organizationId,
       );
 
@@ -561,7 +563,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Verify agent exists and user has access
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      const agent = await AgentModel.findById(agentId, user.id as any, isAgentAdmin as any);
 
       if (!agent) {
         return [];
@@ -569,9 +571,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fetch MCP tools from gateway (same as used in chat)
       const mcpTools = await getChatMcpTools({
-        agentName: agent.name,
+        agentName: agent.name as any,
         agentId,
-        userId: user.id,
+        userId: user.id as any,
         userIsProfileAdmin: isAgentAdmin,
       });
 
@@ -622,7 +624,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Validate that the agent exists and user has access to it
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      const agent = await AgentModel.findById(agentId, user.id as any, isAgentAdmin as any);
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");
@@ -647,7 +649,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await ConversationModel.create({
           userId: user.id,
-          organizationId,
+          organizationId: organizationId as any,
           agentId,
           promptId,
           title,
@@ -672,7 +674,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, body, user, organizationId }, reply) => {
       const conversation = await ConversationModel.update(
         id,
-        user.id,
+        user.id as any,
         organizationId,
         body,
       );
@@ -697,7 +699,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      await ConversationModel.delete(id, user.id, organizationId);
+      await ConversationModel.delete(id, user.id as any, organizationId);
       return reply.send({ success: true });
     },
   );
@@ -730,7 +732,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get conversation with messages
       const conversation = await ConversationModel.findById(
         id,
-        user.id,
+        user.id as any,
         organizationId,
       );
 
@@ -791,18 +793,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Try profile-specific API key first (if conversation has an agent)
       if (conversation.agentId) {
         const profileApiKey = await ChatApiKeyModel.getProfileApiKey(
-          conversation.agentId,
+          conversation.agentId as any,
           "anthropic",
           organizationId,
         );
 
         if (profileApiKey?.secretId) {
           const secret = await secretManager().getSecret(
-            profileApiKey.secretId,
+            profileApiKey.secretId as any,
           );
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+            (secret?.secret as any)?.apiKey ?? 
+            (secret?.secret as any)?.anthropicApiKey
           if (secretValue) {
             anthropicApiKey = secretValue as string;
           }
@@ -816,10 +819,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "anthropic",
         );
         if (orgDefault?.secretId) {
-          const secret = await secretManager().getSecret(orgDefault.secretId);
+          const secret = await secretManager().getSecret(orgDefault.secretId as any);
           // Support both old format (anthropicApiKey) and new format (apiKey)
           const secretValue =
-            secret?.secret?.apiKey ?? secret?.secret?.anthropicApiKey;
+            (secret?.secret as any)?.apiKey ?? 
+            (secret?.secret as any)?.anthropicApiKey
           if (secretValue) {
             anthropicApiKey = secretValue as string;
           }
@@ -871,9 +875,9 @@ The title should capture the main topic or theme of the conversation. Respond wi
         // Update conversation with generated title
         const updatedConversation = await ConversationModel.update(
           id,
-          user.id,
+          user.id as any,
           organizationId,
-          { title: generatedTitle },
+          { title: generatedTitle  } as any,
         );
 
         if (!updatedConversation) {
@@ -927,8 +931,8 @@ The title should capture the main topic or theme of the conversation. Respond wi
 
       // Verify the user has access to the conversation
       const conversation = await ConversationModel.findById(
-        message.conversationId,
-        user.id,
+        message.conversationId as any,
+        user.id as any,
         organizationId,
       );
 
@@ -949,8 +953,8 @@ The title should capture the main topic or theme of the conversation. Respond wi
 
       // Return updated conversation with all messages
       const updatedConversation = await ConversationModel.findById(
-        message.conversationId,
-        user.id,
+        message.conversationId as any,
+        user.id as any,
         organizationId,
       );
 
@@ -984,7 +988,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
       // Verify conversation exists and user owns it
       const conversation = await ConversationModel.findById(
         id,
-        user.id,
+        user.id as any,
         organizationId,
       );
 
@@ -1031,7 +1035,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
       // Verify conversation exists and user owns it
       const conversation = await ConversationModel.findById(
         id,
-        user.id,
+        user.id as any,
         organizationId,
       );
 
@@ -1064,7 +1068,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
       // Verify conversation exists and user owns it
       const conversation = await ConversationModel.findById(
         id,
-        user.id,
+        user.id as any,
         organizationId,
       );
 

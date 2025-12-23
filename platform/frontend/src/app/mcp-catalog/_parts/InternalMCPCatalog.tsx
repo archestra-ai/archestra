@@ -490,7 +490,7 @@ export function InternalMCPCatalog({
             className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
           >
             <Cable className="mr-0.5 h-4 w-4" />
-            Connect to Joint MCP Gateway and Access Those Servers
+            Connect to the Unified MCP Gateway to access those servers
           </Button>
         </div>
         <div className="relative">

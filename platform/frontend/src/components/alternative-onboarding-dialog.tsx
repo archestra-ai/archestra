@@ -61,7 +61,7 @@ export function AlternativeOnboardingDialog({
     if (selectedOption === "chat") {
       window.location.href = "/chat";
     } else if (selectedOption === "proxy") {
-      window.location.href = "/settings";
+      window.location.href = "/connection";
     }
     handleFinishOnboarding();
   };
@@ -144,7 +144,7 @@ export function AlternativeOnboardingDialog({
 
                   <div>
                     <h3 className="font-semibold text-lg mb-2 group-hover:text-primary transition-colors">
-                      Use as a Proxy
+                      Secure your agent using LLM Gateway, or connect to the unified MCP Gateway
                     </h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       Route your existing AI agents through Archestra's secure

@@ -28,6 +28,7 @@ import { EditPolicyDialog } from "./edit-policy-dialog";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { PermissionButton } from '@/components/ui/permission-button';
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -581,7 +582,7 @@ function PolicyDeniedTool({
   policyDenied: PolicyDeniedResult;
   agentId?: string;
 }) {
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isSheetOpen, setIsModalOpen] = useState(false);
 
   // Parse the errorText to get the reason
   let reason = "Policy denied";
@@ -611,14 +612,15 @@ function PolicyDeniedTool({
               <X className="flex-none size-4 h-[1.43em] text-destructive" />
               <span className="text-destructive">Rejected: {reason}</span>
               {agentId && (
-                <Button
+                <PermissionButton
                   size="sm"
                   variant="secondary"
                   className="mt-[-0.45em]"
-                  onClick={() => setIsSheetOpen(true)}
+                  permissions={{ policy: ["update"] }}
+                  onClick={() => setIsModalOpen(true)}
                 >
                   Edit policy
-                </Button>
+                </PermissionButton>
               )}
             </div>
           </div>
@@ -627,7 +629,7 @@ function PolicyDeniedTool({
       {agentId && (
         <EditPolicyDialog
           open={isSheetOpen}
-          onOpenChange={setIsSheetOpen}
+          onOpenChange={setIsModalOpen}
           toolName={toolName}
           agentId={agentId}
         />

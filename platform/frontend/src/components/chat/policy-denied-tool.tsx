@@ -8,16 +8,15 @@ import {
   ToolHeader,
   ToolInput,
 } from "@/components/ai-elements/tool";
+import type { PolicyDeniedPart } from "@/components/chatbot-demo";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { EditPolicyDialog } from "./edit-policy-dialog";
 
+// Re-export for backward compatibility
+export type { PolicyDeniedPart as PolicyDeniedResult };
+
 type PolicyDeniedToolProps = {
-  policyDenied: {
-    type: string;
-    state: "output-denied";
-    input: Record<string, unknown>;
-    errorText: string;
-  };
+  policyDenied: PolicyDeniedPart;
 } & (
   | { editable: true; agentId: string }
   | { editable?: false; agentId?: never }

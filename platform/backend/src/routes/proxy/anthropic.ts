@@ -612,7 +612,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
               accumulatedToolCalls.map((toolCall) => ({
-                toolCallId: toolCall.id,
                 toolCallName: toolCall.name,
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
@@ -956,7 +955,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               toolCalls.map((toolCall) => ({
-                toolCallId: toolCall.id,
                 toolCallName: toolCall.name,
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),

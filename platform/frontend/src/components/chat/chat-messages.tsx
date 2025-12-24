@@ -1,7 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
+import { X } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Conversation,
@@ -22,13 +22,12 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { Button } from "@/components/ui/button";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { EditPolicyDialog } from "./edit-policy-dialog";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
-import { EditPolicyDialog } from "./edit-policy-dialog";
 import { InlineChatError } from "./inline-chat-error";
-import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -69,7 +68,6 @@ function isToolPart(part: any): part is {
 // PolicyDeniedResult structure from backend
 interface PolicyDeniedResult {
   type: string;
-  toolCallId: string;
   state: "output-denied";
   input: Record<string, unknown>;
   errorText: string;
@@ -391,10 +389,12 @@ export function ChatMessages({
                               key={`${message.id}-${i}`}
                               policyDenied={{
                                 type: part.type,
-                                toolCallId: part.toolCallId ?? "",
                                 state: "output-denied",
-                                input: (part.input as Record<string, unknown>) ?? {},
-                                errorText: (part as { errorText?: string }).errorText ?? "",
+                                input:
+                                  (part.input as Record<string, unknown>) ?? {},
+                                errorText:
+                                  (part as { errorText?: string }).errorText ??
+                                  "",
                               }}
                               agentId={agentId}
                             />

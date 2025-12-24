@@ -8,7 +8,6 @@ import { ToolInvocationPolicyModel } from "@/models";
  */
 export interface PolicyDeniedResult {
   type: string; // "tool-<toolName>"
-  toolCallId: string;
   state: "output-denied";
   input: Record<string, unknown>;
   errorText: string; // JSON string with method, args, reason
@@ -21,7 +20,7 @@ export interface PolicyDeniedResult {
  * If this method returns non-null it is because the tool call was blocked and we are returning a structured
  * denial result that can be rendered as a tool error in the UI.
  *
- * @param toolCalls - The tool calls to evaluate (including toolCallId)
+ * @param toolCalls - The tool calls to evaluate
  * @param agentId - The agent ID to evaluate policies for
  * @param contextIsTrusted - Whether the context is trusted
  * @param enabledToolNames - Optional set of tool names that are enabled in the request.
@@ -29,7 +28,6 @@ export interface PolicyDeniedResult {
  */
 export const evaluatePolicies = async (
   toolCalls: Array<{
-    toolCallId: string;
     toolCallName: string;
     toolCallArgs: string;
   }>,
@@ -72,8 +70,8 @@ export const evaluatePolicies = async (
 
   // If any tools were disabled, return structured denial for the first disabled tool
   if (disabledToolNames.length > 0) {
-    const disabledToolCall = toolCalls.find(
-      (tc) => disabledToolNames.includes(tc.toolCallName),
+    const disabledToolCall = toolCalls.find((tc) =>
+      disabledToolNames.includes(tc.toolCallName),
     );
     if (disabledToolCall) {
       let parsedInput: Record<string, unknown> = {};
@@ -84,7 +82,6 @@ export const evaluatePolicies = async (
       }
       return {
         type: `tool-${disabledToolCall.toolCallName}`,
-        toolCallId: disabledToolCall.toolCallId,
         state: "output-denied",
         input: parsedInput,
         errorText: JSON.stringify({
@@ -137,11 +134,6 @@ export const evaluatePolicies = async (
       (tc) => tc.toolCallName === toolCallName,
     );
     const toolInput = blockedToolCall?.toolInput || {};
-    // Find the original tool call to get the toolCallId
-    const originalToolCall = toolCalls.find(
-      (tc) => tc.toolCallName === toolCallName,
-    );
-    const toolCallId = originalToolCall?.toolCallId || "";
 
     logger.debug(
       { agentId, toolCallName, reason },
@@ -150,7 +142,6 @@ export const evaluatePolicies = async (
 
     return {
       type: `tool-${toolCallName}`,
-      toolCallId,
       state: "output-denied",
       input: toolInput,
       errorText: JSON.stringify({

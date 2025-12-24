@@ -526,8 +526,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (accumulatedFunctionCalls.length > 0) {
             const validToolCalls = accumulatedFunctionCalls
               .filter((tc) => tc.name)
-              .map((toolCall, index) => ({
-                toolCallId: `gemini-${index}-${toolCall.name}`,
+              .map((toolCall) => ({
                 toolCallName: toolCall.name,
                 toolCallArgs: JSON.stringify(toolCall.args || {}),
               }));
@@ -812,8 +811,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               (tc): tc is { name: string; args?: Record<string, unknown> } =>
                 Boolean(tc?.name),
             )
-            .map((toolCall, index) => ({
-              toolCallId: `gemini-${index}-${toolCall.name}`,
+            .map((toolCall) => ({
               toolCallName: toolCall.name,
               toolCallArgs: JSON.stringify(toolCall.args || {}),
             }));

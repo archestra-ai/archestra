@@ -558,13 +558,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               (assistantMessage.tool_calls || []).map((toolCall) => {
                 if (toolCall.type === "function") {
                   return {
-                    toolCallId: toolCall.id,
                     toolCallName: toolCall.function.name,
                     toolCallArgs: toolCall.function.arguments,
                   };
                 } else {
                   return {
-                    toolCallId: toolCall.id,
                     toolCallName: toolCall.custom.name,
                     toolCallArgs: toolCall.custom.input,
                   };
@@ -878,13 +876,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (assistantMessage.tool_calls || []).map((toolCall) => {
               if (toolCall.type === "function") {
                 return {
-                  toolCallId: toolCall.id,
                   toolCallName: toolCall.function.name,
                   toolCallArgs: toolCall.function.arguments,
                 };
               } else {
                 return {
-                  toolCallId: toolCall.id,
                   toolCallName: toolCall.custom.name,
                   toolCallArgs: toolCall.custom.input,
                 };

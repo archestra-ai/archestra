@@ -18,17 +18,9 @@ import {
 } from "react";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
 
-// Import DefaultChatTransport - ensure it's only used client-side
-// The "ai" package is browser-compatible, but we need to handle it carefully
-import type { DefaultChatTransport as DefaultChatTransportType } from "ai";
+// Dynamic import of DefaultChatTransport is done in useEffect to avoid Node.js module issues during bundling
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
-
-interface QueuedMessage {
-  id: string;
-  text: string;
-  files?: any[];
-}
 
 interface ChatSession {
   conversationId: string;
@@ -49,12 +41,6 @@ interface ChatSession {
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
-  queuedMessages: QueuedMessage[];
-  addQueuedMessage: (message: QueuedMessage) => void;
-  removeQueuedMessage: (id: string) => void;
-  clearQueuedMessages: () => void;
-  removeMessagesUpTo: (id: string) => void;
-  isManuallySendingRef: React.MutableRefObject<boolean>;
 }
 
 interface ChatContextValue {
@@ -205,35 +191,12 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
-  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
-  const isManuallySendingRef = useRef(false);
-  
-  const addQueuedMessage = useCallback((message: QueuedMessage) => {
-    setQueuedMessages((prev) => [...prev, message]);
-  }, []);
-  
-  const removeQueuedMessage = useCallback((id: string) => {
-    setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
-  }, []);
-  
-  const clearQueuedMessages = useCallback(() => {
-    setQueuedMessages([]);
-  }, []);
-  
-  const removeMessagesUpTo = useCallback((id: string) => {
-    setQueuedMessages((prev) => {
-      const messageIndex = prev.findIndex((msg) => msg.id === id);
-      if (messageIndex === -1) return prev;
-      // Remove all messages up to and including the specified one
-      return prev.slice(messageIndex + 1);
-    });
-  }, []);
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   
   // Lazy load transport to avoid Node.js module issues during bundling
-  const [transport, setTransport] = useState<InstanceType<DefaultChatTransportType> | null>(null);
+  const [transport, setTransport] = useState<any>(null);
   
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -288,30 +251,7 @@ function ChatSessionHook({
     },
   } as Parameters<typeof useChat>[0]);
 
-  // Auto-send queued message when stream finishes
-  useEffect(() => {
-    // Skip auto-send if we're manually sending a message
-    if (isManuallySendingRef.current) {
-      return;
-    }
-    
-    // When status changes from streaming/submitted to ready, and there's a queued message
-    if (
-      status === "ready" &&
-      queuedMessages.length > 0 &&
-      sendMessage
-    ) {
-      // Get the first message in the queue (FIFO)
-      const queued = queuedMessages[0];
-      // Remove it from the queue
-      setQueuedMessages((prev) => prev.slice(1));
-      // Send the queued message automatically
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: queued.text }],
-      });
-    }
-  }, [status, queuedMessages, sendMessage]);
+
 
   // Auto-generate title after first assistant response
   useEffect(() => {
@@ -360,12 +300,6 @@ function ChatSessionHook({
       lastAccessTime: Date.now(),
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
-      queuedMessages,
-      addQueuedMessage,
-      removeQueuedMessage,
-      clearQueuedMessages,
-      removeMessagesUpTo,
-      isManuallySendingRef,
     };
 
     sessionsRef.current.set(conversationId, session);
@@ -383,16 +317,10 @@ function ChatSessionHook({
     addToolResult,
     pendingCustomServerToolCall,
     setPendingCustomServerToolCall,
-      queuedMessages,
-      addQueuedMessage,
-      removeQueuedMessage,
-      clearQueuedMessages,
-      removeMessagesUpTo,
-      isManuallySendingRef,
-      sessionsRef,
-      scheduleCleanup,
-      notifySessionUpdate,
-    ]);
+    sessionsRef,
+    scheduleCleanup,
+    notifySessionUpdate,
+  ]);
 
   return null;
 }

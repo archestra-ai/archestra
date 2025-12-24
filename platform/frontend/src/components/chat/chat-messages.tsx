@@ -613,7 +613,7 @@ function PolicyDeniedTool({
               {agentId && (
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   className="mt-[-0.45em]"
                   onClick={() => setIsSheetOpen(true)}
                 >

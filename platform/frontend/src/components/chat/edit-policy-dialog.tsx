@@ -34,7 +34,7 @@ export function EditPolicyDialog({
     },
   });
 
-  const agentTool = data?.data?.[0];
+  const agentTool = data?.data?.find((tool) => tool.name === toolName);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

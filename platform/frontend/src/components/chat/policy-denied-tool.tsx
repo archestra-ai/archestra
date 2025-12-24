@@ -41,8 +41,7 @@ export function PolicyDeniedTool({
     // Use default reason
   }
 
-  const hasInput =
-    policyDenied.input && Object.keys(policyDenied.input).length > 0;
+  const hasInput = Object.keys(policyDenied.input ?? {}).length > 0;
   const toolName = policyDenied.type.replace("tool-", "");
 
   return (

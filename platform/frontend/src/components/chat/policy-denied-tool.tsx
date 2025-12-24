@@ -11,15 +11,13 @@ import {
 import { PermissionButton } from "@/components/ui/permission-button";
 import { EditPolicyDialog } from "./edit-policy-dialog";
 
-export interface PolicyDeniedResult {
-  type: string;
-  state: "output-denied";
-  input: Record<string, unknown>;
-  errorText: string;
-}
-
 type PolicyDeniedToolProps = {
-  policyDenied: PolicyDeniedResult;
+  policyDenied: {
+    type: string;
+    state: "output-denied";
+    input: Record<string, unknown>;
+    errorText: string;
+  };
 } & (
   | { editable: true; agentId: string }
   | { editable?: false; agentId?: never }

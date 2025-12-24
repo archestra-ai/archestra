@@ -53,11 +53,14 @@ async function handleMcpPostRequest(
     typeof (parsedBody as Record<string, unknown>)?.method === "string" &&
     (parsedBody as Record<string, unknown>).method === "initialize";
 
-  fastify.log.info(
+    fastify.log.info(
     {
       profileId,
       sessionId,
-      method: body?.method,
+      method:
+        parsedBody && typeof parsedBody === "object"
+          ? (parsedBody as Record<string, unknown>)?.method
+          : undefined,
       isInitialize,
       hasTokenAuth: !!tokenAuthContext,
     },
@@ -154,7 +157,14 @@ async function handleMcpPostRequest(
       );
     } else if (!server || !transport) {
       fastify.log.error(
-        { profileId, sessionId, method: body?.method },
+        {
+          profileId,
+          sessionId,
+          method:
+            parsedBody && typeof parsedBody === "object"
+              ? (parsedBody as Record<string, unknown>)?.method
+              : undefined,
+        },
         "Request received without valid session",
       );
       reply.status(400);
@@ -179,7 +189,7 @@ async function handleMcpPostRequest(
     await transport.handleRequest(
       request.raw as IncomingMessage,
       reply.raw as ServerResponse,
-      body,
+      parsedBody,
     );
 
     fastify.log.info(

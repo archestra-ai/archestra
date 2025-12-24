@@ -61,7 +61,21 @@ Each MCP server runs as a dedicated pod in your Kubernetes cluster:
 
 For production deployments, please refer to the [Deployment Guide](/docs/platform-deployment). The MCP Orchestrator works seamlessly when Archestra is deployed within your Kubernetes cluster.
 
-### Local Development with Docker and Kubernetes
+### Quickstart with Kubernetes in Docker
+
+Run the platform with an embedded KinD cluster:
+
+```bash
+docker pull archestra/platform:latest;
+docker run -p 9000:9000 -p 3000:3000 \
+   -e ARCHESTRA_QUICKSTART \
+   -v /var/run/docker.sock:/var/run/docker.sock \
+   -v archestra-postgres-data:/var/lib/postgresql/data \
+   -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+### Local Development with Docker and Standalone Kubernetes
 
 To use a local Kubernetes cluster (like Kind, Minikube, or K3d) for the Archestra Orchestrator, you need to make the cluster accessible from within the Docker container.
 

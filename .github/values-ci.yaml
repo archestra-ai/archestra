@@ -22,6 +22,8 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
+    # Disable better-auth rate limit for e2e tests
+    ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
     # Secrets manager configuration for BYOS tests
     ARCHESTRA_SECRETS_MANAGER: "Vault"
     # Vault configuration for BYOS tests

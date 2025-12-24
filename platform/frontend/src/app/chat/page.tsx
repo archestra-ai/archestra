@@ -27,7 +27,7 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
-import { QueuedMessage } from "@/components/chat/queued-message";
+
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
@@ -343,7 +343,6 @@ export default function ChatPage() {
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
-  // Also focus when queued messages change (to handle auto-sent messages)
   useEffect(() => {
     if (status === "ready") {
       // Use requestAnimationFrame for more reliable focusing
@@ -351,7 +350,7 @@ export default function ChatPage() {
         textareaRef.current?.focus();
       });
     }
-  }, [status, chatSession?.queuedMessages]);
+  }, [status]);
 
   // Sync messages when conversation loads or changes
   useEffect(() => {
@@ -414,23 +413,7 @@ export default function ChatPage() {
         return;
       }
 
-      // If a message is currently being generated, queue this message instead
-      if (status === "submitted" || status === "streaming") {
-        if (chatSession?.addQueuedMessage) {
-          chatSession.addQueuedMessage({
-            id: `queued-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            text: message.text,
-            files: message.files,
-          });
-        }
-        // Always focus after queuing so user can continue typing
-        requestAnimationFrame(() => {
-          textareaRef.current?.focus();
-        });
-        return;
-      }
-
-      // Otherwise, send immediately
+      // Send the message
       sendMessage({
         role: "user",
         parts: [{ type: "text", text: message.text }],
@@ -441,59 +424,7 @@ export default function ChatPage() {
         textareaRef.current?.focus();
       });
     },
-    [sendMessage, status, chatSession],
-  );
-
-  const handleDeleteQueued = useCallback(
-    (id: string) => {
-      if (chatSession?.removeQueuedMessage) {
-        chatSession.removeQueuedMessage(id);
-      }
-    },
-    [chatSession],
-  );
-
-  const handleSendNow = useCallback(
-    (id: string) => {
-      if (!chatSession?.queuedMessages || !sendMessage || !chatSession.removeMessagesUpTo) {
-        return;
-      }
-
-      // Find the message in the queue
-      const queued = chatSession.queuedMessages.find((msg) => msg.id === id);
-      if (!queued) {
-        return;
-      }
-
-      // Mark that we're manually sending to prevent auto-send from interfering
-      chatSession.isManuallySendingRef.current = true;
-
-      // Stop the current stream if one is running - this cancels the ongoing response immediately
-      if (status === "streaming" || status === "submitted") {
-        stop?.();
-      }
-
-      // Remove all messages up to and including the selected one from the queue
-      // This keeps only messages that come after the selected one
-      chatSession.removeMessagesUpTo(id);
-
-      // Send the selected message immediately
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: queued.text }],
-      });
-
-      // Reset the manual send flag after a delay to allow the send to complete
-      setTimeout(() => {
-        chatSession.isManuallySendingRef.current = false;
-      }, 500);
-
-      // Auto-focus the textarea after sending
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
-    },
-    [chatSession, sendMessage, status, stop],
+    [sendMessage],
   );
 
   // If API key is not configured, show setup message
@@ -737,19 +668,7 @@ export default function ChatPage() {
                   }}
                 </WithPermissions>
               )}
-              {chatSession?.queuedMessages && chatSession.queuedMessages.length > 0 && (
-                <div className="space-y-2">
-                  {chatSession.queuedMessages.map((queuedMsg, index) => (
-                    <QueuedMessage
-                      key={queuedMsg.id}
-                      message={queuedMsg.text}
-                      position={index}
-                      onDelete={() => handleDeleteQueued(queuedMsg.id)}
-                      onSendNow={() => handleSendNow(queuedMsg.id)}
-                    />
-                  ))}
-                </div>
-              )}
+
               <PromptInput onSubmit={handleSubmit} status={status === "error" ? "ready" : status}>
                 <PromptInputBody>
                   <PromptInputTextarea
@@ -788,3 +707,4 @@ export default function ChatPage() {
     </div>
   );
 }
+

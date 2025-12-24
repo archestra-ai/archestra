@@ -34,10 +34,24 @@ async function handleMcpPostRequest(
   profileId: string,
   tokenAuthContext: TokenAuthContext | undefined,
 ): Promise<unknown> {
-  const body = request.body as Record<string, unknown>;
+  // Fastify may not always parse the incoming body (e.g., unknown content-type)
+  // so accept Buffer/string fallbacks and try to JSON-parse them to detect
+  // initialize requests. The transport will still handle the raw stream later.
+  let parsedBody = request.body as Record<string, unknown> | string | Buffer | undefined;
   const sessionId = request.headers["mcp-session-id"] as string | undefined;
+
+  if (typeof parsedBody === "string" || Buffer.isBuffer(parsedBody)) {
+    try {
+      parsedBody = JSON.parse(parsedBody.toString());
+    } catch {
+      // ignore parse errors; leave parsedBody as-is so we don't throw
+    }
+  }
+
   const isInitialize =
-    typeof body?.method === "string" && body.method === "initialize";
+    typeof parsedBody === "object" && parsedBody !== null &&
+    typeof (parsedBody as Record<string, unknown>)?.method === "string" &&
+    (parsedBody as Record<string, unknown>).method === "initialize";
 
   fastify.log.info(
     {

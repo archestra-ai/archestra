@@ -25,12 +25,14 @@ import {
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
+import { EditPolicyDialog } from "./edit-policy-dialog";
 import { InlineChatError } from "./inline-chat-error";
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
+  agentId?: string;
   messages: UIMessage[];
   hideToolCalls?: boolean;
   status: ChatStatus;
@@ -94,6 +96,7 @@ function tryParsePolicyDenied(text: string): PolicyDeniedResult | null {
 
 export function ChatMessages({
   conversationId,
+  agentId,
   messages,
   hideToolCalls = false,
   status,
@@ -261,6 +264,7 @@ export function ChatMessages({
                           <PolicyDeniedTool
                             key={partKey}
                             policyDenied={policyDenied}
+                            agentId={agentId}
                           />
                         );
                       }
@@ -380,8 +384,8 @@ export function ChatMessages({
                     default: {
                       // Handle tool invocations (type is "tool-{toolName}")
                       if (isToolPart(part) && part.type?.startsWith("tool-")) {
-                        // Handle policy denied tool parts
-                        if (part.state === "output-denied") {
+                        // Handle policy denied tool parts (cast to string since output-denied is custom)
+                        if ((part.state as string) === "output-denied") {
                           return (
                             <PolicyDeniedTool
                               key={`${message.id}-${i}`}
@@ -392,6 +396,7 @@ export function ChatMessages({
                                 input: (part.input as Record<string, unknown>) ?? {},
                                 errorText: (part as { errorText?: string }).errorText ?? "",
                               }}
+                              agentId={agentId}
                             />
                           );
                         }
@@ -571,9 +576,13 @@ const getHeaderState = ({
 
 function PolicyDeniedTool({
   policyDenied,
+  agentId,
 }: {
   policyDenied: PolicyDeniedResult;
+  agentId?: string;
 }) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
   // Parse the errorText to get the reason
   let reason = "Policy denied";
   try {
@@ -588,24 +597,41 @@ function PolicyDeniedTool({
   const toolName = policyDenied.type.replace("tool-", "");
 
   return (
-    <Tool defaultOpen={true}>
-      <ToolHeader
-        type={policyDenied.type as `tool-${string}`}
-        state="output-denied"
-        isCollapsible={true}
-      />
-      <ToolContent>
-        {hasInput ? <ToolInput input={policyDenied.input} /> : null}
-        <div className="p-4 pt-0">
-          <div className="flex items-start gap-2 text-sm">
-            <X className="size-4 text-destructive h-[1.43em]" />
-            <span className="text-destructive">Rejected: {reason}</span>
-            <Link href={`/tools?page=1&search=${encodeURIComponent(toolName)}`}>
-              Edit policy
-            </Link>
+    <>
+      <Tool defaultOpen={true}>
+        <ToolHeader
+          type={policyDenied.type as `tool-${string}`}
+          state="output-denied"
+          isCollapsible={true}
+        />
+        <ToolContent>
+          {hasInput ? <ToolInput input={policyDenied.input} /> : null}
+          <div className="p-4 pt-0">
+            <div className="flex items-start gap-2 text-sm">
+              <X className="flex-none size-4 h-[1.43em] text-destructive" />
+              <span className="text-destructive">Rejected: {reason}</span>
+              {agentId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-[-0.45em]"
+                  onClick={() => setIsSheetOpen(true)}
+                >
+                  Edit policy
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      </ToolContent>
-    </Tool>
+        </ToolContent>
+      </Tool>
+      {agentId && (
+        <EditPolicyDialog
+          open={isSheetOpen}
+          onOpenChange={setIsSheetOpen}
+          toolName={toolName}
+          agentId={agentId}
+        />
+      )}
+    </>
   );
 }

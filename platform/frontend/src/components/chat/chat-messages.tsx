@@ -25,7 +25,10 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
-import { PolicyDeniedTool, type PolicyDeniedResult } from "./policy-denied-tool";
+import {
+  type PolicyDeniedResult,
+  PolicyDeniedTool,
+} from "./policy-denied-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -546,4 +549,3 @@ const getHeaderState = ({
   if (toolResultPart) return "output-available";
   return state;
 };
-

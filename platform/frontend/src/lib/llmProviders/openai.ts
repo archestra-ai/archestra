@@ -4,8 +4,8 @@ import {
   type DualLlmResult,
   type Interaction,
   type InteractionUtils,
-  parseRefusalMessage,
   parsePolicyDenied,
+  parseRefusalMessage,
 } from "./common";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {

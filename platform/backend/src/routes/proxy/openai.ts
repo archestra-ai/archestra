@@ -581,16 +581,23 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             if (toolInvocationRefusal) {
               const contentMessage = JSON.stringify(toolInvocationRefusal);
+              const refusalMessage =
+                utils.toolInvocation.buildRefusalMessage(toolInvocationRefusal);
               /**
                * Tool invocation was blocked
                *
                * Overwrite the assistant message that will be persisted
                * and stream the refusal message
+               *
+               * NOTE: We store the refusal message in both the refusal and content fields
+               * because most external clients expect to see the content field and don't
+               * conditionally render the refusal field. The Archestra UI can parse the
+               * structured JSON from content, but external clients need readable text.
                */
               assistantMessage = {
                 role: "assistant",
                 content: contentMessage,
-                refusal: null,
+                refusal: refusalMessage,
               };
 
               // Stream the refusal as a single chunk
@@ -893,6 +900,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (toolInvocationRefusal) {
           const contentMessage = JSON.stringify(toolInvocationRefusal);
+          const refusalMessage =
+            utils.toolInvocation.buildRefusalMessage(toolInvocationRefusal);
           logger.debug(
             { toolCallCount: assistantMessage.tool_calls?.length || 0 },
             "[OpenAIProxy] Tool invocation blocked by policy",
@@ -904,7 +913,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           assistantMessage = {
             role: "assistant",
             content: contentMessage,
-            refusal: null,
+            refusal: refusalMessage,
           };
           response.choices = [
             {

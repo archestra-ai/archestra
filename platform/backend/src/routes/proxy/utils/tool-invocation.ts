@@ -14,6 +14,37 @@ export interface PolicyDeniedResult {
 }
 
 /**
+ * Build a human-readable refusal message from a PolicyDeniedResult.
+ *
+ * NOTE: We need this human-readable message because most external clients expect
+ * to see the content field and don't conditionally render the refusal field.
+ * The Archestra UI can parse the structured JSON, but external clients need readable text.
+ */
+export const buildRefusalMessage = (result: PolicyDeniedResult): string => {
+  const toolName = result.type.replace("tool-", "");
+  let reason = "Policy denied";
+  try {
+    const errorDetails = JSON.parse(result.errorText);
+    reason = errorDetails.reason || reason;
+  } catch {
+    // Use default reason
+  }
+
+  const archestraMetadata = `<archestra-tool-name>${toolName}</archestra-tool-name>
+<archestra-tool-arguments>${JSON.stringify(result.input)}</archestra-tool-arguments>
+<archestra-tool-reason>${reason}</archestra-tool-reason>`;
+
+  const contentMessage = `I tried to invoke the ${toolName} tool with the following arguments: ${JSON.stringify(result.input)}.
+
+However, I was denied by a tool invocation policy:
+
+${reason}`;
+
+  return `${archestraMetadata}
+${contentMessage}`;
+};
+
+/**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,
  * if the tool call is allowed or blocked.
  *

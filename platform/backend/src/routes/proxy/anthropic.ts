@@ -631,7 +631,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const contentMessage = JSON.stringify(toolInvocationRefusal);
             responseContent = [
               {
-                type: "text" as const,
+                type: "text",
                 text: contentMessage,
                 citations: null,
               },

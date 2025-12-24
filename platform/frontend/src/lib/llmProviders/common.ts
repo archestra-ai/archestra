@@ -1,5 +1,8 @@
 import type { archestraApiTypes } from "@shared";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+import type {
+  PartialUIMessage,
+  PolicyDeniedPart,
+} from "@/components/chatbot-demo";
 
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
@@ -61,4 +64,22 @@ export function parseRefusalMessage(refusal: string): RefusalInfo {
     toolArguments: toolArgsMatch?.[1],
     reason: toolReasonMatch?.[1] || "Blocked by policy",
   };
+}
+
+export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      parsed.state === "output-denied" &&
+      typeof parsed.type === "string" &&
+      parsed.type.startsWith("tool-")
+    ) {
+      return parsed as PolicyDeniedPart;
+    }
+  } catch {
+    // Not JSON or not a PolicyDeniedResult
+  }
+  return null;
 }

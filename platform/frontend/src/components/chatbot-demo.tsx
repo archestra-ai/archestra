@@ -38,6 +38,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PolicyDeniedTool } from "./chat/policy-denied-tool";
 import Divider from "./divider";
 
 const ChatBotDemo = ({
@@ -345,6 +346,16 @@ const ChatBotDemo = ({
                           );
                         }
 
+                        // Handle policy denied tool (new structured format)
+                        if (_isPolicyDeniedPart(part)) {
+                          return (
+                            <PolicyDeniedTool
+                              key={`${message.id}-${i}`}
+                              policyDenied={part as PolicyDeniedPart}
+                            />
+                          );
+                        }
+
                         // Handle custom dual-llm-analysis type (standalone, not following a tool)
                         if (_isDualLlmPart(part)) {
                           const dualLlmPart = part as DualLlmPart;
@@ -410,6 +421,13 @@ export type BlockedToolPart = {
   fullRefusal?: string;
 };
 
+export type PolicyDeniedPart = {
+  type: string; // "tool-<toolName>"
+  state: "output-denied";
+  input: Record<string, unknown>;
+  errorText: string;
+};
+
 export type DualLlmPart = {
   type: "dual-llm-analysis";
   toolCallId: string;
@@ -422,7 +440,12 @@ export type DualLlmPart = {
 
 export type PartialUIMessage = Partial<UIMessage> & {
   role: UIMessage["role"];
-  parts: (UIMessage["parts"][number] | BlockedToolPart | DualLlmPart)[];
+  parts: (
+    | UIMessage["parts"][number]
+    | BlockedToolPart
+    | DualLlmPart
+    | PolicyDeniedPart
+  )[];
   metadata?: {
     trusted?: boolean;
     blocked?: boolean;
@@ -446,6 +469,17 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
     part !== null &&
     "type" in part &&
     (part as { type: string }).type === "blocked-tool"
+  );
+}
+
+function _isPolicyDeniedPart(part: unknown): part is PolicyDeniedPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    "state" in part &&
+    (part as { state: string }).state === "output-denied" &&
+    (part as { type: string }).type.startsWith("tool-")
   );
 }
 

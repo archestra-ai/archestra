@@ -1,6 +1,11 @@
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
+import {
+  type DualLlmResult,
+  type Interaction,
+  type InteractionUtils,
+  parsePolicyDenied,
+} from "./common";
 
 class AnthropicMessagesInteraction implements InteractionUtils {
   private request: archestraApiTypes.AnthropicMessagesRequest;
@@ -157,7 +162,13 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     // Process content blocks
     for (const block of content) {
       if (block.type === "text" && "text" in block) {
-        parts.push({ type: "text", text: block.text });
+        // Check if text is a PolicyDeniedResult JSON
+        const policyDenied = parsePolicyDenied(block.text);
+        if (policyDenied) {
+          parts.push(policyDenied);
+        } else {
+          parts.push({ type: "text", text: block.text });
+        }
       } else if (
         block.type === "tool_use" &&
         "name" in block &&

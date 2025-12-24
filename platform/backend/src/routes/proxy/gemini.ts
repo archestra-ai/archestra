@@ -454,7 +454,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let tokenUsage: { input?: number; output?: number } = {};
 
         // Variables for interaction recording (accessible in finally block)
-        let toolInvocationRefusal: [string, string] | null = null;
+        let toolInvocationRefusal: Awaited<
+          ReturnType<typeof utils.toolInvocation.evaluatePolicies>
+        > = null;
         let completeResponse: Gemini.Types.GenerateContentResponse | undefined;
 
         try {
@@ -524,7 +526,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (accumulatedFunctionCalls.length > 0) {
             const validToolCalls = accumulatedFunctionCalls
               .filter((tc) => tc.name)
-              .map((toolCall) => ({
+              .map((toolCall, index) => ({
+                toolCallId: `gemini-${index}-${toolCall.name}`,
                 toolCallName: toolCall.name,
                 toolCallArgs: JSON.stringify(toolCall.args || {}),
               }));
@@ -545,8 +548,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
             if (toolInvocationRefusal) {
-              const [_refusalMessage, contentMessage] = toolInvocationRefusal;
-
+              const contentMessage = JSON.stringify(toolInvocationRefusal);
               // Stream the refusal as a single chunk
               const refusalChunk: Gemini.Types.GenerateContentResponse = {
                 candidates: [
@@ -738,7 +740,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   candidates: [
                     {
                       content: {
-                        parts: [{ text: toolInvocationRefusal[1] }],
+                        parts: [
+                          { text: JSON.stringify(toolInvocationRefusal) },
+                        ],
                         role: "model",
                       },
                       finishReason: "STOP",
@@ -799,14 +803,17 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Evaluate tool invocation policies
-        let toolInvocationRefusal: [string, string] | null = null;
+        let toolInvocationRefusal: Awaited<
+          ReturnType<typeof utils.toolInvocation.evaluatePolicies>
+        > = null;
         if (toolCalls.length > 0) {
           const validToolCalls = toolCalls
             .filter(
               (tc): tc is { name: string; args?: Record<string, unknown> } =>
                 Boolean(tc?.name),
             )
-            .map((toolCall) => ({
+            .map((toolCall, index) => ({
+              toolCallId: `gemini-${index}-${toolCall.name}`,
               toolCallName: toolCall.name,
               toolCallArgs: JSON.stringify(toolCall.args || {}),
             }));
@@ -862,7 +869,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         if (toolInvocationRefusal) {
-          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+          const contentMessage = JSON.stringify(toolInvocationRefusal);
 
           logger.debug(
             { toolCallCount: toolCalls.length },

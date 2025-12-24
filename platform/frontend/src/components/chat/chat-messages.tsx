@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
+import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Conversation,
@@ -25,6 +26,8 @@ import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -59,6 +62,34 @@ function isToolPart(part: any): part is {
     "type" in part &&
     (part.type?.startsWith("tool-") || part.type === "dynamic-tool")
   );
+}
+
+// PolicyDeniedResult structure from backend
+interface PolicyDeniedResult {
+  type: string;
+  toolCallId: string;
+  state: "output-denied";
+  input: Record<string, unknown>;
+  errorText: string;
+}
+
+// Try to parse a text string as a PolicyDeniedResult JSON
+function tryParsePolicyDenied(text: string): PolicyDeniedResult | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      parsed.state === "output-denied" &&
+      typeof parsed.type === "string" &&
+      parsed.type.startsWith("tool-")
+    ) {
+      return parsed as PolicyDeniedResult;
+    }
+  } catch {
+    // Not JSON or not a PolicyDeniedResult
+  }
+  return null;
 }
 
 export function ChatMessages({
@@ -223,6 +254,17 @@ export function ChatMessages({
                     case "text": {
                       const partKey = `${message.id}-${i}`;
 
+                      // Check if text contains a PolicyDeniedResult JSON
+                      const policyDenied = tryParsePolicyDenied(part.text);
+                      if (policyDenied) {
+                        return (
+                          <PolicyDeniedTool
+                            key={partKey}
+                            policyDenied={policyDenied}
+                          />
+                        );
+                      }
+
                       // Use editable component for assistant messages
                       if (message.role === "assistant") {
                         // Only show actions if this is the last assistant message in sequence
@@ -338,6 +380,22 @@ export function ChatMessages({
                     default: {
                       // Handle tool invocations (type is "tool-{toolName}")
                       if (isToolPart(part) && part.type?.startsWith("tool-")) {
+                        // Handle policy denied tool parts
+                        if (part.state === "output-denied") {
+                          return (
+                            <PolicyDeniedTool
+                              key={`${message.id}-${i}`}
+                              policyDenied={{
+                                type: part.type,
+                                toolCallId: part.toolCallId ?? "",
+                                state: "output-denied",
+                                input: (part.input as Record<string, unknown>) ?? {},
+                                errorText: (part as { errorText?: string }).errorText ?? "",
+                              }}
+                            />
+                          );
+                        }
+
                         const toolName = part.type.replace("tool-", "");
 
                         // Look ahead for tool result (same tool call ID)
@@ -510,3 +568,44 @@ const getHeaderState = ({
   if (toolResultPart) return "output-available";
   return state;
 };
+
+function PolicyDeniedTool({
+  policyDenied,
+}: {
+  policyDenied: PolicyDeniedResult;
+}) {
+  // Parse the errorText to get the reason
+  let reason = "Policy denied";
+  try {
+    const errorDetails = JSON.parse(policyDenied.errorText);
+    reason = errorDetails.reason || reason;
+  } catch {
+    // Use default reason
+  }
+
+  const hasInput =
+    policyDenied.input && Object.keys(policyDenied.input).length > 0;
+  const toolName = policyDenied.type.replace("tool-", "");
+
+  return (
+    <Tool defaultOpen={true}>
+      <ToolHeader
+        type={policyDenied.type as `tool-${string}`}
+        state="output-denied"
+        isCollapsible={true}
+      />
+      <ToolContent>
+        {hasInput ? <ToolInput input={policyDenied.input} /> : null}
+        <div className="p-4 pt-0">
+          <div className="flex items-start gap-2 text-sm">
+            <X className="size-4 text-destructive h-[1.43em]" />
+            <span className="text-destructive">Rejected: {reason}</span>
+            <Link href={`/tools?page=1&search=${encodeURIComponent(toolName)}`}>
+              Edit policy
+            </Link>
+          </div>
+        </div>
+      </ToolContent>
+    </Tool>
+  );
+}

@@ -57,7 +57,7 @@ export const Tool = ({
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state: ToolUIPart["state"] | "output-available-dual-llm";
+  state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
   className?: string;
   icon?: React.ReactNode;
   errorText?: ToolUIPart["errorText"];
@@ -65,7 +65,7 @@ export type ToolHeaderProps = {
 };
 
 const getStatusBadge = (
-  status: ToolUIPart["state"] | "output-available-dual-llm",
+  status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
 ) => {
   const labels = {
     "input-streaming": "Pending",
@@ -73,6 +73,7 @@ const getStatusBadge = (
     "output-available": "Completed",
     "output-available-dual-llm": "Completed with dual LLM",
     "output-error": "Error",
+    "output-denied": "Denied",
   } as const;
 
   const icons = {
@@ -83,6 +84,7 @@ const getStatusBadge = (
       <CheckCircleIcon className="size-4 text-green-600" />
     ),
     "output-error": <XCircleIcon className="size-4 text-destructive" />,
+    "output-denied": <XCircleIcon className="size-4 text-orange-600" />,
   } as const;
 
   return (

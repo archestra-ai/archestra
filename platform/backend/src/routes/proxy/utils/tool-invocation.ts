@@ -3,24 +3,40 @@ import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
 
 /**
+ * Structured result when a tool invocation is denied by policy.
+ * This format matches the UI message part structure for tool errors.
+ */
+export interface PolicyDeniedResult {
+  type: string; // "tool-<toolName>"
+  toolCallId: string;
+  state: "output-denied";
+  input: Record<string, unknown>;
+  errorText: string; // JSON string with method, args, reason
+}
+
+/**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,
  * if the tool call is allowed or blocked.
  *
- * If this method returns non-null it is because the tool call was blocked and we are returning a refusal message
- * (in the format of an assistant message with a refusal)
+ * If this method returns non-null it is because the tool call was blocked and we are returning a structured
+ * denial result that can be rendered as a tool error in the UI.
  *
- * @param toolCalls - The tool calls to evaluate
+ * @param toolCalls - The tool calls to evaluate (including toolCallId)
  * @param agentId - The agent ID to evaluate policies for
  * @param contextIsTrusted - Whether the context is trusted
  * @param enabledToolNames - Optional set of tool names that are enabled in the request.
  *                          If provided, tool calls not in this set will be filtered and reported as disabled.
  */
 export const evaluatePolicies = async (
-  toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
+  toolCalls: Array<{
+    toolCallId: string;
+    toolCallName: string;
+    toolCallArgs: string;
+  }>,
   agentId: string,
   contextIsTrusted: boolean,
   enabledToolNames?: Set<string>,
-): Promise<null | [string, string]> => {
+): Promise<null | PolicyDeniedResult> => {
   logger.debug(
     { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
     "[toolInvocation] evaluatePolicies: starting evaluation",
@@ -54,11 +70,30 @@ export const evaluatePolicies = async (
     }
   }
 
-  // If any tools were disabled, return distinct message about them
+  // If any tools were disabled, return structured denial for the first disabled tool
   if (disabledToolNames.length > 0) {
-    const toolList = disabledToolNames.join(", ");
-    const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
-    return [message, message];
+    const disabledToolCall = toolCalls.find(
+      (tc) => disabledToolNames.includes(tc.toolCallName),
+    );
+    if (disabledToolCall) {
+      let parsedInput: Record<string, unknown> = {};
+      try {
+        parsedInput = JSON.parse(disabledToolCall.toolCallArgs);
+      } catch {
+        // Keep empty object if parsing fails
+      }
+      return {
+        type: `tool-${disabledToolCall.toolCallName}`,
+        toolCallId: disabledToolCall.toolCallId,
+        state: "output-denied",
+        input: parsedInput,
+        errorText: JSON.stringify({
+          method: disabledToolCall.toolCallName,
+          args: parsedInput,
+          reason: "Tool is not enabled for this conversation",
+        }),
+      };
+    }
   }
 
   // If all tools were filtered out, nothing to evaluate
@@ -98,48 +133,32 @@ export const evaluatePolicies = async (
   );
 
   if (!isAllowed && toolCallName) {
-    const toolInput = parsedToolCalls.find(
+    const blockedToolCall = parsedToolCalls.find(
       (tc) => tc.toolCallName === toolCallName,
-    )?.toolInput;
-
-    const archestraMetadata = `
-<archestra-tool-name>${toolCallName}</archestra-tool-name>
-<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>
-<archestra-tool-reason>${reason}</archestra-tool-reason>`;
-
-    const contentMessage = `
-I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
-
-However, I was denied by a tool invocation policy:
-
-${reason}`;
-
-    const refusalMessage = `${archestraMetadata}
-${contentMessage}`;
+    );
+    const toolInput = blockedToolCall?.toolInput || {};
+    // Find the original tool call to get the toolCallId
+    const originalToolCall = toolCalls.find(
+      (tc) => tc.toolCallName === toolCallName,
+    );
+    const toolCallId = originalToolCall?.toolCallId || "";
 
     logger.debug(
       { agentId, toolCallName, reason },
       "[toolInvocation] evaluatePolicies: tool invocation blocked",
     );
-    // TODO: return string or null, not provider specific message type
-    // return {
-    //   finish_reason: "stop",
-    //   index: 0,
-    //   logprobs: null,
-    //   message: {
-    //     role: "assistant",
-    //     /**
-    //      * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-    //      * is that most clients expect to see the content field, and don't conditionally render the refusal field
-    //      *
-    //      * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-    //      * message, but also show some special UI to indicate that the tool call was blocked.
-    //      */
-    //     refusal: refusalMessage,
-    //     content: contentMessage,
-    //   },
-    // };
-    return [refusalMessage, contentMessage];
+
+    return {
+      type: `tool-${toolCallName}`,
+      toolCallId,
+      state: "output-denied",
+      input: toolInput,
+      errorText: JSON.stringify({
+        method: toolCallName,
+        args: toolInput,
+        reason,
+      }),
+    };
   }
 
   logger.debug(

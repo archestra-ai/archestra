@@ -599,7 +599,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Evaluate tool invocation policies dynamically
-          let toolInvocationRefusal: [string, string] | null = null;
+          let toolInvocationRefusal: Awaited<
+            ReturnType<typeof utils.toolInvocation.evaluatePolicies>
+          > = null;
           if (accumulatedToolCalls.length > 0) {
             fastify.log.info(
               {
@@ -610,6 +612,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
               accumulatedToolCalls.map((toolCall) => ({
+                toolCallId: toolCall.id,
                 toolCallName: toolCall.name,
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
@@ -626,10 +629,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Build the final response for persistence
 
           if (toolInvocationRefusal) {
-            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+            const contentMessage = JSON.stringify(toolInvocationRefusal);
             responseContent = [
               {
-                type: "text",
+                type: "text" as const,
                 text: contentMessage,
                 citations: null,
               },
@@ -953,6 +956,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               toolCalls.map((toolCall) => ({
+                toolCallId: toolCall.id,
                 toolCallName: toolCall.name,
                 toolCallArgs: JSON.stringify(toolCall.input),
               })),
@@ -962,7 +966,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
           if (toolInvocationRefusal) {
-            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+            const contentMessage = JSON.stringify(toolInvocationRefusal);
             logger.debug(
               { toolCallCount: toolCalls.length },
               "[AnthropicProxy] Tool invocation blocked by policy",

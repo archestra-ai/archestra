@@ -558,11 +558,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               (assistantMessage.tool_calls || []).map((toolCall) => {
                 if (toolCall.type === "function") {
                   return {
+                    toolCallId: toolCall.id,
                     toolCallName: toolCall.function.name,
                     toolCallArgs: toolCall.function.arguments,
                   };
                 } else {
                   return {
+                    toolCallId: toolCall.id,
                     toolCallName: toolCall.custom.name,
                     toolCallArgs: toolCall.custom.input,
                   };
@@ -580,7 +582,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "[OpenAIProxy] Tool invocation policy result",
             );
             if (toolInvocationRefusal) {
-              const [refusalMessage, contentMessage] = toolInvocationRefusal;
+              const contentMessage = JSON.stringify(toolInvocationRefusal);
               /**
                * Tool invocation was blocked
                *
@@ -589,15 +591,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                */
               assistantMessage = {
                 role: "assistant",
-                /**
-                 * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-                 * is that most clients expect to see the content field, and don't conditionally render the refusal field
-                 *
-                 * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-                 * message, but also show some special UI to indicate that the tool call was blocked.
-                 */
-                refusal: refusalMessage,
                 content: contentMessage,
+                refusal: null,
               };
 
               // Stream the refusal as a single chunk
@@ -883,11 +878,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (assistantMessage.tool_calls || []).map((toolCall) => {
               if (toolCall.type === "function") {
                 return {
+                  toolCallId: toolCall.id,
                   toolCallName: toolCall.function.name,
                   toolCallArgs: toolCall.function.arguments,
                 };
               } else {
                 return {
+                  toolCallId: toolCall.id,
                   toolCallName: toolCall.custom.name,
                   toolCallArgs: toolCall.custom.input,
                 };
@@ -899,7 +896,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
         if (toolInvocationRefusal) {
-          const [refusalMessage, contentMessage] = toolInvocationRefusal;
+          const contentMessage = JSON.stringify(toolInvocationRefusal);
           logger.debug(
             { toolCallCount: assistantMessage.tool_calls?.length || 0 },
             "[OpenAIProxy] Tool invocation blocked by policy",
@@ -910,8 +907,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           assistantMessage = {
             role: "assistant",
-            refusal: refusalMessage,
             content: contentMessage,
+            refusal: null,
           };
           response.choices = [
             {

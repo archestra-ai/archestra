@@ -352,6 +352,7 @@ const ChatBotDemo = ({
                             <PolicyDeniedTool
                               key={`${message.id}-${i}`}
                               policyDenied={part as PolicyDeniedPart}
+                              editable={false}
                             />
                           );
                         }

@@ -259,6 +259,7 @@ export default {
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
   },
   features: {
+    browserStreaming: process.env.ARCHESTRA_FEATURE_BROWSER_STREAMING === "true",
     /**
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",

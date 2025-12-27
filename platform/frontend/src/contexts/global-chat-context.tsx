@@ -19,6 +19,7 @@ import { useGenerateConversationTitle } from "@/lib/chat.query";
 // The "ai" package is browser-compatible, but we need to handle it carefully
 import type { DefaultChatTransport as DefaultChatTransportType } from "ai";
 
+const EXTERNAL_AGENT_ID_HEADER = "x-external-agent-id";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 
 interface QueuedMessage {
@@ -229,24 +230,32 @@ function ChatSessionHook({
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   
-  // Lazy load transport to avoid Node.js module issues during bundling
-  const [transport, setTransport] = useState<InstanceType<DefaultChatTransportType> | null>(null);
-  
+  // Lazy load transport to avoid Node.js module issues during bundling:
+  // DefaultChatTransport pulls in browser-only deps, so we gate it to client runtime
+  // to prevent SSR/bundle errors in Next.js.
+  const [transport, setTransport] = useState<DefaultChatTransportType<UIMessage> | null>(null);
+  const transportLoadedRef = useRef(false);
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      // Dynamic import to ensure it's only loaded in the browser
-      import("ai").then((module) => {
+    if (transportLoadedRef.current || typeof window === "undefined") return;
+
+    transportLoadedRef.current = true;
+    import("ai")
+      .then((module) => {
         const { DefaultChatTransport } = module;
         setTransport(
-          new DefaultChatTransport({
+          new DefaultChatTransport<UIMessage>({
             api: "/api/chat",
             credentials: "include",
+            headers: {
+              [EXTERNAL_AGENT_ID_HEADER]: "Archestra Chat",
+            },
           }),
         );
-      }).catch((error) => {
+      })
+      .catch((error) => {
         console.error("[ChatSession] Failed to load DefaultChatTransport:", error);
       });
-    }
   }, []);
 
   const {
@@ -287,27 +296,16 @@ function ChatSessionHook({
 
   // Auto-send queued message when stream finishes
   useEffect(() => {
-    // Skip auto-send if we're manually sending a message
-    if (isManuallySendingRef.current) {
+    if (isManuallySendingRef.current) return;
+    if (status !== "ready" || !sendMessage || queuedMessages.length === 0)
       return;
-    }
-    
-    // When status changes from streaming/submitted to ready, and there's a queued message
-    if (
-      status === "ready" &&
-      queuedMessages.length > 0 &&
-      sendMessage
-    ) {
-      // Get the first message in the queue (FIFO)
-      const queued = queuedMessages[0];
-      // Remove it from the queue
-      setQueuedMessages((prev) => prev.slice(1));
-      // Send the queued message automatically
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: queued.text }],
-      });
-    }
+
+    const queued = queuedMessages[0];
+    setQueuedMessages((prev) => prev.slice(1));
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: queued.text }],
+    });
   }, [status, queuedMessages, sendMessage]);
 
   // Auto-generate title after first assistant response

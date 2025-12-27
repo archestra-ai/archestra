@@ -19,6 +19,13 @@ export function QueuedMessage({
   position,
   className,
 }: QueuedMessageProps) {
+  const positionLabel =
+    position === 0
+      ? "Queued (next)"
+      : position !== undefined && position > 0
+        ? `Queued #${position + 1}`
+        : "Queued";
+
   return (
     <div
       className={cn(
@@ -29,7 +36,7 @@ export function QueuedMessage({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-medium text-muted-foreground">
-            Queued{position !== undefined && position > 0 ? ` #${position + 1}` : position === 0 ? " (next)" : ""}
+            {positionLabel}
           </span>
         </div>
         <p className="text-sm text-foreground line-clamp-2 break-words">

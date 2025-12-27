@@ -13,14 +13,7 @@ import {
 } from "react";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
+import ArchestraPromptInput from "./prompt-input";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
@@ -72,7 +65,7 @@ export default function ChatPage() {
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null!);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -232,6 +225,11 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
+  // Placeholder for model selection (can be wired to backend when models list is available)
+  const handleModelChange = useCallback((model: string) => {
+    console.info("Model change requested", { model });
+  }, []);
+
   // Extract chat session properties (or use defaults if session not ready)
   const messages = chatSession?.messages ?? [];
   const sendMessage = chatSession?.sendMessage;
@@ -348,6 +346,12 @@ export default function ChatPage() {
     messages,
   ]);
 
+  const focusTextarea = useCallback(() => {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, []);
+
   const handleSubmit = useCallback(
     (
       // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
@@ -355,38 +359,34 @@ export default function ChatPage() {
       e: FormEvent<HTMLFormElement>,
     ) => {
       e.preventDefault();
-      if (!sendMessage || !message.text?.trim()) {
-        return;
-      }
+      if (!sendMessage) return;
+
+      const trimmed = message.text?.trim();
+      if (!trimmed) return;
 
       // If a message is currently being generated, queue this message instead
       if (status === "submitted" || status === "streaming") {
-        if (chatSession?.addQueuedMessage) {
-          chatSession.addQueuedMessage({
-            id: `queued-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            text: message.text,
-            files: message.files,
-          });
-        }
-        // Always focus after queuing so user can continue typing
-        requestAnimationFrame(() => {
-          textareaRef.current?.focus();
+        chatSession?.addQueuedMessage?.({
+          id:
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `queued-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          text: trimmed,
+          files: message.files,
         });
+        focusTextarea();
         return;
       }
 
       // Otherwise, send immediately
       sendMessage({
         role: "user",
-        parts: [{ type: "text", text: message.text }],
+        parts: [{ type: "text", text: trimmed }],
       });
-      
-      // Auto-focus the textarea after sending
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
+
+      focusTextarea();
     },
-    [sendMessage, status, chatSession],
+    [sendMessage, status, chatSession, focusTextarea],
   );
 
   const handleDeleteQueued = useCallback(
@@ -428,17 +428,14 @@ export default function ChatPage() {
         parts: [{ type: "text", text: queued.text }],
       });
 
-      // Reset the manual send flag after a delay to allow the send to complete
+      // Reset the manual send flag after a brief delay so the status can settle
       setTimeout(() => {
         chatSession.isManuallySendingRef.current = false;
-      }, 500);
+      }, 400);
 
-      // Auto-focus the textarea after sending
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
+      focusTextarea();
     },
-    [chatSession, sendMessage, status, stop],
+    [chatSession, sendMessage, status, stop, focusTextarea],
   );
 
   // If API key is not configured, show setup message
@@ -659,21 +656,16 @@ export default function ChatPage() {
                   ))}
                 </div>
               )}
-              <PromptInput onSubmit={handleSubmit}>
-                <PromptInputBody>
-                  <PromptInputTextarea 
-                    ref={textareaRef}
-                    placeholder="Type a message..." 
-                  />
-                </PromptInputBody>
-                <PromptInputToolbar>
-                  <PromptInputTools />
-                  <PromptInputSubmit
-                    status={status === "error" ? "ready" : status}
-                    onStop={stop}
-                  />
-                </PromptInputToolbar>
-              </PromptInput>
+              <ArchestraPromptInput
+                onSubmit={handleSubmit}
+                status={status}
+                selectedModel={conversation?.selectedModel ?? ""}
+                onModelChange={handleModelChange}
+                messageCount={messages.length}
+                agentId={conversation?.agent.id}
+                conversationId={conversation?.id}
+                textareaRef={textareaRef}
+              />
             </div>
           </div>
         </div>

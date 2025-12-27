@@ -566,7 +566,10 @@ export default function ChatPage() {
               )}
               <PromptInput onSubmit={handleSubmit}>
                 <PromptInputBody>
-                  <PromptInputTextarea placeholder="Type a message..." />
+                  <PromptInputTextarea
+                    placeholder="Type a message..."
+                    canSubmit={status === "ready"}
+                  />
                 </PromptInputBody>
                 <PromptInputToolbar>
                   <PromptInputTools />

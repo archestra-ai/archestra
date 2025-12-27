@@ -490,12 +490,15 @@ export const PromptInputBody = ({
   <div className={cn(className, "flex flex-col")} {...props} />
 );
 
-export type PromptInputTextareaProps = ComponentProps<typeof Textarea>;
+export type PromptInputTextareaProps = ComponentProps<typeof Textarea> & {
+  canSubmit?: boolean;
+};
 
 export const PromptInputTextarea = ({
   onChange,
   className,
   placeholder = "What would you like to know?",
+  canSubmit = true,
   ...props
 }: PromptInputTextareaProps) => {
   const attachments = usePromptInputAttachments();
@@ -509,6 +512,13 @@ export const PromptInputTextarea = ({
 
       if (e.shiftKey) {
         // Allow newline
+        return;
+      }
+
+      // Only submit on Enter if submission is allowed
+      if (!canSubmit) {
+        // Prevent any Enter key activity when submission is not allowed
+        e.preventDefault();
         return;
       }
 

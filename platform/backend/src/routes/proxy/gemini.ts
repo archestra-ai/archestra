@@ -454,9 +454,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let tokenUsage: { input?: number; output?: number } = {};
 
         // Variables for interaction recording (accessible in finally block)
-        let toolInvocationRefusal: Awaited<
-          ReturnType<typeof utils.toolInvocation.evaluatePolicies>
-        > = null;
+        let toolInvocationRefusal: [string, string] | null = null;
         let completeResponse: Gemini.Types.GenerateContentResponse | undefined;
 
         try {
@@ -547,7 +545,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
             if (toolInvocationRefusal) {
-              const contentMessage = JSON.stringify(toolInvocationRefusal);
+              const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
               // Stream the refusal as a single chunk
               const refusalChunk: Gemini.Types.GenerateContentResponse = {
                 candidates: [
@@ -739,9 +738,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   candidates: [
                     {
                       content: {
-                        parts: [
-                          { text: JSON.stringify(toolInvocationRefusal) },
-                        ],
+                        parts: [{ text: toolInvocationRefusal[1] }],
                         role: "model",
                       },
                       finishReason: "STOP",
@@ -802,9 +799,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Evaluate tool invocation policies
-        let toolInvocationRefusal: Awaited<
-          ReturnType<typeof utils.toolInvocation.evaluatePolicies>
-        > = null;
+        let toolInvocationRefusal: [string, string] | null = null;
         if (toolCalls.length > 0) {
           const validToolCalls = toolCalls
             .filter(
@@ -867,7 +862,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         if (toolInvocationRefusal) {
-          const contentMessage = JSON.stringify(toolInvocationRefusal);
+          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
           logger.debug(
             { toolCallCount: toolCalls.length },

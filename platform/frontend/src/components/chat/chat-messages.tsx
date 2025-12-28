@@ -22,6 +22,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -64,25 +65,6 @@ function isToolPart(part: any): part is {
     "type" in part &&
     (part.type?.startsWith("tool-") || part.type === "dynamic-tool")
   );
-}
-
-// Try to parse a text string as a PolicyDeniedResult JSON
-function parsePolicyDenied(text: string): PolicyDeniedResult | null {
-  try {
-    const parsed = JSON.parse(text);
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      parsed.state === "output-denied" &&
-      typeof parsed.type === "string" &&
-      parsed.type.startsWith("tool-")
-    ) {
-      return parsed as PolicyDeniedResult;
-    }
-  } catch {
-    // Not JSON or not a PolicyDeniedResult
-  }
-  return null;
 }
 
 export function ChatMessages({

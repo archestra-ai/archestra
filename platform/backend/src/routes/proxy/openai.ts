@@ -580,10 +580,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "[OpenAIProxy] Tool invocation policy result",
             );
             if (toolInvocationRefusal) {
-              const contentMessage = JSON.stringify(toolInvocationRefusal);
-              const refusalMessage = utils.toolInvocation.buildRefusalMessage(
-                toolInvocationRefusal,
-              );
+              const [refusalMessage, contentMessage] = toolInvocationRefusal;
               /**
                * Tool invocation was blocked
                *
@@ -902,10 +899,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
         if (toolInvocationRefusal) {
-          const contentMessage = JSON.stringify(toolInvocationRefusal);
-          const refusalMessage = utils.toolInvocation.buildRefusalMessage(
-            toolInvocationRefusal,
-          );
+          const [refusalMessage, contentMessage] = toolInvocationRefusal;
           logger.debug(
             { toolCallCount: assistantMessage.tool_calls?.length || 0 },
             "[OpenAIProxy] Tool invocation blocked by policy",

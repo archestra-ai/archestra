@@ -599,9 +599,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Evaluate tool invocation policies dynamically
-          let toolInvocationRefusal: Awaited<
-            ReturnType<typeof utils.toolInvocation.evaluatePolicies>
-          > = null;
+          let toolInvocationRefusal: [string, string] | null = null;
           if (accumulatedToolCalls.length > 0) {
             fastify.log.info(
               {
@@ -628,7 +626,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Build the final response for persistence
 
           if (toolInvocationRefusal) {
-            const contentMessage = JSON.stringify(toolInvocationRefusal);
+            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
             responseContent = [
               {
                 type: "text",
@@ -964,7 +962,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
           if (toolInvocationRefusal) {
-            const contentMessage = JSON.stringify(toolInvocationRefusal);
+            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
             logger.debug(
               { toolCallCount: toolCalls.length },
               "[AnthropicProxy] Tool invocation blocked by policy",

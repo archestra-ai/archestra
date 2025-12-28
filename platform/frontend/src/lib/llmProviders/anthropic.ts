@@ -162,7 +162,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     // Process content blocks
     for (const block of content) {
       if (block.type === "text" && "text" in block) {
-        // Check if text is a PolicyDeniedResult JSON
+        // Check if text is a policy denied message
         const policyDenied = parsePolicyDenied(block.text);
         if (policyDenied) {
           parts.push(policyDenied);

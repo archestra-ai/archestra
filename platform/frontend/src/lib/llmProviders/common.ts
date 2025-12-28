@@ -66,7 +66,11 @@ export function parseRefusalMessage(refusal: string): RefusalInfo {
   };
 }
 
+/**
+ * Parse text to PolicyDeniedPart if it matches JSON or legacy text format
+ */
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
+  // Try JSON format first (new format)
   try {
     const parsed = JSON.parse(text);
     if (
@@ -79,7 +83,30 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
       return parsed as PolicyDeniedPart;
     }
   } catch {
-    // Not JSON or not a PolicyDeniedResult
+    // Not JSON, try legacy text format
   }
+
+  // Try legacy plain text format:
+  // "I tried to invoke the {toolName} tool with the following arguments: {args}.\n\nHowever, I was denied by a tool invocation policy:\n\n{reason}"
+  const legacyMatch = text.match(
+    /I tried to invoke the (.+?) tool with the following arguments: (.+?)\.\s*However, I was denied by a tool invocation policy:\s*([\s\S]+)/,
+  );
+  if (legacyMatch) {
+    const [, toolName, argsStr, reason] = legacyMatch;
+    let input: Record<string, unknown> = {};
+    try {
+      input = JSON.parse(argsStr);
+    } catch {
+      // Keep empty if parsing fails
+    }
+    return {
+      type: `tool-${toolName}`,
+      toolCallId: "",
+      state: "output-denied",
+      input,
+      errorText: JSON.stringify({ reason: reason.trim() }),
+    };
+  }
+
   return null;
 }

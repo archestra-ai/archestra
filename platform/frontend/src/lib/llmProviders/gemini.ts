@@ -1,11 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import {
-  type DualLlmResult,
-  type Interaction,
-  type InteractionUtils,
-  parsePolicyDenied,
-} from "./common";
+import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 // Define more precise types for Gemini parts since the generated types use union discrimination
 type GeminiFunctionCallPart = {
@@ -321,12 +316,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     // Process content parts
     for (const part of contentParts) {
       if (hasText(part) && part.text) {
-        const policyDenied = parsePolicyDenied(part.text);
-        if (policyDenied) {
-          parts.push(policyDenied);
-        } else {
-          parts.push({ type: "text", text: part.text });
-        }
+        parts.push({ type: "text", text: part.text });
       } else if (hasFunctionCall(part) && part.functionCall) {
         // Tool invocation by model
         parts.push({

@@ -424,6 +424,7 @@ export type BlockedToolPart = {
 
 export type PolicyDeniedPart = {
   type: string; // "tool-<toolName>"
+  toolCallId: string;
   state: "output-denied";
   input: Record<string, unknown>;
   errorText: string;

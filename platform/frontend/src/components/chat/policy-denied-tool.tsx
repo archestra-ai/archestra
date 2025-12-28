@@ -29,13 +29,13 @@ export function PolicyDeniedTool({
 }: PolicyDeniedToolProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Parse the errorText to get the reason
+  // Parse errorText JSON: { method, args, reason }
   let reason = "Policy denied";
   try {
-    const errorDetails = JSON.parse(policyDenied.errorText);
-    reason = errorDetails.reason || reason;
+    const parsed = JSON.parse(policyDenied.errorText);
+    reason = parsed.reason || reason;
   } catch {
-    // Use default reason
+    // Use default if not valid JSON
   }
 
   const hasInput = Object.keys(policyDenied.input ?? {}).length > 0;

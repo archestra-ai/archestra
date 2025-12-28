@@ -4,7 +4,6 @@ import {
   type DualLlmResult,
   type Interaction,
   type InteractionUtils,
-  parsePolicyDenied,
   parseRefusalMessage,
 } from "./common";
 
@@ -187,21 +186,11 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
         // Add text content if present
         if (typeof content === "string" && content) {
-          const policyDenied = parsePolicyDenied(content);
-          if (policyDenied) {
-            parts.push(policyDenied);
-          } else {
-            parts.push({ type: "text", text: content });
-          }
+          parts.push({ type: "text", text: content });
         } else if (Array.isArray(content)) {
           for (const part of content) {
             if (part.type === "text") {
-              const policyDenied = parsePolicyDenied(part.text);
-              if (policyDenied) {
-                parts.push(policyDenied);
-              } else {
-                parts.push({ type: "text", text: part.text });
-              }
+              parts.push({ type: "text", text: part.text });
             } else if (part.type === "refusal") {
               parts.push({ type: "text", text: part.refusal });
             }
@@ -278,21 +267,11 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     } else {
       // Handle regular content
       if (typeof content === "string") {
-        const policyDenied = parsePolicyDenied(content);
-        if (policyDenied) {
-          parts.push(policyDenied);
-        } else {
-          parts.push({ type: "text", text: content });
-        }
+        parts.push({ type: "text", text: content });
       } else if (Array.isArray(content)) {
         for (const part of content) {
           if (part.type === "text") {
-            const policyDenied = parsePolicyDenied(part.text);
-            if (policyDenied) {
-              parts.push(policyDenied);
-            } else {
-              parts.push({ type: "text", text: part.text });
-            }
+            parts.push({ type: "text", text: part.text });
           } else if (part.type === "image_url") {
             parts.push({
               type: "file",

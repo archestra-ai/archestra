@@ -6,22 +6,47 @@
  * - Tab isolation: conversationId → browserContextId binding
  * - Cleanup: onConversationDelete lifecycle hook
  * - Address bar sync: Single source from page.url()
+ * 
+ * Fixes from Copilot PR Review:
+ * - WebSocket.OPEN constant fix
+ * - Configurable screenshot interval
+ * - Selector validation
+ * - Action log TTL cleanup
+ * - Production-safe browser args
  */
 
 import type { BrowserContext, Page, Browser } from 'playwright';
 import { chromium } from 'playwright';
-import type { WebSocket } from 'ws';
+import WebSocket from 'ws';
 import { BrowserSecurityValidator } from './browser-security';
 import type { BrowserAction, BrowserSession, DomainPolicy } from './types';
 import logger from '@/logging';
+
+// Configurable screenshot interval with validation
+const DEFAULT_SCREENSHOT_INTERVAL_MS = 500; // Default ~2 FPS (was 100ms/10 FPS)
+const SCREENSHOT_INTERVAL_MS = (() => {
+  const raw = process.env.BROWSER_SCREENSHOT_INTERVAL_MS;
+  if (!raw) return DEFAULT_SCREENSHOT_INTERVAL_MS;
+  
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SCREENSHOT_INTERVAL_MS;
+  }
+  
+  // Clamp to reasonable range (200ms - 5000ms)
+  return Math.max(200, Math.min(5000, parsed));
+})();
+
+// Maximum actions to keep in memory per session (TTL cleanup)
+const MAX_ACTIONS_PER_SESSION = 1000;
 
 export class BrowserStreamService {
   // Session isolation - the key bug fix from PR #1432
   private sessions: Map<string, BrowserSession> = new Map();
   private securityValidator: BrowserSecurityValidator;
   
-  // Screenshot streaming config
-  private readonly SCREENSHOT_INTERVAL_MS = 100; // 10 FPS
+  // Screenshot streaming config (configurable via BROWSER_SCREENSHOT_INTERVAL_MS)
+  private readonly SCREENSHOT_INTERVAL_MS = SCREENSHOT_INTERVAL_MS;
   private readonly MAX_SCREENSHOT_QUALITY = 80;
   
   constructor(securityValidator: BrowserSecurityValidator) {
@@ -41,14 +66,24 @@ export class BrowserStreamService {
       throw new Error(`Session already exists for conversation: ${conversationId}`);
     }
     
+    // NOTE: Avoid disabling web security or sandboxing in production.
+    // These flags are only enabled in non-production environments for
+    // compatibility with certain CI/container setups.
+    const launchArgs = [
+      '--disable-features=VizDisplayCompositor',
+    ];
+
+    if (process.env.NODE_ENV !== 'production') {
+      launchArgs.push(
+        '--disable-web-security',
+        '--no-sandbox',
+      );
+    }
+
     // Launch browser with isolation
     const browser = await chromium.launch({
       headless: true,
-      args: [
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--no-sandbox',
-      ],
+      args: launchArgs,
     });
     
     // Create isolated context - each conversation is sandboxed
@@ -101,6 +136,20 @@ export class BrowserStreamService {
       this.sessions.delete(conversationId);
       logger.info({ conversationId }, 'Browser session destroyed');
     }
+  }
+  
+  /**
+   * Validate CSS selector syntax
+   */
+  private validateSelector(selector: string): { valid: boolean; error?: string } {
+    if (typeof selector !== 'string' || selector.trim().length === 0) {
+      return { valid: false, error: 'Invalid selector: empty or whitespace' };
+    }
+    // Basic validation - more complex validation done by Playwright
+    if (selector.length > 1000) {
+      return { valid: false, error: 'Selector too long' };
+    }
+    return { valid: true };
   }
   
   /**
@@ -167,6 +216,12 @@ export class BrowserStreamService {
       return { success: false, error: 'Session not found' };
     }
     
+    // Validate selector
+    const selectorValidation = this.validateSelector(selector);
+    if (!selectorValidation.valid) {
+      return { success: false, error: selectorValidation.error };
+    }
+    
     // Secret detection through security rules
     const validation = await this.securityValidator.validateInput(text);
     
@@ -184,6 +239,12 @@ export class BrowserStreamService {
     }
     
     try {
+      // Validate selector exists before typing
+      const element = await session.page.$(selector);
+      if (!element) {
+        return { success: false, error: `Element not found: ${selector}` };
+      }
+      
       await session.page.type(selector, text);
       
       this.logAction(conversationId, {
@@ -216,7 +277,19 @@ export class BrowserStreamService {
       return { success: false, error: 'Session not found' };
     }
     
+    // Validate selector
+    const selectorValidation = this.validateSelector(selector);
+    if (!selectorValidation.valid) {
+      return { success: false, error: selectorValidation.error };
+    }
+    
     try {
+      // Validate selector exists before clicking
+      const element = await session.page.$(selector);
+      if (!element) {
+        return { success: false, error: `Element not found: ${selector}` };
+      }
+      
       await session.page.click(selector);
       
       this.logAction(conversationId, {
@@ -255,6 +328,7 @@ export class BrowserStreamService {
   
   /**
    * Stream screenshots to WebSocket client
+   * FIX: Use WebSocket.OPEN constant instead of ws.OPEN
    */
   streamScreenshots(ws: WebSocket, conversationId: string): () => void {
     const session = this.sessions.get(conversationId);
@@ -265,7 +339,8 @@ export class BrowserStreamService {
     
     const intervalId = setInterval(async () => {
       try {
-        if (ws.readyState !== ws.OPEN) {
+        // FIX: Use WebSocket.OPEN constant (was ws.OPEN which is undefined)
+        if (ws.readyState !== WebSocket.OPEN) {
           clearInterval(intervalId);
           return;
         }
@@ -338,12 +413,17 @@ export class BrowserStreamService {
   }
   
   /**
-   * Log action for audit trail
+   * Log action for audit trail with TTL cleanup
    */
   private logAction(conversationId: string, action: BrowserAction): void {
     const session = this.sessions.get(conversationId);
     if (session) {
       session.actions.push(action);
+      
+      // TTL cleanup: Keep only last MAX_ACTIONS_PER_SESSION actions
+      if (session.actions.length > MAX_ACTIONS_PER_SESSION) {
+        session.actions = session.actions.slice(-MAX_ACTIONS_PER_SESSION);
+      }
     }
     
     logger.info({ conversationId, action: action.type, result: action.result }, 'Browser action');

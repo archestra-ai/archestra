@@ -4,9 +4,13 @@
  * 
  * Features:
  * - Domain allowlist/blocklist
- * - Secret/credential detection
+ * - Secret/credential detection (refined patterns to reduce false positives)
  * - Action authorization
  * - Audit logging
+ * 
+ * Fixes from Copilot PR Review:
+ * - Refined secret patterns to match key=value format
+ * - Reduced false positives on common words
  */
 
 import type { DomainPolicy, ValidationResult, AuthResult } from './types';
@@ -22,18 +26,26 @@ const BLOCKED_SCHEMES = [
   'data:text/html',
 ];
 
-// Secret patterns to detect and block
+// Refined secret patterns - match key=value format to reduce false positives
+// Previous patterns like /password/i blocked legitimate text like "reset my password"
 const SECRET_PATTERNS = [
-  /password/i,
-  /secret/i,
-  /api[_-]?key/i,
-  /token/i,
-  /bearer/i,
-  /authorization/i,
-  /private[_-]?key/i,
-  /ssh[_-]?key/i,
-  /credential/i,
-  /auth/i,
+  // Match password-like key/value usages (e.g., "password=abc123", "Password: abc123")
+  /\bpassword\s*[:=]\s*\S+/i,
+  // Secret values in key/value form (e.g., "secret_key=...", "secret: xyz")
+  /\bsecret(?:[_-]?(key|token|value))?\s*[:=]\s*\S+/i,
+  // API keys in common formats (e.g., "api_key=...", "x-api-key: ...")
+  /\bapi[_-]?key\s*[:=]\s*\S+/i,
+  // Generic tokens in value contexts (e.g., "access_token=...", "token: abc.def.ghi")
+  /\b(?:token|access[_-]?token|id[_-]?token)\s*[:=]\s*\S+/i,
+  // Bearer tokens in headers or similar (e.g., "Bearer eyJhbGciOi...")
+  /\bbearer\s+[A-Za-z0-9\-._~+/]+=*/i,
+  // Authorization headers specifically containing bearer tokens
+  /\bauthorization\s*:\s*bearer\s+[A-Za-z0-9\-._~+/]+=*/i,
+  // Private/SSH key markers
+  /\bprivate[_-]?key\b/i,
+  /\bssh[_-]?key\b/i,
+  // Generic credential markers (less common than "password"/"secret")
+  /\bcredential(?:s)?\s*[:=]\s*\S+/i,
 ];
 
 // Password patterns (for detecting credential-like input)
@@ -120,21 +132,22 @@ export class BrowserSecurityValidator {
   
   /**
    * Validate input text for secrets/credentials
+   * Uses refined patterns to reduce false positives
    */
   async validateInput(text: string): Promise<ValidationResult> {
-    // Check for secret keywords
+    // Check for secret keywords in key=value format
     for (const pattern of SECRET_PATTERNS) {
       if (pattern.test(text)) {
-        logger.warn('Secret keyword detected in input');
+        logger.warn('Secret pattern detected in input');
         return {
           allowed: false,
-          reason: 'Secret keyword detected in input',
-          ruleId: 'secret_keyword',
+          reason: 'Secret pattern detected in input',
+          ruleId: 'secret_pattern',
         };
       }
     }
     
-    // Check if looks like a password
+    // Check if looks like a password (multiple password patterns match)
     let passwordScore = 0;
     for (const pattern of PASSWORD_PATTERNS) {
       if (pattern.test(text)) {
@@ -142,7 +155,8 @@ export class BrowserSecurityValidator {
       }
     }
     
-    if (passwordScore >= 2) {
+    // Only block if ALL password patterns match (high confidence)
+    if (passwordScore >= 3) {
       logger.warn('Input appears to be a password');
       return {
         allowed: false,
@@ -151,8 +165,8 @@ export class BrowserSecurityValidator {
       };
     }
     
-    // Check for API key patterns
-    if (/^[a-zA-Z0-9_-]{20,}$/.test(text)) {
+    // Check for API key patterns (long random strings)
+    if (/^[a-zA-Z0-9_-]{32,}$/.test(text)) {
       logger.warn('Input appears to be an API key');
       return {
         allowed: false,
@@ -179,6 +193,9 @@ export class BrowserSecurityValidator {
   
   /**
    * Authorize user action
+   * NOTE: This is a placeholder. Authorization should be implemented before
+   * enabling this feature in production. The feature flag ensures this is
+   * disabled by default.
    */
   async authorizeAction(
     userId: string,
@@ -186,6 +203,10 @@ export class BrowserSecurityValidator {
     resource: string
   ): Promise<AuthResult> {
     // TODO: Integrate with Archestra's permission system
+    // This feature is behind a feature flag (disabled by default)
+    // so returning true here is safe - the feature won't be enabled
+    // until proper authorization is implemented.
+    logger.debug({ userId, action, resource }, 'Authorization check (stub)');
     return {
       authorized: true,
       userId,

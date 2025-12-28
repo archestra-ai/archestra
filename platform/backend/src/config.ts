@@ -259,6 +259,15 @@ export default {
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
   },
   features: {
+    /**
+     * Enables experimental browser streaming / browser MCP capabilities.
+     *
+     * NOTE: As of now, this flag is only a configuration toggle and the browser MCP
+     * tools (e.g. browse_url, click_element, etc.) are not yet wired into the MCP
+     * Gateway or chat infrastructure. Integration will be implemented in a future
+     * iteration/PR. This comment is intentionally kept in sync with our tooling
+     * expectations to avoid confusing partially implemented features.
+     */
     browserStreaming: process.env.ARCHESTRA_FEATURE_BROWSER_STREAMING === "true",
     /**
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:

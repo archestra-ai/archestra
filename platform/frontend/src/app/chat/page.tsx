@@ -4,7 +4,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
@@ -444,12 +444,10 @@ export default function ChatPage() {
     status,
   ]);
 
-  useEffect(() => {
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  useLayoutEffect(() => {
     if (status === "ready" && textareaRef.current) {
-      // Use requestAnimationFrame for more reliable focusing
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
+      textareaRef.current.focus();
     }
   }, [status, conversationId]);
 
@@ -473,11 +471,9 @@ export default function ChatPage() {
       parts: [{ type: "text", text: message.text }],
     });
 
-    // Auto-focus the textarea after sending
-    requestAnimationFrame(() => {
+      // Auto-focus the textarea after sending
       textareaRef.current?.focus();
-    });
-  };
+    };
 
   // If API key is not configured, show setup message
   // Only show after loading completes to avoid flash of incorrect content

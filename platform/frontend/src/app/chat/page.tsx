@@ -451,7 +451,7 @@ export default function ChatPage() {
         textareaRef.current?.focus();
       });
     }
-  }, [status]);
+  }, [status, conversationId]);
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();

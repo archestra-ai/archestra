@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SecretStorageTypeSchema } from "./mcp-server";
 
 // Supported chat providers
 export const SupportedChatProviderSchema = z.enum([
@@ -61,6 +62,11 @@ export type UpdateChatApiKey = z.infer<typeof UpdateChatApiKeySchema>;
 export const ChatApiKeyWithScopeInfoSchema = SelectChatApiKeySchema.extend({
   teamName: z.string().nullable().optional(),
   userName: z.string().nullable().optional(),
+  // BYOS vault reference info (only populated when BYOS is enabled and secret is a vault reference)
+  vaultSecretPath: z.string().nullable().optional(),
+  vaultSecretKey: z.string().nullable().optional(),
+  // Secret storage type (database, vault, external_vault, or none)
+  secretStorageType: SecretStorageTypeSchema.optional(),
 });
 
 export type ChatApiKeyWithScopeInfo = z.infer<

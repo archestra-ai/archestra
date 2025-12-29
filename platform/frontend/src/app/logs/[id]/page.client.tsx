@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
+import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
 import { Savings } from "@/components/savings";
@@ -251,7 +252,11 @@ function LogDetail({
                 </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
+                  <CopyButton
+                    text={JSON.stringify(dynamicInteraction.request, null, 2)}
+                    className="absolute top-2 right-2"
+                  />
                   <pre className="text-xs whitespace-pre-wrap break-words">
                     {JSON.stringify(dynamicInteraction.request, null, 2)}
                   </pre>
@@ -270,7 +275,15 @@ function LogDetail({
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-4">
-                  <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                  <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
+                    <CopyButton
+                      text={JSON.stringify(
+                        dynamicInteraction.processedRequest,
+                        null,
+                        2,
+                      )}
+                      className="absolute top-2 right-2"
+                    />
                     <pre className="text-xs whitespace-pre-wrap break-words">
                       {JSON.stringify(
                         dynamicInteraction.processedRequest,
@@ -295,7 +308,11 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
+                  <CopyButton
+                    text={JSON.stringify(dynamicInteraction.response, null, 2)}
+                    className="absolute top-2 right-2"
+                  />
                   <pre className="text-xs whitespace-pre-wrap break-words">
                     {JSON.stringify(dynamicInteraction.response, null, 2)}
                   </pre>

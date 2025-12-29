@@ -67,32 +67,37 @@ export function parseRefusalMessage(refusal: string): RefusalInfo {
 }
 
 /**
- * Parse text to PolicyDeniedPart if it matches JSON or legacy text format
+ * Parse text to PolicyDeniedPart if it matches the policy denied format
+ * Example of a message:
+ *
+ * {
+ *     "text": "\nI tried to invoke the upstash__context7__get-library-docs tool
+ *     with the following arguments: {\"context7CompatibleLibraryID\":\"/websites/p5js_reference\"}.
+ *     \n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked:
+ *     context contains untrusted data",
+ *     "type": "text",
+ *     "state": "done"
+ * }
  */
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
-  // Try JSON format first (new format)
-  try {
-    const parsed = JSON.parse(text);
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      parsed.state === "output-denied" &&
-      typeof parsed.type === "string" &&
-      parsed.type.startsWith("tool-")
-    ) {
-      return parsed as PolicyDeniedPart;
-    }
-  } catch {
-    // Not JSON, try legacy text format
+  // Check for policy denial keywords
+  const lowerText = text.toLowerCase();
+  const hasKeywords =
+    lowerText.includes("denied") &&
+    lowerText.includes("tool") &&
+    lowerText.includes("invocation") &&
+    lowerText.includes("policy");
+
+  if (!hasKeywords) {
+    return null;
   }
 
-  // Try legacy plain text format:
-  // "I tried to invoke the {toolName} tool with the following arguments: {args}.\n\nHowever, I was denied by a tool invocation policy:\n\n{reason}"
-  const legacyMatch = text.match(
-    /I tried to invoke the (.+?) tool with the following arguments: (.+?)\.\s*However, I was denied by a tool invocation policy:\s*([\s\S]+)/,
+  // Extract tool name and JSON arguments
+  const match = text.match(
+    /invoke[d]?\s+(?:the\s+)?(.+?)\s+tool[\s\S]*?(\{[\s\S]*?\})[\s\S]*?(?:denied|blocked)[\s\S]*?:\s*([\s\S]+)/i,
   );
-  if (legacyMatch) {
-    const [, toolName, argsStr, reason] = legacyMatch;
+  if (match) {
+    const [, toolName, argsStr, reason] = match;
     let input: Record<string, unknown> = {};
     try {
       input = JSON.parse(argsStr);

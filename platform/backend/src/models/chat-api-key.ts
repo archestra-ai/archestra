@@ -1,10 +1,13 @@
+import { isVaultReference, parseVaultReference } from "@shared";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { computeSecretStorageType } from "@/secretmanager.utils";
 import type {
   ChatApiKey,
   ChatApiKeyScope,
   ChatApiKeyWithScopeInfo,
   InsertChatApiKey,
+  SecretValue,
   SupportedChatProvider,
   UpdateChatApiKey,
 } from "@/types";
@@ -113,7 +116,7 @@ class ChatApiKeyModel {
       }
     }
 
-    // Query with team and user name joins
+    // Query with team, user, and secrets table joins
     const apiKeys = await db
       .select({
         id: schema.chatApiKeysTable.id,
@@ -128,6 +131,9 @@ class ChatApiKeyModel {
         updatedAt: schema.chatApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
         userName: schema.usersTable.name,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.chatApiKeysTable)
       .leftJoin(
@@ -138,10 +144,34 @@ class ChatApiKeyModel {
         schema.usersTable,
         eq(schema.chatApiKeysTable.userId, schema.usersTable.id),
       )
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.chatApiKeysTable.secretId, schema.secretsTable.id),
+      )
       .where(and(...conditions))
       .orderBy(schema.chatApiKeysTable.createdAt);
 
-    return apiKeys;
+    // Parse vault references from secrets and compute storage type
+    return apiKeys.map((key) => {
+      const vaultRef = parseVaultReferenceFromSecret(key.secret);
+      const secretStorageType = computeSecretStorageType(
+        key.secretId,
+        key.secretIsVault,
+        key.secretIsByosVault,
+      );
+      const {
+        secret: _secret,
+        secretIsVault: _isVault,
+        secretIsByosVault: _isByosVault,
+        ...rest
+      } = key;
+      return {
+        ...rest,
+        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+        secretStorageType,
+      };
+    });
   }
 
   /**
@@ -193,7 +223,7 @@ class ChatApiKeyModel {
     // Only return keys with configured secrets
     conditions.push(sql`${schema.chatApiKeysTable.secretId} IS NOT NULL`);
 
-    // Query with team and user name joins
+    // Query with team, user, and secrets table joins
     const apiKeys = await db
       .select({
         id: schema.chatApiKeysTable.id,
@@ -208,6 +238,9 @@ class ChatApiKeyModel {
         updatedAt: schema.chatApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
         userName: schema.usersTable.name,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.chatApiKeysTable)
       .leftJoin(
@@ -218,10 +251,34 @@ class ChatApiKeyModel {
         schema.usersTable,
         eq(schema.chatApiKeysTable.userId, schema.usersTable.id),
       )
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.chatApiKeysTable.secretId, schema.secretsTable.id),
+      )
       .where(and(...conditions))
       .orderBy(schema.chatApiKeysTable.createdAt);
 
-    return apiKeys;
+    // Parse vault references from secrets and compute storage type
+    return apiKeys.map((key) => {
+      const vaultRef = parseVaultReferenceFromSecret(key.secret);
+      const secretStorageType = computeSecretStorageType(
+        key.secretId,
+        key.secretIsVault,
+        key.secretIsByosVault,
+      );
+      const {
+        secret: _secret,
+        secretIsVault: _isVault,
+        secretIsByosVault: _isByosVault,
+        ...rest
+      } = key;
+      return {
+        ...rest,
+        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+        secretStorageType,
+      };
+    });
   }
 
   /**
@@ -446,6 +503,25 @@ class ChatApiKeyModel {
 
     return !!result;
   }
+}
+
+/**
+ * Helper to parse vault reference from a secret value
+ * For chat API keys, the secret contains { apiKey: "path#key" } format
+ */
+function parseVaultReferenceFromSecret(
+  secret: SecretValue | null,
+): { vaultSecretPath: string; vaultSecretKey: string } | null {
+  if (!secret || typeof secret !== "object") return null;
+  const apiKeyValue = (secret as Record<string, unknown>).apiKey;
+  if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
+    const parsed = parseVaultReference(apiKeyValue);
+    return {
+      vaultSecretPath: parsed.path,
+      vaultSecretKey: parsed.key,
+    };
+  }
+  return null;
 }
 
 export default ChatApiKeyModel;

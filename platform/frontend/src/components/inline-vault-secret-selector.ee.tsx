@@ -15,6 +15,7 @@ import {
   type VaultSecretListItem,
 } from "@/lib/team-vault-folder.query.ee";
 import { E2eTestId } from "../../../shared";
+import { CurrentVaultSecret } from "./current-vault-secret.ee";
 
 interface InlineVaultSecretSelectorProps {
   /** The team ID whose vault folder to use */
@@ -129,77 +130,87 @@ export default function InlineVaultSecretSelector({
   }
 
   return (
-    <div className="flex gap-2 items-start">
-      {/* Secret selector */}
-      <Select
-        value={selectedSecretPath || "none"}
-        onValueChange={handleSecretChange}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          className="w-48"
-          data-testid={E2eTestId.InlineVaultSecretSelectorSecretTrigger}
+    <div className="space-y-3">
+      <div className="flex gap-4 items-start">
+        {/* Secret selector */}
+        <Select
+          value={selectedSecretPath || "none"}
+          onValueChange={handleSecretChange}
+          disabled={disabled}
         >
-          <SelectValue placeholder={secretPlaceholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">-- {secretPlaceholder} --</SelectItem>
-          {secrets.map((secret: VaultSecretListItem) => (
-            <SelectItem key={secret.path} value={secret.path}>
-              <div className="flex items-center gap-2">
-                <Key className="h-3 w-3" />
-                {secret.name}
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Key selector */}
-      {selectedSecretPath &&
-        (isLoadingKeys ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground h-10">
-            <Loader2 className="h-4 w-4 animate-spin" />
-          </div>
-        ) : keysError ? (
-          <Alert variant="destructive" className="py-2 flex-1">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              {keysError.message}
-            </AlertDescription>
-          </Alert>
-        ) : availableKeys.length === 0 ? (
-          <Alert variant="default" className="py-2 flex-1">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              No keys found
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <Select
-            value={selectedSecretKey || "none"}
-            onValueChange={handleKeyChange}
-            disabled={disabled}
+          <SelectTrigger
+            className="w-48"
+            data-testid={E2eTestId.InlineVaultSecretSelectorSecretTrigger}
           >
-            <SelectTrigger
-              className="w-48"
-              data-testid={E2eTestId.InlineVaultSecretSelectorSecretTriggerKey}
+            <SelectValue placeholder={secretPlaceholder} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">-- {secretPlaceholder} --</SelectItem>
+            {secrets.map((secret: VaultSecretListItem) => (
+              <SelectItem key={secret.path} value={secret.path}>
+                <div className="flex items-center gap-2">
+                  <Key className="h-3 w-3" />
+                  {secret.name}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Key selector */}
+        {selectedSecretPath &&
+          (isLoadingKeys ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground h-10">
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          ) : keysError ? (
+            <Alert variant="destructive" className="py-2 flex-1">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                {keysError.message}
+              </AlertDescription>
+            </Alert>
+          ) : availableKeys.length === 0 ? (
+            <Alert variant="default" className="py-2 flex-1">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                No keys found
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Select
+              value={selectedSecretKey || "none"}
+              onValueChange={handleKeyChange}
+              disabled={disabled}
             >
-              <SelectValue placeholder={keyPlaceholder} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">-- {keyPlaceholder} --</SelectItem>
-              {availableKeys.map((key) => (
-                <SelectItem key={key} value={key}>
-                  <div className="flex items-center gap-2">
-                    <Key className="h-3 w-3" />
-                    {key}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
+              <SelectTrigger
+                className="w-48"
+                data-testid={
+                  E2eTestId.InlineVaultSecretSelectorSecretTriggerKey
+                }
+              >
+                <SelectValue placeholder={keyPlaceholder} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">-- {keyPlaceholder} --</SelectItem>
+                {availableKeys.map((key) => (
+                  <SelectItem key={key} value={key}>
+                    <div className="flex items-center gap-2">
+                      <Key className="h-3 w-3" />
+                      {key}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+      </div>
+      <div className="mt-4">
+        <CurrentVaultSecret
+          selectedSecretPath={selectedSecretPath}
+          selectedSecretKey={selectedSecretKey}
+        />
+      </div>
     </div>
   );
 }

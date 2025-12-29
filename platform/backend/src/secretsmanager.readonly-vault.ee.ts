@@ -421,7 +421,10 @@ export default class ReadonlyVaultSecretManager implements ISecretManager {
       return null;
     }
 
-    return await SecretModel.update(secretId, { secret: _secretValue });
+    return await SecretModel.update(secretId, {
+      secret: _secretValue,
+      isByosVault: true,
+    });
   }
 
   /**

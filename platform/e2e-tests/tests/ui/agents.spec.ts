@@ -20,19 +20,23 @@ test(
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.locator("[type=submit]").click();
 
-    // After profile creation, dialog transitions to "How to connect" view
-    // Wait for the success dialog to appear with connection instructions
-    // Using toPass with retry to handle potential timing issues in slower browsers (Firefox/WebKit)
-    await expect(async () => {
-      await expect(
-        page.getByText(new RegExp(`How to connect.*${AGENT_NAME}`, "i")),
-      ).toBeVisible({ timeout: 15_000 });
-    }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
+    // After profile creation, wait for the success toast to appear
+    await expect(page.getByText("Profile created successfully")).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Click Close button to dismiss the dialog
-    await page
-      .getByTestId(E2eTestId.CreateAgentCloseHowToConnectButton)
-      .click();
+    // A new dialog opens with connection instructions
+    // Wait for the "Connect via" dialog to appear
+    await expect(
+      page.getByRole("heading", {
+        name: new RegExp(`Connect via.*${AGENT_NAME}`, "i"),
+      }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Close the connection dialog by clicking the "Done" button
+    await page.getByRole("button", { name: "Done" }).click();
+
+    // Ensure dialog is closed
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
     await page.waitForLoadState("networkidle");
 

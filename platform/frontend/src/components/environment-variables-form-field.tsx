@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId, parseVaultReference } from "@shared";
 import { CheckCircle2, Key, Plus, Trash2 } from "lucide-react";
 import { lazy, useEffect, useState } from "react";
 import type {
@@ -14,7 +14,6 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
-import { parseVaultReference } from "@/app/mcp-catalog/_parts/mcp-catalog-form.utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

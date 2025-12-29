@@ -373,7 +373,7 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <Wrench className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Tools assigned:{" "}
+          Assigned to profile:{" "}
           <span className="font-medium text-foreground">
             {getToolsAssignedCount()}{" "}
             {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}

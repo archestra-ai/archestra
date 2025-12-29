@@ -22,7 +22,9 @@ const messagesTable = pgTable(
     updatedAt: timestamp("updated_at", { mode: "date" }),
   },
   (table) => ({
-    conversationIdIdx: index("messages_conversation_id_idx").on(table.conversationId),
+    conversationIdIdx: index("messages_conversation_id_idx").on(
+      table.conversationId,
+    ),
   }),
 );
 

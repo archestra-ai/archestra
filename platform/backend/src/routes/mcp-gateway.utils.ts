@@ -317,9 +317,7 @@ export function createTransport(
  * Extract bearer token from Authorization header
  * Returns the token string if valid, null otherwise
  */
-export function extractBearerToken(
-  request: FastifyRequest,
-): string | null {
+export function extractBearerToken(request: FastifyRequest): string | null {
   const authHeader = request.headers.authorization as string | undefined;
   if (!authHeader) {
     return null;

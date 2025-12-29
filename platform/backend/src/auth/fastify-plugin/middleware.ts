@@ -109,7 +109,6 @@ export class Authnz {
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
       (method === "GET" && url === "/api/sso-providers/public")
-
     ) {
       logger.debug({ url, method }, "[Authnz] Route is in skip list");
       return true;

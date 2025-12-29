@@ -82,8 +82,12 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
-): Record<Key, boolean> {
-  const { data: userPermissions } = useAllPermissions();
+): Record<Key, boolean> | null {
+  const { data: userPermissions, isLoading } = useAllPermissions();
+
+  if (isLoading) {
+    return null;
+  }
 
   const result = {} as Record<Key, boolean>;
 

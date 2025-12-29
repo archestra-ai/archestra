@@ -80,8 +80,21 @@ export function parseRefusalMessage(refusal: string): RefusalInfo {
  * }
  */
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
+  // Unwrap AI SDK error format: {originalError: {message: "..."}}
+  let actualText = text;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.originalError?.message) {
+      actualText = parsed.originalError.message;
+    } else if (parsed.message) {
+      actualText = parsed.message;
+    }
+  } catch {
+    // Not JSON, use as-is
+  }
+
   // Check for policy denial keywords
-  const lowerText = text.toLowerCase();
+  const lowerText = actualText.toLowerCase();
   const hasKeywords =
     lowerText.includes("denied") &&
     lowerText.includes("tool") &&
@@ -93,7 +106,7 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
   }
 
   // Extract tool name and JSON arguments
-  const match = text.match(
+  const match = actualText.match(
     /invoke[d]?\s+(?:the\s+)?(.+?)\s+tool[\s\S]*?(\{[\s\S]*?\})[\s\S]*?(?:denied|blocked)[\s\S]*?:\s*([\s\S]+)/i,
   );
   if (match) {

@@ -472,21 +472,7 @@ function MessageTool({
 
   // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
   if (errorText) {
-    // AI SDK wraps errors in {originalError: {message: "..."}}
-    let actualError = errorText;
-    try {
-      const parsed = JSON.parse(errorText);
-      // Extract from originalError.message (AI SDK format)
-      if (parsed.originalError?.message) {
-        actualError = parsed.originalError.message;
-      } else if (parsed.message) {
-        actualError = parsed.message;
-      }
-    } catch {
-      // Not JSON, use as-is
-    }
-
-    const policyDenied = parsePolicyDenied(actualError);
+    const policyDenied = parsePolicyDenied(errorText);
     if (policyDenied) {
       // Use the tool's actual input from the part if available
       if (part.input && Object.keys(part.input).length > 0) {

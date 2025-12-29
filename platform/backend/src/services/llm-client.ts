@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { EXTERNAL_AGENT_ID_HEADER, USER_ID_HEADER } from "@shared";
+import type { streamText } from "ai";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
@@ -9,10 +10,10 @@ import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { secretManager } from "@/secretsmanager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
-export type LLMClient =
-  | ReturnType<typeof createAnthropic>
-  | ReturnType<typeof createGoogleGenerativeAI>
-  | ReturnType<typeof createOpenAI>;
+/**
+ * Type representing a model that can be passed to streamText/generateText
+ */
+export type LLMModel = Parameters<typeof streamText>[0]["model"];
 
 /**
  * Detect which provider a model belongs to based on its name
@@ -111,16 +112,19 @@ export function isApiKeyRequired(
 }
 
 /**
- * Create an LLM client for the specified provider, pointing to the LLM Proxy
+ * Create an LLM model for the specified provider, pointing to the LLM Proxy
+ * Returns a model instance ready to use with streamText/generateText
  */
-export function createLLMClient(params: {
+export function createLLMModel(params: {
   provider: SupportedChatProvider;
   apiKey: string | undefined;
   agentId: string;
+  modelName: string;
   userId?: string;
   externalAgentId?: string;
-}): LLMClient {
-  const { provider, apiKey, agentId, userId, externalAgentId } = params;
+}): LLMModel {
+  const { provider, apiKey, agentId, modelName, userId, externalAgentId } =
+    params;
 
   // Build headers for LLM Proxy
   const clientHeaders: Record<string, string> = {};
@@ -136,39 +140,44 @@ export function createLLMClient(params: {
 
   if (provider === "anthropic") {
     // URL format: /v1/anthropic/:agentId/v1/messages
-    return createAnthropic({
+    const client = createAnthropic({
       apiKey,
       baseURL: `http://localhost:${config.api.port}/v1/anthropic/${agentId}/v1`,
       headers,
     });
+    return client(modelName);
   }
 
   if (provider === "gemini") {
     // URL format: /v1/gemini/:agentId/v1beta/models
     // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
-    return createGoogleGenerativeAI({
+    const client = createGoogleGenerativeAI({
       apiKey: apiKey || "vertex-ai-mode",
       baseURL: `http://localhost:${config.api.port}/v1/gemini/${agentId}/v1beta`,
       headers,
     });
+    return client(modelName);
   }
 
   if (provider === "openai") {
     // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
-    return createOpenAI({
+    const client = createOpenAI({
       apiKey,
       baseURL: `http://localhost:${config.api.port}/v1/openai/${agentId}`,
       headers,
     });
+    // Use .chat() to force Chat Completions API (not Responses API)
+    // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
   }
 
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
 /**
- * Full helper to resolve API key and create LLM client
+ * Full helper to resolve API key and create LLM model
  */
-export async function createLLMClientForAgent(params: {
+export async function createLLMModelForAgent(params: {
   organizationId: string;
   userId: string;
   agentId: string;
@@ -176,7 +185,7 @@ export async function createLLMClientForAgent(params: {
   conversationId?: string | null;
   externalAgentId?: string;
 }): Promise<{
-  client: LLMClient;
+  model: LLMModel;
   provider: SupportedChatProvider;
   apiKeySource: string;
 }> {
@@ -184,12 +193,12 @@ export async function createLLMClientForAgent(params: {
     organizationId,
     userId,
     agentId,
-    model,
+    model: modelName,
     conversationId,
     externalAgentId,
   } = params;
 
-  const provider = detectProviderFromModel(model);
+  const provider = detectProviderFromModel(modelName);
 
   const { apiKey, source } = await resolveProviderApiKey({
     organizationId,
@@ -213,13 +222,14 @@ export async function createLLMClientForAgent(params: {
     );
   }
 
-  const client = createLLMClient({
+  const model = createLLMModel({
     provider,
     apiKey,
     agentId,
+    modelName,
     userId,
     externalAgentId,
   });
 
-  return { client, provider, apiKeySource: source };
+  return { model, provider, apiKeySource: source };
 }

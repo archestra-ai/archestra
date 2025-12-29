@@ -9,7 +9,7 @@ import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
-import { createLLMClientForAgent } from "@/services/llm-client";
+import { createLLMModelForAgent } from "@/services/llm-client";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**
@@ -318,8 +318,8 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Starting A2A execution",
         );
 
-        // Create LLM client using shared service
-        const { client: llmClient, provider } = await createLLMClientForAgent({
+        // Create LLM model using shared service
+        const { model, provider } = await createLLMModelForAgent({
           organizationId,
           userId,
           agentId: agent.id,
@@ -329,7 +329,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Execute with AI SDK using streamText (required for long-running requests)
         // We stream internally but collect the full result for JSON-RPC response
         const stream = streamText({
-          model: llmClient(selectedModel),
+          model,
           system: systemPrompt,
           prompt: userMessage,
           tools: mcpTools,

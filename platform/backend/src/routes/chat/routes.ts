@@ -28,7 +28,7 @@ import {
   secretManager,
 } from "@/secretsmanager";
 import {
-  createLLMClientForAgent,
+  createLLMModelForAgent,
   detectProviderFromModel,
 } from "@/services/llm-client";
 import {
@@ -201,8 +201,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Create LLM client using shared service
-      const { client: llmClient } = await createLLMClientForAgent({
+      // Create LLM model using shared service
+      const { model } = await createLLMModelForAgent({
         organizationId,
         userId: user.id,
         agentId: conversation.agentId,
@@ -214,7 +214,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Stream with AI SDK
       // Build streamText config conditionally
       const streamTextConfig: Parameters<typeof streamText>[0] = {
-        model: llmClient(conversation.selectedModel),
+        model,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),

@@ -106,7 +106,7 @@ export function InternalMCPCatalog({
       } else {
         params.delete("search");
       }
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
   );

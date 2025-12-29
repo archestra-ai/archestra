@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.8"
+    "version": "1.0.9"
   },
   "components": {
     "schemas": {
@@ -17770,6 +17770,23 @@
                       "userName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "vaultSecretPath": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "vaultSecretKey": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "secretStorageType": {
+                        "type": "string",
+                        "enum": [
+                          "vault",
+                          "external_vault",
+                          "database",
+                          "none"
+                        ]
                       }
                     },
                     "required": [
@@ -18041,12 +18058,19 @@
                   },
                   "teamId": {
                     "type": "string"
+                  },
+                  "vaultSecretPath": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vaultSecretKey": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
                   "name",
-                  "provider",
-                  "apiKey"
+                  "provider"
                 ]
               }
             }
@@ -18429,6 +18453,23 @@
                       "userName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "vaultSecretPath": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "vaultSecretKey": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "secretStorageType": {
+                        "type": "string",
+                        "enum": [
+                          "vault",
+                          "external_vault",
+                          "database",
+                          "none"
+                        ]
                       }
                     },
                     "required": [
@@ -18745,6 +18786,23 @@
                     "userName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "vaultSecretPath": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
                     }
                   },
                   "required": [
@@ -19009,6 +19067,14 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "vaultSecretPath": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vaultSecretKey": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
+import { Cable, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -467,28 +467,41 @@ export function InternalMCPCatalog({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
+      <div className="space-y-4">
+        <div className="flex gap-3">
+          <Button
+            onClick={() =>
+              userIsMcpServerAdmin
+                ? openDialog("create")
+                : openDialog("custom-request")
+            }
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <Plus className="mr-0.5 h-4 w-4" />
+            {userIsMcpServerAdmin
+              ? "Add MCP Server to the Registry"
+              : "Request Custom MCP"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.href = "/connection?tab=mcp";
+            }}
+            className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 hover:from-green-500/20 hover:to-emerald-500/20 border-green-500/50 hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
+          >
+            <Cable className="mr-0.5 h-4 w-4" />
+            Connect to the Unified MCP Gateway to access those servers
+          </Button>
+        </div>
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search MCP servers by name..."
+            placeholder="Search registry by name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
           />
         </div>
-        <Button
-          onClick={() =>
-            userIsMcpServerAdmin
-              ? openDialog("create")
-              : openDialog("custom-request")
-          }
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          {userIsMcpServerAdmin
-            ? "Add MCP Server"
-            : "Request to add custom MCP Server"}
-        </Button>
       </div>
       <div className="space-y-4">
         {filteredCatalogItems.length > 0 ? (

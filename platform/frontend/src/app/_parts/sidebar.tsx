@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bot,
   Bug,
+  Cable,
   DollarSign,
   Github,
   LogIn,
@@ -90,15 +91,20 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
     },
     {
+      title: "Cost & Limits",
+      url: "/cost",
+      icon: DollarSign,
+    },
+    {
+      title: "Connect",
+      url: "/connection",
+      icon: Cable,
+    },
+    {
       title: "Settings",
       url: "/settings",
       icon: Settings,
       customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-    },
-    {
-      title: "Cost & Limits",
-      url: "/cost",
-      icon: DollarSign,
     },
   ];
 };

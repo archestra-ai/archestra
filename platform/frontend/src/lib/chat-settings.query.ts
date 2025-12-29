@@ -63,13 +63,9 @@ export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
 export function useCreateChatApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      name: string;
-      provider: SupportedChatProvider;
-      apiKey: string;
-      scope?: ChatApiKeyScope;
-      teamId?: string;
-    }) => {
+    mutationFn: async (
+      data: archestraApiTypes.CreateChatApiKeyData["body"],
+    ) => {
       const { data: responseData, error } = await createChatApiKey({
         body: data,
       });
@@ -102,12 +98,7 @@ export function useUpdateChatApiKey() {
       data,
     }: {
       id: string;
-      data: {
-        name?: string;
-        apiKey?: string;
-        scope?: ChatApiKeyScope;
-        teamId?: string | null;
-      };
+      data: archestraApiTypes.UpdateChatApiKeyData["body"];
     }) => {
       const { data: responseData, error } = await updateChatApiKey({
         path: { id },

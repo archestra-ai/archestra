@@ -502,6 +502,12 @@ export default class K8sDeployment {
         {
           name: "mcp-server",
           image: dockerImage,
+          // Use Never for local images (without registry/domain prefix)
+          // Registry images typically have a domain or slash (e.g., docker.io/image, myregistry.com/image, or username/image)
+          imagePullPolicy:
+            dockerImage.includes("/") || dockerImage.includes(".")
+              ? undefined // Let K8s decide (defaults to Always for :latest, IfNotPresent for others)
+              : ("Never" as k8s.V1Container["imagePullPolicy"]), // For local images like "gaggimate-mcp:latest" without registry
           env: this.createContainerEnvFromConfig(),
           ...(localConfig.command
             ? {

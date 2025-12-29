@@ -26,10 +26,7 @@ import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
-import {
-  type PolicyDeniedResult,
-  PolicyDeniedTool,
-} from "./policy-denied-tool";
+import { PolicyDeniedTool } from "./policy-denied-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -230,7 +227,7 @@ export function ChatMessages({
                     case "text": {
                       const partKey = `${message.id}-${i}`;
 
-                      // Check if text contains a PolicyDeniedResult JSON
+                      // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
                       const policyDenied = parsePolicyDenied(part.text);
                       if (policyDenied) {
                         return (
@@ -352,6 +349,7 @@ export function ChatMessages({
                           key={`${message.id}-${i}`}
                           toolResultPart={toolResultPart}
                           toolName={toolName}
+                          agentId={agentId}
                         />
                       );
                     }
@@ -381,6 +379,7 @@ export function ChatMessages({
                             key={`${message.id}-${i}`}
                             toolResultPart={toolResultPart}
                             toolName={toolName}
+                            agentId={agentId}
                           />
                         );
                       }
@@ -457,10 +456,12 @@ function MessageTool({
   part,
   toolResultPart,
   toolName,
+  agentId,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
+  agentId?: string;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -468,6 +469,37 @@ function MessageTool({
   const errorText = toolResultPart
     ? (toolResultPart.errorText ?? outputError)
     : (part.errorText ?? outputError);
+
+  // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
+  if (errorText) {
+    // AI SDK wraps errors in {originalError: {message: "..."}}
+    let actualError = errorText;
+    try {
+      const parsed = JSON.parse(errorText);
+      // Extract from originalError.message (AI SDK format)
+      if (parsed.originalError?.message) {
+        actualError = parsed.originalError.message;
+      } else if (parsed.message) {
+        actualError = parsed.message;
+      }
+    } catch {
+      // Not JSON, use as-is
+    }
+
+    const policyDenied = parsePolicyDenied(actualError);
+    if (policyDenied) {
+      // Use the tool's actual input from the part if available
+      if (part.input && Object.keys(part.input).length > 0) {
+        policyDenied.input = part.input as Record<string, unknown>;
+      }
+      return (
+        <PolicyDeniedTool
+          policyDenied={policyDenied}
+          {...(agentId ? { editable: true, agentId } : { editable: false })}
+        />
+      );
+    }
+  }
 
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(

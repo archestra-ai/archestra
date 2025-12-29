@@ -694,6 +694,13 @@
       "when": 1766221758178,
       "tag": "0098_great_mister_fear",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1766509921821,
+      "tag": "0099_sturdy_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

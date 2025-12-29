@@ -135,7 +135,8 @@ export function McpToolsDialog({
       selectedToolIds.includes(tool.id),
     );
     onBulkAssignTools(selectedTools);
-    // Don't clear selection here - it will be cleared when the bulk assign dialog closes
+    // Clear selections immediately after bulk assignment
+    setSelectedToolIds([]);
   };
 
   const handleDialogChange = (newOpen: boolean) => {

@@ -30,6 +30,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
@@ -58,6 +59,16 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | undefined>(
     () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
   );
+
+  // Hide version display only when viewing a specific conversation
+  useEffect(() => {
+    if (conversationId) {
+      document.body.classList.add("hide-version");
+    } else {
+      document.body.classList.remove("hide-version");
+    }
+    return () => document.body.classList.remove("hide-version");
+  }, [conversationId]);
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -631,6 +642,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
               conversationId={conversationId}
+              agentId={currentProfileId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
@@ -685,6 +697,9 @@ export default function ChatPage() {
                   currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
                 />
+                <div className="text-center">
+                  <Version inline />
+                </div>
               </div>
             </div>
           )}

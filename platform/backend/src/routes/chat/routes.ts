@@ -339,7 +339,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Stream with AI SDK
       // Build streamText config conditionally
       const streamTextConfig: Parameters<typeof streamText>[0] = {
-        model: llmClient(conversation.selectedModel),
+        model: llmClient.chat(conversation.selectedModel),
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),

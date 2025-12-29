@@ -25,13 +25,9 @@ export const ChatCompletionUsageSchema = z
     `https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113`,
   );
 
-export const FinishReasonSchema = z.enum([
-  "stop",
-  "length",
-  "tool_calls",
-  "content_filter",
-  "function_call",
-]);
+export const FinishReasonSchema = z
+  .enum(["stop", "length", "tool_calls", "content_filter", "function_call"])
+  .nullable();
 
 const ChoiceSchema = z
   .object({
@@ -72,7 +68,12 @@ export const ChatCompletionRequestSchema = z
     tools: z.array(ToolSchema).optional(),
     tool_choice: ToolChoiceOptionSchema.optional(),
     temperature: z.number().nullable().optional(),
+    top_p: z.number().nullable().optional(),
     max_tokens: z.number().nullable().optional(),
+    stop: z
+      .union([z.string(), z.array(z.string())])
+      .nullable()
+      .optional(),
     stream: z.boolean().nullable().optional(),
   })
   .describe(

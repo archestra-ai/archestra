@@ -25,7 +25,7 @@ const FunctionDefinitionSchema = z
     `https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174`,
   );
 
-const FunctionToolSchema = z
+export const FunctionToolSchema = z
   .object({
     type: z.enum(["function"]),
     function: FunctionDefinitionSchema,

@@ -31,6 +31,15 @@ namespace OpenAi {
     export type Message = z.infer<typeof OpenAiMessages.MessageParamSchema>;
     export type Role = Message["role"];
 
+    export type ToolCall = z.infer<typeof OpenAiMessages.ToolCallSchema>;
+    export type FunctionToolCall = z.infer<
+      typeof OpenAiMessages.FunctionToolCallSchema
+    >;
+
+    export type Tool = z.infer<typeof OpenAiTools.ToolSchema>;
+    export type FunctionTool = z.infer<typeof OpenAiTools.FunctionToolSchema>;
+    export type ToolChoice = z.infer<typeof OpenAiTools.ToolChoiceOptionSchema>;
+
     export type ChatCompletionChunk =
       OpenAIProvider.Chat.Completions.ChatCompletionChunk;
   }

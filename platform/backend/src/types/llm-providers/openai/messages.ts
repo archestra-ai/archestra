@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const FunctionToolCallSchema = z
+export const FunctionToolCallSchema = z
   .object({
     id: z.string(),
     type: z.enum(["function"]),

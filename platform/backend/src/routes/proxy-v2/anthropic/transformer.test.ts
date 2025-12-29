@@ -11,7 +11,7 @@ describe("AnthropicTransformer", () => {
     });
   });
 
-  describe("convertRequestToOpenAI", () => {
+  describe("requestToOpenAI", () => {
     test("converts basic Anthropic request to OpenAI format", () => {
       const anthropicReq = {
         model: "claude-3-5-sonnet-20241022",
@@ -19,7 +19,7 @@ describe("AnthropicTransformer", () => {
         messages: [{ role: "user" as const, content: "Hello, Claude!" }],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.model).toBe("claude-3-5-sonnet-20241022");
       expect(result.max_tokens).toBe(1024);
@@ -36,7 +36,7 @@ describe("AnthropicTransformer", () => {
         messages: [{ role: "user" as const, content: "Hello!" }],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.messages[0]).toEqual({
         role: "system",
@@ -59,7 +59,7 @@ describe("AnthropicTransformer", () => {
         messages: [{ role: "user" as const, content: "Hello!" }],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.messages[0]).toEqual({
         role: "system",
@@ -96,7 +96,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       // First message should be assistant with tool_calls
       const assistantMsg = result.messages[0];
@@ -143,7 +143,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.tools).toEqual([
         {
@@ -171,7 +171,7 @@ describe("AnthropicTransformer", () => {
         tool_choice: { type: "any" as const },
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.tool_choice).toBe("required");
     });
@@ -184,7 +184,7 @@ describe("AnthropicTransformer", () => {
         tool_choice: { type: "tool" as const, name: "get_weather" },
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.tool_choice).toEqual({
         type: "function",
@@ -193,7 +193,7 @@ describe("AnthropicTransformer", () => {
     });
   });
 
-  describe("convertRequestFromOpenAI", () => {
+  describe("requestFromOpenAI", () => {
     test("converts basic OpenAI request to Anthropic format", () => {
       const openaiReq = {
         model: "claude-3-5-sonnet-20241022",
@@ -201,7 +201,7 @@ describe("AnthropicTransformer", () => {
         messages: [{ role: "user" as const, content: "Hello, Claude!" }],
       };
 
-      const result = transformer.convertRequestFromOpenAI(openaiReq);
+      const result = transformer.requestFromOpenAI(openaiReq);
 
       expect(result.model).toBe("claude-3-5-sonnet-20241022");
       expect(result.max_tokens).toBe(1024);
@@ -220,7 +220,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestFromOpenAI(openaiReq);
+      const result = transformer.requestFromOpenAI(openaiReq);
 
       expect(result.system).toBe("You are a helpful assistant.");
       expect(result.messages).toEqual([{ role: "user", content: "Hello!" }]);
@@ -253,7 +253,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestFromOpenAI(openaiReq);
+      const result = transformer.requestFromOpenAI(openaiReq);
 
       // Assistant message should have tool_use blocks
       expect(result.messages[0]).toEqual({
@@ -303,7 +303,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestFromOpenAI(openaiReq);
+      const result = transformer.requestFromOpenAI(openaiReq);
 
       expect(result.tools).toEqual([
         {
@@ -327,7 +327,7 @@ describe("AnthropicTransformer", () => {
         tool_choice: "required" as const,
       };
 
-      const result = transformer.convertRequestFromOpenAI(openaiReq);
+      const result = transformer.requestFromOpenAI(openaiReq);
 
       expect(result.tool_choice).toEqual({ type: "any" });
     });
@@ -338,13 +338,13 @@ describe("AnthropicTransformer", () => {
         messages: [{ role: "user" as const, content: "Hello!" }],
       };
 
-      const result = transformer.convertRequestFromOpenAI(openaiReq);
+      const result = transformer.requestFromOpenAI(openaiReq);
 
       expect(result.max_tokens).toBe(4096);
     });
   });
 
-  describe("convertResponseToOpenAI", () => {
+  describe("responseToOpenAI", () => {
     test("converts text response to OpenAI format", () => {
       const anthropicResp = {
         id: "msg_123",
@@ -366,7 +366,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
 
       expect(result.id).toBe("msg_123");
       expect(result.object).toBe("chat.completion");
@@ -405,7 +405,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
 
       expect(result.choices[0].message.tool_calls).toEqual([
         {
@@ -447,7 +447,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
 
       expect(result.choices[0].message.content).toBe(
         "Let me check the weather.",
@@ -460,7 +460,7 @@ describe("AnthropicTransformer", () => {
     });
   });
 
-  describe("convertResponseFromOpenAI", () => {
+  describe("responseFromOpenAI", () => {
     test("converts OpenAI text response to Anthropic format", () => {
       const openaiResp = {
         id: "chatcmpl-123",
@@ -485,7 +485,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseFromOpenAI(openaiResp);
+      const result = transformer.responseFromOpenAI(openaiResp);
 
       expect(result.id).toBe("chatcmpl-123");
       expect(result.type).toBe("message");
@@ -534,7 +534,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseFromOpenAI(openaiResp);
+      const result = transformer.responseFromOpenAI(openaiResp);
 
       expect(result.content).toEqual([
         {
@@ -549,7 +549,7 @@ describe("AnthropicTransformer", () => {
   });
 
   describe("round-trip transformations", () => {
-    test("convertRequestToOpenAI → convertRequestFromOpenAI preserves essential data", () => {
+    test("requestToOpenAI → requestFromOpenAI preserves essential data", () => {
       const originalRequest = {
         model: "claude-3-5-sonnet-20241022",
         max_tokens: 2048,
@@ -573,8 +573,8 @@ describe("AnthropicTransformer", () => {
         temperature: 0.7,
       };
 
-      const normalized = transformer.convertRequestToOpenAI(originalRequest);
-      const transformed = transformer.convertRequestFromOpenAI(normalized);
+      const normalized = transformer.requestToOpenAI(originalRequest);
+      const transformed = transformer.requestFromOpenAI(normalized);
 
       expect(transformed.model).toBe(originalRequest.model);
       expect(transformed.max_tokens).toBe(originalRequest.max_tokens);
@@ -584,7 +584,7 @@ describe("AnthropicTransformer", () => {
       expect(transformed.tools?.[0]?.name).toBe("test_tool");
     });
 
-    test("convertResponseToOpenAI → convertResponseFromOpenAI preserves essential data", () => {
+    test("responseToOpenAI → responseFromOpenAI preserves essential data", () => {
       const originalResponse = {
         id: "msg_roundtrip",
         type: "message" as const,
@@ -601,8 +601,8 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const transformed = transformer.convertResponseToOpenAI(originalResponse);
-      const denormalized = transformer.convertResponseFromOpenAI(transformed);
+      const transformed = transformer.responseToOpenAI(originalResponse);
+      const denormalized = transformer.responseFromOpenAI(transformed);
 
       expect(denormalized.id).toBe(originalResponse.id);
       expect(denormalized.model).toBe(originalResponse.model);
@@ -627,7 +627,7 @@ describe("AnthropicTransformer", () => {
           messages: [{ role: "user" as const, content: "Hello" }],
           tool_choice: { type: "auto" as const },
         };
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         expect(result.tool_choice).toBe("auto");
       });
 
@@ -638,7 +638,7 @@ describe("AnthropicTransformer", () => {
           messages: [{ role: "user" as const, content: "Hello" }],
           tool_choice: { type: "any" as const },
         };
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         expect(result.tool_choice).toBe("required");
       });
 
@@ -649,7 +649,7 @@ describe("AnthropicTransformer", () => {
           messages: [{ role: "user" as const, content: "Hello" }],
           tool_choice: { type: "none" as const },
         };
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         expect(result.tool_choice).toBe("none");
       });
 
@@ -660,7 +660,7 @@ describe("AnthropicTransformer", () => {
           messages: [{ role: "user" as const, content: "Hello" }],
           tool_choice: { type: "tool" as const, name: "get_weather" },
         };
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         expect(result.tool_choice).toEqual({
           type: "function",
           function: { name: "get_weather" },
@@ -674,7 +674,7 @@ describe("AnthropicTransformer", () => {
           messages: [{ role: "user" as const, content: "Hello" }],
         };
 
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         expect(result.tool_choice).toBeUndefined();
       });
     });
@@ -700,7 +700,7 @@ describe("AnthropicTransformer", () => {
             | { type: "function"; function: { name: string } },
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
         expect(result.tool_choice).toEqual(expectedAnthropic);
       });
     });
@@ -729,7 +729,7 @@ describe("AnthropicTransformer", () => {
         usage: { input_tokens: 10, output_tokens: 5 },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
       expect(result.choices[0].finish_reason).toBe(expectedOpenAI);
     });
 
@@ -761,7 +761,7 @@ describe("AnthropicTransformer", () => {
         // biome-ignore lint/suspicious/noExplicitAny: See TODO above
       } as any;
 
-      const result = transformer.convertResponseFromOpenAI(openaiResp);
+      const result = transformer.responseFromOpenAI(openaiResp);
       expect(result.stop_reason).toBe(expectedAnthropic);
     });
   });
@@ -783,7 +783,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
 
       expect(result.usage).toEqual({
         prompt_tokens: 150,
@@ -807,7 +807,7 @@ describe("AnthropicTransformer", () => {
         },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
 
       expect(result.usage).toEqual({
         prompt_tokens: 0,
@@ -827,7 +827,7 @@ describe("AnthropicTransformer", () => {
           messages: [],
         };
 
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         expect(result.messages).toEqual([]);
       });
 
@@ -849,7 +849,7 @@ describe("AnthropicTransformer", () => {
           ],
         };
 
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         const toolMsg = result.messages[0];
         expect(toolMsg.role).toBe("tool");
         expect(toolMsg.content).toBe("");
@@ -873,7 +873,7 @@ describe("AnthropicTransformer", () => {
           ],
         };
 
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
         const toolMsg = result.messages[0];
         expect(toolMsg.role).toBe("tool");
         expect(toolMsg.content).toBe("");
@@ -900,7 +900,7 @@ describe("AnthropicTransformer", () => {
           usage: { input_tokens: 10, output_tokens: 5 },
         };
 
-        const result = transformer.convertResponseToOpenAI(anthropicResp);
+        const result = transformer.responseToOpenAI(anthropicResp);
 
         const toolCall = result.choices[0].message.tool_calls?.[0];
         expect(toolCall).toBeDefined();
@@ -931,7 +931,7 @@ describe("AnthropicTransformer", () => {
           ],
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
         const assistantContent = result.messages[0].content;
 
         expect(Array.isArray(assistantContent)).toBe(true);
@@ -960,7 +960,7 @@ describe("AnthropicTransformer", () => {
           ],
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.system).toBe(
           "You are a helpful assistant.\n\nBe concise.",
@@ -980,7 +980,7 @@ describe("AnthropicTransformer", () => {
           ],
         };
 
-        const result = transformer.convertRequestToOpenAI(anthropicReq);
+        const result = transformer.requestToOpenAI(anthropicReq);
 
         const assistantMsg = result.messages[1];
         expect(assistantMsg.role).toBe("assistant");
@@ -997,7 +997,7 @@ describe("AnthropicTransformer", () => {
           stop: "END",
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.stop_sequences).toEqual(["END"]);
       });
@@ -1010,7 +1010,7 @@ describe("AnthropicTransformer", () => {
           stop: ["END", "STOP", "DONE"],
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.stop_sequences).toEqual(["END", "STOP", "DONE"]);
       });
@@ -1022,7 +1022,7 @@ describe("AnthropicTransformer", () => {
           messages: [{ role: "user" as const, content: "Hello" }],
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.stop_sequences).toBeUndefined();
       });
@@ -1037,7 +1037,7 @@ describe("AnthropicTransformer", () => {
           temperature: 0.5,
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.temperature).toBe(0.5);
       });
@@ -1050,7 +1050,7 @@ describe("AnthropicTransformer", () => {
           top_p: 0.9,
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.top_p).toBe(0.9);
       });
@@ -1063,7 +1063,7 @@ describe("AnthropicTransformer", () => {
           temperature: 0,
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.temperature).toBe(0);
       });
@@ -1078,7 +1078,7 @@ describe("AnthropicTransformer", () => {
           stream: true,
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.stream).toBe(true);
       });
@@ -1091,7 +1091,7 @@ describe("AnthropicTransformer", () => {
           stream: false,
         };
 
-        const result = transformer.convertRequestFromOpenAI(openaiReq);
+        const result = transformer.requestFromOpenAI(openaiReq);
 
         expect(result.stream).toBe(false);
       });
@@ -1130,7 +1130,7 @@ describe("AnthropicTransformer", () => {
         usage: { input_tokens: 50, output_tokens: 100 },
       };
 
-      const result = transformer.convertResponseToOpenAI(anthropicResp);
+      const result = transformer.responseToOpenAI(anthropicResp);
 
       expect(result.choices[0].message.tool_calls).toHaveLength(2);
       expect(result.choices[0].message.tool_calls?.[0].id).toBe("tool_1");
@@ -1163,7 +1163,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       // Should produce two separate tool messages
       expect(result.messages).toHaveLength(2);
@@ -1207,7 +1207,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       // Should produce tool message followed by user message
       expect(result.messages).toHaveLength(2);
@@ -1240,7 +1240,7 @@ describe("AnthropicTransformer", () => {
         ],
       };
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       expect(result.messages[0].role).toBe("tool");
       expect(result.messages[0].content).toBe("First part.\nSecond part.");
@@ -1268,9 +1268,9 @@ describe("AnthropicTransformer", () => {
             display_height_px: 768,
           },
         ],
-      } as unknown as Parameters<typeof transformer.convertRequestToOpenAI>[0];
+      } as unknown as Parameters<typeof transformer.requestToOpenAI>[0];
 
-      const result = transformer.convertRequestToOpenAI(anthropicReq);
+      const result = transformer.requestToOpenAI(anthropicReq);
 
       // Should only include the custom tool
       expect(result.tools).toHaveLength(1);
@@ -1306,8 +1306,8 @@ describe("AnthropicTransformer", () => {
     test("createStreamTransformer returns a new transformer instance", () => {
       const converter = transformer.createStreamTransformer();
       expect(converter).toBeDefined();
-      expect(typeof converter.decode).toBe("function");
-      expect(typeof converter.encode).toBe("function");
+      expect(typeof converter.toOpenAI).toBe("function");
+      expect(typeof converter.writeFromOpenAI).toBe("function");
       expect(typeof converter.isToolChunk).toBe("function");
     });
 
@@ -1315,7 +1315,7 @@ describe("AnthropicTransformer", () => {
       const converter = transformer.createStreamTransformer();
       const event = createMessageStartEvent();
 
-      const result = converter.decode(event);
+      const result = converter.toOpenAI(event);
 
       expect(result).not.toBeNull();
       expect(result?.object).toBe("chat.completion.chunk");
@@ -1328,10 +1328,10 @@ describe("AnthropicTransformer", () => {
       const converter = transformer.createStreamTransformer();
 
       // First emit message_start to initialize model
-      converter.decode(createMessageStartEvent());
+      converter.toOpenAI(createMessageStartEvent());
 
       // Then content block start
-      converter.decode({
+      converter.toOpenAI({
         type: "content_block_start",
         index: 0,
         content_block: { type: "text", text: "" },
@@ -1339,7 +1339,7 @@ describe("AnthropicTransformer", () => {
       } as any);
 
       // Now the delta
-      const result = converter.decode({
+      const result = converter.toOpenAI({
         type: "content_block_delta",
         index: 0,
         delta: { type: "text_delta", text: "Hello" },
@@ -1353,10 +1353,10 @@ describe("AnthropicTransformer", () => {
       const converter = transformer.createStreamTransformer();
 
       // Initialize with message_start
-      converter.decode(createMessageStartEvent());
+      converter.toOpenAI(createMessageStartEvent());
 
       // Tool use content block start
-      const result = converter.decode({
+      const result = converter.toOpenAI({
         type: "content_block_start",
         index: 0,
         content_block: {
@@ -1379,9 +1379,9 @@ describe("AnthropicTransformer", () => {
       const converter = transformer.createStreamTransformer();
 
       // Initialize
-      converter.decode(createMessageStartEvent());
+      converter.toOpenAI(createMessageStartEvent());
 
-      converter.decode({
+      converter.toOpenAI({
         type: "content_block_start",
         index: 0,
         content_block: {
@@ -1392,7 +1392,7 @@ describe("AnthropicTransformer", () => {
         },
       });
 
-      const result = converter.decode({
+      const result = converter.toOpenAI({
         type: "content_block_delta",
         index: 0,
         delta: { type: "input_json_delta", partial_json: '{"city": "' },
@@ -1453,16 +1453,16 @@ describe("AnthropicTransformer", () => {
 
       // Ping events exist at runtime but not in TS types
       const pingEvent = { type: "ping" } as unknown as Parameters<
-        typeof converter.decode
+        typeof converter.toOpenAI
       >[0];
-      const result = converter.decode(pingEvent);
+      const result = converter.toOpenAI(pingEvent);
 
       expect(result).toBeNull();
     });
 
     test("returns null for message_stop event", () => {
       const converter = transformer.createStreamTransformer();
-      const result = converter.decode({ type: "message_stop" });
+      const result = converter.toOpenAI({ type: "message_stop" });
       expect(result).toBeNull();
     });
 
@@ -1470,9 +1470,9 @@ describe("AnthropicTransformer", () => {
       const converter = transformer.createStreamTransformer();
 
       // Initialize
-      converter.decode(createMessageStartEvent());
+      converter.toOpenAI(createMessageStartEvent());
 
-      const result = converter.decode({
+      const result = converter.toOpenAI({
         type: "message_delta",
         delta: { stop_reason: "end_turn", stop_sequence: null },
         usage: { output_tokens: 15 },
@@ -1488,10 +1488,10 @@ describe("AnthropicTransformer", () => {
       const converter = transformer.createStreamTransformer();
 
       // Initialize
-      converter.decode(createMessageStartEvent());
+      converter.toOpenAI(createMessageStartEvent());
 
       // First tool
-      const tool1 = converter.decode({
+      const tool1 = converter.toOpenAI({
         type: "content_block_start",
         index: 0,
         content_block: {
@@ -1504,10 +1504,10 @@ describe("AnthropicTransformer", () => {
       expect(tool1?.choices[0].delta.tool_calls?.[0].index).toBe(0);
 
       // End first tool block
-      converter.decode({ type: "content_block_stop", index: 0 });
+      converter.toOpenAI({ type: "content_block_stop", index: 0 });
 
       // Second tool
-      const tool2 = converter.decode({
+      const tool2 = converter.toOpenAI({
         type: "content_block_start",
         index: 1,
         content_block: {

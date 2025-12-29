@@ -58,7 +58,7 @@ class AnthropicStreamTransformer
   /** Whether we've started a text content block */
   private hasStartedTextBlock = false;
 
-  decode(event: AnthropicStreamEvent): OpenAIStreamChunk | null {
+  toOpenAI(event: AnthropicStreamEvent): OpenAIStreamChunk | null {
     // Handle "ping" event which exists at runtime but not in TypeScript types
     const eventType = event.type as string;
     if (eventType === "ping") {
@@ -96,7 +96,7 @@ class AnthropicStreamTransformer
     return delta !== undefined && "tool_calls" in delta;
   }
 
-  encode(reply: FastifyReply, chunk: OpenAIStreamChunk): void {
+  writeFromOpenAI(reply: FastifyReply, chunk: OpenAIStreamChunk): void {
     const choice = chunk.choices?.[0];
     if (!choice) return;
 
@@ -412,7 +412,7 @@ export class AnthropicTransformer extends BaseProviderTransformer<
 > {
   readonly provider = "anthropic";
 
-  convertRequestToOpenAI(anthropicReq: AnthropicRequest): OpenAIRequest {
+  requestToOpenAI(anthropicReq: AnthropicRequest): OpenAIRequest {
     const messages: OpenAIRequest["messages"] = [];
 
     // 1. Convert system param to system message
@@ -449,7 +449,7 @@ export class AnthropicTransformer extends BaseProviderTransformer<
     };
   }
 
-  convertRequestFromOpenAI(openaiReq: OpenAIRequest): AnthropicRequest {
+  requestFromOpenAI(openaiReq: OpenAIRequest): AnthropicRequest {
     // 1. Extract system messages
     const systemContent = this.extractSystemMessages(openaiReq.messages);
 
@@ -481,7 +481,7 @@ export class AnthropicTransformer extends BaseProviderTransformer<
     };
   }
 
-  convertResponseToOpenAI(response: AnthropicResponse): OpenAIResponse {
+  responseToOpenAI(response: AnthropicResponse): OpenAIResponse {
     const { textContent, toolCalls } = this.extractResponseContent(
       response.content,
     );
@@ -515,7 +515,7 @@ export class AnthropicTransformer extends BaseProviderTransformer<
     };
   }
 
-  convertResponseFromOpenAI(openaiResp: OpenAIResponse): AnthropicResponse {
+  responseFromOpenAI(openaiResp: OpenAIResponse): AnthropicResponse {
     const choice = openaiResp.choices[0];
     const content: AnthropicResponse["content"] = [];
 

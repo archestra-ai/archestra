@@ -14,45 +14,6 @@ export type OpenAIResponse = OpenAi.Types.ChatCompletionsResponse;
 export type OpenAIStreamChunk = OpenAi.Types.ChatCompletionChunk;
 
 /**
- * Bidirectional transformer for streaming chunks.
- *
- * Handles both directions:
- * - decode: Native provider events → OpenAI format (inbound from SDK)
- * - encode: OpenAI format → Native SSE events (outbound to client)
- *
- * MUST be created per streaming session because it's stateful
- * (tracks tool indices, content block lifecycle, etc.)
- *
- * @typeParam TStreamEvent - The provider's streaming event format
- */
-export interface StreamTransformer<TStreamEvent> {
-  /**
-   * Decode a native provider streaming event to OpenAI chunk format.
-   *
-   * @param event - Provider-specific streaming event
-   * @returns OpenAI stream chunk, or null to skip this event (e.g., ping events)
-   */
-  decode(event: TStreamEvent): OpenAIStreamChunk | null;
-
-  /**
-   * Check if an OpenAI chunk contains tool calls.
-   * Used for buffering tool call chunks for policy evaluation.
-   *
-   * @param chunk - OpenAI stream chunk
-   * @returns true if chunk contains tool_calls delta
-   */
-  isToolChunk(chunk: OpenAIStreamChunk): boolean;
-
-  /**
-   * Encode an OpenAI chunk to native provider SSE format and write to response.
-   *
-   * @param reply - Fastify reply object
-   * @param chunk - OpenAI stream chunk to encode and write
-   */
-  encode(reply: FastifyReply, chunk: OpenAIStreamChunk): void;
-}
-
-/**
  * Base class for provider transformations.
  *
  * @typeParam ProviderRequest - The provider's request format
@@ -68,13 +29,13 @@ export abstract class BaseProviderTransformer<
   abstract readonly provider: string;
 
   /**
-   * Convert incoming provider request to OpenAI format for internal processing.
+   * Convert provider request to OpenAI format for internal processing.
    * This allows all business logic (policies, TOON, metrics) to work on one format.
    *
    * @param request - Provider-specific request format
    * @returns OpenAI format request for internal processing
    */
-  abstract convertRequestToOpenAI(request: ProviderRequest): OpenAIRequest;
+  abstract requestToOpenAI(request: ProviderRequest): OpenAIRequest;
 
   /**
    * Convert OpenAI format to provider API format for the actual API call.
@@ -82,7 +43,7 @@ export abstract class BaseProviderTransformer<
    * @param request - OpenAI format request
    * @returns Provider-specific request format for API call
    */
-  abstract convertRequestFromOpenAI(request: OpenAIRequest): ProviderRequest;
+  abstract requestFromOpenAI(request: OpenAIRequest): ProviderRequest;
 
   /**
    * Convert provider response to OpenAI format for internal processing.
@@ -90,7 +51,7 @@ export abstract class BaseProviderTransformer<
    * @param response - Provider-specific response
    * @returns OpenAI format response for internal processing
    */
-  abstract convertResponseToOpenAI(response: ProviderResponse): OpenAIResponse;
+  abstract responseToOpenAI(response: ProviderResponse): OpenAIResponse;
 
   /**
    * Convert OpenAI format back to provider format for client response.
@@ -98,9 +59,7 @@ export abstract class BaseProviderTransformer<
    * @param response - OpenAI format response
    * @returns Provider-specific response format for client
    */
-  abstract convertResponseFromOpenAI(
-    response: OpenAIResponse,
-  ): ProviderResponse;
+  abstract responseFromOpenAI(response: OpenAIResponse): ProviderResponse;
 
   /**
    * Create a stateful stream transformer for a streaming session.
@@ -110,4 +69,43 @@ export abstract class BaseProviderTransformer<
    * @returns A new stateful stream transformer
    */
   abstract createStreamTransformer(): StreamTransformer<ProviderStreamEvent>;
+}
+
+/**
+ * Bidirectional transformer for streaming chunks.
+ *
+ * Handles both directions:
+ * - toOpenAI: Native provider events → OpenAI format (inbound from SDK)
+ * - fromOpenAI: OpenAI format → Native SSE events (outbound to client)
+ *
+ * MUST be created per streaming session because it's stateful
+ * (tracks tool indices, content block lifecycle, etc.)
+ *
+ * @typeParam TStreamEvent - The provider's streaming event format
+ */
+export interface StreamTransformer<TStreamEvent> {
+  /**
+   * Convert a native provider streaming event to OpenAI chunk format.
+   *
+   * @param event - Provider-specific streaming event
+   * @returns OpenAI stream chunk, or null to skip this event (e.g., ping events)
+   */
+  toOpenAI(event: TStreamEvent): OpenAIStreamChunk | null;
+
+  /**
+   * Check if a chunk contains tool calls.
+   *
+   * @param chunk - OpenAI stream chunk
+   * @returns true if chunk contains tool_calls delta
+   */
+  isToolChunk(chunk: OpenAIStreamChunk): boolean;
+
+  /**
+   * Write an OpenAI chunk to the provider response.
+   * Converts chunk to provider specific formar before.
+   *
+   * @param reply - Fastify reply object
+   * @param chunk - OpenAI stream chunk to convert and write
+   */
+  writeFromOpenAI(reply: FastifyReply, chunk: OpenAIStreamChunk): void;
 }

@@ -139,7 +139,7 @@ export async function handleRequest<TRequest, TResponse, TStreamEvent>(
   }
 
   // ========== 3. CONVERT TO OPENAI FORMAT ==========
-  const openaiRequest = transformer.convertRequestToOpenAI(request);
+  const openaiRequest = transformer.requestToOpenAI(request);
 
   logger.info(
     {
@@ -269,7 +269,7 @@ export async function handleRequest<TRequest, TResponse, TStreamEvent>(
   };
 
   // Convert back to provider format for API call
-  const providerRequest = transformer.convertRequestFromOpenAI(
+  const providerRequest = transformer.requestFromOpenAI(
     processedOpenaiRequest,
   );
 
@@ -378,7 +378,7 @@ async function handleNonStreaming<TRequest, TResponse, TStreamEvent>(
 
   // Convert to OpenAI format for processing
   const openaiResponse =
-    provider.transformer.convertResponseToOpenAI(providerResponse);
+    provider.transformer.responseToOpenAI(providerResponse);
 
   // Run post-processing (stores interaction in native format)
   const { response: processedResponse, wasBlocked } = await runPostProcessing({
@@ -396,15 +396,15 @@ async function handleNonStreaming<TRequest, TResponse, TStreamEvent>(
     externalAgentId,
     userId,
     // Converters for storing in native format
-    convertRequestFromOpenAI: (req) =>
-      provider.transformer.convertRequestFromOpenAI(req),
-    convertResponseFromOpenAI: (res) =>
-      provider.transformer.convertResponseFromOpenAI(res),
+    requestFromOpenAI: (req) =>
+      provider.transformer.requestFromOpenAI(req),
+    responseFromOpenAI: (res) =>
+      provider.transformer.responseFromOpenAI(res),
   });
 
   // Convert back to provider format and send
   const finalResponse = wasBlocked
-    ? provider.transformer.convertResponseFromOpenAI(processedResponse)
+    ? provider.transformer.responseFromOpenAI(processedResponse)
     : providerResponse;
 
   reply.send(finalResponse);
@@ -414,9 +414,9 @@ async function handleNonStreaming<TRequest, TResponse, TStreamEvent>(
  * Handle streaming API call
  *
  * Uses chunk-by-chunk OpenAI format conversion:
- * 1. Convert each native event to OpenAI chunk immediately
+ * 1. Convert each native event to OpenAI chunk
  * 2. Buffer tool call chunks for policy evaluation
- * 3. Stream non-tool chunks in native format using OpenAI chunk writer
+ * 3. Stream non-tool chunks
  * 4. After streaming, evaluate policies and flush or replace tool chunks
  */
 async function handleStreaming<TRequest, TResponse, TStreamEvent>(
@@ -450,7 +450,7 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
   let hasToolCalls = false;
 
   for await (const nativeEvent of streamResult.events) {
-    const chunk = streamTransformer.decode(nativeEvent);
+    const chunk = streamTransformer.toOpenAI(nativeEvent);
 
     if (!chunk) continue;
 
@@ -460,14 +460,14 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
       hasToolCalls = true;
       bufferedToolChunks.push(chunk);
     } else {
-      streamTransformer.encode(reply, chunk);
+      streamTransformer.writeFromOpenAI(reply, chunk);
     }
   }
 
   // Get accumulated response for post-processing (metrics, interaction recording)
   const accumulatedResponse = await streamResult.getAccumulatedResponse();
   const openaiResponse =
-    provider.transformer.convertResponseToOpenAI(accumulatedResponse);
+    provider.transformer.responseToOpenAI(accumulatedResponse);
 
   // Run post-processing (stores interaction in native format)
   const { response: processedResponse, wasBlocked } = await runPostProcessing({
@@ -484,11 +484,10 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
     interactionType: provider.interactionType,
     externalAgentId,
     userId,
-    // Converters for storing in native format
-    convertRequestFromOpenAI: (req) =>
-      provider.transformer.convertRequestFromOpenAI(req),
-    convertResponseFromOpenAI: (res) =>
-      provider.transformer.convertResponseFromOpenAI(res),
+    requestFromOpenAI: (req) =>
+      provider.transformer.requestFromOpenAI(req),
+    responseFromOpenAI: (res) =>
+      provider.transformer.responseFromOpenAI(res),
   });
 
   // Handle tool calls based on policy result
@@ -497,7 +496,7 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
       // Stream refusal message as a text content chunk
       const refusalContent =
         processedResponse.choices[0]?.message?.content ?? "Blocked by policy";
-      streamTransformer.encode(reply, {
+      streamTransformer.writeFromOpenAI(reply, {
         id: openaiResponse.id,
         object: "chat.completion.chunk",
         created: Math.floor(Date.now() / 1000),
@@ -509,7 +508,7 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
     } else {
       // Encode and stream the buffered tool call chunks (in native SSE format)
       for (const chunk of bufferedToolChunks) {
-        streamTransformer.encode(reply, chunk);
+        streamTransformer.writeFromOpenAI(reply, chunk);
       }
     }
   }
@@ -518,7 +517,7 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
   const finishReason = wasBlocked
     ? "stop"
     : (openaiResponse.choices[0]?.finish_reason ?? "stop");
-  streamTransformer.encode(reply, {
+  streamTransformer.writeFromOpenAI(reply, {
     id: openaiResponse.id,
     object: "chat.completion.chunk",
     created: Math.floor(Date.now() / 1000),
@@ -586,9 +585,9 @@ interface PostProcessingParams<TRequest, TResponse> {
   externalAgentId?: string;
   userId?: string;
   /** Convert OpenAI request back to native format for storage */
-  convertRequestFromOpenAI: (req: OpenAIRequest) => TRequest;
+  requestFromOpenAI: (req: OpenAIRequest) => TRequest;
   /** Convert OpenAI response back to native format for storage */
-  convertResponseFromOpenAI: (res: OpenAIResponse) => TResponse;
+  responseFromOpenAI: (res: OpenAIResponse) => TResponse;
 }
 
 /**
@@ -611,8 +610,8 @@ async function runPostProcessing<TRequest, TResponse>(
     interactionType,
     externalAgentId,
     userId,
-    convertRequestFromOpenAI,
-    convertResponseFromOpenAI,
+    requestFromOpenAI,
+    responseFromOpenAI,
   } = params;
 
   let processedResponse = response;
@@ -715,8 +714,8 @@ async function runPostProcessing<TRequest, TResponse>(
 
   // 4. Record interaction in native provider format
   // Convert OpenAI format back to native format for storage
-  const nativeProcessedRequest = convertRequestFromOpenAI(processedRequest);
-  const nativeResponse = convertResponseFromOpenAI(processedResponse);
+  const nativeProcessedRequest = requestFromOpenAI(processedRequest);
+  const nativeResponse = responseFromOpenAI(processedResponse);
 
   // Cast to the expected types - we know these are compatible at runtime
   // since the transformer converts to/from the correct provider format

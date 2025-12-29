@@ -3,37 +3,13 @@ import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { computeSecretStorageType } from "@/secretmanager.utils";
 import { secretManager } from "@/secretsmanager";
-import type {
-  InsertMcpServer,
-  McpServer,
-  SecretStorageType,
-  UpdateMcpServer,
-} from "@/types";
+import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
-
-/**
- * Compute the secret storage type based on secretId and secret flags.
- */
-function computeSecretStorageType(
-  secretId: string | null,
-  isVault: boolean | null,
-  isByosVault: boolean | null,
-): SecretStorageType {
-  if (!secretId) {
-    return "none";
-  }
-  if (isVault) {
-    return "vault";
-  }
-  if (isByosVault) {
-    return "external_vault";
-  }
-  return "database";
-}
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {

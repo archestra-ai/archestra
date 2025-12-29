@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
+    "headers": {
+      "x-goog-api-key": {
+        "contains": "gemini-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "Tool persistence test response."
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 50,
+        "candidatesTokenCount": 10,
+        "totalTokenCount": 60
+      }
+    }
+  }
+}

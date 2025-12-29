@@ -4,7 +4,7 @@ import { type archestraApiTypes, E2eTestId } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { lazy, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useFeatureFlag } from "@/lib/features.hook";
 import { useTeams } from "@/lib/team.query";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
+const InlineVaultSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/inline-vault-secret-selector.ee"),
+);
 
 const WithPermissions = lazy(() =>
   // biome-ignore lint/style/noRestrictedImports: dynamic import
@@ -32,9 +44,11 @@ type CreateChatApiKeyBody = archestraApiTypes.CreateChatApiKeyData["body"];
 export type ChatApiKeyFormValues = {
   name: string;
   provider: CreateChatApiKeyBody["provider"];
-  apiKey: string;
+  apiKey: string | null;
   scope: NonNullable<CreateChatApiKeyBody["scope"]>;
-  teamId: string;
+  teamId: string | null;
+  vaultSecretPath: string | null;
+  vaultSecretKey: string | null;
 };
 
 // Response type for existing keys
@@ -126,6 +140,7 @@ export function ChatApiKeyForm({
   form,
   isPending = false,
 }: ChatApiKeyFormProps) {
+  const byosEnabled = useFeatureFlag("byosEnabled");
   const isEditMode = Boolean(existingKey);
 
   // Data fetching for team selector
@@ -229,9 +244,37 @@ export function ChatApiKeyForm({
     }
   }, [scope, teamId, usedTeamIds, form]);
 
+  // Clean vault secret values when changing scope
+  useEffect(() => {
+    if (scope !== "team") {
+      form.setValue("vaultSecretPath", null);
+      form.setValue("vaultSecretKey", null);
+    }
+  }, [scope, form]);
+
+  const vaultSecretSelector =
+    scope === "team" ? (
+      <InlineVaultSecretSelector
+        teamId={teamId}
+        selectedSecretPath={form.getValues("vaultSecretPath")}
+        selectedSecretKey={form.getValues("vaultSecretKey")}
+        onSecretPathChange={(v) => form.setValue("vaultSecretPath", v)}
+        onSecretKeyChange={(v) => form.setValue("vaultSecretKey", v)}
+      />
+    ) : (
+      <ExternalSecretSelector
+        selectedTeamId={teamId}
+        selectedSecretPath={form.getValues("vaultSecretPath")}
+        selectedSecretKey={form.getValues("vaultSecretKey")}
+        onTeamChange={(v) => form.setValue("teamId", v)}
+        onSecretChange={(v) => form.setValue("vaultSecretPath", v)}
+        onSecretKeyChange={(v) => form.setValue("vaultSecretKey", v)}
+      />
+    );
+
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Name field - only in full mode */}
         {mode === "full" && (
           <div className="space-y-2">
@@ -244,7 +287,6 @@ export function ChatApiKeyForm({
             />
           </div>
         )}
-
         {/* Provider selector */}
         <div className="space-y-2">
           <Label htmlFor="chat-api-key-provider">Provider</Label>
@@ -344,7 +386,7 @@ export function ChatApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-team">Team</Label>
             <Select
-              value={teamId}
+              value={teamId ?? undefined}
               onValueChange={(v) => form.setValue("teamId", v)}
               disabled={isPending}
             >
@@ -369,42 +411,54 @@ export function ChatApiKeyForm({
         )}
 
         {/* API Key input */}
-        <div className="space-y-2">
-          <Label htmlFor="chat-api-key-value">
-            API Key{" "}
-            {isEditMode && (
-              <span className="text-muted-foreground font-normal">
-                (leave blank to keep current)
-              </span>
-            )}
-          </Label>
-          <div className="relative">
-            <Input
-              id="chat-api-key-value"
-              type="password"
-              placeholder={providerConfig.placeholder}
-              disabled={isPending}
-              className={showConfiguredStyling ? "border-green-500 pr-10" : ""}
-              {...form.register("apiKey")}
-            />
-            {showConfiguredStyling && (
-              <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+        {byosEnabled ? (
+          <Suspense
+            fallback={
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            }
+          >
+            {vaultSecretSelector}
+          </Suspense>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="chat-api-key-value">
+              API Key{" "}
+              {isEditMode && (
+                <span className="text-muted-foreground font-normal">
+                  (leave blank to keep current)
+                </span>
+              )}
+            </Label>
+            <div className="relative">
+              <Input
+                id="chat-api-key-value"
+                type="password"
+                placeholder={providerConfig.placeholder}
+                disabled={isPending}
+                className={
+                  showConfiguredStyling ? "border-green-500 pr-10" : ""
+                }
+                {...form.register("apiKey")}
+              />
+              {showConfiguredStyling && (
+                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+              )}
+            </div>
+            {showConsoleLink && (
+              <p className="text-xs text-muted-foreground">
+                Get your API key from{" "}
+                <Link
+                  href={providerConfig.consoleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  {providerConfig.consoleName}
+                </Link>
+              </p>
             )}
           </div>
-          {showConsoleLink && (
-            <p className="text-xs text-muted-foreground">
-              Get your API key from{" "}
-              <Link
-                href={providerConfig.consoleUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                {providerConfig.consoleName}
-              </Link>
-            </p>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

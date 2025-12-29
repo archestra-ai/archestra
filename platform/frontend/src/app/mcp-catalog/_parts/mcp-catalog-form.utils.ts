@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  isVaultReference,
+  parseVaultReference,
+} from "@shared";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
 type McpCatalogApiData =
@@ -103,35 +107,6 @@ export function transformFormToApiData(
   }
 
   return data;
-}
-
-/**
- * Check if a value is a BYOS vault reference (path#key format)
- * Type guard to narrow string | undefined to string
- */
-export function isVaultReference(value: string | undefined): value is string {
-  if (!value) return false;
-  // Vault references look like "secret/data/path/to/secret#keyname"
-  // They contain a # and the part before # looks like a path
-  const hashIndex = value.indexOf("#");
-  if (hashIndex === -1) return false;
-  const path = value.substring(0, hashIndex);
-  // Basic check: path should contain "/" and not be too short
-  return path.includes("/") && path.length > 5;
-}
-
-/**
- * Parse a vault reference into path and key
- */
-export function parseVaultReference(value: string): {
-  path: string;
-  key: string;
-} {
-  const hashIndex = value.indexOf("#");
-  return {
-    path: value.substring(0, hashIndex),
-    key: value.substring(hashIndex + 1),
-  };
 }
 
 // Transform catalog item to form values

@@ -425,6 +425,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           async (llmSpan) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: true,
@@ -856,6 +857,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           async (llmSpan) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,

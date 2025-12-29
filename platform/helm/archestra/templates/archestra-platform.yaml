@@ -136,6 +136,10 @@ spec:
               mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
               readOnly: true
           {{- end }}
+      {{- with .Values.archestra.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
       volumes:
         - name: kubeconfig

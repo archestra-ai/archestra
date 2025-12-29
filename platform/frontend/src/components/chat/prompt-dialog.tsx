@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -196,25 +195,6 @@ export function PromptDialog({
                 );
               }}
             </WithPermissions>
-            {agentId && (
-              <WithPermissions
-                permissions={{ profile: ["read"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => {
-                  return hasPermission === undefined ? null : hasPermission ? (
-                    <McpToolsDisplay
-                      agentId={agentId}
-                      className="text-xs text-muted-foreground"
-                    />
-                  ) : (
-                    <Badge variant="outline" className="text-xs">
-                      Unable to show the list of tools
-                    </Badge>
-                  );
-                }}
-              </WithPermissions>
-            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt</Label>

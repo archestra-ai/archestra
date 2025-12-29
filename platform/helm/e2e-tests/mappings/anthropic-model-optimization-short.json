@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-model-optimization-short"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-anthropic-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg-model-opt-short",
+      "type": "message",
+      "role": "assistant",
+      "model": "e2e-test-anthropic-optimized",
+      "content": [
+        {
+          "type": "text",
+          "text": "This is a short response for model optimization test."
+        }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 1500,
+        "output_tokens": 15
+      }
+    }
+  }
+}

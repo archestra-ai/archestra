@@ -652,6 +652,48 @@
       "when": 1766004692000,
       "tag": "0092_rename_default_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1766009104491,
+      "tag": "0093_motionless_the_santerians",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1766012153282,
+      "tag": "0094_wonderful_ink",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1766045947350,
+      "tag": "0095_optimal_xorn",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1766151403560,
+      "tag": "0096_lying_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1766167515073,
+      "tag": "0097_long_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1766221758178,
+      "tag": "0098_great_mister_fear",
+      "breakpoints": true
     }
   ]
 }

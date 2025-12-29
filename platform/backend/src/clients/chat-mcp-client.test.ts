@@ -29,7 +29,7 @@ describe("chat-mcp-client tool caching", () => {
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
 
     chatClient.clearChatMcpClient(agent.id);
-    chatClient.__test.clearToolCache(cacheKey);
+    await chatClient.__test.clearToolCache(cacheKey);
 
     const mockClient = {
       listTools: vi.fn().mockResolvedValue({
@@ -65,10 +65,14 @@ describe("chat-mcp-client tool caching", () => {
       userIsProfileAdmin: false,
     });
 
-    expect(second).toBe(first);
+    // Check that second call returns the same cached tools (by value)
+    // Note: With cacheManager, object identity may differ but values should match
+    expect(second).toEqual(first);
+    expect(Object.keys(second)).toEqual(["lookup_email"]);
+    // Most importantly, listTools should only be called once due to caching
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);
 
     chatClient.clearChatMcpClient(agent.id);
-    chatClient.__test.clearToolCache(cacheKey);
+    await chatClient.__test.clearToolCache(cacheKey);
   });
 });

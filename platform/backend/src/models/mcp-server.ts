@@ -3,37 +3,13 @@ import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { computeSecretStorageType } from "@/secretmanager.utils";
 import { secretManager } from "@/secretsmanager";
-import type {
-  InsertMcpServer,
-  McpServer,
-  SecretStorageType,
-  UpdateMcpServer,
-} from "@/types";
+import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
-
-/**
- * Compute the secret storage type based on secretId and secret flags.
- */
-function computeSecretStorageType(
-  secretId: string | null,
-  isVault: boolean | null,
-  isByosVault: boolean | null,
-): SecretStorageType {
-  if (!secretId) {
-    return "none";
-  }
-  if (isVault) {
-    return "vault";
-  }
-  if (isByosVault) {
-    return "external_vault";
-  }
-  return "database";
-}
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -44,10 +20,10 @@ class McpServerModel {
     let mcpServerName = serverData.name;
     if (serverData.serverType === "local") {
       if (serverData.teamId) {
-        // Team installation: use teamId for unique pod name
+        // Team installation: use teamId for unique deployment name
         mcpServerName = `${serverData.name}-${serverData.teamId}`;
       } else if (userId) {
-        // Personal installation: use userId for unique pod name
+        // Personal installation: use userId for unique deployment name
         mcpServerName = `${serverData.name}-${userId}`;
       }
     }
@@ -361,7 +337,7 @@ class McpServerModel {
       return false;
     }
 
-    // For local servers, stop and remove the K8s pod
+    // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
       // Clean up agent_tools that use this server as execution source
       // Must be done before deletion to ensure agents do not retain unusable tool assignments; FK constraint would only null out the reference, not remove the assignment
@@ -383,11 +359,13 @@ class McpServerModel {
 
       try {
         await McpServerRuntimeManager.removeMcpServer(id);
-        logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+        logger.info(
+          `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
+        );
       } catch (error) {
         logger.error(
           { err: error },
-          `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
+          `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
         );
         // Continue with deletion even if pod cleanup fails
       }

@@ -24,6 +24,8 @@ Put the screenshot of the main page here as the last step after deployment.
    ```bash
    docker pull archestra/platform:latest;
    docker run -p 9000:9000 -p 3000:3000 \
+      -e ARCHESTRA_QUICKSTART \
+      -v /var/run/docker.sock:/var/run/docker.sock \
       -v archestra-postgres-data:/var/lib/postgresql/data \
       -v archestra-app-data:/app/data \
       archestra/platform;

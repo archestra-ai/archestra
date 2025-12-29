@@ -2,7 +2,6 @@
 
 import {
   type archestraApiTypes,
-  modelsByProvider,
   providerDisplayNames,
   type SupportedProvider,
   SupportedProviders,
@@ -46,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { type ChatModel, useChatModelsQuery } from "@/lib/chat-models.query";
 import {
   useCreateTokenPrice,
   useDeleteTokenPrice,
@@ -77,10 +77,12 @@ function TokenPriceInlineForm({
   initialData,
   onSave,
   onCancel,
+  models = [],
 }: {
   initialData?: TokenPriceData;
   onSave: (data: archestraApiTypes.CreateTokenPriceData["body"]) => void;
   onCancel: () => void;
+  models?: ChatModel[];
 }) {
   const [formData, setFormData] = useState({
     provider: initialData?.provider || ("openai" as const),
@@ -91,11 +93,13 @@ function TokenPriceInlineForm({
 
   const modelOptions = useMemo(
     () =>
-      modelsByProvider[formData.provider].map((model: string) => ({
-        value: model,
-        label: model,
-      })),
-    [formData.provider],
+      models
+        .filter((model) => model.provider === formData.provider)
+        .map((model) => ({
+          value: model.id,
+          label: model.displayName,
+        })),
+    [formData.provider, models],
   );
 
   const isValid =
@@ -220,6 +224,7 @@ function TokenPriceRow({
   onSave,
   onCancel,
   onDelete,
+  models = [],
 }: {
   tokenPrice: TokenPriceData;
   isEditing: boolean;
@@ -227,6 +232,7 @@ function TokenPriceRow({
   onSave: (data: archestraApiTypes.UpdateTokenPriceData["body"]) => void;
   onCancel: () => void;
   onDelete: () => void;
+  models?: ChatModel[];
 }) {
   if (isEditing) {
     return (
@@ -234,6 +240,7 @@ function TokenPriceRow({
         initialData={tokenPrice}
         onSave={onSave}
         onCancel={onCancel}
+        models={models}
       />
     );
   }
@@ -304,6 +311,7 @@ export default function TokenPricePage() {
 
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
+  const { data: chatModels = [] } = useChatModelsQuery();
   const deleteTokenPrice = useDeleteTokenPrice();
   const createTokenPrice = useCreateTokenPrice();
   const updateTokenPrice = useUpdateTokenPrice();
@@ -382,6 +390,7 @@ export default function TokenPricePage() {
                   <TokenPriceInlineForm
                     onSave={handleCreateTokenPrice}
                     onCancel={handleCancelEdit}
+                    models={chatModels}
                   />
                 )}
                 {tokenPrices.length === 0 && !isAddingTokenPrice ? (
@@ -409,6 +418,7 @@ export default function TokenPricePage() {
                       }
                       onCancel={handleCancelEdit}
                       onDelete={() => handleDeleteTokenPrice(tokenPrice.id)}
+                      models={chatModels}
                     />
                   ))
                 )}

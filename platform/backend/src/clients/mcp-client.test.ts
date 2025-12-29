@@ -29,18 +29,18 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
-const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetPod } =
+const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetDeployment } =
   vi.hoisted(() => ({
     mockUsesStreamableHttp: vi.fn(),
     mockGetHttpEndpointUrl: vi.fn(),
-    mockGetPod: vi.fn(),
+    mockGetDeployment: vi.fn(),
   }));
 
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
-    getPod: mockGetPod,
+    getDeployment: mockGetDeployment,
   },
 }));
 
@@ -84,7 +84,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
-    mockGetPod.mockReset();
+    mockGetDeployment.mockReset();
   });
 
   describe("executeToolCall", () => {
@@ -649,13 +649,14 @@ describe("McpClient", () => {
         // Mock runtime manager to indicate stdio transport (not HTTP)
         mockUsesStreamableHttp.mockResolvedValue(false);
 
-        // Mock K8sPod instance
-        const mockK8sPod = {
+        // Mock K8sDeployment instance
+        const mockK8sDeployment = {
           k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
           k8sNamespace: "default",
-          k8sPodName: "mcp-test-pod",
+          deploymentName: "mcp-test-deployment",
+          getRunningPodName: vi.fn().mockResolvedValue("mcp-test-pod-actual"),
         };
-        mockGetPod.mockReturnValue(mockK8sPod);
+        mockGetDeployment.mockReturnValue(mockK8sDeployment);
 
         // Mock the tool call response
         mockCallTool.mockResolvedValue({
@@ -674,7 +675,8 @@ describe("McpClient", () => {
         // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
         expect(mockGetHttpEndpointUrl).not.toHaveBeenCalled();
-        expect(mockGetPod).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockGetDeployment).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockK8sDeployment.getRunningPodName).toHaveBeenCalled();
 
         // Verify MCP SDK client was used
         expect(mockCallTool).toHaveBeenCalledWith({

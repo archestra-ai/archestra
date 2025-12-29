@@ -739,6 +739,23 @@ class ToolModel {
   }
 
   /**
+   * Get tool names by IDs
+   * Used to map tool IDs to names for filtering
+   */
+  static async getNamesByIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.id, ids));
+
+    return tools.map((t) => t.name);
+  }
+
+  /**
    * Bulk create proxy-sniffed tools for an agent (tools discovered via LLM proxy)
    * Fetches existing tools in a single query, then bulk inserts only new tools
    * Returns all tools (existing + newly created) to avoid N+1 queries

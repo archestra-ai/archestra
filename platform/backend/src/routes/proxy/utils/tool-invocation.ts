@@ -1,3 +1,4 @@
+import { isArchestraMcpServerTool } from "@shared";
 import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
 
@@ -7,11 +8,18 @@ import { ToolInvocationPolicyModel } from "@/models";
  *
  * If this method returns non-null it is because the tool call was blocked and we are returning a refusal message
  * (in the format of an assistant message with a refusal)
+ *
+ * @param toolCalls - The tool calls to evaluate
+ * @param agentId - The agent ID to evaluate policies for
+ * @param contextIsTrusted - Whether the context is trusted
+ * @param enabledToolNames - Optional set of tool names that are enabled in the request.
+ *                          If provided, tool calls not in this set will be filtered and reported as disabled.
  */
 export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
   agentId: string,
   contextIsTrusted: boolean,
+  enabledToolNames?: Set<string>,
 ): Promise<null | [string, string]> => {
   logger.debug(
     { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
@@ -22,8 +30,44 @@ export const evaluatePolicies = async (
     return null;
   }
 
+  // Filter out disabled tools (not in request's tools list)
+  // This is required because otherwise the tool invocation policies will be evaluated
+  // for tools that are disabled during chat session.
+  // Note: archestra__* tools are always enabled (built-in tools that bypass policies)
+  const isToolEnabled = (toolName: string) =>
+    isArchestraMcpServerTool(toolName) || enabledToolNames?.has(toolName);
+
+  let disabledToolNames: string[] = [];
+  let filteredToolCalls = toolCalls;
+  if (enabledToolNames && enabledToolNames.size > 0) {
+    disabledToolNames = toolCalls
+      .filter((tc) => !isToolEnabled(tc.toolCallName))
+      .map((tc) => tc.toolCallName);
+    filteredToolCalls = toolCalls.filter((tc) =>
+      isToolEnabled(tc.toolCallName),
+    );
+    if (disabledToolNames.length > 0) {
+      logger.info(
+        { disabledTools: disabledToolNames },
+        "[toolInvocation] evaluatePolicies: disabled tools filtered out",
+      );
+    }
+  }
+
+  // If any tools were disabled, return distinct message about them
+  if (disabledToolNames.length > 0) {
+    const toolList = disabledToolNames.join(", ");
+    const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
+    return [message, message];
+  }
+
+  // If all tools were filtered out, nothing to evaluate
+  if (filteredToolCalls.length === 0) {
+    return null;
+  }
+
   // Parse all tool arguments upfront
-  const parsedToolCalls = toolCalls.map((toolCall) => {
+  const parsedToolCalls = filteredToolCalls.map((toolCall) => {
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:
      *

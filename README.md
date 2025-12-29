@@ -121,6 +121,8 @@ Metrics, traces and logs allowing to come to a conclusion about per-org, per-age
 ```
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
+  -e ARCHESTRA_QUICKSTART \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -v archestra-postgres-data:/var/lib/postgresql/data \
   -v archestra-app-data:/app/data \
   archestra/platform;

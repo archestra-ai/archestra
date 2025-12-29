@@ -87,12 +87,6 @@ export interface ArchestraContext {
   };
 }
 
-export const isArchestraMcpServerTool = (toolName: string): boolean => {
-  return toolName.startsWith(
-    `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
-  );
-};
-
 /**
  * Execute an Archestra MCP tool
  */

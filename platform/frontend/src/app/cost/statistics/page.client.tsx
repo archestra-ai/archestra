@@ -15,7 +15,7 @@ import {
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { DateRange } from "react-day-picker";
 
@@ -33,6 +33,7 @@ ChartJS.register(
 import type { archestraApiTypes } from "@shared";
 import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
 
+import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -153,7 +154,9 @@ export function StatisticsPageClient({
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <StatisticsContent initialData={initialData} />
+        <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
+          <StatisticsContent initialData={initialData} />
+        </Suspense>
       </ErrorBoundary>
     </div>
   );

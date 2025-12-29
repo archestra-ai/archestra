@@ -12,7 +12,7 @@ export const oauthConfigSchema = z.object({
 
 export const formSchema = z
   .object({
-    name: z.string().min(1, "Name is required"),
+    name: z.string().trim().min(1, "Name is required"),
     serverType: z.enum(["remote", "local"]),
     serverUrl: z
       .string()

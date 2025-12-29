@@ -198,12 +198,12 @@ export function AssignToolsDialog({
         return prev.map((tool) =>
           tool.toolId === toolId
             ? {
-              ...tool,
-              credentialsSourceId: isDynamic
-                ? undefined
-                : credentialsSourceId,
-              useDynamicTeamCredential: isDynamic,
-            }
+                ...tool,
+                credentialsSourceId: isDynamic
+                  ? undefined
+                  : credentialsSourceId,
+                useDynamicTeamCredential: isDynamic,
+              }
             : tool,
         );
       });
@@ -218,10 +218,10 @@ export function AssignToolsDialog({
         return prev.map((tool) =>
           tool.toolId === toolId
             ? {
-              ...tool,
-              executionSourceId: isDynamic ? undefined : executionSourceId,
-              useDynamicTeamCredential: isDynamic,
-            }
+                ...tool,
+                executionSourceId: isDynamic ? undefined : executionSourceId,
+                useDynamicTeamCredential: isDynamic,
+              }
             : tool,
         );
       });
@@ -307,9 +307,9 @@ export function AssignToolsDialog({
         (current.credentialSourceMcpServerId !==
           (tool.credentialsSourceId || null) ||
           current.executionSourceMcpServerId !==
-          (tool.executionSourceId || null) ||
+            (tool.executionSourceId || null) ||
           current.useDynamicTeamCredential !==
-          (tool.useDynamicTeamCredential || false))
+            (tool.useDynamicTeamCredential || false))
       );
     });
 
@@ -527,13 +527,13 @@ export function AssignToolsDialog({
                                 onValueChange={(credentialSourceId) =>
                                   isLocalServer
                                     ? handleExecutionSourceChange(
-                                      tool.id,
-                                      credentialSourceId ?? undefined,
-                                    )
+                                        tool.id,
+                                        credentialSourceId ?? undefined,
+                                      )
                                     : handleCredentialsSourceChange(
-                                      tool.id,
-                                      credentialSourceId ?? undefined,
-                                    )
+                                        tool.id,
+                                        credentialSourceId ?? undefined,
+                                      )
                                 }
                                 value={displayValue ?? undefined}
                                 className="mb-4"

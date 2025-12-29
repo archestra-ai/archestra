@@ -251,6 +251,51 @@ function ChildComponent({ catalogId }: Props) {
 
 TanStack Query's built-in caching ensures no duplicate network requests when multiple components use the same query.
 
+### Handle Toasts in Query Files, Not Components
+
+**ALWAYS handle toast notifications in `.query.ts` files**, not in components. This centralizes error handling and ensures consistent user feedback:
+
+```typescript
+// ❌ Bad: Toast handling in component
+function MyComponent() {
+  const mutation = useUpdateSomething();
+
+  const handleClick = () => {
+    mutation.mutate(data, {
+      onError: (error) => {
+        toast.error(`Failed: ${error.message}`);  // Don't do this!
+      },
+    });
+  };
+}
+
+// ✅ Good: Toast handling in query file
+// lib/something.query.ts
+export function useUpdateSomething() {
+  return useMutation({
+    mutationFn: async (data) => { ... },
+    onSuccess: () => {
+      toast.success("Updated successfully");
+    },
+    onError: (error) => {
+      toast.error(`Failed to update: ${error instanceof Error ? error.message : "Unknown error"}`);
+    },
+  });
+}
+
+// Component just calls the mutation
+function MyComponent() {
+  const mutation = useUpdateSomething();
+  const handleClick = () => mutation.mutate(data);
+}
+```
+
+This pattern:
+- Centralizes error handling logic
+- Ensures consistent error messages
+- Keeps components focused on UI concerns
+- Makes testing easier
+
 ## shadcn/ui Components
 
 **ALWAYS use shadcn/ui** instead of direct Radix UI:
@@ -267,6 +312,30 @@ Import from the components directory:
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 ```
+
+### Use UI Components Over Plain HTML Elements
+
+**ALWAYS use components from `@/components/ui` over plain HTML elements.** Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui`:
+
+```typescript
+// ❌ Bad: Plain HTML button
+<button type="button" className="..." onClick={handleClick}>
+  Click me
+</button>
+
+// ✅ Good: shadcn/ui Button
+<Button variant="ghost" onClick={handleClick}>
+  Click me
+</Button>
+
+// ❌ Bad: Plain HTML input
+<input type="text" className="..." value={value} onChange={handleChange} />
+
+// ✅ Good: shadcn/ui Input
+<Input value={value} onChange={handleChange} />
+```
+
+This ensures consistent styling, accessibility, and theming across the application.
 
 ## Error Handling and Loading States
 
@@ -420,6 +489,133 @@ lib/chat.utils.ts
 lib/chat.hook.ts
 ```
 
+## Form Handling with react-hook-form
+
+**ALWAYS use react-hook-form** for form state management instead of multiple `useState` hooks:
+
+### Pass Form to Child Components
+
+```typescript
+// ❌ Bad: Multiple useState hooks
+function MyForm() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  // ... more states
+}
+
+// ✅ Good: Use useForm and pass form to child components
+import { useForm, UseFormReturn } from "react-hook-form";
+
+type FormValues = {
+  name: string;
+  email: string;
+  phone: string;
+};
+
+// Parent component owns the form
+function ParentComponent() {
+  const form = useForm<FormValues>({
+    defaultValues: { name: "", email: "", phone: "" },
+  });
+  const mutation = useCreateSomething();
+
+  const handleSubmit = form.handleSubmit(async (values) => {
+    await mutation.mutateAsync(values);
+    form.reset();
+  });
+
+  return (
+    <>
+      <MyFormFields form={form} isPending={mutation.isPending} />
+      <Button onClick={handleSubmit} disabled={mutation.isPending}>Submit</Button>
+    </>
+  );
+}
+
+// Child component renders form fields
+interface MyFormFieldsProps {
+  form: UseFormReturn<FormValues>;
+  isPending?: boolean;
+}
+
+function MyFormFields({ form, isPending }: MyFormFieldsProps) {
+  return (
+    <div>
+      <Input {...form.register("name")} disabled={isPending} />
+      <Input {...form.register("email")} disabled={isPending} />
+    </div>
+  );
+}
+```
+
+### Parent Controls Mutations and Submission
+
+Keep mutations in parent components. Form components focus on rendering fields only:
+
+```typescript
+// ❌ Bad: Mutation inside form component
+function FormComponent() {
+  const mutation = useCreateItem();  // Don't put mutations here
+  const handleSubmit = () => mutation.mutate(data);
+  return <form onSubmit={handleSubmit}>...</form>;
+}
+
+// ✅ Good: Parent handles mutations
+function ParentComponent() {
+  const form = useForm<FormValues>();
+  const mutation = useCreateItem();
+
+  const handleSubmit = form.handleSubmit(async (values) => {
+    await mutation.mutateAsync(values);
+  });
+
+  return (
+    <>
+      <FormFields form={form} isPending={mutation.isPending} />
+      <Button onClick={handleSubmit}>Submit</Button>
+    </>
+  );
+}
+
+function FormFields({ form, isPending }: Props) {
+  // Pure rendering, no mutations
+  return <Input {...form.register("name")} disabled={isPending} />;
+}
+```
+
+## Reuse API Types from @shared
+
+**ALWAYS reuse types from `archestraApiTypes`** instead of defining duplicate types:
+
+```typescript
+// ❌ Bad: Defining duplicate types
+type CreateItemPayload = {
+  name: string;
+  description?: string;
+  scope: "personal" | "team" | "org_wide";
+};
+
+// ✅ Good: Reuse from generated API types
+import { type archestraApiTypes } from "@shared";
+
+type CreateItemBody = archestraApiTypes.CreateItemData["body"];
+type ItemResponse = archestraApiTypes.GetItemsResponses["200"][number];
+
+// For form values, derive from API types
+type ItemFormValues = {
+  name: string;
+  description: string;
+  scope: NonNullable<CreateItemBody["scope"]>;
+};
+```
+
+Common patterns:
+- `archestraApiTypes.CreateXxxData["body"]` - Request body type for create endpoints
+- `archestraApiTypes.UpdateXxxData["body"]` - Request body type for update endpoints
+- `archestraApiTypes.GetXxxResponses["200"]` - Response type for list endpoints
+- `archestraApiTypes.GetXxxResponses["200"][number]` - Single item from list response
+
 ## Next.js App Router
 
 - Use file-based routing in `src/app/`
@@ -450,14 +646,18 @@ export default async function DashboardPage() {
 1. ✅ Extract pure functions from components
 2. ✅ Create small, focused components (especially for array.map items)
 3. ✅ Use shadcn/ui, avoid direct Radix UI
-4. ✅ Use TanStack Query with useSuspenseQuery for data fetching
-5. ✅ Use error boundaries for error handling
-6. ✅ Use Suspense for loading states
-7. ✅ Prefetch data on server, pass as initial data to queries
-8. ✅ Avoid index/barrel files - use direct imports
-9. ✅ Use flat, feature-based file colocation (e.g., chat.query.ts, chat.utils.ts)
-10. ✅ Apply colors via global theme, not inline
-11. ✅ Avoid React Context - use TanStack Query for shared data
-12. ✅ Extract business logic to pure functions or queries
-13. ✅ Only export what needs to be used by other modules - keep internal helpers private
-14. ✅ Prefer TanStack Query hooks over prop drilling - pass only identifiers, let components fetch their own data
+4. ✅ Use shadcn/ui components over plain HTML elements (Button over button, Input over input, etc.)
+5. ✅ Use TanStack Query with useSuspenseQuery for data fetching
+6. ✅ Handle toast notifications in .query.ts files, not in components
+7. ✅ Use error boundaries for error handling
+8. ✅ Use Suspense for loading states
+9. ✅ Prefetch data on server, pass as initial data to queries
+10. ✅ Avoid index/barrel files - use direct imports
+11. ✅ Use flat, feature-based file colocation (e.g., chat.query.ts, chat.utils.ts)
+12. ✅ Apply colors via global theme, not inline
+13. ✅ Avoid React Context - use TanStack Query for shared data
+14. ✅ Extract business logic to pure functions or queries
+15. ✅ Only export what needs to be used by other modules - keep internal helpers private
+16. ✅ Prefer TanStack Query hooks over prop drilling - pass only identifiers, let components fetch their own data
+17. ✅ Use react-hook-form for forms - pass form object to child components, parent handles mutations
+18. ✅ Reuse API types from archestraApiTypes (e.g., CreateXxxData["body"]) instead of defining duplicate types

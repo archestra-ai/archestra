@@ -7,9 +7,14 @@ archestra:
 
   # Environment variables for e2e testing
   env:
+    # LLM Proxy base URLs (for LLM proxy routes)
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/v1"
     ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080"
     ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080"
+    # Chat base URLs (for chat API key validation)
+    ARCHESTRA_CHAT_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/v1"
+    ARCHESTRA_CHAT_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080"
+    ARCHESTRA_CHAT_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080"
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"
@@ -17,6 +22,8 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
+    # Disable better-auth rate limit for e2e tests
+    ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
     # Secrets manager configuration for BYOS tests
     ARCHESTRA_SECRETS_MANAGER: "Vault"
     # Vault configuration for BYOS tests

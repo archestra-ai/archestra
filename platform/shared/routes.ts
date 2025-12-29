@@ -43,6 +43,7 @@ export const RouteId = {
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
   RestartMcpServer: "restartMcpServer",
+  RestartAllMcpServerInstallations: "restartAllMcpServerInstallations",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   McpProxy: "mcpProxy",
 
@@ -149,6 +150,7 @@ export const RouteId = {
   DeleteChatConversation: "deleteChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
+  UpdateChatMessage: "updateChatMessage",
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
@@ -156,14 +158,11 @@ export const RouteId = {
 
   // Chat API Key Routes
   GetChatApiKeys: "getChatApiKeys",
+  GetAvailableChatApiKeys: "getAvailableChatApiKeys",
   CreateChatApiKey: "createChatApiKey",
   GetChatApiKey: "getChatApiKey",
   UpdateChatApiKey: "updateChatApiKey",
   DeleteChatApiKey: "deleteChatApiKey",
-  SetChatApiKeyDefault: "setChatApiKeyDefault",
-  UnsetChatApiKeyDefault: "unsetChatApiKeyDefault",
-  UpdateChatApiKeyProfiles: "updateChatApiKeyProfiles",
-  BulkAssignChatApiKeysToProfiles: "bulkAssignChatApiKeysToProfiles",
 
   // Prompt Routes
   GetPrompts: "getPrompts",
@@ -213,6 +212,11 @@ export const RouteId = {
   GetTokens: "getTokens",
   GetTokenValue: "getTokenValue",
   RotateToken: "rotateToken",
+
+  // User Token Routes (Personal Tokens)
+  GetUserToken: "getUserToken",
+  GetUserTokenValue: "getUserTokenValue",
+  RotateUserToken: "rotateUserToken",
 
   // Statistics Routes
   GetTeamStatistics: "getTeamStatistics",

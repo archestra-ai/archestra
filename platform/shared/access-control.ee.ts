@@ -303,6 +303,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.RestartMcpServer]: {
+    mcpServer: ["update"],
+  },
+  [RouteId.RestartAllMcpServerInstallations]: {
+    mcpServer: ["admin"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
   },
@@ -441,6 +447,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatModels]: {
     conversation: ["read"],
   },
+  [RouteId.UpdateChatMessage]: {
+    conversation: ["update"],
+  },
   [RouteId.GetConversationEnabledTools]: {
     conversation: ["read"],
   },
@@ -451,6 +460,9 @@ export const requiredEndpointPermissionsMap: Partial<
     conversation: ["update"],
   },
   [RouteId.GetChatApiKeys]: {
+    chatSettings: ["read"],
+  },
+  [RouteId.GetAvailableChatApiKeys]: {
     chatSettings: ["read"],
   },
   [RouteId.CreateChatApiKey]: {
@@ -464,18 +476,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
-  },
-  [RouteId.SetChatApiKeyDefault]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.UnsetChatApiKeyDefault]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.UpdateChatApiKeyProfiles]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.BulkAssignChatApiKeysToProfiles]: {
-    chatSettings: ["update"],
   },
   [RouteId.GetPrompts]: {
     prompt: ["read"],
@@ -560,6 +560,11 @@ export const requiredEndpointPermissionsMap: Partial<
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+
+  // User token routes - available to all authenticated users (manages their own personal token)
+  [RouteId.GetUserToken]: {},
+  [RouteId.GetUserTokenValue]: {},
+  [RouteId.RotateUserToken]: {},
   [RouteId.GetTokenPrices]: {
     tokenPrice: ["read"],
   },

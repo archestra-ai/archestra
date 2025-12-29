@@ -24,8 +24,10 @@ import {
   AgentTeamModel,
   isArchestraPrefixedToken,
   McpToolCallModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
+  UserTokenModel,
 } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
@@ -36,6 +38,10 @@ interface TokenAuthResult {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  /** True if this is a personal user token */
+  isUserToken?: boolean;
+  /** User ID for user tokens */
+  userId?: string;
 }
 
 /**
@@ -381,6 +387,77 @@ export async function validateTeamToken(
     teamId: token.teamId,
     isOrganizationToken: token.isOrganizationToken,
   };
+}
+
+/**
+ * Validate a user token for a specific profile
+ * Returns token auth info if valid, null otherwise
+ *
+ * Validates that:
+ * 1. The token is valid (exists and matches)
+ * 2. The profile is accessible via this token:
+ *    - User must be a member of at least one team that the profile is assigned to
+ */
+export async function validateUserToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  // Validate the token itself
+  const token = await UserTokenModel.validateToken(tokenValue);
+  if (!token) {
+    return null;
+  }
+
+  // Get user's team IDs
+  const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
+
+  // Get profile's team IDs
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+
+  // Check if there's any overlap between user's teams and profile's teams
+  const hasAccess = userTeamIds.some((teamId) =>
+    profileTeamIds.includes(teamId),
+  );
+
+  if (!hasAccess) {
+    logger.warn(
+      { profileId, userId: token.userId, userTeamIds, profileTeamIds },
+      "Profile not accessible via user token (no shared teams)",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: token.id,
+    teamId: null, // User tokens aren't scoped to a single team
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId: token.userId,
+  };
+}
+
+/**
+ * Validate any archestra_ prefixed token for a specific profile
+ * Tries team/org tokens first, then user tokens
+ * Returns token auth info if valid, null otherwise
+ */
+export async function validateMCPGatewayToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  // First try team/org token validation
+  const teamTokenResult = await validateTeamToken(profileId, tokenValue);
+  if (teamTokenResult) {
+    return teamTokenResult;
+  }
+
+  // Then try user token validation
+  const userTokenResult = await validateUserToken(profileId, tokenValue);
+  if (userTokenResult) {
+    return userTokenResult;
+  }
+
+  return null;
 }
 
 /**

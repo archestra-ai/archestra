@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.0.9](https://github.com/archestra-ai/archestra/compare/platform-v1.0.8...platform-v1.0.9) (2025-12-23)
+
+
+### Features
+
+* Ability to restart mcp server ([#1684](https://github.com/archestra-ai/archestra/issues/1684)) ([cd9eda0](https://github.com/archestra-ai/archestra/commit/cd9eda09ebbe51648550144dc78d89c7926856c7))
+* add inline editing for chat messages ([#1632](https://github.com/archestra-ai/archestra/issues/1632)) ([6c2e983](https://github.com/archestra-ai/archestra/commit/6c2e983206abbb34aa17781d7165da76af7c138a))
+* MCP orchestrator in docker for quick start ([#1674](https://github.com/archestra-ai/archestra/issues/1674)) ([12f9522](https://github.com/archestra-ai/archestra/commit/12f9522f2b8569275405a1b3359140bd72e90d8b))
+
+
+### Bug Fixes
+
+* add better-auth default permissions to non-EE access control ([#1697](https://github.com/archestra-ai/archestra/issues/1697)) ([2727501](https://github.com/archestra-ai/archestra/commit/2727501cd2a353e2d51517dffe56b522e69debd0))
+* fix chat e2e test ([#1685](https://github.com/archestra-ai/archestra/issues/1685)) ([86f6c24](https://github.com/archestra-ai/archestra/commit/86f6c2454aa7e413c99337dae53a82602f8b5246))
+* **helm:** handle empty sensitive env vars without creating invalid `Secret` keys ([#1677](https://github.com/archestra-ai/archestra/issues/1677)) ([c0bc8c0](https://github.com/archestra-ai/archestra/commit/c0bc8c0c819f9dfb4ceac5794af51558bf624bb3))
+* prevent Sentry noise from 4xx errors and DB connection drops ([#1675](https://github.com/archestra-ai/archestra/issues/1675)) ([6456026](https://github.com/archestra-ai/archestra/commit/64560263ffee7f3e391ce84a26f4c56b4af0cf6e))
+* stabilize mcp & cost limits e2e ([#1682](https://github.com/archestra-ai/archestra/issues/1682)) ([434714f](https://github.com/archestra-ai/archestra/commit/434714f9c8cbbea4f4af3c3ee2a3a93c74effc69))
+
+
+### Miscellaneous Chores
+
+* Add e2e tests for LLM proxy model optimization ([#1638](https://github.com/archestra-ai/archestra/issues/1638)) ([49deeb0](https://github.com/archestra-ai/archestra/commit/49deeb0e6df7c2a3e6a72312feef365408a87698))
+* add e2e tests for result compression feature ([#1642](https://github.com/archestra-ai/archestra/issues/1642)) ([1c1bb19](https://github.com/archestra-ai/archestra/commit/1c1bb19ca3fb842b9449fc681f39199d2360b117))
+* improve mcp gateway token visibility ([#1671](https://github.com/archestra-ai/archestra/issues/1671)) ([0ac2c77](https://github.com/archestra-ai/archestra/commit/0ac2c77ba002037dc54018de00b1f38c903f6e3c))
+* stabilize cost limit tests ([#1686](https://github.com/archestra-ai/archestra/issues/1686)) ([fb7d073](https://github.com/archestra-ai/archestra/commit/fb7d07303df24760594d782edbb814375f9d5796))
+* switch from chat api keys profile assignment to personal | team | org scopes ([#1669](https://github.com/archestra-ai/archestra/issues/1669)) ([19004d0](https://github.com/archestra-ai/archestra/commit/19004d0331b7a77c7242122679379dc5df5365bd))
+* tool persistance e2e test ([#1691](https://github.com/archestra-ai/archestra/issues/1691)) ([582ce44](https://github.com/archestra-ai/archestra/commit/582ce4485a73b9ca02edf122bc7934016e393fda))
+
+## [1.0.8](https://github.com/archestra-ai/archestra/compare/platform-v1.0.7...platform-v1.0.8) (2025-12-19)
+
+
+### Features
+
+* add `archestra.nodeSelector` to `helm` chart ([#1670](https://github.com/archestra-ai/archestra/issues/1670)) ([381d209](https://github.com/archestra-ai/archestra/commit/381d209db472a663551e03be4bd559b67df26579))
+* personal mcp gw tokens ([#1667](https://github.com/archestra-ai/archestra/issues/1667)) ([0ebe221](https://github.com/archestra-ai/archestra/commit/0ebe2213f51dd6eab2cb5867e16da7c334f8571f))
+
+
+### Bug Fixes
+
+* Fixed The layout shift issue in ArchestraArchitectureDiagram component in Settings/gateways ([#1659](https://github.com/archestra-ai/archestra/issues/1659)) ([6144cd0](https://github.com/archestra-ai/archestra/commit/6144cd07d2c5f50f7f3c6cae48897eda2e7c44e9))
+* improve chat regeneration icon theme compatibility and animation ([#1408](https://github.com/archestra-ai/archestra/issues/1408)) ([d2616fc](https://github.com/archestra-ai/archestra/commit/d2616fcd054968837623d485e2fbf0533daf5def))
+* invalidate model selector query when updating chat api key ([#1668](https://github.com/archestra-ai/archestra/issues/1668)) ([bc98be1](https://github.com/archestra-ai/archestra/commit/bc98be15a9075ec0a0482dec9911ee35dfa12a0b))
+
+
+### Dependencies
+
+* license checker ([#1649](https://github.com/archestra-ai/archestra/issues/1649)) ([bf50ed8](https://github.com/archestra-ai/archestra/commit/bf50ed8386737ba58c78708408f9338b40b79fef))
+
+
+### Miscellaneous Chores
+
+* map LLM provider error responses/codes to human readable messages in Chat UI ([#1656](https://github.com/archestra-ai/archestra/issues/1656)) ([5fe0f68](https://github.com/archestra-ai/archestra/commit/5fe0f6850bde4f7aae1456ea3e6fe9f86bbe55f9))
+
 ## [1.0.7](https://github.com/archestra-ai/archestra/compare/platform-v1.0.6...platform-v1.0.7) (2025-12-18)
 
 

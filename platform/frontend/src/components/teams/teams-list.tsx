@@ -74,7 +74,8 @@ export function TeamsList() {
   const [teamDescription, setTeamDescription] = useState("");
 
   // Tokens query
-  const { data: tokens, isLoading: tokensLoading } = useTokens();
+  const { data: tokensData, isLoading: tokensLoading } = useTokens();
+  const tokens = tokensData?.tokens;
 
   const { data: teams, isLoading } = useQuery({
     queryKey: ["teams"],

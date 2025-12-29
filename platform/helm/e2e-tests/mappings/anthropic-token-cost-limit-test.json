@@ -17,7 +17,7 @@
       "id": "msg_token_limit_test",
       "type": "message",
       "role": "assistant",
-      "model": "claude-3-5-sonnet-20241022",
+      "model": "test-claude-cost-limit",
       "content": [
         {
           "type": "text",

@@ -25,6 +25,7 @@ import {
 import {
   type Agent,
   Anthropic,
+  ApiError,
   constructResponseSchema,
   UuidIdSchema,
 } from "@/types";
@@ -461,6 +462,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const stream = anthropicClient.messages.stream({
               // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
               ...(body as any),
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
             });
@@ -928,6 +930,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await anthropicClient.messages.create({
               // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
               ...(body as any),
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,
@@ -1088,7 +1091,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const statusCode =
         error instanceof Error && "status" in error
-          ? (error.status as 200 | 400 | 404 | 403 | 500)
+          ? (error.status as 400 | 404 | 403 | 500)
           : 500;
 
       // Extract the actual error message from Anthropic SDK errors using lodash get
@@ -1144,13 +1147,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply;
       }
 
-      // For non-streaming, send JSON error
-      return reply.status(statusCode).send({
-        error: {
-          message: errorMessage,
-          type: "api_error",
-        },
-      });
+      // For non-streaming, throw ApiError to let the central error handler format the response correctly
+      // This ensures the error type matches the expected schema for each status code
+      throw new ApiError(statusCode, errorMessage);
     }
   };
 

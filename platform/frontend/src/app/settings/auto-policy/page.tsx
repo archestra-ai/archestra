@@ -27,9 +27,9 @@ export default function AutoPolicySettingsPage() {
   );
   const { data: promptTemplate } = usePolicyConfigSubagentPrompt();
 
-  // Find default Anthropic API key
+  // Check for org-wide Anthropic API key (required for auto-policy subagent)
   const hasAnthropicKey = chatApiKeys?.some(
-    (key) => key.provider === "anthropic" && key.isOrganizationDefault,
+    (key) => key.provider === "anthropic" && key.scope === "org_wide",
   );
 
   const handleToggleAutoConfigureNewTools = async (checked: boolean) => {
@@ -56,7 +56,7 @@ export default function AutoPolicySettingsPage() {
             <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
               <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
                 <XCircle className="h-4 w-4" />
-                <span>Requires default Anthropic API key</span>
+                <span>Requires an org-wide Anthropic API key</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Configure in{" "}

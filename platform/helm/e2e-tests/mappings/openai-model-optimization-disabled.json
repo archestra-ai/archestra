@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "openai-model-optimization-disabled"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-openai-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-model-opt-disabled",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-openai-baseline",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "This is a response when optimization rule is disabled.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1500,
+        "completion_tokens": 15,
+        "total_tokens": 1515
+      }
+    }
+  }
+}

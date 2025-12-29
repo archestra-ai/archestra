@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId, formatSecretStorageType } from "@shared";
 import { format } from "date-fns";
 import { Trash, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,21 +21,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
-
-function formatSecretStorageType(
-  storageType: "vault" | "external_vault" | "database" | "none" | undefined,
-): string {
-  switch (storageType) {
-    case "vault":
-      return "Vault";
-    case "external_vault":
-      return "External Vault";
-    case "database":
-      return "Database";
-    default:
-      return "No secret";
-  }
-}
 
 interface ManageUsersDialogProps {
   isOpen: boolean;

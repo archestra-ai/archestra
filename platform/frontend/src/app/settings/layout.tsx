@@ -25,11 +25,10 @@ export default function SettingsLayout({
   const { data: secretsType } = useSecretsType();
 
   const tabs = [
-    { label: "LLM & MCP Gateways", href: "/settings/gateways" },
+    { label: "Your Account", href: "/settings/account" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "Chat", href: "/settings/chat" },
     { label: "Policy Config Subagent", href: "/settings/auto-policy" },
-    { label: "Your Account", href: "/settings/account" },
     ...(userCanReadOrganization
       ? [
           { label: "Members", href: "/settings/members" },

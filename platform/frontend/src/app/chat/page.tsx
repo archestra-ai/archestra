@@ -642,6 +642,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
               conversationId={conversationId}
+              agentId={currentProfileId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}

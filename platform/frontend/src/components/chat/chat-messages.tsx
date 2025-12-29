@@ -22,12 +22,15 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
+import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
+import { PolicyDeniedTool } from "./policy-denied-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
+  agentId?: string;
   messages: UIMessage[];
   hideToolCalls?: boolean;
   status: ChatStatus;
@@ -63,6 +66,7 @@ function isToolPart(part: any): part is {
 
 export function ChatMessages({
   conversationId,
+  agentId,
   messages,
   hideToolCalls = false,
   status,
@@ -223,6 +227,20 @@ export function ChatMessages({
                     case "text": {
                       const partKey = `${message.id}-${i}`;
 
+                      // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
+                      const policyDenied = parsePolicyDenied(part.text);
+                      if (policyDenied) {
+                        return (
+                          <PolicyDeniedTool
+                            key={partKey}
+                            policyDenied={policyDenied}
+                            {...(agentId
+                              ? { editable: true, agentId }
+                              : { editable: false })}
+                          />
+                        );
+                      }
+
                       // Use editable component for assistant messages
                       if (message.role === "assistant") {
                         // Only show actions if this is the last assistant message in sequence
@@ -331,6 +349,7 @@ export function ChatMessages({
                           key={`${message.id}-${i}`}
                           toolResultPart={toolResultPart}
                           toolName={toolName}
+                          agentId={agentId}
                         />
                       );
                     }
@@ -360,6 +379,7 @@ export function ChatMessages({
                             key={`${message.id}-${i}`}
                             toolResultPart={toolResultPart}
                             toolName={toolName}
+                            agentId={agentId}
                           />
                         );
                       }
@@ -436,10 +456,12 @@ function MessageTool({
   part,
   toolResultPart,
   toolName,
+  agentId,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
+  agentId?: string;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -447,6 +469,19 @@ function MessageTool({
   const errorText = toolResultPart
     ? (toolResultPart.errorText ?? outputError)
     : (part.errorText ?? outputError);
+
+  // OpenAI sends policy denials as tool errors (see case "text" above for Anthropic path)
+  if (errorText) {
+    const policyDenied = parsePolicyDenied(errorText);
+    if (policyDenied) {
+      return (
+        <PolicyDeniedTool
+          policyDenied={policyDenied}
+          {...(agentId ? { editable: true, agentId } : { editable: false })}
+        />
+      );
+    }
+  }
 
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(

@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.88.1",
-    "@types/node": "^24",
+    "@types/node": "^25",
     "knip": "^5.72.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2"

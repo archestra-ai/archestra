@@ -208,6 +208,29 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Track if we created a KinD cluster for cleanup
+CREATED_KIND_CLUSTER=""
+
+# Cleanup function for graceful shutdown
+cleanup() {
+    echo "Shutting down..."
+
+    # Delete KinD cluster if we created one in quickstart mode
+    if [ -n "$CREATED_KIND_CLUSTER" ]; then
+        echo "Deleting KinD cluster '${CREATED_KIND_CLUSTER}'..."
+        if kind delete cluster --name "${CREATED_KIND_CLUSTER}" 2>/dev/null; then
+            echo "KinD cluster deleted successfully"
+        else
+            echo "Warning: Failed to delete KinD cluster"
+        fi
+    fi
+
+    exit 0
+}
+
+# Set up signal handlers for graceful shutdown
+trap cleanup SIGTERM SIGINT
+
 # Generate and persist ARCHESTRA_AUTH_SECRET if not set
 if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     SECRET_FILE="/app/data/.auth_secret"
@@ -254,6 +277,8 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
+        # Mark for cleanup even if it already exists (we're using it)
+        CREATED_KIND_CLUSTER="${CLUSTER_NAME}"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
         if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
@@ -261,6 +286,8 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             exit 1
         fi
         echo "KinD cluster created successfully"
+        # Mark for cleanup on shutdown
+        CREATED_KIND_CLUSTER="${CLUSTER_NAME}"
     fi
 
     # Export kubeconfig
@@ -407,8 +434,18 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 CONF
 
-# Start supervisord
-exec /usr/bin/supervisord -c /etc/supervisord.conf
+# Start supervisord in foreground but allow signal handling
+# Run in background and wait so trap can catch signals
+/usr/bin/supervisord -c /etc/supervisord.conf &
+SUPERVISOR_PID=$!
+
+# Wait for supervisord to exit (or for a signal)
+wait $SUPERVISOR_PID
+EXIT_CODE=$?
+
+# If we get here without signal, do cleanup anyway
+cleanup
+exit $EXIT_CODE
 EOF
 
 RUN chmod +x /docker-entrypoint.sh

@@ -37,6 +37,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
+import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { cn } from "@/lib/utils";
 import { PolicyDeniedTool } from "./chat/policy-denied-tool";
 import Divider from "./divider";
@@ -131,7 +132,17 @@ const ChatBotDemo = ({
                     }
 
                     switch (part.type) {
-                      case "text":
+                      case "text": {
+                        const policyDenied = parsePolicyDenied(part.text);
+                        if (policyDenied) {
+                          return (
+                            <PolicyDeniedTool
+                              key={`${message.id}-${i}`}
+                              policyDenied={policyDenied}
+                              editable={false}
+                            />
+                          );
+                        }
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message from={message.role}>
@@ -159,6 +170,7 @@ const ChatBotDemo = ({
                               )}
                           </Fragment>
                         );
+                      }
                       case "tool-invocation":
                       case "dynamic-tool": {
                         const toolName =
@@ -346,17 +358,6 @@ const ChatBotDemo = ({
                           );
                         }
 
-                        // Handle policy denied tool (new structured format)
-                        if (_isPolicyDeniedPart(part)) {
-                          return (
-                            <PolicyDeniedTool
-                              key={`${message.id}-${i}`}
-                              policyDenied={part as PolicyDeniedPart}
-                              editable={false}
-                            />
-                          );
-                        }
-
                         // Handle custom dual-llm-analysis type (standalone, not following a tool)
                         if (_isDualLlmPart(part)) {
                           const dualLlmPart = part as DualLlmPart;
@@ -471,17 +472,6 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
     part !== null &&
     "type" in part &&
     (part as { type: string }).type === "blocked-tool"
-  );
-}
-
-function _isPolicyDeniedPart(part: unknown): part is PolicyDeniedPart {
-  return (
-    typeof part === "object" &&
-    part !== null &&
-    "type" in part &&
-    "state" in part &&
-    (part as { state: string }).state === "output-denied" &&
-    (part as { type: string }).type.startsWith("tool-")
   );
 }
 

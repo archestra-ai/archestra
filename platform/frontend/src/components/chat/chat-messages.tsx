@@ -474,10 +474,6 @@ function MessageTool({
   if (errorText) {
     const policyDenied = parsePolicyDenied(errorText);
     if (policyDenied) {
-      // Use the tool's actual input from the part if available
-      if (part.input && Object.keys(part.input).length > 0) {
-        policyDenied.input = part.input as Record<string, unknown>;
-      }
       return (
         <PolicyDeniedTool
           policyDenied={policyDenied}

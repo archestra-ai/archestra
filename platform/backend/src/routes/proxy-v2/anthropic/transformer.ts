@@ -60,6 +60,7 @@ class AnthropicStreamTransformer
 
   toOpenAI(event: AnthropicStreamEvent): OpenAIStreamChunk | null {
     // Handle "ping" event which exists at runtime but not in TypeScript types
+    // TODO: ikonstantinov - investigate what is the ping event
     const eventType = event.type as string;
     if (eventType === "ping") {
       return null;

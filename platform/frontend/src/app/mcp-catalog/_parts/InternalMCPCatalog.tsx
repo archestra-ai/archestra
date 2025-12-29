@@ -2,7 +2,8 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   OAuthConfirmationDialog,
@@ -52,6 +53,13 @@ export function InternalMCPCatalog({
   initialData?: CatalogItem[];
   installedServers?: InstalledServer[];
 }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Get search query from URL
+  const searchQueryFromUrl = searchParams.get("search") || "";
+
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
@@ -81,7 +89,27 @@ export function InternalMCPCatalog({
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(searchQueryFromUrl);
+
+  // Sync search query with URL when navigating via browser back/forward
+  useEffect(() => {
+    setSearchQuery(searchQueryFromUrl);
+  }, [searchQueryFromUrl]);
+
+  // Update URL when search query changes
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      const params = new URLSearchParams(searchParams.toString());
+      if (value.trim()) {
+        params.set("search", value);
+      } else {
+        params.delete("search");
+      }
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
   const [selectedCatalogItem, setSelectedCatalogItem] =
     useState<CatalogItem | null>(null);
   const [catalogItemForReinstall, setCatalogItemForReinstall] =
@@ -498,7 +526,7 @@ export function InternalMCPCatalog({
           <Input
             placeholder="Search registry by name..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
           />
         </div>

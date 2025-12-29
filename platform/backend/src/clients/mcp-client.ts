@@ -557,7 +557,7 @@ class McpClient {
 
   /**
    * Strip server prefix from tool name
-   * Slugifies the prefix (lowercase + spaces to underscores) to match how tool names are created
+   * Slugifies the prefix using ToolModel.slugifyName to match how tool names are created
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
     // Slugify the prefix the same way ToolModel.slugifyName does

@@ -201,19 +201,50 @@ for (const config of testConfigs) {
         );
       }
 
-      // Wait for async usage tracking to complete
+      // Poll for async usage tracking to complete
       // Usage tracking happens asynchronously after the response is sent
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // We need to wait until the usage is actually recorded before the second request
+      // The limits endpoint returns modelUsage array with { model, tokensIn, tokensOut, cost }
+      const maxPollingAttempts = 30;
+      const pollingIntervalMs = 500;
+      let usageTracked = false;
 
-      // DEBUG: We are requesting usage limits between the two LLM requests
-      // to make sure the first LLM request counts against limits.
-      // This request is visible in Playwright UI and is helpful in debugging.
-      await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/limits`,
-        ignoreStatusCheck: true,
-      });
+      for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
+        const limitsResponse = await makeApiRequest({
+          request,
+          method: "get",
+          urlSuffix: `/api/limits?entityType=agent&entityId=${profileId}`,
+          ignoreStatusCheck: true,
+        });
+
+        if (limitsResponse.ok()) {
+          const limits = await limitsResponse.json();
+          const targetLimit = limits.find(
+            (l: {
+              id: string;
+              modelUsage?: Array<{ model: string; cost: number }>;
+            }) => l.id === limitId,
+          );
+          // Check if any model has recorded usage (cost > 0)
+          const totalCost =
+            targetLimit?.modelUsage?.reduce(
+              (sum: number, m: { cost: number }) => sum + m.cost,
+              0,
+            ) ?? 0;
+          if (totalCost > 0) {
+            usageTracked = true;
+            break;
+          }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollingIntervalMs));
+      }
+
+      if (!usageTracked) {
+        throw new Error(
+          `Usage was not tracked after ${maxPollingAttempts * pollingIntervalMs}ms`,
+        );
+      }
 
       // 4. Second request should be blocked (limit exceeded)
       const blockedResponse = await makeApiRequest({

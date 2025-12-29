@@ -40,14 +40,19 @@ test.describe("MCP Install", () => {
     await adminPage
       .getByLabel("Add MCP Server to the Private")
       .getByText(CONTEXT7_CATALOG_ITEM_NAME)
-      .waitFor({ state: "visible" });
+      .waitFor({ state: "visible", timeout: 30000 });
+    await adminPage.waitForLoadState("networkidle");
     await adminPage.getByTestId(E2eTestId.AddCatalogItemButton).first().click();
     await adminPage.waitForLoadState("networkidle");
 
+    // Wait for the connect button to appear after adding to registry
+    const connectButton = adminPage.getByTestId(
+      `connect-catalog-item-button-${CONTEXT7_CATALOG_ITEM_NAME}`,
+    );
+    await connectButton.waitFor({ state: "visible", timeout: 30000 });
+
     // install the server
-    await adminPage
-      .getByTestId(`connect-catalog-item-button-${CONTEXT7_CATALOG_ITEM_NAME}`)
-      .click();
+    await connectButton.click();
     await adminPage.waitForTimeout(2_000);
 
     // fill the api key (just fake value)

@@ -32,12 +32,13 @@ async function withRetry<T>(
 test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   /**
    * It can take some time to pull the Docker images and start the MCP server.. hence the polling
+   * In CI environments with parallel workers, this can take longer due to resource contention
    */
   const waitForMcpServerReady = async (
     request: APIRequestContext,
     makeApiRequest: TestFixtures["makeApiRequest"],
     serverId: string,
-    maxRetries = 30,
+    maxRetries = 60,
   ) => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const statusResponse = await makeApiRequest({
@@ -152,6 +153,9 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   });
 
   test.describe("Local MCP Server - NPX Command", () => {
+    // Extend timeout for this describe block since MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
     let catalogId: string;
     let serverId: string;
 
@@ -254,6 +258,9 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   });
 
   test.describe("Local MCP Server - Docker Image", () => {
+    // Extend timeout for this describe block since Docker image pull and MCP server installation can take a while
+    test.describe.configure({ timeout: 60_000 });
+
     let catalogId: string;
     let serverId: string;
 

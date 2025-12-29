@@ -1,8 +1,9 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId, formatSecretStorageType } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  AlertTriangle,
   Building2,
   CheckCircle2,
   Loader2,
@@ -23,6 +24,7 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -49,6 +51,7 @@ import {
   useDeleteChatApiKey,
   useUpdateChatApiKey,
 } from "@/lib/chat-settings.query";
+import { useFeatureFlag } from "@/lib/features.hook";
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -59,9 +62,11 @@ const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
 const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
   name: "",
   provider: "anthropic",
-  apiKey: "",
+  apiKey: null,
   scope: "personal",
-  teamId: "",
+  teamId: null,
+  vaultSecretPath: null,
+  vaultSecretKey: null,
 };
 
 function ChatSettingsContent() {
@@ -69,6 +74,7 @@ function ChatSettingsContent() {
   const createMutation = useCreateChatApiKey();
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
+  const byosEnabled = useFeatureFlag("byosEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -102,23 +108,30 @@ function ChatSettingsContent() {
         apiKey: PLACEHOLDER_KEY,
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
+        // Include vault secret info for BYOS mode
+        vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
+        vaultSecretKey: selectedApiKey.vaultSecretKey ?? null,
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);
 
   // Submit handlers
   const handleCreate = createForm.handleSubmit(async (values) => {
-    if (!values.apiKey || values.apiKey === PLACEHOLDER_KEY) {
-      toast.error("API key is required");
-      return;
-    }
-
     await createMutation.mutateAsync({
       name: values.name,
       provider: values.provider,
-      apiKey: values.apiKey,
+      apiKey: values.apiKey ?? undefined,
       scope: values.scope,
-      teamId: values.scope === "team" ? values.teamId : undefined,
+      teamId:
+        values.scope === "team" && values.teamId ? values.teamId : undefined,
+      vaultSecretPath:
+        byosEnabled && values.vaultSecretPath
+          ? values.vaultSecretPath
+          : undefined,
+      vaultSecretKey:
+        byosEnabled && values.vaultSecretKey
+          ? values.vaultSecretKey
+          : undefined,
     });
 
     createForm.reset(DEFAULT_FORM_VALUES);
@@ -139,13 +152,21 @@ function ChatSettingsContent() {
       id: selectedApiKey.id,
       data: {
         name: values.name || undefined,
-        apiKey: apiKeyChanged ? values.apiKey : undefined,
+        apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
         scope: scopeChanged ? values.scope : undefined,
         teamId:
           scopeChanged || teamIdChanged
             ? values.scope === "team"
               ? values.teamId
               : null
+            : undefined,
+        vaultSecretPath:
+          byosEnabled && values.vaultSecretPath
+            ? values.vaultSecretPath
+            : undefined,
+        vaultSecretKey:
+          byosEnabled && values.vaultSecretKey
+            ? values.vaultSecretKey
             : undefined,
       },
     });
@@ -181,10 +202,12 @@ function ChatSettingsContent() {
   // Validation for create form
   const createFormValues = createForm.watch();
   const isCreateValid =
-    createFormValues.apiKey &&
     createFormValues.apiKey !== PLACEHOLDER_KEY &&
     createFormValues.name &&
-    (createFormValues.scope !== "team" || createFormValues.teamId);
+    (createFormValues.scope !== "team" || createFormValues.teamId) &&
+    (byosEnabled
+      ? createFormValues.vaultSecretPath && createFormValues.vaultSecretKey
+      : createFormValues.apiKey);
 
   // Validation for edit form
   const editFormValues = editForm.watch();
@@ -254,6 +277,15 @@ function ChatSettingsContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        ),
+      },
+      {
+        accessorKey: "secretStorageType",
+        header: "Storage",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {formatSecretStorageType(row.original.secretStorageType)}
+          </span>
         ),
       },
       {
@@ -327,7 +359,7 @@ function ChatSettingsContent() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-lg font-semibold">LLM Provider API Keys</h2>
@@ -344,6 +376,19 @@ function ChatSettingsContent() {
         </Button>
       </div>
 
+      {byosEnabled &&
+        apiKeys.some((key) => key.secretStorageType === "database") && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Database-stored API keys detected</AlertTitle>
+            <AlertDescription>
+              External Vault storage is enabled, but some of your API keys are
+              still stored in the database. To migrate them to the vault, delete
+              them and create new ones with vault references.
+            </AlertDescription>
+          </Alert>
+        )}
+
       <div data-testid={E2eTestId.ChatApiKeysTable}>
         <DataTable
           columns={columns}
@@ -355,14 +400,14 @@ function ChatSettingsContent() {
 
       {/* Create Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add API Key</DialogTitle>
             <DialogDescription>
               Add a new LLM provider API key for use in Chat
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-2">
             <ChatApiKeyForm
               mode="full"
               showConsoleLink={false}
@@ -393,7 +438,7 @@ function ChatSettingsContent() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit API Key</DialogTitle>
             <DialogDescription>

@@ -14,7 +14,7 @@ The Archestra Platform can be deployed using Docker for development and testing,
 
 ## Docker Deployment
 
-Docker deployment provides the fastest way to get started with Archestra Platform, ideal for development and testing purposes.
+Docker deployment provides the fastest way to get started with Archestra Platform, ideal for tinkering and testing purposes.
 
 ### Docker Prerequisites
 

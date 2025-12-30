@@ -1,9 +1,9 @@
-name: On commits to main
+name: On commits to dev
 
 on:
   push:
     branches:
-      - main
+      - dev
   # Allow manual triggering of the workflow
   workflow_dispatch:
 

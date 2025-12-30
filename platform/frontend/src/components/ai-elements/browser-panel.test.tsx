@@ -15,14 +15,18 @@ describe("BrowserPanel", () => {
     });
 
     it("should render text content", () => {
-      const content = [{ type: "text" as const, text: "Navigated to example.com" }];
+      const content = [
+        { type: "text" as const, text: "Navigated to example.com" },
+      ];
       render(<BrowserPanel content={content} />);
       expect(screen.getByText("Navigated to example.com")).toBeInTheDocument();
     });
 
     it("should render URL in the URL bar", () => {
       const content = [{ type: "text" as const, text: "Page loaded" }];
-      render(<BrowserPanel content={content} currentUrl="https://example.com" />);
+      render(
+        <BrowserPanel content={content} currentUrl="https://example.com" />,
+      );
       expect(screen.getByText("https://example.com")).toBeInTheDocument();
     });
 
@@ -77,7 +81,10 @@ describe("BrowserPanel", () => {
       render(<BrowserPanel content={content} pageTitle="Screenshot test" />);
       const img = screen.getByAltText("Screenshot test");
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute("src", expect.stringContaining("data:image/png;base64"));
+      expect(img).toHaveAttribute(
+        "src",
+        expect.stringContaining("data:image/png;base64"),
+      );
     });
 
     it("should render fullscreen button for screenshots", () => {
@@ -96,7 +103,10 @@ describe("BrowserPanel", () => {
 
     it("should extract URL from text content", () => {
       const content = [
-        { type: "text" as const, text: "Navigated to: https://example.com/page" },
+        {
+          type: "text" as const,
+          text: "Navigated to: https://example.com/page",
+        },
       ];
       render(<BrowserPanel content={content} />);
       expect(screen.getByText("https://example.com/page")).toBeInTheDocument();
@@ -118,7 +128,9 @@ describe("BrowserPanel", () => {
 
     it("should render external link for valid URLs", () => {
       const content = [{ type: "text" as const, text: "Content" }];
-      render(<BrowserPanel content={content} currentUrl="https://example.com" />);
+      render(
+        <BrowserPanel content={content} currentUrl="https://example.com" />,
+      );
       const externalLink = document.querySelector('a[target="_blank"]');
       expect(externalLink).toBeInTheDocument();
       expect(externalLink).toHaveAttribute("href", "https://example.com");
@@ -168,7 +180,9 @@ describe("isBrowserToolOutput", () => {
     });
 
     it("should return false for string output", () => {
-      expect(isBrowserToolOutput("browser_navigate", "plain string")).toBe(false);
+      expect(isBrowserToolOutput("browser_navigate", "plain string")).toBe(
+        false,
+      );
     });
 
     it("should return true for array with text type", () => {

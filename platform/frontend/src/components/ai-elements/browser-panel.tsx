@@ -191,10 +191,12 @@ export const BrowserPanel = ({
               href={extractedUrl}
               target="_blank"
               rel="noopener noreferrer"
+              title="Open in new tab"
               className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
               onClick={(e) => e.stopPropagation()}
             >
               <ExternalLinkIcon className="size-3" />
+              <span className="sr-only">Open in new tab</span>
             </a>
           )}
         </div>
@@ -305,7 +307,10 @@ export function isBrowserToolOutput(
   }
 
   // Check for nested content property
-  if ("content" in output && Array.isArray((output as { content: unknown[] }).content)) {
+  if (
+    "content" in output &&
+    Array.isArray((output as { content: unknown[] }).content)
+  ) {
     return true;
   }
 

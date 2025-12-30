@@ -20534,6 +20534,9 @@
                       "selectedModel": {
                         "type": "string"
                       },
+                      "hasCustomToolSelection": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -20572,6 +20575,7 @@
                       "chatApiKeyId",
                       "title",
                       "selectedModel",
+                      "hasCustomToolSelection",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -20883,6 +20887,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -20921,6 +20928,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -21206,6 +21214,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -21244,6 +21255,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -21556,6 +21568,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -21594,6 +21609,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -22409,6 +22425,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22447,6 +22466,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -22760,6 +22780,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22798,6 +22821,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",

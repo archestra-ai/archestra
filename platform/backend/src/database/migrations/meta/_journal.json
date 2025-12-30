@@ -705,8 +705,15 @@
     {
       "idx": 100,
       "version": "7",
-      "when": 1767053980219,
-      "tag": "0100_cute_talisman",
+      "when": 1767097600473,
+      "tag": "0100_public_zodiak",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1767110270620,
+      "tag": "0101_numerous_hercules",
       "breakpoints": true
     }
   ]

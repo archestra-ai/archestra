@@ -5,6 +5,8 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
+import ConversationEnabledToolModel from "./conversation-enabled-tool";
+import ToolModel from "./tool";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -12,6 +14,22 @@ class ConversationModel {
       .insert(schema.conversationsTable)
       .values(data)
       .returning();
+
+    // Disable Archestra tools by default for new conversations
+    // Get all tools assigned to the agent
+    const agentTools = await ToolModel.getToolsByAgent(data.agentId);
+
+    // Filter out Archestra tools (those starting with "archestra__")
+    const nonArchestraToolIds = agentTools
+      .filter((tool) => !tool.name.startsWith("archestra__"))
+      .map((tool) => tool.id);
+
+    // Set enabled tools to only non-Archestra tools
+    // This creates a custom tool selection with Archestra tools disabled
+    await ConversationEnabledToolModel.setEnabledTools(
+      conversation.id,
+      nonArchestraToolIds,
+    );
 
     const conversationWithAgent = (await ConversationModel.findById({
       id: conversation.id,

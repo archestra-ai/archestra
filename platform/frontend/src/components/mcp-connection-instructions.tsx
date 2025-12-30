@@ -382,7 +382,15 @@ export function McpConnectionInstructions({
       {/* Token Selector */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Select token</Label>
-        <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
+        <Select
+          value={effectiveTokenId}
+          onValueChange={(value) => {
+            setSelectedTokenId(value);
+            // Reset exposed token state when changing token selection
+            setShowExposedToken(false);
+            setExposedTokenValue(null);
+          }}
+        >
           <SelectTrigger className="w-full min-h-[60px] py-2.5">
             <SelectValue placeholder="Select token">
               {effectiveTokenId && (

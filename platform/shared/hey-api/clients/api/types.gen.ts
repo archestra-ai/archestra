@@ -6584,6 +6584,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6681,6 +6682,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6853,6 +6855,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6870,6 +6873,7 @@ export type UpdateChatConversationData = {
         title?: string | null;
         selectedModel?: string;
         chatApiKeyId?: string | null;
+        agentId?: string;
     };
     path: {
         id: string;
@@ -6950,6 +6954,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -7131,6 +7136,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -7228,6 +7234,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {

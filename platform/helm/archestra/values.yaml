@@ -165,6 +165,16 @@ archestra:
         # Specifies whether RBAC resources (ServiceAccount, Role, RoleBinding) should be created
         create: true
 
+        # Additional ClusterRoleBindings to attach to the mcp-k8s-operator service account
+        # Use this to grant cluster-wide permissions (e.g., read access to all namespaces)
+        # The ClusterRoles must be created externally (e.g., via Terraform or kubectl)
+        # Example:
+        #   additionalClusterRoleBindings:
+        #     - clusterRoleName: cluster-reader
+        #     - clusterRoleName: custom-role
+        #       name: custom-binding-name  # Optional: override the auto-generated binding name
+        additionalClusterRoleBindings: []
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer

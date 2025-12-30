@@ -3,6 +3,10 @@ import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
+  BrowserPanel,
+  isBrowserToolOutput,
+} from "@/components/ai-elements/browser-panel";
+import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
@@ -484,11 +488,16 @@ function MessageTool({
   }
 
   const hasInput = part.input && Object.keys(part.input).length > 0;
-  const hasContent = Boolean(
-    hasInput ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
-  );
+  const toolOutput = toolResultPart?.output ?? part.output;
+  const hasContent = Boolean(hasInput || toolOutput);
+
+  // Check if this is a browser tool with visual output
+  const isBrowserTool = isBrowserToolOutput(toolName, toolOutput);
+
+  // Extract browser content for BrowserPanel
+  const browserContent = isBrowserTool
+    ? extractBrowserContent(toolOutput)
+    : null;
 
   return (
     <Tool className={hasContent ? "cursor-pointer" : ""}>
@@ -504,23 +513,97 @@ function MessageTool({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
-        {toolResultPart && (
+
+        {/* Render BrowserPanel for browser tools with visual output */}
+        {isBrowserTool && browserContent && !errorText && (
+          <div className="p-4">
+            <BrowserPanel
+              content={browserContent}
+              toolName={toolName}
+              currentUrl={extractUrlFromInput(part.input)}
+              isLoading={part.state === "input-available"}
+            />
+          </div>
+        )}
+
+        {/* Fallback to standard ToolOutput for non-browser tools or errors */}
+        {(!isBrowserTool || errorText) && toolResultPart && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
+        {(!isBrowserTool || errorText) &&
+          !toolResultPart &&
+          Boolean(part.output) && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          )}
       </ToolContent>
     </Tool>
   );
+}
+
+/**
+ * Extract browser content from tool output for BrowserPanel
+ */
+function extractBrowserContent(output: unknown): Array<{
+  type: "text" | "image";
+  text?: string;
+  data?: string;
+  mimeType?: string;
+}> | null {
+  if (!output) return null;
+
+  // Handle array of content items (MCP format)
+  if (Array.isArray(output)) {
+    const validContent = output.filter(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        "type" in item &&
+        (item.type === "text" || item.type === "image"),
+    );
+    return validContent.length > 0 ? validContent : null;
+  }
+
+  // Handle object with content property
+  if (typeof output === "object" && output !== null && "content" in output) {
+    const content = (output as { content: unknown }).content;
+    if (Array.isArray(content)) {
+      return extractBrowserContent(content);
+    }
+  }
+
+  // Handle single text response
+  if (typeof output === "string") {
+    return [{ type: "text", text: output }];
+  }
+
+  return null;
+}
+
+/**
+ * Extract URL from tool input (for browser navigation tools)
+ */
+function extractUrlFromInput(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+
+  const inputObj = input as Record<string, unknown>;
+
+  // Common URL parameter names
+  const urlKeys = ["url", "URL", "uri", "href", "link", "address"];
+  for (const key of urlKeys) {
+    if (typeof inputObj[key] === "string") {
+      return inputObj[key] as string;
+    }
+  }
+
+  return undefined;
 }
 
 const tryToExtractErrorFromOutput = (output: unknown) => {

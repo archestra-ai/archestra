@@ -496,6 +496,43 @@ async function seedTestMcpServer(): Promise<void> {
 }
 
 /**
+ * Seeds Browser MCP server for web browsing capabilities
+ * Uses the official Microsoft Playwright MCP package (@playwright/mcp)
+ * Reference: https://github.com/microsoft/playwright-mcp
+ */
+async function seedBrowserMcpServer(): Promise<void> {
+  const existing = await InternalMcpCatalogModel.findByName("Browser");
+  if (existing) {
+    logger.info("✓ Browser MCP server already exists in catalog, skipping");
+    return;
+  }
+
+  await InternalMcpCatalogModel.create({
+    name: "Browser",
+    description:
+      "Web browsing via Playwright - navigate to URLs, take screenshots, click elements, fill forms, and extract page content. Enables agents to interact with web pages in a real browser environment.",
+    serverType: "local",
+    localConfig: {
+      dockerImage: "archestra-browser-mcp:latest",
+      command: "npx",
+      arguments: ["@playwright/mcp@latest", "--headless"],
+      transportType: "stdio",
+      environment: [
+        {
+          key: "PLAYWRIGHT_BROWSERS_PATH",
+          type: "plain_text",
+          value: "/ms-playwright",
+          promptOnInstallation: false,
+          required: false,
+          description: "Path to Playwright browser binaries",
+        },
+      ],
+    },
+  });
+  logger.info("✓ Seeded Browser MCP server");
+}
+
+/**
  * Creates team tokens for existing teams and organization
  * - Creates "Organization Token" if missing
  * - Creates team tokens for each team if missing
@@ -532,5 +569,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultRegularPrompts();
   await seedArchestraTools();
   await seedTestMcpServer();
+  await seedBrowserMcpServer();
   await seedTeamTokens();
 }

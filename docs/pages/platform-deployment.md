@@ -14,7 +14,7 @@ The Archestra Platform can be deployed using Docker for development and testing,
 
 ## Docker Deployment
 
-Docker deployment provides the fastest way to get started with Archestra Platform, ideal for development and testing purposes.
+Docker deployment provides the fastest way to get started with Archestra Platform, ideal for tinkering and testing purposes.
 
 ### Docker Prerequisites
 
@@ -27,7 +27,7 @@ Run the platform with a single command:
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
-   -e ARCHESTRA_QUICKSTART \
+   -e ARCHESTRA_QUICKSTART=true \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
@@ -47,7 +47,7 @@ This will start the platform with:
 
 ```diff
 docker run -p 9000:9000 -p 3000:3000 \
--  -e ARCHESTRA_QUICKSTART \
+-  -e ARCHESTRA_QUICKSTART=true \
 -  -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \

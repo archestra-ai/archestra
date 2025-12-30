@@ -1,1 +1,0 @@
-ALTER TABLE "conversations" ADD COLUMN "has_custom_tool_selection" boolean DEFAULT false NOT NULL;

@@ -302,36 +302,40 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Always include user ID header so interactions are saved with user association
       clientHeaders[USER_ID_HEADER] = user.id;
 
-      let llmClient:
-        | ReturnType<typeof createAnthropic>
-        | ReturnType<typeof createGoogleGenerativeAI>
-        | ReturnType<typeof createOpenAI>;
+      // Create model based on provider
+      // Note: OpenAI uses .chat() to force Chat Completions API (not Responses API)
+      // so our proxy's tool policy evaluation is applied
+      let model: Parameters<typeof streamText>[0]["model"];
 
       if (provider === "anthropic") {
         // URL format: /v1/anthropic/:agentId/v1/messages
-        llmClient = createAnthropic({
+        const llmClient = createAnthropic({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
           headers:
             Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
+        model = llmClient(conversation.selectedModel);
       } else if (provider === "gemini") {
         // URL format: /v1/gemini/:agentId/v1beta/models
         // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
-        llmClient = createGoogleGenerativeAI({
+        const llmClient = createGoogleGenerativeAI({
           apiKey: providerApiKey || "vertex-ai-mode",
           baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
           headers:
             Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
+        model = llmClient(conversation.selectedModel);
       } else if (provider === "openai") {
         // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
-        llmClient = createOpenAI({
+        // Use .chat() to force Chat Completions API instead of Responses API
+        const llmClient = createOpenAI({
           apiKey: providerApiKey,
           baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
           headers:
             Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
         });
+        model = llmClient.chat(conversation.selectedModel);
       } else {
         throw new ApiError(400, `Unsupported provider: ${provider}`);
       }
@@ -339,7 +343,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Stream with AI SDK
       // Build streamText config conditionally
       const streamTextConfig: Parameters<typeof streamText>[0] = {
-        model: llmClient(conversation.selectedModel),
+        model,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
         stopWhen: stepCountIs(20),

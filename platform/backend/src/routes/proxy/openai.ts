@@ -635,7 +635,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   model: model,
                 };
 
-                // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
+                // Chunk 1: Send id and type (AI SDK requires function object to be present)
                 const idChunk = {
                   ...baseChunk,
                   choices: [
@@ -647,6 +647,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             index,
                             id: toolCall.id,
                             type: "function" as const,
+                            function: {
+                              name: toolCall.function.name,
+                              arguments: "",
+                            },
                           },
                         ],
                       },
@@ -657,29 +661,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 };
                 reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
 
-                // Chunk 2: Send function name (with id so clients can use assignment)
-                const nameChunk = {
-                  ...baseChunk,
-                  choices: [
-                    {
-                      index: 0,
-                      delta: {
-                        tool_calls: [
-                          {
-                            index,
-                            id: toolCall.id,
-                            function: { name: toolCall.function.name },
-                          },
-                        ],
-                      },
-                      finish_reason: null,
-                      logprobs: null,
-                    },
-                  ],
-                };
-                reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
-
-                // Chunk 3: Send function arguments (with id so clients can use assignment)
+                // Chunk 2: Send function arguments (with id so clients can use assignment)
                 const argsChunk = {
                   ...baseChunk,
                   choices: [

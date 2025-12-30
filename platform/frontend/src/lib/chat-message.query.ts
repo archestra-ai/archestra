@@ -19,6 +19,14 @@ export function useUpdateChatMessage(conversationId: string) {
       text: string;
       deleteSubsequentMessages?: boolean;
     }) => {
+      const isValidUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          messageId,
+        );
+      if (!isValidUuid) {
+        throw new Error(`Invalid message ID format: ${messageId}`);
+      }
+
       const { data, error } = await updateChatMessage({
         path: { id: messageId },
         body: { partIndex, text, deleteSubsequentMessages },

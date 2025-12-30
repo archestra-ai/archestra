@@ -47,7 +47,6 @@ export function CreateSsoProviderDialog({
     resolver: zodResolver(SsoProviderFormSchema),
     defaultValues: defaultValues || {
       providerId: "",
-      issuer: "",
       domain: "",
       providerType: providerType,
       ...(providerType === "saml"
@@ -80,7 +79,25 @@ export function CreateSsoProviderDialog({
 
   const onSubmit = useCallback(
     async (data: SsoProviderFormValues) => {
-      await createSsoProvider.mutateAsync(data);
+      if (data.providerType === "oidc") {
+        const oidcConfig = data.oidcConfig!; // Assert as non-null as schema should validate it
+
+        await createSsoProvider.mutateAsync({
+          ...data,
+          domain: data.domain ?? "",
+          issuer: data.issuer || oidcConfig.issuer || "",
+          oidcConfig: {
+            ...oidcConfig,
+            pkce: oidcConfig.pkce ?? false, // Ensure pkce is boolean
+          },
+        });
+      } else {
+        await createSsoProvider.mutateAsync({
+          ...data,
+          domain: data.domain ?? "",
+          issuer: data.issuer || data.samlConfig?.issuer || "",
+        });
+      }
       form.reset();
       onOpenChange(false);
     },

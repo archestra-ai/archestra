@@ -1,6 +1,8 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { extractUIResourceFromOutput } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
+import { useTheme } from "next-themes";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Conversation,
@@ -27,13 +29,19 @@ import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { UIResourceDisplay } from "./ui-resource-display";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
   agentId?: string;
   messages: UIMessage[];
   hideToolCalls?: boolean;
+  hideUIResources?: boolean;
   status: ChatStatus;
+
+  onUIToolCall?: (toolName: string, params: Record<string, unknown>) => void;
+  onUIPromptSubmit?: (prompt: string) => void;
+  onUIIntent?: (intent: string, params: Record<string, unknown>) => void;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
   onUserMessageEdit?: (
@@ -69,7 +77,11 @@ export function ChatMessages({
   agentId,
   messages,
   hideToolCalls = false,
+  hideUIResources = false,
   status,
+  onUIToolCall,
+  onUIPromptSubmit,
+  onUIIntent,
   isLoadingConversation = false,
   onMessagesUpdate,
   onUserMessageEdit,
@@ -144,11 +156,6 @@ export function ChatMessages({
   };
 
   if (messages.length === 0) {
-    // Don't show "start conversation" message while loading - prevents flash of empty state
-    if (isLoadingConversation) {
-      return null;
-    }
-
     return (
       <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
         <p className="text-sm">Start a conversation by sending a message</p>
@@ -349,6 +356,10 @@ export function ChatMessages({
                           key={`${message.id}-${i}`}
                           toolResultPart={toolResultPart}
                           toolName={toolName}
+                          onToolCall={onUIToolCall}
+                          onPromptSubmit={onUIPromptSubmit}
+                          onIntent={onUIIntent}
+                          hideUIResources={hideUIResources}
                           agentId={agentId}
                         />
                       );
@@ -379,6 +390,10 @@ export function ChatMessages({
                             key={`${message.id}-${i}`}
                             toolResultPart={toolResultPart}
                             toolName={toolName}
+                            onToolCall={onUIToolCall}
+                            onPromptSubmit={onUIPromptSubmit}
+                            onIntent={onUIIntent}
+                            hideUIResources={hideUIResources}
                             agentId={agentId}
                           />
                         );
@@ -396,16 +411,16 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <Message from="assistant">
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-              />
-            </Message>
-          )}
+              <Message from="assistant">
+                <Image
+                  src={"/logo.png"}
+                  alt="Loading logo"
+                  width={40}
+                  height={40}
+                  className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                />
+              </Message>
+            )}
         </div>
       </ConversationContent>
       <ConversationScrollButton />
@@ -456,13 +471,38 @@ function MessageTool({
   part,
   toolResultPart,
   toolName,
+  onToolCall,
+  onPromptSubmit,
+  onIntent,
+  hideUIResources,
   agentId,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
+  onToolCall?: (toolName: string, params: Record<string, unknown>) => void;
+  onPromptSubmit?: (prompt: string) => void;
+  onIntent?: (intent: string, params: Record<string, unknown>) => void;
+  hideUIResources?: boolean;
   agentId?: string;
 }) {
+  const output = toolResultPart?.output ?? part.output;
+  const uiResource = extractUIResourceFromOutput(output);
+
+  if (uiResource && !hideUIResources) {
+    return (
+      <div className="my-4">
+        <UIResourceDisplay
+          resource={uiResource.resource}
+          toolName={toolName}
+          onToolCall={onToolCall}
+          onPromptSubmit={onPromptSubmit}
+          onIntent={onIntent}
+        />
+      </div>
+    );
+  }
+
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
     : tryToExtractErrorFromOutput(part.output);
@@ -486,8 +526,8 @@ function MessageTool({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
+    (toolResultPart && Boolean(toolResultPart.output)) ||
+    (!toolResultPart && Boolean(part.output)),
   );
 
   return (
@@ -509,6 +549,9 @@ function MessageTool({
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
+            onToolCall={onToolCall}
+            onPromptSubmit={onPromptSubmit}
+            onIntent={onIntent}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
@@ -516,6 +559,9 @@ function MessageTool({
             label={errorText ? "Error" : "Result"}
             output={part.output}
             errorText={errorText}
+            onToolCall={onToolCall}
+            onPromptSubmit={onPromptSubmit}
+            onIntent={onIntent}
           />
         )}
       </ToolContent>

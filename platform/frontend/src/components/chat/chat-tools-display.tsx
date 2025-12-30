@@ -346,7 +346,7 @@ export function ChatToolsDisplay({
                   // Update openTooltips, but keep tooltip open if hovering
                   setOpenTooltips((prev) => ({
                     ...prev,
-                    [serverName]: open,
+                    [serverName]: open ?? false,
                   }));
                 }}
               >

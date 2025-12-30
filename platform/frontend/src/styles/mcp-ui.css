@@ -1,0 +1,48 @@
+.mcp-ui-container {
+  font-family: sans-serif;
+  /* padding: 16px; // TODO: Migrate to Tailwind class (e.g., p-4) in JSX */
+}
+
+.mcp-ui-title {
+  color: oklch(var(--foreground));
+  /* margin-bottom: 16px; // TODO: Migrate to Tailwind class (e.g., mb-4) in JSX */
+}
+
+.mcp-ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* margin-top: 8px; // TODO: Migrate to Tailwind class (e.g., mt-2) in JSX */
+}
+
+.mcp-ui-table-header {
+  background-color: oklch(var(--card));
+}
+
+.mcp-ui-table-header-cell {
+  text-align: left;
+  /* padding: 8px; // TODO: Migrate to Tailwind class (e.g., p-2) in JSX */
+  /* border: 1px solid oklch(var(--border)); // TODO: Migrate to Tailwind classes (e.g., border border-border) in JSX */
+}
+
+.mcp-ui-table-body-row {
+  /* border-bottom: 1px solid oklch(var(--border)); // TODO: Migrate to Tailwind classes (e.g., border-b border-border) in JSX */
+}
+
+.mcp-ui-table-body-cell {
+  /* padding: 8px; // TODO: Migrate to Tailwind class (e.g., p-2) in JSX */
+  /* border: 1px solid oklch(var(--border)); // TODO: Migrate to Tailwind classes (e.g., border border-border) in JSX */
+}
+
+.mcp-ui-table-body-cell-key {
+  font-weight: bold;
+}
+
+.mcp-ui-null-value {
+  color: oklch(var(--muted-foreground));
+}
+
+.mcp-ui-preformatted {
+  margin: 0;
+  white-space: pre-wrap;
+  /* font-size: 12px; // TODO: Migrate to Tailwind class (e.g., text-xs) in JSX */
+}

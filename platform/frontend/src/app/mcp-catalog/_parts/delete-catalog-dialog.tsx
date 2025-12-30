@@ -30,10 +30,10 @@ export function DeleteCatalogDialog({
   };
 
   const ConfirmationContent = ({ name }: { name: string }) => (
-    <div>
+    <span>
       Are you sure you want to delete{" "}
       <span className="font-semibold break-all">"{name}"</span>?
-    </div>
+    </span>
   );
 
   return (
@@ -42,23 +42,16 @@ export function DeleteCatalogDialog({
         <DialogHeader>
           <DialogTitle>Delete Catalog Item</DialogTitle>
           <DialogDescription>
-            {item &&
-              (() => {
-                return installationCount > 0 ? (
-                  <div className="space-y-3">
-                    <ConfirmationContent name={item.name} />
-                    <div className="text-sm">
-                      There are currently <strong>{installationCount}</strong>{" "}
-                      installation(s) of this server. Deleting this catalog
-                      entry will also uninstall all associated servers.
-                    </div>
-                  </div>
-                ) : (
-                  <ConfirmationContent name={item.name} />
-                );
-              })()}
+            {item && <ConfirmationContent name={item.name} />}
           </DialogDescription>
         </DialogHeader>
+        {item && installationCount > 0 && (
+          <div className="text-sm text-muted-foreground px-4">
+            There are currently <strong>{installationCount}</strong>{" "}
+            installation(s) of this server. Deleting this catalog entry will
+            also uninstall all associated servers.
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel

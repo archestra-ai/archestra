@@ -5,6 +5,7 @@ import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
@@ -76,6 +77,16 @@ export default function ChatPage() {
     }
     return false;
   });
+
+  const [hideUIResources, setHideUIResources] = useState(() => {
+    // Initialize from localStorage
+    if (typeof window !== "undefined") {
+      return (
+        localStorage.getItem("archestra-chat-hide-ui-resources") === "true"
+      );
+    }
+    return false;
+  });
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
@@ -113,9 +124,8 @@ export default function ChatPage() {
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   const hasAnyApiKey =
-    chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
-  const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
-
+    chatApiKeys.some((k) => k.secretId !== null) ||
+    features?.geminiVertexAiEnabled;
   // Sync conversation ID with URL
   useEffect(() => {
     const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
@@ -151,29 +161,22 @@ export default function ChatPage() {
   // Mutation for updating conversation model
   const updateConversationMutation = useUpdateConversation();
 
-  // Handle model change with error handling
   const handleModelChange = useCallback(
-    (model: string) => {
-      if (!conversation) return;
-
-      updateConversationMutation.mutate(
-        {
-          id: conversation.id,
+    async (model: string) => {
+      if (!conversationId) return;
+      try {
+        await updateConversationMutation.mutateAsync({
+          id: conversationId,
           selectedModel: model,
-        },
-        {
-          onError: (error) => {
-            toast.error(
-              `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-          },
-        },
-      );
+        });
+      } catch (error) {
+        console.error("Failed to update conversation model:", error);
+      }
     },
-    [conversation, updateConversationMutation],
+    [conversationId, updateConversationMutation],
   );
 
-  // Find the specific prompt for this conversation (if any)
+  // Find specific prompt for this conversation (if any)
   const conversationPrompt = conversation?.promptId
     ? prompts.find((p) => p.id === conversation.promptId)
     : undefined;
@@ -278,6 +281,12 @@ export default function ChatPage() {
     setHideToolCalls(newValue);
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
+
+  const toggleHideUIResources = useCallback(() => {
+    const newValue = !hideUIResources;
+    setHideUIResources(newValue);
+    localStorage.setItem("archestra-chat-hide-ui-resources", String(newValue));
+  }, [hideUIResources]);
 
   // Extract chat session properties (or use defaults if session not ready)
   const messages = chatSession?.messages ?? [];
@@ -464,11 +473,59 @@ export default function ChatPage() {
     });
   };
 
+  const onUIPromptSubmit = useCallback(
+    (prompt: string) => {
+      if (!sendMessage || status === "submitted" || status === "streaming") {
+        return;
+      }
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: prompt }],
+      });
+    },
+    [sendMessage, status],
+  );
+
+  const onUIToolCall = useCallback(
+    (toolName: string, params: Record<string, unknown>) => {
+      if (!sendMessage || status === "submitted" || status === "streaming") {
+        return;
+      }
+      sendMessage({
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: `Tool call: ${toolName}(${JSON.stringify(params)})`,
+          },
+        ],
+      });
+    },
+    [sendMessage, status],
+  );
+
+  const onUIIntent = useCallback(
+    (intent: string, params: Record<string, unknown>) => {
+      if (!sendMessage || status === "submitted" || status === "streaming") {
+        return;
+      }
+      sendMessage({
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: `Intent: ${intent}(${JSON.stringify(params)})`,
+          },
+        ],
+      });
+    },
+    [sendMessage, status],
+  );
+
   // If API key is not configured, show setup message
-  // Only show after loading completes to avoid flash of incorrect content
-  if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
+  if (!hasAnyApiKey) {
     return (
-      <div className="flex h-full w-full items-center justify-center p-8">
+      <div className="flex h-screen items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>LLM Provider API Key Required</CardTitle>
@@ -621,6 +678,24 @@ export default function ChatPage() {
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={toggleHideUIResources}
+                className="text-xs"
+              >
+                {hideUIResources ? (
+                  <>
+                    <Eye className="h-3 w-3 mr-1" />
+                    Show UI
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    Hide UI
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={toggleHideToolCalls}
                 className="text-xs"
               >
@@ -645,7 +720,11 @@ export default function ChatPage() {
               agentId={currentProfileId}
               messages={messages}
               hideToolCalls={hideToolCalls}
+              hideUIResources={hideUIResources}
               status={status}
+              onUIPromptSubmit={onUIPromptSubmit}
+              onUIToolCall={onUIToolCall}
+              onUIIntent={onUIIntent}
               isLoadingConversation={isLoadingConversation}
               onMessagesUpdate={setMessages}
               onUserMessageEdit={(

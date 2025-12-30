@@ -122,7 +122,14 @@ export function CustomServerRequestDialog({
                 .map((arg) => arg.trim())
                 .filter((arg) => arg.length > 0),
               environment:
-                values.environment.length > 0 ? values.environment : undefined,
+                values.environment.length > 0
+                  ? values.environment.map((env) => ({
+                      key: env.key,
+                      value: env.value,
+                      type: "plain_text",
+                      promptOnInstallation: false,
+                    }))
+                  : undefined,
             },
           };
 

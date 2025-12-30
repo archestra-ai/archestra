@@ -217,20 +217,18 @@ export function ManageChatToolsDialog({
           <DialogDescription>
             Select which tools are available in this chat session.
           </DialogDescription>
-          <DialogDescription>
+          <div className="px-4 text-sm text-muted-foreground">
             Don't see the tools you need?{" "}
-            <div className="inline-block">
-              <AssignToolsToProfile
-                agentId={agentId}
-                showAssignedToolsList={false}
-                assignToolsButtonProps={{
-                  variant: "link",
-                  size: "sm",
-                  className: "text-xs",
-                }}
-              />
-            </div>
-          </DialogDescription>
+            <AssignToolsToProfile
+              agentId={agentId}
+              showAssignedToolsList={false}
+              assignToolsButtonProps={{
+                variant: "link",
+                size: "sm",
+                className: "text-xs",
+              }}
+            />
+          </div>
         </DialogHeader>
 
         {!isLoading && (

@@ -21,6 +21,9 @@ export function usePublicSsoProviders() {
   return useQuery({
     queryKey: ssoProviderKeys.public,
     queryFn: async () => {
+      if (!config.enterpriseLicenseActivated) {
+        return [];
+      }
       const { data } = await archestraApiSdk.getPublicSsoProviders();
       return data;
     },

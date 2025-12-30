@@ -41,7 +41,7 @@ const markdownComponents: Components = {
   ),
   code: (props) => (
     <code
-      className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono"
+      className="bg-accent text-accent-foreground px-1 py-0.5 rounded text-xs font-mono"
       {...props}
     />
   ),

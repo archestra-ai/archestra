@@ -1,5 +1,6 @@
 "use client";
 
+import { extractUIResourceFromOutput } from "@shared";
 import type { ToolUIPart } from "ai";
 import {
   CheckCircleIcon,
@@ -10,6 +11,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
+import { useTheme } from "next-themes";
 import { createContext, useContext, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { UIResourceDisplay } from "@/components/chat/ui-resource-display";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -178,6 +181,10 @@ export type ToolOutputProps = ComponentProps<"div"> & {
     role: "user" | "assistant";
     content: string | unknown;
   }>;
+  onToolCall?: (toolName: string, params: Record<string, unknown>) => void;
+  onPromptSubmit?: (prompt: string) => void;
+  onIntent?: (intent: string, params: Record<string, unknown>) => void;
+  hideUIResources?: boolean;
 };
 
 export const ToolOutput = ({
@@ -186,12 +193,37 @@ export const ToolOutput = ({
   errorText,
   label,
   conversations,
+  onToolCall,
+  onPromptSubmit,
+  onIntent,
+  hideUIResources,
   ...props
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const uiResource = extractUIResourceFromOutput(output);
 
   if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  if (uiResource && !hideUIResources) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide flex items-center gap-2">
+          {label ?? "Result"}
+          <span className="text-green-600 dark:text-green-400 font-normal normal-case">
+            ✓ Interactive UI
+          </span>
+        </h4>
+        <UIResourceDisplay
+          resource={uiResource.resource}
+          onToolCall={onToolCall}
+          onPromptSubmit={onPromptSubmit}
+          onIntent={onIntent}
+        />
+      </div>
+    );
   }
 
   // Render conversations as chat bubbles if provided

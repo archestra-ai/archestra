@@ -4,28 +4,21 @@ import { Input } from "./ui/input";
 
 type DebouncedInputProps = Omit<
   React.ComponentProps<typeof Input>,
-  "onChange" | "value"
+  "onChange"
 > & {
   initialValue: string;
   onChange: (value: string) => void;
-  debounceMs?: number;
 };
 
 export function DebouncedInput({
   initialValue,
   onChange,
-  debounceMs = 800,
   ...props
 }: DebouncedInputProps) {
   const [value, setValue] = useState(initialValue);
   const isFirstRender = useRef(true);
 
-  const debouncedValue = useDebounce(value, debounceMs);
-
-  // Sync internal state when initialValue changes (e.g., browser back/forward)
-  useEffect(() => {
-    setValue(initialValue);
-  }, [initialValue]);
+  const debouncedValue = useDebounce(value, 800);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's ok here
   useEffect(() => {

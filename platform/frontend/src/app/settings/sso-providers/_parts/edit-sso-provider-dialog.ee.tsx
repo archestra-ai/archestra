@@ -78,51 +78,11 @@ export function EditSsoProviderDialog({
 
   useEffect(() => {
     if (provider) {
-      const isSaml = !!provider.samlConfig;
       form.reset({
-        providerId: provider.providerId,
-        issuer: provider.issuer,
-        domain: provider.domain,
-        providerType: isSaml ? "saml" : "oidc",
-        // Include roleMapping and teamSyncConfig if they exist on the provider
-        ...(provider.roleMapping && { roleMapping: provider.roleMapping }),
-        ...(provider.teamSyncConfig && {
-          teamSyncConfig: provider.teamSyncConfig,
-        }),
-        ...(isSaml
-          ? {
-              samlConfig: provider.samlConfig || {
-                issuer: "",
-                entryPoint: "",
-                cert: "",
-                callbackUrl: "",
-                spMetadata: {},
-                idpMetadata: {},
-                mapping: {
-                  id: "",
-                  email: "email",
-                  name: "",
-                  firstName: "firstName",
-                  lastName: "lastName",
-                },
-              },
-            }
-          : {
-              oidcConfig: provider.oidcConfig || {
-                issuer: "",
-                pkce: true,
-                clientId: "",
-                clientSecret: "",
-                discoveryEndpoint: "",
-                scopes: ["openid", "email", "profile"],
-                mapping: {
-                  id: "sub",
-                  email: "email",
-                  name: "name",
-                },
-                overrideUserInfo: true,
-              },
-            }),
+        ...provider,
+        providerType: provider.samlConfig ? "saml" : "oidc",
+        samlConfig: provider.samlConfig,
+        oidcConfig: provider.oidcConfig,
       });
     }
   }, [provider, form]);

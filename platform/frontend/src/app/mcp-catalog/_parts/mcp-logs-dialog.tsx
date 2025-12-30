@@ -249,30 +249,27 @@ export function McpLogsDialog({
             <Terminal className="h-5 w-5 flex-shrink-0" />
             <span className="truncate">Logs: {serverName}</span>
           </DialogTitle>
-          <DialogDescription className="flex flex-col gap-2">
-            <span>View the recent logs from the MCP server container</span>
-            {installs.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Installation:</span>
-                <Select
-                  value={serverId ?? undefined}
-                  onValueChange={setServerId}
-                >
-                  <SelectTrigger className="w-[300px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {installs.map((install) => (
-                      <SelectItem key={install.id} value={install.id}>
-                        {install.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <DialogDescription>
+            View the recent logs from the MCP server container
           </DialogDescription>
         </DialogHeader>
+        {installs.length > 1 && (
+          <div className="flex items-center gap-2 px-4">
+            <span className="text-sm font-medium">Installation:</span>
+            <Select value={serverId ?? undefined} onValueChange={setServerId}>
+              <SelectTrigger className="w-[300px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {installs.map((install) => (
+                  <SelectItem key={install.id} value={install.id}>
+                    {install.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-2 flex-1 min-h-0">

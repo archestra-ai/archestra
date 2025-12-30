@@ -1,6 +1,6 @@
 "use client";
 
-import "highlight.js/styles/github-dark.css";
+
 import type { archestraCatalogTypes } from "@shared";
 import {
   BookOpen,
@@ -80,13 +80,13 @@ const markdownComponents: Components = {
   ),
   code: ({ node, ...props }) => (
     <code
-      className={`bg-muted text-destructive px-1.5 py-0.5 rounded text-sm font-mono break-words ${commonClasses}`}
+      className={`bg-accent text-accent-foreground px-1.5 py-0.5 rounded text-sm font-mono break-words ${commonClasses}`}
       {...props}
     />
   ),
   pre: ({ node, ...props }) => (
     <pre
-      className={`bg-muted/50 border rounded-lg p-4 overflow-x-auto text-sm mb-4 text-foreground ${commonClasses}`}
+      className={`bg-muted/50 border border-border rounded-lg p-4 overflow-x-auto text-sm mb-4 text-foreground ${commonClasses}`}
       {...props}
     />
   ),
@@ -689,12 +689,7 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                   </h3>
                   <div className="card border px-4">
                     <div className="github-markdown">
-                      <style>{`
-                      .github-markdown pre code.hljs {
-                        background: transparent !important;
-                        color: inherit !important;
-                      }
-                    `}</style>
+
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
                         rehypePlugins={[rehypeHighlight, rehypeRaw]}

@@ -212,8 +212,19 @@ set -e
 KIND_CLUSTER=""
 
 # Cleanup function for graceful shutdown
+# Usage: cleanup [exit_code]
+# If exit_code not provided, defaults to 0 (signal-triggered cleanup)
 cleanup() {
+    CLEANUP_EXIT_CODE="${1:-0}"
+
     echo "Shutting down..."
+
+    # Stop supervisord gracefully before cleaning up KinD cluster
+    if [ -n "$SUPERVISOR_PID" ] && kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
+        echo "Stopping services..."
+        kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
+        wait "$SUPERVISOR_PID" 2>/dev/null || true
+    fi
 
     # Delete KinD cluster if we created one in quickstart mode
     if [ -n "$KIND_CLUSTER" ]; then
@@ -225,7 +236,7 @@ cleanup() {
         fi
     fi
 
-    exit 0
+    exit "$CLEANUP_EXIT_CODE"
 }
 
 # Set up signal handlers for graceful shutdown
@@ -277,8 +288,6 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
-        # Reuse existing cluster without marking it for cleanup
-        :
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
         if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
@@ -443,7 +452,9 @@ SUPERVISOR_PID=$!
 wait $SUPERVISOR_PID
 EXIT_CODE=$?
 
-exit $EXIT_CODE
+# If we get here, supervisord exited on its own (not via signal)
+# Run cleanup with the actual exit code
+cleanup "$EXIT_CODE"
 EOF
 
 RUN chmod +x /docker-entrypoint.sh

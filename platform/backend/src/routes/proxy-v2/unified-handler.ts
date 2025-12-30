@@ -5,6 +5,8 @@ import {
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
 } from "@/llm-metrics";
 import logger from "@/logging";
 import {
@@ -438,6 +440,10 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
 
   provider.setupStreamingHeaders(reply);
 
+  // Track timing for TTFT and tokens/sec metrics
+  const streamStartTime = Date.now();
+  let firstChunkTime: number | undefined;
+
   const streamResult = await provider.stream(providerRequest, proxyContext);
 
   const streamTransformer = provider.transformer.createStreamTransformer();
@@ -449,6 +455,19 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
     const chunk = streamTransformer.toOpenAI(nativeEvent);
 
     if (!chunk) continue;
+
+    // Capture time to first token on first chunk
+    if (!firstChunkTime) {
+      firstChunkTime = Date.now();
+      const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+      reportTimeToFirstToken(
+        provider.name,
+        agent,
+        optimizedModel,
+        ttftSeconds,
+        externalAgentId,
+      );
+    }
 
     const choice = chunk.choices?.[0];
 
@@ -471,6 +490,20 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
   const accumulatedResponse = await streamResult.getAccumulatedResponse();
   const openaiResponse =
     provider.transformer.responseToOpenAI(accumulatedResponse);
+
+  // Report tokens per second if we have output tokens and timing
+  const outputTokens = openaiResponse.usage?.completion_tokens;
+  if (outputTokens && firstChunkTime) {
+    const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+    reportTokensPerSecond(
+      provider.name,
+      agent,
+      optimizedModel,
+      outputTokens,
+      totalDurationSeconds,
+      externalAgentId,
+    );
+  }
 
   // Run post-processing (stores interaction in native format)
   const { response: processedResponse, wasBlocked } = await runPostProcessing({

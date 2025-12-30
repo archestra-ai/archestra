@@ -55,6 +55,7 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef(new Map<string, ChatSession>());
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
+  const usageCountRef = useRef(new Map<string, number>());
   const [sessions, setSessions] = useState<Set<string>>(new Set());
   // Version counter to trigger re-renders when sessions update
   const [sessionVersion, setSessionVersion] = useState(0);
@@ -65,6 +66,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cancelCleanup = useCallback((conversationId: string) => {
+    // Increment usage count
+    usageCountRef.current.set(
+      conversationId,
+      (usageCountRef.current.get(conversationId) ?? 0) + 1,
+    );
+
+    // Cancel any pending cleanup timer
     const timer = cleanupTimersRef.current.get(conversationId);
     if (timer) {
       clearTimeout(timer);
@@ -74,6 +82,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // Schedule cleanup for inactive sessions
   const scheduleCleanup = useCallback((conversationId: string) => {
+    // Decrement usage count
+    const currentCount = usageCountRef.current.get(conversationId) ?? 0;
+    const newCount = Math.max(0, currentCount - 1);
+    usageCountRef.current.set(conversationId, newCount);
+
+    // Only schedule cleanup if no more usages
+    if (newCount > 0) return;
+
     // Clear existing timer
     const existingTimer = cleanupTimersRef.current.get(conversationId);
     if (existingTimer) {
@@ -86,6 +102,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (session) {
         sessionsRef.current.delete(conversationId);
         cleanupTimersRef.current.delete(conversationId);
+        usageCountRef.current.delete(conversationId);
         setSessions((prev) => {
           const next = new Set(prev);
           next.delete(conversationId);
@@ -123,6 +140,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(
     (conversationId: string) => {
       sessionsRef.current.delete(conversationId);
+      usageCountRef.current.delete(conversationId);
       const timer = cleanupTimersRef.current.get(conversationId);
       if (timer) {
         clearTimeout(timer);
@@ -145,7 +163,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       for (const timer of cleanupTimersRef.current.values()) {
         clearTimeout(timer);
       }
-      cleanupTimersRef.current.clear();
     };
   }, []);
 

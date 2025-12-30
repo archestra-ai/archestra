@@ -32,7 +32,8 @@ interface A2AConnectionInstructionsProps {
 export function A2AConnectionInstructions({
   prompt,
 }: A2AConnectionInstructionsProps) {
-  const { data: tokensData } = useTokens();
+  // Filter tokens by the profile's teams (prompt.agentId is the profile ID)
+  const { data: tokensData } = useTokens({ profileId: prompt.agentId });
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
@@ -253,7 +254,15 @@ curl -X GET "${agentCardUrl}" \\
       {/* Token Selector */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Authentication Token</Label>
-        <Select value={effectiveTokenId} onValueChange={setSelectedTokenId}>
+        <Select
+          value={effectiveTokenId}
+          onValueChange={(value) => {
+            setSelectedTokenId(value);
+            // Reset exposed token state when changing token selection
+            setShowExposedToken(false);
+            setExposedTokenValue(null);
+          }}
+        >
           <SelectTrigger className="w-full min-h-[60px] py-2.5">
             <SelectValue placeholder="Select token">
               {effectiveTokenId && (

@@ -241,9 +241,6 @@ cleanup() {
     exit "$CLEANUP_EXIT_CODE"
 }
 
-# Set up signal handlers for graceful shutdown
-trap cleanup SIGTERM SIGINT
-
 # Generate and persist ARCHESTRA_AUTH_SECRET if not set
 if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     SECRET_FILE="/app/data/.auth_secret"
@@ -444,6 +441,9 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 CONF
+
+# Set up signal handlers now that all initialization is complete
+trap cleanup SIGTERM SIGINT
 
 # Start supervisord in foreground but allow signal handling
 # Run in background and wait so trap can catch signals

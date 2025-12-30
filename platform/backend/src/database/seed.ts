@@ -522,6 +522,127 @@ async function seedTeamTokens(): Promise<void> {
   }
 }
 
+/**
+ * Seeds a test MCP server with a UIResource for development
+ */
+async function seedMcpServerWithUI1(): Promise<void> {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_TEST_MCP_SERVER !== "true"
+  ) {
+    return;
+  }
+
+  const serverName = "ui-test-server-1";
+  const existing = await InternalMcpCatalogModel.findByName(serverName);
+  if (existing) {
+    logger.info(`✓ Test MCP server with UI (${serverName}) already exists, skipping`);
+    return;
+  }
+
+  const uiHtml = "<html><body><h1>Hello from MCP UI 1</h1></body></html>";
+  const mcpServerScript = `
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+
+const server = new McpServer({ name: '${serverName}', version: '1.0.0' });
+
+server.tool('show_ui', 'Shows a simple UI', {}, async () => {
+  return {
+    content: [
+      {
+        type: 'resource',
+        resource: {
+          uri: 'data:text/html,${encodeURIComponent(uiHtml)}',
+          mimeType: 'text/html'
+        }
+      }
+    ]
+  };
+});
+
+const transport = new StdioServerTransport();
+server.connect(transport);
+`.trim();
+
+  await InternalMcpCatalogModel.create({
+    name: serverName,
+    description: "Simple test MCP server that returns a UIResource.",
+    serverType: "local",
+    localConfig: {
+      command: "sh",
+      arguments: [
+        "-c",
+        `npm install --silent @modelcontextprotocol/sdk && node -e '${mcpServerScript.replace(/'/g, "'\"'\"'")}'`,
+      ],
+      transportType: "stdio",
+      environment: [],
+    },
+  });
+  logger.info(`✓ Seeded test MCP server with UI (${serverName})`);
+}
+
+
+/**
+ * Seeds a second test MCP server with a UIResource for development
+ */
+async function seedMcpServerWithUI2(): Promise<void> {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_TEST_MCP_SERVER !== "true"
+  ) {
+    return;
+  }
+
+  const serverName = "ui-test-server-2";
+  const existing = await InternalMcpCatalogModel.findByName(serverName);
+  if (existing) {
+    logger.info(`✓ Test MCP server with UI (${serverName}) already exists, skipping`);
+    return;
+  }
+
+  const uiHtml = "<html><body><h2>Hello from MCP UI 2</h2></body></html>";
+  const mcpServerScript = `
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+
+const server = new McpServer({ name: '${serverName}', version: '1.0.0' });
+
+server.tool('show_ui_2', 'Shows another simple UI', {}, async () => {
+  return {
+    content: [
+      {
+        type: 'resource',
+        resource: {
+          uri: 'data:text/html,${encodeURIComponent(uiHtml)}',
+          mimeType: 'text/html'
+        }
+      }
+    ]
+  };
+});
+
+const transport = new StdioServerTransport();
+server.connect(transport);
+`.trim();
+
+  await InternalMcpCatalogModel.create({
+    name: serverName,
+    description: "Another simple test MCP server that returns a UIResource.",
+    serverType: "local",
+    localConfig: {
+      command: "sh",
+      arguments: [
+        "-c",
+        `npm install --silent @modelcontextprotocol/sdk && node -e '${mcpServerScript.replace(/'/g, "'\"'\"'")}'`,
+      ],
+      transportType: "stdio",
+      environment: [],
+    },
+  });
+  logger.info(`✓ Seeded test MCP server with UI (${serverName})`);
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
@@ -533,4 +654,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedArchestraTools();
   await seedTestMcpServer();
   await seedTeamTokens();
+  await seedMcpServerWithUI1();
+  await seedMcpServerWithUI2();
 }

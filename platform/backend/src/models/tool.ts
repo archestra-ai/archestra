@@ -9,14 +9,12 @@ import AgentToolModel from "./agent-tool";
 
 class ToolModel {
   /**
-   * Slugify a tool name to get a unique name for the MCP server's tool.
-   * Ensures the result matches the pattern ^[a-zA-Z0-9_-]{1,128}$ required by LLM providers.
+   * Slugify a tool name to get a unique name for the MCP server's tool
    */
   static slugifyName(mcpServerName: string, toolName: string): string {
     return `${mcpServerName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolName}`
       .toLowerCase()
-      .replace(/\s+/g, "_") // Replace whitespace with underscores
-      .replace(/[^a-z0-9_-]/g, ""); // Remove any characters not allowed in tool names
+      .replace(/ /g, "_");
   }
 
   /**

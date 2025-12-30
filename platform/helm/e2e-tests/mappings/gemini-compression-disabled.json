@@ -1,0 +1,43 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
+    "headers": {
+      "x-goog-api-key": {
+        "contains": "gemini-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "\"files\":[{\"name\":\"README.md\",\"size\":1024"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "I have processed the JSON tool result."
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 150,
+        "candidatesTokenCount": 10,
+        "totalTokenCount": 160
+      }
+    }
+  }
+}

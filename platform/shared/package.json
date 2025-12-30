@@ -5,7 +5,9 @@
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./access-control": "./access-control.ts",
+    "./access-control.ee": "./access-control.ee.ts"
   },
   "scripts": {
     "lint": "biome check",
@@ -14,6 +16,7 @@
     "type-check": "tsc --noEmit",
     "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
+    "codegen": "pnpm codegen:api-client && pnpm codegen:theme-css",
     "check:ci": "pnpm type-check && pnpm knip && biome ci",
     "knip": "knip"
   },
@@ -21,14 +24,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-auth": "1.4.4-beta.3",
+    "better-auth": "1.4.6-beta.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.88.0",
-    "@types/node": "^24",
-    "knip": "^5.50.0",
-    "tsx": "^4.20.6",
+    "@hey-api/openapi-ts": "^0.89.2",
+    "@types/node": "^25",
+    "knip": "^5.76.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.2"
   }
 }

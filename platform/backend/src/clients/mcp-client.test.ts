@@ -29,18 +29,18 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
-const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetPod } =
+const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetDeployment } =
   vi.hoisted(() => ({
     mockUsesStreamableHttp: vi.fn(),
     mockGetHttpEndpointUrl: vi.fn(),
-    mockGetPod: vi.fn(),
+    mockGetDeployment: vi.fn(),
   }));
 
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
-    getPod: mockGetPod,
+    getDeployment: mockGetDeployment,
   },
 }));
 
@@ -55,7 +55,7 @@ describe("McpClient", () => {
     agentId = agent.id;
 
     // Create secret with access token
-    const secret = await secretManager.createSecret(
+    const secret = await secretManager().createSecret(
       { access_token: "test-github-token-123" },
       "testmcptoken",
     );
@@ -84,7 +84,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
-    mockGetPod.mockReset();
+    mockGetDeployment.mockReset();
   });
 
   describe("executeToolCall", () => {
@@ -116,6 +116,7 @@ describe("McpClient", () => {
 
         // Assign tool to agent with response modifier
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Modified: {{{lookup (lookup response 0) "text"}}}',
         });
@@ -163,6 +164,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             '{{#with (lookup response 0)}}{"formatted": true, "data": "{{{this.text}}}"}{{/with}}',
         });
@@ -198,6 +200,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: `{{#with (lookup response 0)}}{{#with (json this.text)}}
   {
   {{#each this.issues}}
@@ -247,6 +250,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: "{{{json response}}}",
         });
 
@@ -283,6 +287,7 @@ describe("McpClient", () => {
 
         // Invalid Handlebars template
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: "{{#invalid",
         });
 
@@ -320,6 +325,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Type: {{lookup (lookup response 0) "type"}}',
         });
@@ -354,6 +360,7 @@ describe("McpClient", () => {
 
         // Assign tool without response modifier template
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: null,
         });
 
@@ -398,11 +405,13 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Template 1: {{lookup (lookup response 0) "text"}}',
         });
 
         await AgentToolModel.create(agentId, tool2.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Template 2: {{lookup (lookup response 0) "text"}}',
         });
@@ -500,7 +509,9 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager responses
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -550,7 +561,9 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager responses - no endpoint URL
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -586,6 +599,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
           responseModifierTemplate:
             'Result: {{{lookup (lookup response 0) "text"}}}',
         });
@@ -628,18 +642,21 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager to indicate stdio transport (not HTTP)
         mockUsesStreamableHttp.mockResolvedValue(false);
 
-        // Mock K8sPod instance
-        const mockK8sPod = {
+        // Mock K8sDeployment instance
+        const mockK8sDeployment = {
           k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
           k8sNamespace: "default",
-          k8sPodName: "mcp-test-pod",
+          deploymentName: "mcp-test-deployment",
+          getRunningPodName: vi.fn().mockResolvedValue("mcp-test-pod-actual"),
         };
-        mockGetPod.mockReturnValue(mockK8sPod);
+        mockGetDeployment.mockReturnValue(mockK8sDeployment);
 
         // Mock the tool call response
         mockCallTool.mockResolvedValue({
@@ -658,7 +675,8 @@ describe("McpClient", () => {
         // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
         expect(mockGetHttpEndpointUrl).not.toHaveBeenCalled();
-        expect(mockGetPod).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockGetDeployment).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockK8sDeployment.getRunningPodName).toHaveBeenCalled();
 
         // Verify MCP SDK client was used
         expect(mockCallTool).toHaveBeenCalledWith({

@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-allows-archestra-untrusted-context"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg_archestra_mixed_123",
+      "type": "message",
+      "role": "assistant",
+      "model": "claude-3-5-sonnet-20241022",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_read_file_123",
+          "name": "read_file",
+          "input": {
+            "file_path": "/etc/passwd"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_archestra_whoami_123",
+          "name": "archestra__whoami",
+          "input": {}
+        }
+      ],
+      "stop_reason": "tool_use",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 150,
+        "output_tokens": 30
+      }
+    }
+  }
+}

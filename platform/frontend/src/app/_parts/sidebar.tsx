@@ -1,10 +1,11 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
-import { E2eTestId, requiredPagePermissionsMap } from "@shared";
+import { E2eTestId } from "@shared";
 import {
   BookOpen,
   Bot,
   Bug,
+  Cable,
   DollarSign,
   Github,
   LogIn,
@@ -49,6 +50,11 @@ interface MenuItem {
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
+const { requiredPagePermissionsMap } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional page permissions
+    await import("@shared/access-control.ee")
+  : await import("@shared/access-control");
+
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   if (!isAuthenticated) {
     return [];
@@ -73,7 +79,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       customIsActive: (pathname: string) => pathname.startsWith("/logs"),
     },
     {
-      title: "Tools",
+      title: "Tool Policies",
       url: "/tools",
       icon: Wrench,
       customIsActive: (pathname: string) => pathname.startsWith("/tools"),
@@ -85,15 +91,20 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
       customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
     },
     {
+      title: "Cost & Limits",
+      url: "/cost",
+      icon: DollarSign,
+    },
+    {
+      title: "Connect",
+      url: "/connection",
+      icon: Cable,
+    },
+    {
       title: "Settings",
       url: "/settings",
       icon: Settings,
       customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-    },
-    {
-      title: "Cost & Limits",
-      url: "/cost",
-      icon: DollarSign,
     },
   ];
 };

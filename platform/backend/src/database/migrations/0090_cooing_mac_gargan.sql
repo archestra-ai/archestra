@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "chat_api_keys_org_provider_default_unique" ON "chat_api_keys" USING btree ("organization_id","provider") WHERE "chat_api_keys"."is_organization_default" = true;

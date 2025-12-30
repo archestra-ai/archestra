@@ -58,6 +58,7 @@ export function useCreateRole() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
     },
   });
 }
@@ -89,6 +90,7 @@ export function useUpdateRole() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
       queryClient.invalidateQueries({
         queryKey: roleKeys.detail(variables.roleId),
       });
@@ -114,6 +116,7 @@ export function useDeleteRole() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
     },
   });
 }

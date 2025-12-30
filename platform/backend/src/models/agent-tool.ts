@@ -15,6 +15,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -49,6 +50,48 @@ class AgentToolModel {
         ...options,
       })
       .returning();
+
+    // Auto-configure policies if enabled (run in background)
+    // Import at top of method to avoid circular dependency
+    const { agentToolAutoPolicyService } = await import(
+      "./agent-tool-auto-policy"
+    );
+    const { default: OrganizationModel } = await import("./organization");
+
+    // Get agent's organization via team relationship and trigger auto-configure in background
+    db.select({ organizationId: schema.teamsTable.organizationId })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+
+        const organizationId = rows[0].organizationId;
+        const organization = await OrganizationModel.getById(organizationId);
+
+        if (organization?.autoConfigureNewTools) {
+          // Use the unified method with timeout and loading state management
+          await agentToolAutoPolicyService.configurePoliciesForAgentToolWithTimeout(
+            agentTool.id,
+            organizationId,
+          );
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            agentToolId: agentTool.id,
+            agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger auto-configure for new agent-tool",
+        );
+      });
+
     return agentTool;
   }
 
@@ -249,6 +292,7 @@ class AgentToolModel {
     toolId: string,
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
+    useDynamicTeamCredential?: boolean,
   ): Promise<{ status: "created" | "updated" | "unchanged" }> {
     // Check if assignment already exists
     const [existing] = await db
@@ -272,6 +316,7 @@ class AgentToolModel {
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
+          | "useDynamicTeamCredential"
         >
       > = {};
 
@@ -283,6 +328,10 @@ class AgentToolModel {
         options.executionSourceMcpServerId = executionSourceMcpServerId;
       }
 
+      if (useDynamicTeamCredential !== undefined) {
+        options.useDynamicTeamCredential = useDynamicTeamCredential;
+      }
+
       await AgentToolModel.create(agentId, toolId, options);
       return { status: "created" };
     }
@@ -292,22 +341,30 @@ class AgentToolModel {
       existing.credentialSourceMcpServerId !==
         (credentialSourceMcpServerId ?? null) ||
       existing.executionSourceMcpServerId !==
-        (executionSourceMcpServerId ?? null);
+        (executionSourceMcpServerId ?? null) ||
+      (useDynamicTeamCredential !== undefined &&
+        existing.useDynamicTeamCredential !== useDynamicTeamCredential);
 
     if (needsUpdate) {
       // Update credentials
       const updateData: Partial<
         Pick<
           UpdateAgentTool,
-          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+          | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
+          | "useDynamicTeamCredential"
         >
       > = {};
 
-      // Always set both fields to ensure they're updated correctly
+      // Always set credential fields to ensure they're updated correctly
       updateData.credentialSourceMcpServerId =
         credentialSourceMcpServerId ?? null;
       updateData.executionSourceMcpServerId =
         executionSourceMcpServerId ?? null;
+
+      if (useDynamicTeamCredential !== undefined) {
+        updateData.useDynamicTeamCredential = useDynamicTeamCredential;
+      }
 
       await AgentToolModel.update(existing.id, updateData);
       return { status: "updated" };
@@ -326,6 +383,10 @@ class AgentToolModel {
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
+        | "useDynamicTeamCredential"
+        | "policiesAutoConfiguredAt"
+        | "policiesAutoConfiguringStartedAt"
+        | "policiesAutoConfiguredReasoning"
       >
     >,
   ) {
@@ -344,17 +405,26 @@ class AgentToolModel {
     ids: string[],
     field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
     value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+    clearAutoConfigured = false,
   ): Promise<number> {
     if (ids.length === 0) {
       return 0;
     }
 
+    const updateData: Record<string, unknown> = {
+      [field]: value,
+      updatedAt: new Date(),
+    };
+
+    // Clear auto-configured timestamp and reasoning if requested (manual policy change)
+    if (clearAutoConfigured) {
+      updateData.policiesAutoConfiguredAt = null;
+      updateData.policiesAutoConfiguredReasoning = null;
+    }
+
     const result = await db
       .update(schema.agentToolsTable)
-      .set({
-        [field]: value,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(inArray(schema.agentToolsTable.id, ids));
 
     return result.rowCount ?? 0;
@@ -623,6 +693,64 @@ class AgentToolModel {
       );
 
     return agentTool || null;
+  }
+
+  /**
+   * Batch fetch security configs for multiple tools at once.
+   * Returns a Map of toolName -> security config.
+   */
+  static async getSecurityConfigBatch(
+    agentId: string,
+    toolNames: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >
+  > {
+    if (toolNames.length === 0) {
+      return new Map();
+    }
+
+    const agentTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+
+    const result = new Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >();
+
+    for (const tool of agentTools) {
+      result.set(tool.toolName, {
+        allowUsageWhenUntrustedDataIsPresent:
+          tool.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: tool.toolResultTreatment,
+      });
+    }
+
+    return result;
   }
 
   /**

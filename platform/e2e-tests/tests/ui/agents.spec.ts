@@ -1,5 +1,6 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
+import { clickButton } from "../../utils";
 
 test(
   "can create and delete a profile",
@@ -18,26 +19,45 @@ test(
     await page.getByTestId(E2eTestId.CreateAgentButton).click();
     await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
     await page.locator("[type=submit]").click();
-    await page.waitForTimeout(1000);
 
-    // Close the "How to connect" modal which shows up after creating a profile
-    await page
-      .getByTestId(E2eTestId.CreateAgentCloseHowToConnectButton)
-      .click();
+    // After profile creation, wait for the success toast to appear
+    await expect(page.getByText("Profile created successfully")).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Check if the profile is created
+    // A new dialog opens with connection instructions
+    // Wait for the "Connect via" dialog to appear
     await expect(
-      page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
-    ).toBeVisible();
+      page.getByRole("heading", {
+        name: new RegExp(`Connect via.*${AGENT_NAME}`, "i"),
+      }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Close the connection dialog by clicking the "Done" button
+    await page.getByRole("button", { name: "Done" }).click();
+
+    // Ensure dialog is closed
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState("networkidle");
+
+    // Poll for the profile to appear in the table (handles async creation)
+    const profileLocator = page
+      .getByTestId(E2eTestId.AgentsTable)
+      .getByText(AGENT_NAME);
+
+    await expect(async () => {
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await expect(profileLocator).toBeVisible({ timeout: 5000 });
+    }).toPass({ timeout: 30_000, intervals: [2000, 3000, 5000] });
 
     // Delete created profile - click the delete button directly
     await page
       .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
       .click();
-    await page.getByRole("button", { name: "Delete profile" }).click();
+    await clickButton({ page, options: { name: "Delete profile" } });
 
-    await expect(
-      page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
-    ).not.toBeVisible();
+    // Wait for deletion to complete
+    await expect(profileLocator).not.toBeVisible({ timeout: 10000 });
   },
 );

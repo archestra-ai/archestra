@@ -1,6 +1,4 @@
 "use client";
-
-import type { UIMessage } from "@ai-sdk/react";
 import {
   PromptInput,
   PromptInputBody,
@@ -19,7 +17,6 @@ export type ArchestraPromptInputProps = {
   ) => void;
   status: "ready" | "submitted" | "streaming" | "error";
   selectedModel?: string;
-  onModelChange?: (model: string) => void; // reserved for future model picker
   messageCount: number;
   agentId?: string;
   conversationId?: string;

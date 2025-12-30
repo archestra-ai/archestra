@@ -1,6 +1,5 @@
 "use client";
 
-
 import type { UIActionResult, UIResourceContent } from "@shared";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";

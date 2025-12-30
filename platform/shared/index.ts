@@ -5,16 +5,15 @@ export * as archestraApiSdk from "./hey-api/clients/api/sdk.gen";
 export * as archestraApiTypes from "./hey-api/clients/api/types.gen";
 export * as archestraCatalogSdk from "./hey-api/clients/archestra-catalog/sdk.gen";
 export * as archestraCatalogTypes from "./hey-api/clients/archestra-catalog/types.gen";
-
+export * from "./mcp-ui.types";
 export * from "./model-constants";
 export * from "./permission.types";
 export * from "./roles";
 export * from "./routes";
+export * from "./schemas";
 export * from "./test-mcp-server";
 // Theme utilities and config
 export * from "./themes/theme-config";
 export * from "./themes/theme-utils";
 export * from "./types";
 export * from "./utils";
-export * from "./schemas";
-export * from "./mcp-ui.types";

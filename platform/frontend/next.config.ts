@@ -1,7 +1,7 @@
+import withBundleAnalyzer from "@next/bundle-analyzer";
 import { withSentryConfig } from "@sentry/nextjs";
 import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { NextConfig } from "next";
-import withBundleAnalyzer from "@next/bundle-analyzer";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -57,7 +57,6 @@ const nextConfig: NextConfig = {
 const analyze = withBundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 });
-
 
 export default analyze(
   withSentryConfig(nextConfig, {

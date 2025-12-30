@@ -10,9 +10,10 @@ import {
   WrenchIcon,
   XCircleIcon,
 } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
 import { useTheme } from "next-themes";
+import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
+import { UIResourceDisplay } from "@/components/chat/ui-resource-display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
-import { UIResourceDisplay } from "@/components/chat/ui-resource-display";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -200,7 +200,6 @@ export const ToolOutput = ({
   ...props
 }: ToolOutputProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { resolvedTheme } = useTheme();
   const uiResource = extractUIResourceFromOutput(output);
 
   if (!(output || errorText || conversations)) {

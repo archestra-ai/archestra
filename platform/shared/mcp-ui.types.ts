@@ -93,7 +93,8 @@ export function extractUIResourceFromOutput(
   // 3. Handle arrays by searching for a UI resource within them
   if (Array.isArray(output)) {
     if (extractionCache.has(output)) {
-      return extractionCache.get(output)!;
+      const cached = extractionCache.get(output);
+      if (cached) return cached;
     }
 
     for (const item of output) {
@@ -103,7 +104,7 @@ export function extractUIResourceFromOutput(
         return result;
       }
     }
-    
+
     extractionCache.set(output, null);
     return null;
   }
@@ -111,7 +112,8 @@ export function extractUIResourceFromOutput(
   // 4. Handle objects
   if (typeof output === "object" && output !== null) {
     if (extractionCache.has(output)) {
-      return extractionCache.get(output)!;
+      const cached = extractionCache.get(output);
+      if (cached) return cached;
     }
 
     const obj = output as Record<string, unknown>;
@@ -176,7 +178,7 @@ export function extractUIResourceFromOutput(
         return null;
       }
     }
-    
+
     extractionCache.set(output, null);
   }
 
@@ -192,13 +194,10 @@ function convertObjectToHtml(obj: Record<string, unknown>): string | null {
     html += `<h2 class="text-foreground mb-4">${obj.title || obj.name}</h2>`;
   }
 
-  html +=
-    '<table class="w-full border-collapse mt-2">';
+  html += '<table class="w-full border-collapse mt-2">';
   html += '<thead><tr class="bg-card">';
-  html +=
-    '<th class="text-left p-2 border border-border">Property</th>';
-  html +=
-    '<th class="text-left p-2 border border-border">Value</th>';
+  html += '<th class="text-left p-2 border border-border">Property</th>';
+  html += '<th class="text-left p-2 border border-border">Value</th>';
   html += "</tr></thead><tbody>";
 
   for (const [key, value] of Object.entries(obj)) {

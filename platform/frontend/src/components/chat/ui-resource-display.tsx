@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import type { UIActionResult, UIResourceContent } from "@shared";
 import { useTheme } from "next-themes";
-import { DynamicReactRenderer, renderComponentTree } from "./DynamicReactRenderer";
-import { McpUIResourceRenderer } from "./mcp-ui-resource-renderer";
-import { Button } from "../ui/button";
+import { useState } from "react";
 import { CodeText } from "../code-text";
+import { Button } from "../ui/button";
+import {
+  DynamicReactRenderer,
+  renderComponentTree,
+} from "./DynamicReactRenderer";
+import { McpUIResourceRenderer } from "./mcp-ui-resource-renderer";
 
 interface UIResourceDisplayProps {
   resource: UIResourceContent;
@@ -32,7 +35,9 @@ export function UIResourceDisplay({
   const { resolvedTheme } = useTheme();
   const [showCode, setShowCode] = useState(false);
 
-  const isReactComponent = resource.mimeType === "application/vnd.mcp-ui.remote-dom+javascript; framework=react";
+  const isReactComponent =
+    resource.mimeType ===
+    "application/vnd.mcp-ui.remote-dom+javascript; framework=react";
 
   return (
     <div className={className}>

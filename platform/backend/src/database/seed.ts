@@ -536,7 +536,9 @@ async function seedMcpServerWithUI1(): Promise<void> {
   const serverName = "ui-test-server-1";
   const existing = await InternalMcpCatalogModel.findByName(serverName);
   if (existing) {
-    logger.info(`✓ Test MCP server with UI (${serverName}) already exists, skipping`);
+    logger.info(
+      `✓ Test MCP server with UI (${serverName}) already exists, skipping`,
+    );
     return;
   }
 
@@ -582,7 +584,6 @@ server.connect(transport);
   logger.info(`✓ Seeded test MCP server with UI (${serverName})`);
 }
 
-
 /**
  * Seeds a second test MCP server with a UIResource for development
  */
@@ -597,7 +598,9 @@ async function seedMcpServerWithUI2(): Promise<void> {
   const serverName = "ui-test-server-2";
   const existing = await InternalMcpCatalogModel.findByName(serverName);
   if (existing) {
-    logger.info(`✓ Test MCP server with UI (${serverName}) already exists, skipping`);
+    logger.info(
+      `✓ Test MCP server with UI (${serverName}) already exists, skipping`,
+    );
     return;
   }
 

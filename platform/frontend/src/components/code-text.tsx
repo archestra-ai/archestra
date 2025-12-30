@@ -10,7 +10,10 @@ export function CodeText({
   language?: string;
 }) {
   return (
-    <code className={cn("text-sm bg-muted px-1 py-0.5 rounded", className)} data-language={language}>
+    <code
+      className={cn("text-sm bg-muted px-1 py-0.5 rounded", className)}
+      data-language={language}
+    >
       {children}
     </code>
   );

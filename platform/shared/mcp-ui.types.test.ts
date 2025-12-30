@@ -1,9 +1,6 @@
-import { describe, it, expect } from "vitest";
-import {
-  extractUIResourceFromOutput,
-  isUIResource,
-} from "./index";
+import { describe, expect, it } from "vitest";
 import type { UIResource } from "./index";
+import { extractUIResourceFromOutput, isUIResource } from "./index";
 
 describe("isUIResource", () => {
   it("should return true for a valid UIResource", () => {
@@ -66,7 +63,7 @@ describe("extractUIResourceFromOutput", () => {
     };
     expect(extractUIResourceFromOutput(output)).toEqual(uiResource);
   });
-    it("should extract a UIResource from a parsed JSON with content array", () => {
+  it("should extract a UIResource from a parsed JSON with content array", () => {
     const output = JSON.stringify({
       content: [
         { type: "text", text: "some text" },
@@ -76,7 +73,6 @@ describe("extractUIResourceFromOutput", () => {
     });
     expect(extractUIResourceFromOutput(output)).toEqual(uiResource);
   });
-
 
   it("should return null for invalid or empty inputs", () => {
     expect(extractUIResourceFromOutput(null)).toBeNull();

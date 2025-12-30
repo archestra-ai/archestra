@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { THEME_IDS } from "./themes/theme-config";
 
-
 export const UIResourceContentSchema = z.object({
   uri: z.string().startsWith("ui://"),
   mimeType: z.union([
@@ -11,7 +10,9 @@ export const UIResourceContentSchema = z.object({
     z.custom((val) => {
       return (
         typeof val === "string" &&
-        val.startsWith("application/vnd.mcp-ui.remote-dom+javascript; framework=")
+        val.startsWith(
+          "application/vnd.mcp-ui.remote-dom+javascript; framework=",
+        )
       );
     }),
   ]),
@@ -73,13 +74,6 @@ export const UIActionResultSchema = z.union([
   UIActionNotifySchema,
   UIActionLinkSchema,
 ]);
-
-
-
-
-
-
-
 
 export const OAuthConfigSchema = z.object({
   name: z.string(),

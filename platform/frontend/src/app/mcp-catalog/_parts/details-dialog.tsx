@@ -1,6 +1,5 @@
 "use client";
 
-
 import type { archestraCatalogTypes } from "@shared";
 import {
   BookOpen,
@@ -689,7 +688,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                   </h3>
                   <div className="card border px-4">
                     <div className="github-markdown">
-
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
                         rehypePlugins={[rehypeHighlight, rehypeRaw]}

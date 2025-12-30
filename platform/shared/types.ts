@@ -17,4 +17,3 @@ export enum SecretsManagerType {
   /** BYOS (Bring Your Own Secrets) - Vault with external team folder support */
   BYOS_VAULT = "BYOS_VAULT",
 }
-

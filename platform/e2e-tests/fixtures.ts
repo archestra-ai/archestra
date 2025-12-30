@@ -3,17 +3,17 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 import {
+  type APIRequestContext,
   type Browser,
   type BrowserContext,
   test as base,
   type Page,
-  type APIRequestContext,
 } from "@playwright/test";
 import {
+  API_BASE_URL,
   editorAuthFile,
   memberAuthFile,
   UI_BASE_URL,
-  API_BASE_URL,
 } from "./consts";
 
 /** Type for user-specific navigation function */

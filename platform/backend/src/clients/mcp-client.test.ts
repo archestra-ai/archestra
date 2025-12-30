@@ -6,7 +6,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
 

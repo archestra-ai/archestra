@@ -1,11 +1,15 @@
 import {
-  API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-  UI_BASE_URL,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { getOrgTokenForProfile, makeApiRequest, findCatalogItem, findInstalledServer, waitForServerInstallation } from "./mcp-gateway-utils";
+import {
+  findCatalogItem,
+  findInstalledServer,
+  getOrgTokenForProfile,
+  makeApiRequest,
+  waitForServerInstallation,
+} from "./mcp-gateway-utils";
 
 /**
  * MCP Gateway Authentication Tests

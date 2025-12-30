@@ -34,8 +34,13 @@ import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
-} from "@/secretsmanager";
+} from "@/secrets-manager";
+import {
+  createLLMModelForAgent,
+  detectProviderFromModel,
+} from "@/services/llm-client";
 import type { SupportedChatProvider } from "@/types";
+
 import {
   ApiError,
   constructResponseSchema,

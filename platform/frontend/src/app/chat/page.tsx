@@ -6,7 +6,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
@@ -118,9 +117,8 @@ export default function ChatPage() {
   const chatSession = useChatSession(conversationId);
 
   // Check if API key is configured for any provider
-  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useChatApiKeys();
-  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: chatApiKeys = [] } = useChatApiKeys();
+  const { data: features } = useFeatures();
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   const hasAnyApiKey =

@@ -449,7 +449,7 @@ CONF
 SUPERVISOR_PID=$!
 
 # Wait for supervisord to exit (or for a signal)
-wait $SUPERVISOR_PID
+wait "$SUPERVISOR_PID"
 EXIT_CODE=$?
 
 # If we get here, supervisord exited on its own (not via signal)

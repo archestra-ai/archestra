@@ -158,7 +158,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       scheduleCleanup,
       cancelCleanup,
     }),
-    [registerSession, getSession, clearSession, notifySessionUpdate, scheduleCleanup, cancelCleanup],
+    [
+      registerSession,
+      getSession,
+      clearSession,
+      notifySessionUpdate,
+      scheduleCleanup,
+      cancelCleanup,
+    ],
   );
 
   return (

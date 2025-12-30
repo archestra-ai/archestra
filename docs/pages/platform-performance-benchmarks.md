@@ -91,4 +91,4 @@ This document provides performance metrics and overhead measurements for Archest
 - Error logging and tracking
 - Performance metrics available via database queries
 
-For detailed information on setting up Prometheus monitoring, distributed tracing with OpenTelemetry, and Grafana dashboards, see the [Observability documentation](platform-observability.md).
+For detailed information on setting up Prometheus monitoring, distributed tracing with OpenTelemetry, and Grafana dashboards, see the [Observability documentation](/docs/platform-observability).

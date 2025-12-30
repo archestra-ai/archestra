@@ -1,12 +1,13 @@
+import { SupportedProvidersDiscriminatorSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import {
-  Anthropic,
-  Gemini,
-  OpenAi,
-  SupportedProvidersDiscriminatorSchema,
-} from "./llm-providers";
+import { Anthropic, Gemini, OpenAi } from "./llm-providers";
+
+export const UserInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
 
 /**
  * Request/Response schemas that accept any provider type
@@ -68,6 +69,8 @@ export const InsertInteractionSchema = createInsertSchema(
     response: InteractionResponseSchema,
   },
 );
+
+export type UserInfo = z.infer<typeof UserInfoSchema>;
 
 export type Interaction = z.infer<typeof SelectInteractionSchema>;
 export type InsertInteraction = z.infer<typeof InsertInteractionSchema>;

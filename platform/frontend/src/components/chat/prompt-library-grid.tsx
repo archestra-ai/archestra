@@ -6,11 +6,13 @@ import {
 } from "@shared";
 import {
   History as HistoryIcon,
+  Link2,
   MessageSquarePlus,
   MoreVertical,
   Pencil,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -56,9 +58,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
+import { A2AConnectionInstructions } from "../a2a-connection-instructions";
 import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
-import { McpToolsDisplay } from "./mcp-tools-display";
+import { AssignToolsToProfile } from "./assign-tools-to-profile";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -82,6 +85,7 @@ export function PromptLibraryGrid({
   const [isFreeChatDialogOpen, setIsFreeChatDialogOpen] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
+  const [promptToConnect, setPromptToConnect] = useState<Prompt | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -129,8 +133,18 @@ export function PromptLibraryGrid({
           placeholder="Search prompts by name or profile..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-9"
         />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent"
+          >
+            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -177,6 +191,7 @@ export function PromptLibraryGrid({
                     onEdit={onEdit}
                     onDelete={setPromptToDelete}
                     onViewVersionHistory={onViewVersionHistory}
+                    onConnect={setPromptToConnect}
                     disabled={hasPermission === false}
                   />
                 );
@@ -220,8 +235,9 @@ export function PromptLibraryGrid({
                   permissions={{ profile: ["read"] }}
                   noPermissionHandle="hide"
                 >
-                  <McpToolsDisplay
+                  <AssignToolsToProfile
                     agentId={selectedProfileId}
+                    showAssignedToolsList
                     className="text-xs text-muted-foreground"
                   />
                 </WithPermissions>
@@ -274,6 +290,27 @@ export function PromptLibraryGrid({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* A2A Connection Dialog */}
+      <Dialog
+        open={!!promptToConnect}
+        onOpenChange={(open) => !open && setPromptToConnect(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Connect to &quot;{promptToConnect?.name}&quot;
+            </DialogTitle>
+            <DialogDescription>
+              Use these details to connect to this prompt as an A2A agent from
+              your application.
+            </DialogDescription>
+          </DialogHeader>
+          {promptToConnect && (
+            <A2AConnectionInstructions prompt={promptToConnect} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -286,6 +323,7 @@ interface PromptTileProps {
   onEdit: (prompt: Prompt) => void;
   onDelete: (promptId: string) => void;
   onViewVersionHistory: (prompt: Prompt) => void;
+  onConnect: (prompt: Prompt) => void;
   disabled?: boolean;
 }
 
@@ -367,6 +405,7 @@ function PromptTile({
   onEdit,
   onDelete,
   onViewVersionHistory,
+  onConnect,
   disabled = false,
 }: PromptTileProps) {
   const handlePromptClick = () => onPromptClick(prompt);
@@ -380,7 +419,7 @@ function PromptTile({
         <div className="flex items-start justify-between gap-2">
           {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
           <div
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 max-w-[calc(100%-2rem)]"
             onClick={handlePromptClick}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -391,8 +430,8 @@ function PromptTile({
             role="button"
             tabIndex={0}
           >
-            <div className="flex items-baseline gap-2">
-              <CardTitle className="text-base truncate">
+            <div className="flex items-baseline gap-2 overflow-hidden">
+              <CardTitle className="text-base truncate flex-1 min-w-0">
                 <TruncatedText
                   message={prompt.name}
                   className="text-base truncate pr-0"
@@ -444,6 +483,15 @@ function PromptTile({
               >
                 <HistoryIcon className="mr-2 h-4 w-4" />
                 Version History
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConnect(prompt);
+                }}
+              >
+                <Link2 className="mr-2 h-4 w-4" />
+                A2A Connect
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {

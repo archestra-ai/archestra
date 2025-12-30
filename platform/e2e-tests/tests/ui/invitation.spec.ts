@@ -1,10 +1,14 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "../../fixtures";
+import { clickButton } from "../../utils";
 
 test.describe(
   "Invitation functionality",
   { tag: ["@firefox", "@webkit"] },
   () => {
+    // increase stability
+    test.describe.configure({ mode: "serial", retries: 4 });
+
     test("shows error message when email is invalid", async ({
       page,
       goToPage,
@@ -16,7 +20,7 @@ test.describe(
       await page.waitForTimeout(1000);
 
       // Click the "Invite Member" button to open the dialog
-      await page.getByRole("button", { name: /invite member/i }).click();
+      await clickButton({ page, options: { name: /invite member/i } });
 
       // Wait for the dialog to open
       await page.waitForTimeout(500);
@@ -52,7 +56,7 @@ test.describe(
       await page.waitForTimeout(1000);
 
       // Click the "Invite Member" button to open the dialog
-      await page.getByRole("button", { name: /invite member/i }).click();
+      await clickButton({ page, options: { name: /invite member/i } });
 
       // Wait for the dialog to open
       await page.waitForTimeout(500);

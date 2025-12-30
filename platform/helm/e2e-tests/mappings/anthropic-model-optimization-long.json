@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-model-optimization-long"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-anthropic-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg-model-opt-long",
+      "type": "message",
+      "role": "assistant",
+      "model": "e2e-test-anthropic-baseline",
+      "content": [
+        {
+          "type": "text",
+          "text": "This is a response for a long message that exceeds the maxLength threshold."
+        }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 3500,
+        "output_tokens": 20
+      }
+    }
+  }
+}

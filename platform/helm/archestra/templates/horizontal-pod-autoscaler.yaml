@@ -1,0 +1,24 @@
+{{- if .Values.archestra.horizontalPodAutoscaler.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "archestra-platform.fullname" . }}
+  minReplicas: {{ .Values.archestra.horizontalPodAutoscaler.minReplicas }}
+  maxReplicas: {{ .Values.archestra.horizontalPodAutoscaler.maxReplicas }}
+  {{- with .Values.archestra.horizontalPodAutoscaler.metrics }}
+  metrics:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.archestra.horizontalPodAutoscaler.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

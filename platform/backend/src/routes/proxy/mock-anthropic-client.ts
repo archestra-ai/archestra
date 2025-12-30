@@ -35,6 +35,8 @@ const MOCK_RESPONSE: Anthropic.Message = {
 export interface MockStreamOptions {
   /** If set, the stream will throw an error at this chunk index (0-based) */
   interruptAtChunk?: number;
+  /** If true, include a tool_use block in the stream */
+  includeToolUse?: boolean;
 }
 
 /**
@@ -147,7 +149,7 @@ export class MockAnthropicClient {
     stream: (params: Anthropic.Messages.MessageCreateParams) => {
       // Return the same async iterator structure
       let index = 0;
-      const chunks: Anthropic.Messages.MessageStreamEvent[] = [
+      const baseChunks: Anthropic.Messages.MessageStreamEvent[] = [
         {
           type: "message_start",
           message: {
@@ -166,32 +168,82 @@ export class MockAnthropicClient {
             } as Anthropic.Messages.Usage,
           },
         },
-        {
-          type: "content_block_start",
-          index: 0,
-          content_block: {
-            type: "text",
-            text: "",
-            citations: [],
-          } as Anthropic.Messages.TextBlock,
-        },
-        {
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "text_delta", text: "Hello! " },
-        },
-        {
-          type: "content_block_delta",
-          index: 0,
-          delta: {
-            type: "text_delta",
-            text: "How can I help you today?",
+      ];
+
+      // Conditionally add tool_use or text content blocks
+      if (MockAnthropicClient.streamOptions.includeToolUse) {
+        baseChunks.push(
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: {
+              type: "tool_use",
+              id: "toolu_mock123",
+              name: "get_weather",
+              input: {}, // This empty object is what causes the bug if not handled
+            },
           },
-        },
-        {
-          type: "content_block_stop",
-          index: 0,
-        },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "input_json_delta",
+              partial_json: '{"location":"',
+            },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "input_json_delta",
+              partial_json: 'San Francisco",',
+            },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "input_json_delta",
+              partial_json: '"unit":"fahrenheit"}',
+            },
+          },
+          {
+            type: "content_block_stop",
+            index: 0,
+          },
+        );
+      } else {
+        baseChunks.push(
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: {
+              type: "text",
+              text: "",
+              citations: [],
+            } as Anthropic.Messages.TextBlock,
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "Hello! " },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "text_delta",
+              text: "How can I help you today?",
+            },
+          },
+          {
+            type: "content_block_stop",
+            index: 0,
+          },
+        );
+      }
+
+      baseChunks.push(
         {
           type: "message_delta",
           delta: { stop_reason: "end_turn", stop_sequence: null },
@@ -204,7 +256,9 @@ export class MockAnthropicClient {
         {
           type: "message_stop",
         },
-      ];
+      );
+
+      const chunks = baseChunks;
 
       return {
         [Symbol.asyncIterator]() {

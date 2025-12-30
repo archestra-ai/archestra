@@ -8,6 +8,7 @@ const {
   bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
+  autoConfigureAgentToolPolicies,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -93,21 +94,26 @@ export function useAssignTool() {
       toolId,
       credentialSourceMcpServerId,
       executionSourceMcpServerId,
+      useDynamicTeamCredential,
     }: {
       agentId: string;
       toolId: string;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
+      useDynamicTeamCredential?: boolean;
     }) => {
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
         body:
-          credentialSourceMcpServerId || executionSourceMcpServerId
+          credentialSourceMcpServerId ||
+          executionSourceMcpServerId ||
+          useDynamicTeamCredential !== undefined
             ? {
                 credentialSourceMcpServerId:
                   credentialSourceMcpServerId || undefined,
                 executionSourceMcpServerId:
                   executionSourceMcpServerId || undefined,
+                useDynamicTeamCredential,
               }
             : undefined,
       });
@@ -116,6 +122,7 @@ export function useAssignTool() {
     onSuccess: (_, { agentId }) => {
       // Invalidate queries to refetch data
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
@@ -171,6 +178,7 @@ export function useBulkAssignTools() {
       queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
 
       // Invalidate the MCP servers list
       queryClient.invalidateQueries({
@@ -206,6 +214,7 @@ export function useUnassignTool() {
     },
     onSuccess: (_, { agentId }) => {
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
@@ -238,6 +247,7 @@ export function useProfileToolPatchMutation() {
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
       });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }
@@ -253,6 +263,35 @@ export function useBulkUpdateProfileTools() {
     },
     onSuccess: () => {
       // Invalidate all agent-tools queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: ["agent-tools"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useAutoConfigurePolicies() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (agentToolIds: string[]) => {
+      const result = await autoConfigureAgentToolPolicies({
+        body: { agentToolIds },
+      });
+
+      if (!result.data) {
+        const errorMessage =
+          result.error && "message" in result.error
+            ? String(result.error.message)
+            : "Failed to auto-configure policies";
+        throw new Error(errorMessage);
+      }
+
+      return result.data;
+    },
+    onSuccess: () => {
+      // Invalidate agent-tools queries to refetch with new policies
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
       });

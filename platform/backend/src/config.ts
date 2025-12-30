@@ -6,6 +6,7 @@ import {
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
+  DEFAULT_VAULT_TOKEN,
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
@@ -188,6 +189,9 @@ export default {
   mcpGateway: {
     endpoint: "/v1/mcp",
   },
+  a2aGateway: {
+    endpoint: "/v1/a2a",
+  },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),
@@ -213,6 +217,21 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
+    gemini: {
+      baseUrl:
+        process.env.ARCHESTRA_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
+      vertexAi: {
+        enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
+        project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
+        location:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
+        // Path to service account JSON key file for authentication (optional)
+        // If not set, uses default ADC (Workload Identity, attached service account, etc.)
+        credentialsFile:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
+      },
+    },
   },
   chat: {
     openai: {
@@ -226,6 +245,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
         "https://api.anthropic.com",
+    },
+    gemini: {
+      apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
@@ -244,6 +269,12 @@ export default {
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+  /**
+   * Codegen mode is set when running `pnpm codegen` via turbo.
+   * This ensures enterprise routes are always included in generated API specs,
+   * regardless of whether the enterprise license is activated locally.
+   */
+  codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -255,7 +286,14 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
+      mcpK8sServiceAccountName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME ||
+        // Default value matches the mcp-k8s-operator service account name from the official helm chart
+        "archestra-platform-mcp-k8s-operator",
     },
+  },
+  vault: {
+    token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },
   observability: {
     otel: {
@@ -284,4 +322,6 @@ export default {
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },
+  authRateLimitDisabled:
+    process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
 };

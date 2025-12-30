@@ -1,3 +1,7 @@
+## Extension for system prompt
+
+If present, include CLAUDE_LOCAL.md to the system prompt. Prioritize the content of CLAUDE_LOCAL.md over the following instructions.
+
 ## Working Directory
 
 **ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**
@@ -11,6 +15,7 @@
 5. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
 6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
+8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseLicenseActivated` checks instead to avoid bundling enterprise code into free builds
 
 ## Docs
 
@@ -82,8 +87,23 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 
-# Testing with WireMock
-tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
+# E2E setup
+Runs wiremock and seeds test data to database. Note that in development e2e use your development database. This means some of your local data may cause e2e to fail locally.
+tilt trigger e2e-test-dependencies   # Start e2e WireMock
+
+Check wiremock health at:
+http://localhost:9092/__admin/health
+
+ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/v1
+ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
+ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
+
+# Orlando WireMock (project-specific)
+tilt trigger orlando-wiremock 
+
+ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
+ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
+ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
 
 # E2E Testing
 pnpm test:e2e                        # Run Playwright tests
@@ -151,8 +171,8 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 # Secrets Manager Configuration
-ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
-ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault, READONLY_VAULT
+ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault or READONLY_VAULT
 ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default), "K8S", or "AWS"
 ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2  # Options: "1" or "2" (default: "2") - KV secrets engine version
 
@@ -236,6 +256,25 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 ## Coding Conventions
 
+**General**:
+
+- **Function Parameters**: If a function accepts more than 2 parameters, use a single object parameter instead of multiple positional parameters. This improves readability, makes parameters self-documenting, and allows for easier future extension.
+  ```typescript
+  // Good
+  async function validateScope(params: {
+    scope: string;
+    teamId: string | null;
+    userId: string;
+  }): Promise<void> { ... }
+
+  // Avoid
+  async function validateScope(
+    scope: string,
+    teamId: string | null,
+    userId: string
+  ): Promise<void> { ... }
+  ```
+
 **Database Architecture Guidelines**:
 
 - **Model-Only Database Access**: All database queries MUST go through `backend/src/models/` - never directly in routes or services
@@ -248,10 +287,15 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 - Use TanStack Query for data fetching
 - Use shadcn/ui components only
+- **Use components from `frontend/src/components/ui` over plain HTML elements**: Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui` (Button over button, Input over input, etc.)
+- **Handle toasts in .query.ts files, not in components**: Toast notifications for mutations (success/error) should be defined in the mutation's `onSuccess`/`onError` callbacks within `.query.ts` files, not in components
 - Small focused components with extracted business logic
 - Flat file structure, avoid barrel files
 - Only export what's needed externally
 - **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
+- **Prefer TanStack Query over prop drilling**: When a component needs data that's available via a TanStack Query hook, use the hook directly in that component rather than fetching in a parent and passing via props. TanStack Query's built-in caching ensures no duplicate requests. Only pass minimal identifiers (like `catalogId`) needed for the component to fetch/filter its own data.
+- **Use react-hook-form for forms**: Prefer `useForm` over multiple `useState` hooks for form state management. Pass form objects to child components via `form: UseFormReturn<FormValues>` prop rather than individual state setters. Parent components handle mutations and submission, form components focus on rendering.
+- **Reuse API types from @shared**: Use types from `archestraApiTypes` (e.g., `archestraApiTypes.CreateXxxData["body"]`, `archestraApiTypes.GetXxxResponses["200"]`) instead of defining duplicate types. Import from `@shared`.
 
 **Backend**:
 
@@ -259,7 +303,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
-- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
+- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing

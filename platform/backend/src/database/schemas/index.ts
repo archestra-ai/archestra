@@ -4,8 +4,12 @@ export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
-export { default as chatSettingsTable } from "./chat-settings";
+export {
+  type ChatApiKeyScope,
+  default as chatApiKeysTable,
+} from "./chat-api-key";
 export { default as conversationsTable } from "./conversation";
+export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as interactionsTable } from "./interaction";
@@ -17,7 +21,6 @@ export { default as limitsTable } from "./limit";
 export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
-export { default as mcpServerTeamsTable } from "./mcp-server-team";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
@@ -31,10 +34,13 @@ export { default as sessionsTable } from "./session";
 export { default as ssoProvidersTable } from "./sso-provider";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
+export { default as teamTokensTable } from "./team-token";
+export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as tokenPricesTable } from "./token-price";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";

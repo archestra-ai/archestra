@@ -12,7 +12,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import {
+import React, {
   type ChangeEvent,
   type ChangeEventHandler,
   Children,
@@ -81,6 +81,7 @@ export type AttachmentsContext = {
   clear: () => void;
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
+  status?: ChatStatus;
 };
 
 export type TextInputContext = {
@@ -453,6 +454,7 @@ export type PromptInputProps = Omit<
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
   ) => void | Promise<void>;
+  status?: ChatStatus;
 };
 
 export const PromptInput = ({
@@ -465,12 +467,14 @@ export const PromptInput = ({
   maxFileSize,
   onError,
   onSubmit,
+  status,
   children,
   ...props
 }: PromptInputProps) => {
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController();
   const usingProvider = !!controller;
+  const effectiveStatus = status ?? "ready";
 
   // Refs
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -703,12 +707,18 @@ export const PromptInput = ({
       clear,
       openFileDialog,
       fileInputRef: inputRef,
+      status: effectiveStatus,
     }),
-    [files, add, remove, clear, openFileDialog],
+    [files, add, remove, clear, openFileDialog, effectiveStatus],
   );
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
+
+    // Only submit when chat is fully ready
+    if (effectiveStatus !== "ready") {
+      return;
+    }
 
     const form = event.currentTarget;
     const text = usingProvider
@@ -813,20 +823,21 @@ export const PromptInputBody = ({
   <div className={cn("contents", className)} {...props} />
 );
 
-export type PromptInputTextareaProps = ComponentProps<typeof Textarea> & {
-  canSubmit?: boolean;
+export type PromptInputTextareaProps = ComponentProps<
+  typeof InputGroupTextarea
+> & {
+  status?: ChatStatus;
 };
 
-export const PromptInputTextarea = ({
-  onChange,
-  className,
-  placeholder = "What would you like to know?",
-  canSubmit = true,
-  ...props
-}: PromptInputTextareaProps) => {
-  const controller = useOptionalPromptInputController();
+export const PromptInputTextarea = React.forwardRef<
+  HTMLTextAreaElement,
+  PromptInputTextareaProps
+>(({ onChange, className, placeholder = "What would you like to know?", status: statusProp, ...props }, ref) => {
   const attachments = usePromptInputAttachments();
+  const controller = useOptionalPromptInputController();
   const [isComposing, setIsComposing] = useState(false);
+  // Use prop status if provided, otherwise fall back to context status
+  const status = statusProp ?? attachments.status ?? "ready";
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === "Enter") {
@@ -836,15 +847,6 @@ export const PromptInputTextarea = ({
       if (e.shiftKey) {
         return;
       }
-
-      // Only submit on Enter if submission is allowed
-      if (!canSubmit) {
-        // Prevent any Enter key activity when submission is not allowed
-        e.preventDefault();
-        return;
-      }
-
-      // Submit on Enter (without Shift)
       e.preventDefault();
 
       // Check if the submit button is disabled before submitting
@@ -853,6 +855,11 @@ export const PromptInputTextarea = ({
         'button[type="submit"]',
       ) as HTMLButtonElement | null;
       if (submitButton?.disabled) {
+        return;
+      }
+
+      // Submit on Enter (without Shift) only when chat is ready
+      if (status !== "ready") {
         return;
       }
 
@@ -911,7 +918,14 @@ export const PromptInputTextarea = ({
 
   return (
     <InputGroupTextarea
-      className={cn("field-sizing-content max-h-48 min-h-16", className)}
+      ref={ref}
+      className={cn(
+        "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
+        "field-sizing-content bg-transparent dark:bg-transparent",
+        "max-h-48 min-h-16",
+        "focus-visible:ring-0",
+        className,
+      )}
       name="message"
       onCompositionEnd={() => setIsComposing(false)}
       onCompositionStart={() => setIsComposing(true)}
@@ -922,7 +936,9 @@ export const PromptInputTextarea = ({
       {...controlledProps}
     />
   );
-};
+});
+
+PromptInputTextarea.displayName = "PromptInputTextarea";
 
 export type PromptInputHeaderProps = Omit<
   ComponentProps<typeof InputGroupAddon>,
@@ -1041,13 +1057,15 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
+  const effectiveStatus = status ?? "ready";
+  const isStopping = effectiveStatus === "streaming";
   let Icon = <CornerDownLeftIcon className="size-4" />;
 
-  if (status === "submitted") {
+  if (effectiveStatus === "submitted") {
     Icon = <Loader2Icon className="size-4 animate-spin" />;
-  } else if (status === "streaming") {
+  } else if (isStopping) {
     Icon = <SquareIcon className="size-4" />;
-  } else if (status === "error") {
+  } else if (effectiveStatus === "error") {
     Icon = <XIcon className="size-4" />;
   }
 
@@ -1056,7 +1074,8 @@ export const PromptInputSubmit = ({
       aria-label="Submit"
       className={cn(className)}
       size={size}
-      type="submit"
+      // When streaming, this button acts as Stop without submitting the form
+      type={isStopping ? "button" : "submit"}
       variant={variant}
       {...props}
     >

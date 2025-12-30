@@ -2659,7 +2659,10 @@ describe("fetchPlatformPodNodeSelector", () => {
   test("ignores HOSTNAME when not running in-cluster (only uses POD_NAME)", async () => {
     // When running outside K8s (Docker mode, local dev), HOSTNAME is the container ID
     // which doesn't correspond to a K8s pod. Only POD_NAME should be used.
-    // HOSTNAME is only used when loadKubeconfigFromCurrentCluster=true (in-cluster mode).
+    const originalConfig =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
+
     const originalPodName = process.env.POD_NAME;
     const originalHostname = process.env.HOSTNAME;
     delete process.env.POD_NAME;
@@ -2682,9 +2685,51 @@ describe("fetchPlatformPodNodeSelector", () => {
       labelSelector: "app.kubernetes.io/name=archestra-platform",
     });
 
-    // Restore env vars
+    // Restore
     process.env.POD_NAME = originalPodName;
     process.env.HOSTNAME = originalHostname;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalConfig;
+  });
+
+  test("uses HOSTNAME as fallback when running in-cluster", async () => {
+    // When running inside K8s cluster, HOSTNAME is the pod name
+    const originalConfig =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.POD_NAME;
+    process.env.HOSTNAME = "archestra-platform-xyz789";
+
+    const mockReadPod = vi.fn().mockResolvedValue({
+      spec: {
+        nodeSelector: {
+          "node.kubernetes.io/instance-type": "m5.large",
+        },
+      },
+    });
+
+    const mockK8sApi = {
+      readNamespacedPod: mockReadPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "test-ns");
+
+    expect(result).toEqual({
+      "node.kubernetes.io/instance-type": "m5.large",
+    });
+    expect(mockReadPod).toHaveBeenCalledWith({
+      name: "archestra-platform-xyz789",
+      namespace: "test-ns",
+    });
+
+    // Restore
+    process.env.POD_NAME = originalPodName;
+    process.env.HOSTNAME = originalHostname;
+    config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+      originalConfig;
   });
 
   test("returns null when pod has no nodeSelector", async () => {

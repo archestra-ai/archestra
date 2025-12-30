@@ -230,6 +230,75 @@ export async function getTeamTokenForProfile(
 }
 
 /**
+ * Find a catalog item by name
+ */
+export async function findCatalogItem(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: string; name: string } | undefined> {
+  const response = await request.get(
+    `${API_BASE_URL}/api/internal_mcp_catalog`,
+    {
+      headers: { Origin: UI_BASE_URL },
+    },
+  );
+  const catalog = await response.json();
+  return catalog.find((item: { name: string }) => item.name === name);
+}
+
+/**
+ * Wait for MCP server installation to complete
+ */
+export async function waitForServerInstallation(
+  request: APIRequestContext,
+  serverId: string,
+  maxAttempts = 60,
+): Promise<{
+  localInstallationStatus: string;
+  localInstallationError?: string;
+}> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await request.get(
+      `${API_BASE_URL}/api/mcp_server/${serverId}`,
+      {
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+    const server = await response.json();
+
+    if (server.localInstallationStatus === "success") {
+      return server;
+    }
+    if (server.localInstallationStatus === "error") {
+      throw new Error(
+        `MCP server installation failed: ${server.localInstallationError}`,
+      );
+    }
+
+    // Wait 2 seconds between checks
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(
+    `MCP server installation timed out after ${maxAttempts * 2} seconds`,
+  );
+}
+
+/**
+ * Find an installed MCP server by catalog ID
+ */
+export async function findInstalledServer(
+  request: APIRequestContext,
+  catalogId: string,
+): Promise<{ id: string; catalogId: string } | undefined> {
+  const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  const serversData = await response.json();
+  const servers = serversData.data || serversData;
+  return servers.find((s: { catalogId: string }) => s.catalogId === catalogId);
+}
+
+/**
  * List tools available via MCP gateway
  */
 export async function listMcpTools(

@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("Agents API CRUD", () => {
   test("should get all agents", async ({ request, makeApiRequest }) => {

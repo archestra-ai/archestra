@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("Organization Roles API - CRUD Operations", () => {
   test("should get all roles (including predefined)", async ({

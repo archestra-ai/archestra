@@ -1,85 +1,11 @@
-import type { APIRequestContext } from "@playwright/test";
 import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   UI_BASE_URL,
 } from "../../consts";
-import { expect, test } from "./fixtures";
-import { getOrgTokenForProfile, makeApiRequest } from "./mcp-gateway-utils";
-
-// =============================================================================
-// Helper functions for MCP server installation
-// =============================================================================
-
-/**
- * Find a catalog item by name
- */
-async function findCatalogItem(
-  request: APIRequestContext,
-  name: string,
-): Promise<{ id: string; name: string } | undefined> {
-  const response = await request.get(
-    `${API_BASE_URL}/api/internal_mcp_catalog`,
-    {
-      headers: { Origin: UI_BASE_URL },
-    },
-  );
-  const catalog = await response.json();
-  return catalog.find((item: { name: string }) => item.name === name);
-}
-
-/**
- * Wait for MCP server installation to complete
- */
-async function waitForServerInstallation(
-  request: APIRequestContext,
-  serverId: string,
-  maxAttempts = 60,
-): Promise<{
-  localInstallationStatus: string;
-  localInstallationError?: string;
-}> {
-  for (let i = 0; i < maxAttempts; i++) {
-    const response = await request.get(
-      `${API_BASE_URL}/api/mcp_server/${serverId}`,
-      {
-        headers: { Origin: UI_BASE_URL },
-      },
-    );
-    const server = await response.json();
-
-    if (server.localInstallationStatus === "success") {
-      return server;
-    }
-    if (server.localInstallationStatus === "error") {
-      throw new Error(
-        `MCP server installation failed: ${server.localInstallationError}`,
-      );
-    }
-
-    // Wait 2 seconds between checks
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  throw new Error(
-    `MCP server installation timed out after ${maxAttempts * 2} seconds`,
-  );
-}
-
-/**
- * Find an installed MCP server by catalog ID
- */
-async function findInstalledServer(
-  request: APIRequestContext,
-  catalogId: string,
-): Promise<{ id: string; catalogId: string } | undefined> {
-  const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
-    headers: { Origin: UI_BASE_URL },
-  });
-  const serversData = await response.json();
-  const servers = serversData.data || serversData;
-  return servers.find((s: { catalogId: string }) => s.catalogId === catalogId);
-}
+import { expect, test } from "../../fixtures";
+import { getOrgTokenForProfile, makeApiRequest, findCatalogItem, findInstalledServer, waitForServerInstallation } from "./mcp-gateway-utils";
 
 /**
  * MCP Gateway Authentication Tests

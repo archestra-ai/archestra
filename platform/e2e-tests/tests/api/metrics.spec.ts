@@ -4,7 +4,7 @@ import {
   METRICS_BEARER_TOKEN,
   METRICS_ENDPOINT,
 } from "../../consts";
-import { type APIRequestContext, expect, test } from "./fixtures";
+import { type APIRequestContext, expect, test } from "../../fixtures";
 
 const fetchMetrics = async (
   request: APIRequestContext,

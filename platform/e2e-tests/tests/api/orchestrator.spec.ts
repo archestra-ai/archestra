@@ -3,7 +3,7 @@ import {
   expect,
   type TestFixtures,
   test,
-} from "./fixtures";
+} from "../../fixtures";
 
 /**
  * Retry wrapper for external service calls that may fail due to network issues.

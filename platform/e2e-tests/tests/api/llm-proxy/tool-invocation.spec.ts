@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures";
+import { expect, test } from "../../../fixtures";
 
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;

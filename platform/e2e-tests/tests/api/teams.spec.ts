@@ -1,5 +1,5 @@
 import { ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME } from "../../consts";
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("Teams API", () => {
   test.describe("Permission-based Team Visibility", () => {

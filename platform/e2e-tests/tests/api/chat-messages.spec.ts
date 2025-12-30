@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 // Valid v4 UUIDs for testing (these won't exist in the database)
 const NONEXISTENT_MESSAGE_ID = "1d6934ea-eb0d-452d-abf3-72122d140c49";

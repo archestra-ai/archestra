@@ -5,7 +5,7 @@ import {
   expect,
   type TestFixtures,
   test,
-} from "./fixtures";
+} from "../../fixtures";
 
 test.describe("Auth Permissions API", () => {
   const makeHasPermissionsRequest = async ({

@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("Prompts API", () => {
   test("should maintain agent-prompt relationships when updating a prompt", async ({

@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("MCP Server Installation Requests API - CRUD Operations", () => {
   test("should get all installation requests", async ({

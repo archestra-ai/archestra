@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("Chat API Keys CRUD", () => {
   test.describe.configure({ mode: "serial" });

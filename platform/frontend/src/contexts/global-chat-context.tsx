@@ -17,6 +17,7 @@ import {
 import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
+const SESSION_KEEPALIVE_INTERVAL = 2 * 60 * 1000; // 2 min heartbeat while tab is visible
 
 interface ChatSession {
   conversationId: string;
@@ -44,6 +45,7 @@ interface ChatContextValue {
   getSession: (conversationId: string) => ChatSession | undefined;
   clearSession: (conversationId: string) => void;
   notifySessionUpdate: () => void;
+  setCurrentConversation: (conversationId: string | undefined) => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -51,7 +53,10 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef(new Map<string, ChatSession>());
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
+  const currentConversationIdRef = useRef<string | null>(null);
   const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
+  const [currentConversationId, setCurrentConversationId] =
+    useState<string | null>(null);
   // Version counter to trigger re-renders when sessions update
   const [sessionVersion, setSessionVersion] = useState(0);
 
@@ -59,6 +64,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const notifySessionUpdate = useCallback(() => {
     setSessionVersion((v) => v + 1);
   }, []);
+
+  // Track current conversation in a ref for cleanup callbacks.
+  useEffect(() => {
+    currentConversationIdRef.current = currentConversationId;
+  }, [currentConversationId]);
 
   // Schedule cleanup for inactive sessions
   const scheduleCleanup = useCallback((conversationId: string) => {
@@ -71,8 +81,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // Schedule new cleanup
     const timer = setTimeout(() => {
       const session = sessionsRef.current.get(conversationId);
+      const isCurrent = currentConversationIdRef.current === conversationId;
       if (
         session &&
+        !isCurrent &&
         Date.now() - session.lastAccessTime >= SESSION_CLEANUP_TIMEOUT
       ) {
         sessionsRef.current.delete(conversationId);
@@ -88,6 +100,43 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     cleanupTimersRef.current.set(conversationId, timer);
   }, []);
 
+  // Keep sessions alive while the tab is visible to avoid dropping messages after idle.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const refreshSessions = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      for (const [conversationId, session] of sessionsRef.current.entries()) {
+        session.lastAccessTime = now;
+        scheduleCleanup(conversationId);
+      }
+    };
+
+    const interval = setInterval(refreshSessions, SESSION_KEEPALIVE_INTERVAL);
+    document.addEventListener("visibilitychange", refreshSessions);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshSessions);
+    };
+  }, [scheduleCleanup]);
+
+
+  const setCurrentConversation = useCallback(
+    (conversationId: string | undefined) => {
+      setCurrentConversationId(conversationId ?? null);
+      if (!conversationId) return;
+
+      const session = sessionsRef.current.get(conversationId);
+      if (session) {
+        session.lastAccessTime = Date.now();
+        scheduleCleanup(conversationId);
+      }
+    },
+    [scheduleCleanup],
+  );
+
   // Register a new session (creates the useChat hook instance)
   const registerSession = useCallback((conversationId: string) => {
     setActiveSessions((prev) => {
@@ -99,6 +148,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  // Rehydrate the current conversation session when returning to a visible tab.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const ensureCurrentSession = () => {
+      if (document.visibilityState !== "visible") return;
+      const currentId = currentConversationIdRef.current;
+      if (!currentId) return;
+
+      const session = sessionsRef.current.get(currentId);
+      if (!session) {
+        registerSession(currentId);
+        setCurrentConversation(currentId);
+        notifySessionUpdate();
+      }
+    };
+
+    document.addEventListener("visibilitychange", ensureCurrentSession);
+    ensureCurrentSession();
+
+    return () => {
+      document.removeEventListener("visibilitychange", ensureCurrentSession);
+    };
+  }, [registerSession, setCurrentConversation, notifySessionUpdate]);
 
   // Get a session
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionVersion as dependency to make this reactive
@@ -152,8 +226,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       getSession,
       clearSession,
       notifySessionUpdate,
+      setCurrentConversation,
     }),
-    [registerSession, getSession, clearSession, notifySessionUpdate],
+    [registerSession, getSession, clearSession, notifySessionUpdate, setCurrentConversation],
   );
 
   return (
@@ -310,13 +385,18 @@ export function useGlobalChat() {
 }
 
 export function useChatSession(conversationId: string | undefined) {
-  const { registerSession, getSession } = useGlobalChat();
+  const { registerSession, getSession, setCurrentConversation } =
+    useGlobalChat();
 
   useEffect(() => {
     if (conversationId) {
       registerSession(conversationId);
+      setCurrentConversation(conversationId);
+      return () => {
+        setCurrentConversation(undefined);
+      };
     }
-  }, [conversationId, registerSession]);
+  }, [conversationId, registerSession, setCurrentConversation]);
 
   return conversationId ? getSession(conversationId) : null;
 }

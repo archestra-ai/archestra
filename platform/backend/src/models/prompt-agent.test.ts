@@ -8,8 +8,14 @@ describe("PromptAgentModel", () => {
     test("assigns an agent to a prompt", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      const agent1 = await AgentModel.create({ name: "Parent Agent", teams: [] });
-      const agent2 = await AgentModel.create({ name: "Child Agent", teams: [] });
+      const agent1 = await AgentModel.create({
+        name: "Parent Agent",
+        teams: [],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Child Agent",
+        teams: [],
+      });
 
       const prompt1 = await PromptModel.create(org.id, {
         name: "Parent Prompt",
@@ -36,8 +42,14 @@ describe("PromptAgentModel", () => {
     test("removes an agent from a prompt", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      const agent1 = await AgentModel.create({ name: "Parent Agent", teams: [] });
-      const agent2 = await AgentModel.create({ name: "Child Agent", teams: [] });
+      const agent1 = await AgentModel.create({
+        name: "Parent Agent",
+        teams: [],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Child Agent",
+        teams: [],
+      });
 
       const prompt1 = await PromptModel.create(org.id, {
         name: "Parent Prompt",
@@ -68,10 +80,15 @@ describe("PromptAgentModel", () => {
       expect(agentsAfter).toHaveLength(0);
     });
 
-    test("returns false when agent not assigned", async ({ makeOrganization }) => {
+    test("returns false when agent not assigned", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
 
-      const agent1 = await AgentModel.create({ name: "Parent Agent", teams: [] });
+      const agent1 = await AgentModel.create({
+        name: "Parent Agent",
+        teams: [],
+      });
 
       const prompt1 = await PromptModel.create(org.id, {
         name: "Parent Prompt",
@@ -91,9 +108,18 @@ describe("PromptAgentModel", () => {
     test("returns all agents for a prompt", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
-      const childAgent1 = await AgentModel.create({ name: "Child 1", teams: [] });
-      const childAgent2 = await AgentModel.create({ name: "Child 2", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
+      const childAgent1 = await AgentModel.create({
+        name: "Child 1",
+        teams: [],
+      });
+      const childAgent2 = await AgentModel.create({
+        name: "Child 2",
+        teams: [],
+      });
 
       const parentPrompt = await PromptModel.create(org.id, {
         name: "Parent Prompt",
@@ -134,7 +160,10 @@ describe("PromptAgentModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
       const childAgent = await AgentModel.create({
         name: "Child Profile",
         teams: [],
@@ -170,7 +199,10 @@ describe("PromptAgentModel", () => {
     test("excludes inactive prompts", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
       const childAgent = await AgentModel.create({ name: "Child", teams: [] });
 
       const parentPrompt = await PromptModel.create(org.id, {
@@ -200,13 +232,27 @@ describe("PromptAgentModel", () => {
   });
 
   describe("sync", () => {
-    test("adds new agents and removes old ones", async ({ makeOrganization }) => {
+    test("adds new agents and removes old ones", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
-      const childAgent1 = await AgentModel.create({ name: "Child 1", teams: [] });
-      const childAgent2 = await AgentModel.create({ name: "Child 2", teams: [] });
-      const childAgent3 = await AgentModel.create({ name: "Child 3", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
+      const childAgent1 = await AgentModel.create({
+        name: "Child 1",
+        teams: [],
+      });
+      const childAgent2 = await AgentModel.create({
+        name: "Child 2",
+        teams: [],
+      });
+      const childAgent3 = await AgentModel.create({
+        name: "Child 3",
+        teams: [],
+      });
 
       const parentPrompt = await PromptModel.create(org.id, {
         name: "Parent Prompt",
@@ -261,9 +307,18 @@ describe("PromptAgentModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
-      const childAgent1 = await AgentModel.create({ name: "Child 1", teams: [] });
-      const childAgent2 = await AgentModel.create({ name: "Child 2", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
+      const childAgent1 = await AgentModel.create({
+        name: "Child 1",
+        teams: [],
+      });
+      const childAgent2 = await AgentModel.create({
+        name: "Child 2",
+        teams: [],
+      });
 
       const parentPrompt = await PromptModel.create(org.id, {
         name: "Parent Prompt",
@@ -299,10 +354,15 @@ describe("PromptAgentModel", () => {
   });
 
   describe("hasAgent", () => {
-    test("returns true when agent is assigned", async ({ makeOrganization }) => {
+    test("returns true when agent is assigned", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
       const childAgent = await AgentModel.create({ name: "Child", teams: [] });
 
       const parentPrompt = await PromptModel.create(org.id, {
@@ -333,7 +393,10 @@ describe("PromptAgentModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const parentAgent = await AgentModel.create({ name: "Parent", teams: [] });
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
 
       const parentPrompt = await PromptModel.create(org.id, {
         name: "Parent Prompt",

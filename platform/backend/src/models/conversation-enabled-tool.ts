@@ -3,7 +3,6 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 
 class ConversationEnabledToolModel {
-
   /**
    * Get enabled tool IDs for a conversation
    * Returns empty array if no custom selection (meaning all tools enabled)
@@ -42,7 +41,10 @@ class ConversationEnabledToolModel {
     );
 
     const result = await db
-      .select({ hasCustomToolSelection: schema.conversationsTable.hasCustomToolSelection })
+      .select({
+        hasCustomToolSelection:
+          schema.conversationsTable.hasCustomToolSelection,
+      })
       .from(schema.conversationsTable)
       .where(eq(schema.conversationsTable.id, conversationId))
       .limit(1);
@@ -124,7 +126,10 @@ class ConversationEnabledToolModel {
       await tx
         .delete(schema.conversationEnabledToolsTable)
         .where(
-          eq(schema.conversationEnabledToolsTable.conversationId, conversationId),
+          eq(
+            schema.conversationEnabledToolsTable.conversationId,
+            conversationId,
+          ),
         );
     });
 

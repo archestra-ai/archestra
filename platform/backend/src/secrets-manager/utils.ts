@@ -1,4 +1,4 @@
-import type { SecretStorageType } from "./types";
+import type { SecretStorageType } from "@/types";
 
 /**
  * Extract error message from Vault response

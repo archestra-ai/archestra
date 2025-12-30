@@ -4,15 +4,15 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { SecretsManagerType } from "@shared";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
-import logger from "./logging";
-import SecretModel from "./models/secret";
+import logger from "@/logging";
+import SecretModel from "@/models/secret";
+import { ApiError, type SecretValue, type SelectSecret } from "@/types";
 import type {
   ISecretManager,
   SecretsConnectivityResult,
   VaultConfig,
-} from "./secretmanager.types";
-import { extractVaultErrorMessage } from "./secretmanager.utils";
-import { ApiError, type SecretValue, type SelectSecret } from "./types";
+} from "./types";
+import { extractVaultErrorMessage } from "./utils";
 
 /**
  * Vault-backed implementation of SecretManager

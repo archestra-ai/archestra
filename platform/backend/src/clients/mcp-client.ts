@@ -10,7 +10,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,

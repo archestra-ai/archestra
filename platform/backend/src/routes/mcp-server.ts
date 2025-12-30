@@ -10,7 +10,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,

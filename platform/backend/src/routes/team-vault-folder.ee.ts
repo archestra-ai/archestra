@@ -4,7 +4,7 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { TeamModel } from "@/models";
 import TeamVaultFolderModel from "@/models/team-vault-folder.ee";
-import { assertByosEnabled } from "@/secretsmanager";
+import { assertByosEnabled } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,

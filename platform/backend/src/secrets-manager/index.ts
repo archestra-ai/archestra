@@ -1,15 +1,11 @@
 import { SecretsManagerType } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
-import type {
-  ISecretManager,
-  VaultConfig,
-  VaultKvVersion,
-} from "./secretmanager.types";
-import { DbSecretsManager } from "./secretsmanager.db";
+import { ApiError } from "@/types";
+import { DbSecretsManager } from "./db";
 // biome-ignore lint/style/noRestrictedImports: only type import
-import type ReadonlyVaultSecretManager from "./secretsmanager.readonly-vault.ee";
-import { ApiError } from "./types";
+import type ReadonlyVaultSecretManager from "./readonly-vault.ee";
+import type { ISecretManager, VaultConfig, VaultKvVersion } from "./types";
 
 export class SecretsManagerConfigurationError extends Error {
   constructor(message: string) {
@@ -92,8 +88,7 @@ export async function createSecretManager(
       "createSecretManager: using VaultSecretManager",
     );
     // biome-ignore lint/style/noRestrictedImports: dynamic import
-    const VaultSecretManager = (await import("./secretsmanager.vault.ee"))
-      .default;
+    const VaultSecretManager = (await import("./vault.ee")).default;
     return new VaultSecretManager(vaultConfig);
   }
 
@@ -125,7 +120,7 @@ export async function createSecretManager(
     );
     const ReadonlyVaultSecretManager =
       // biome-ignore lint/style/noRestrictedImports: dynamic import
-      (await import("./secretsmanager.readonly-vault.ee")).default;
+      (await import("./readonly-vault.ee")).default;
     return new ReadonlyVaultSecretManager(vaultConfig);
   }
 

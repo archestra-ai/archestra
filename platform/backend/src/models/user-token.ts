@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
 
 /**

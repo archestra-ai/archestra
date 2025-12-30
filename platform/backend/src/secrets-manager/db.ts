@@ -1,10 +1,7 @@
 import { SecretsManagerType } from "@shared";
-import SecretModel from "./models/secret";
-import type {
-  ISecretManager,
-  SecretsConnectivityResult,
-} from "./secretmanager.types";
-import { ApiError, type SecretValue, type SelectSecret } from "./types";
+import SecretModel from "@/models/secret";
+import { ApiError, type SecretValue, type SelectSecret } from "@/types";
+import type { ISecretManager, SecretsConnectivityResult } from "./types";
 
 /**
  * Database-backed implementation of SecretManager

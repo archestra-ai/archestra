@@ -4,22 +4,22 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { SecretsManagerType } from "@shared";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
-import logger from "./logging";
-import SecretModel from "./models/secret";
+import logger from "@/logging";
+import SecretModel from "@/models/secret";
+import {
+  ApiError,
+  parseVaultSecretReference,
+  type SecretValue,
+  type SelectSecret,
+} from "@/types";
 import type {
   ISecretManager,
   SecretsConnectivityResult,
   VaultConfig,
   VaultFolderConnectivityResult,
   VaultSecretListItem,
-} from "./secretmanager.types";
-import { extractVaultErrorMessage } from "./secretmanager.utils";
-import {
-  ApiError,
-  parseVaultSecretReference,
-  type SecretValue,
-  type SelectSecret,
 } from "./types";
+import { extractVaultErrorMessage } from "./utils";
 
 /**
  * ReadonlyVaultSecretManager - Manages secrets stored in external (customer-owned) Vault folders.

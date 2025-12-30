@@ -8,17 +8,15 @@ import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import {
   ApiError,
+  type ISecretManager,
   parseVaultSecretReference,
+  type SecretsConnectivityResult,
   type SecretValue,
   type SelectSecret,
+  type VaultConfig,
+  type VaultFolderConnectivityResult,
+  type VaultSecretListItem,
 } from "@/types";
-import type {
-  ISecretManager,
-  SecretsConnectivityResult,
-  VaultConfig,
-  VaultFolderConnectivityResult,
-  VaultSecretListItem,
-} from "./types";
 import { extractVaultErrorMessage } from "./utils";
 
 /**

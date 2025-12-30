@@ -6,12 +6,14 @@ import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
-import { ApiError, type SecretValue, type SelectSecret } from "@/types";
-import type {
-  ISecretManager,
-  SecretsConnectivityResult,
-  VaultConfig,
-} from "./types";
+import {
+  ApiError,
+  type ISecretManager,
+  type SecretsConnectivityResult,
+  type SecretValue,
+  type SelectSecret,
+  type VaultConfig,
+} from "@/types";
 import { extractVaultErrorMessage } from "./utils";
 
 /**

@@ -1,11 +1,15 @@
 import { SecretsManagerType } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
-import { ApiError } from "@/types";
+import {
+  ApiError,
+  type ISecretManager,
+  type VaultConfig,
+  type VaultKvVersion,
+} from "@/types";
 import { DbSecretsManager } from "./db";
 // biome-ignore lint/style/noRestrictedImports: only type import
 import type ReadonlyVaultSecretManager from "./readonly-vault.ee";
-import type { ISecretManager, VaultConfig, VaultKvVersion } from "./types";
 
 export class SecretsManagerConfigurationError extends Error {
   constructor(message: string) {

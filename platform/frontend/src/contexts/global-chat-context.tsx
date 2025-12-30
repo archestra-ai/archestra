@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
+import { DefaultChatTransport } from "ai";
 import {
   createContext,
   type ReactNode,
@@ -14,19 +15,9 @@ import {
   useState,
 } from "react";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
-
-// Import DefaultChatTransport - ensure it's only used client-side
-// The "ai" package is browser-compatible, but we need to handle it carefully
-import type { DefaultChatTransport as DefaultChatTransportType } from "ai";
-
-const EXTERNAL_AGENT_ID_HEADER = "x-external-agent-id";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 
-interface QueuedMessage {
-  id: string;
-  text: string;
-  files?: any[];
-}
+type QueuedMessage = UIMessage & { id: string };
 
 interface ChatSession {
   conversationId: string;
@@ -229,34 +220,6 @@ function ChatSessionHook({
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
-  
-  // Lazy load transport to avoid Node.js module issues during bundling:
-  // DefaultChatTransport pulls in browser-only deps, so we gate it to client runtime
-  // to prevent SSR/bundle errors in Next.js.
-  const [transport, setTransport] = useState<DefaultChatTransportType<UIMessage> | null>(null);
-  const transportLoadedRef = useRef(false);
-
-  useEffect(() => {
-    if (transportLoadedRef.current || typeof window === "undefined") return;
-
-    transportLoadedRef.current = true;
-    import("ai")
-      .then((module) => {
-        const { DefaultChatTransport } = module;
-        setTransport(
-          new DefaultChatTransport<UIMessage>({
-            api: "/api/chat",
-            credentials: "include",
-            headers: {
-              [EXTERNAL_AGENT_ID_HEADER]: "Archestra Chat",
-            },
-          }),
-        );
-      })
-      .catch((error) => {
-        console.error("[ChatSession] Failed to load DefaultChatTransport:", error);
-      });
-  }, []);
 
   const {
     messages,
@@ -267,7 +230,10 @@ function ChatSessionHook({
     error,
     addToolResult,
   } = useChat({
-    transport: transport || undefined,
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      credentials: "include",
+    }),
     id: conversationId,
     onFinish: () => {
       queryClient.invalidateQueries({
@@ -302,10 +268,7 @@ function ChatSessionHook({
 
     const queued = queuedMessages[0];
     setQueuedMessages((prev) => prev.slice(1));
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: queued.text }],
-    });
+    sendMessage(queued);
   }, [status, queuedMessages, sendMessage]);
 
   // Auto-generate title after first assistant response

@@ -209,16 +209,16 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 set -e
 
 # Track if we created a KinD cluster for cleanup
-CREATED_KIND_CLUSTER=""
+KIND_CLUSTER=""
 
 # Cleanup function for graceful shutdown
 cleanup() {
     echo "Shutting down..."
 
     # Delete KinD cluster if we created one in quickstart mode
-    if [ -n "$CREATED_KIND_CLUSTER" ]; then
-        echo "Deleting KinD cluster '${CREATED_KIND_CLUSTER}'..."
-        if kind delete cluster --name "${CREATED_KIND_CLUSTER}" 2>/dev/null; then
+    if [ -n "$KIND_CLUSTER" ]; then
+        echo "Deleting KinD cluster '${KIND_CLUSTER}'..."
+        if kind delete cluster --name "${KIND_CLUSTER}" 2>/dev/null; then
             echo "KinD cluster deleted successfully"
         else
             echo "Warning: Failed to delete KinD cluster"
@@ -278,7 +278,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
         # Mark for cleanup even if it already exists (we're using it)
-        CREATED_KIND_CLUSTER="${CLUSTER_NAME}"
+        KIND_CLUSTER="${CLUSTER_NAME}"
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
         if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
@@ -287,7 +287,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         fi
         echo "KinD cluster created successfully"
         # Mark for cleanup on shutdown
-        CREATED_KIND_CLUSTER="${CLUSTER_NAME}"
+        KIND_CLUSTER="${CLUSTER_NAME}"
     fi
 
     # Export kubeconfig

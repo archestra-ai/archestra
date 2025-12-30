@@ -398,12 +398,16 @@ export async function getChatMcpTools({
   userId,
   userIsProfileAdmin,
   enabledToolIds,
+  conversationId,
+  organizationId,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
   userIsProfileAdmin: boolean;
   enabledToolIds?: string[];
+  conversationId?: string;
+  organizationId?: string;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId);
 
@@ -506,7 +510,12 @@ export async function getChatMcpTools({
                 const archestraResponse = await executeArchestraTool(
                   mcpTool.name,
                   args,
-                  { profile: { id: agentId, name: agentName } },
+                  {
+                    profile: { id: agentId, name: agentName },
+                    conversationId,
+                    userId,
+                    organizationId,
+                  },
                 );
 
                 // Check for errors

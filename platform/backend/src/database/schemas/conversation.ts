@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import chatApiKeysTable from "./chat-api-key";
 import promptsTable from "./prompt";
@@ -21,6 +21,12 @@ const conversationsTable = pgTable("conversations", {
   hasCustomToolSelection: boolean("has_custom_tool_selection")
     .notNull()
     .default(false),
+  todoList: jsonb("todo_list").$type<Array<{
+    id: number;
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+  }>>(),
+  artefact: text("artefact"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

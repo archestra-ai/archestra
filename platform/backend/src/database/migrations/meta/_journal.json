@@ -708,6 +708,20 @@
       "when": 1767097600473,
       "tag": "0100_public_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1767116249076,
+      "tag": "0101_unique_daimon_hellstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1767121666783,
+      "tag": "0102_melted_nighthawk",
+      "breakpoints": true
     }
   ]
 }

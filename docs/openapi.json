@@ -20534,6 +20534,9 @@
                       "selectedModel": {
                         "type": "string"
                       },
+                      "hasCustomToolSelection": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -20572,6 +20575,7 @@
                       "chatApiKeyId",
                       "title",
                       "selectedModel",
+                      "hasCustomToolSelection",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -20883,6 +20887,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -20921,6 +20928,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -21206,6 +21214,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -21244,6 +21255,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -21471,7 +21483,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Update conversation title, model, or API key",
+        "description": "Update conversation title, model, agent, or API key",
         "requestBody": {
           "content": {
             "application/json": {
@@ -21487,6 +21499,11 @@
                   },
                   "chatApiKeyId": {
                     "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "agentId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -21551,6 +21568,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -21589,6 +21609,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -22404,6 +22425,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22442,6 +22466,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -22755,6 +22780,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22793,6 +22821,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",

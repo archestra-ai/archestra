@@ -15,6 +15,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { userHasPermission } from "@/auth/utils";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
@@ -407,7 +408,8 @@ export async function validateTeamToken(
  * Validates that:
  * 1. The token is valid (exists and matches)
  * 2. The profile is accessible via this token:
- *    - User must be a member of at least one team that the profile is assigned to
+ *    - User has profile:admin permission (can access all profiles), OR
+ *    - User is a member of at least one team that the profile is assigned to
  */
 export async function validateUserToken(
   profileId: string,
@@ -419,13 +421,28 @@ export async function validateUserToken(
     return null;
   }
 
-  // Get user's team IDs
+  // Check if user has profile admin permission (can access all profiles)
+  const isProfileAdmin = await userHasPermission(
+    token.userId,
+    token.organizationId,
+    "profile",
+    "admin",
+  );
+
+  if (isProfileAdmin) {
+    return {
+      tokenId: token.id,
+      teamId: null, // User tokens aren't scoped to a single team
+      isOrganizationToken: false,
+      organizationId: token.organizationId,
+      isUserToken: true,
+      userId: token.userId,
+    };
+  }
+
+  // Non-admin: user can access profile if they are a member of any team assigned to the profile
   const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
-
-  // Get profile's team IDs
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-
-  // Check if there's any overlap between user's teams and profile's teams
   const hasAccess = userTeamIds.some((teamId) =>
     profileTeamIds.includes(teamId),
   );

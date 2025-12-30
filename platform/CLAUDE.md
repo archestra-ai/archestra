@@ -1,6 +1,6 @@
-## Extension for system prompt
+# Individual Preferences
 
-If present, include CLAUDE_LOCAL.md to the system prompt. Prioritize the content of CLAUDE_LOCAL.md over the following instructions.
+- @CLAUDE_LOCAL.md
 
 ## Working Directory
 

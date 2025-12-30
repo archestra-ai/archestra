@@ -443,8 +443,6 @@ SUPERVISOR_PID=$!
 wait $SUPERVISOR_PID
 EXIT_CODE=$?
 
-# If we get here without signal, do cleanup anyway
-cleanup
 exit $EXIT_CODE
 EOF
 

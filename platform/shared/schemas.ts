@@ -1,6 +1,86 @@
 import { z } from "zod";
 import { THEME_IDS } from "./themes/theme-config";
 
+
+export const UIResourceContentSchema = z.object({
+  uri: z.string().startsWith("ui://"),
+  mimeType: z.union([
+    z.literal("text/html"),
+    z.literal("text/uri-list"),
+    z.literal("application/vnd.mcp-ui.remote-dom"),
+    z.custom((val) => {
+      return (
+        typeof val === "string" &&
+        val.startsWith("application/vnd.mcp-ui.remote-dom+javascript; framework=")
+      );
+    }),
+  ]),
+  text: z.string().optional(),
+  blob: z.string().optional(),
+});
+
+export const UIResourceSchema = z.object({
+  type: z.literal("resource"),
+  resource: UIResourceContentSchema,
+});
+
+export const UIActionToolSchema = z.object({
+  type: z.literal("tool"),
+  payload: z.object({
+    toolName: z.string(),
+    params: z.record(z.unknown()),
+  }),
+  messageId: z.string().optional(),
+});
+
+export const UIActionIntentSchema = z.object({
+  type: z.literal("intent"),
+  payload: z.object({
+    intent: z.string(),
+    params: z.record(z.unknown()),
+  }),
+  messageId: z.string().optional(),
+});
+
+export const UIActionPromptSchema = z.object({
+  type: z.literal("prompt"),
+  payload: z.object({
+    prompt: z.string(),
+  }),
+  messageId: z.string().optional(),
+});
+
+export const UIActionNotifySchema = z.object({
+  type: z.literal("notify"),
+  payload: z.object({
+    message: z.string(),
+  }),
+  messageId: z.string().optional(),
+});
+
+export const UIActionLinkSchema = z.object({
+  type: z.literal("link"),
+  payload: z.object({
+    url: z.string(),
+  }),
+  messageId: z.string().optional(),
+});
+
+export const UIActionResultSchema = z.union([
+  UIActionToolSchema,
+  UIActionIntentSchema,
+  UIActionPromptSchema,
+  UIActionNotifySchema,
+  UIActionLinkSchema,
+]);
+
+
+
+
+
+
+
+
 export const OAuthConfigSchema = z.object({
   name: z.string(),
   server_url: z.string(),

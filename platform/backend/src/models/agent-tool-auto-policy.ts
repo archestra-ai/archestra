@@ -1,5 +1,5 @@
 import logger from "@/logging";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import { policyConfigSubagent } from "@/subagents";
 import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";

@@ -16699,7 +16699,12 @@ export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTok
 export type GetTokensData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter team tokens to only show tokens for teams the profile is assigned to
+         */
+        profileId?: string;
+    };
     url: '/api/tokens';
 };
 

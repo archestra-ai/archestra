@@ -3,7 +3,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { TeamModel, TeamTokenModel } from "@/models";
+import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -62,6 +62,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * - team:admin: can see all team tokens
    * - team:update + team membership: can see own team tokens only
    *
+   * When profileId is provided, team tokens are further filtered to only
+   * include tokens for teams that the profile is also assigned to.
+   *
    * Also returns permission flags so the UI can show disabled options
    * for tokens the user doesn't have access to.
    */
@@ -73,11 +76,21 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get tokens visible to the user based on their permissions",
         tags: ["Tokens"],
+        querystring: z.object({
+          profileId: z
+            .string()
+            .uuid()
+            .optional()
+            .describe(
+              "Filter team tokens to only show tokens for teams the profile is assigned to",
+            ),
+        }),
         response: constructResponseSchema(TokensListResponseSchema),
       },
     },
     async (request, reply) => {
       const { user, headers } = request;
+      const { profileId } = request.query;
 
       // Check permissions
       const { success: canAccessOrgToken } = await hasPermission(
@@ -112,7 +125,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Filter team tokens
+      // Filter team tokens based on user permissions
       if (!isTeamAdmin) {
         if (!hasTeamUpdate) {
           // No team:update permission = no team tokens visible
@@ -128,6 +141,17 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
               (token.teamId && userTeamIds.includes(token.teamId)),
           );
         }
+      }
+
+      // If profileId is provided, further filter team tokens to only show
+      // tokens for teams that the profile is also assigned to
+      if (profileId) {
+        const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+        visibleTokens = visibleTokens.filter(
+          (token) =>
+            token.isOrganizationToken ||
+            (token.teamId && profileTeamIds.includes(token.teamId)),
+        );
       }
 
       return reply.send({

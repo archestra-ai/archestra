@@ -146,19 +146,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch enabled tool IDs, MCP tools, and agent prompts in parallel
-      const [enabledToolIds, prompt] = await Promise.all([
+      // Fetch enabled tool IDs, custom selection status, and agent prompts in parallel
+      const [enabledToolIds, hasCustomSelection, prompt] = await Promise.all([
         ConversationEnabledToolModel.findByConversation(conversationId),
+        ConversationEnabledToolModel.hasCustomSelection(conversationId),
         PromptModel.findById(conversation.promptId),
       ]);
 
       // Fetch MCP tools with enabled tool filtering
+      // Pass undefined if no custom selection (use all tools)
+      // Pass the actual array (even if empty) if there is custom selection
       const mcpTools = await getChatMcpTools({
         agentName: conversation.agent.name,
         agentId: conversation.agentId,
         userId: user.id,
         userIsProfileAdmin,
-        enabledToolIds,
+        enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
       });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -190,6 +193,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
+          hasCustomToolSelection: hasCustomSelection,
+          enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
           model: conversation.selectedModel,
           provider,
           promptId: prompt?.id,

@@ -41,6 +41,7 @@ export function transformFormToApiData(
         ? Number(values.localConfig.httpPort)
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
+      serviceAccount: values.localConfig.serviceAccount || undefined,
     };
 
     // BYOS: Include local config vault path and key if set
@@ -181,6 +182,7 @@ export function transformCatalogItemToFormValues(
         transportType?: "stdio" | "streamable-http";
         httpPort?: string;
         httpPath?: string;
+        serviceAccount?: string;
       }
     | undefined;
   if (item.localConfig) {
@@ -222,6 +224,7 @@ export function transformCatalogItemToFormValues(
       transportType: config.transportType || undefined,
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
+      serviceAccount: config.serviceAccount || undefined,
     };
   }
 

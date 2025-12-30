@@ -52,6 +52,7 @@ const LocalConfigSelectSchema = z.object({
     )
     .optional(),
   dockerImage: z.string().optional(),
+  serviceAccount: z.string().optional(),
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.number().optional(),
   httpPath: z.string().optional(),

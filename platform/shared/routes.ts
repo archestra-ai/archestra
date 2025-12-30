@@ -178,6 +178,11 @@ export const RouteId = {
   AssignAgentPrompts: "assignAgentPrompts",
   DeleteAgentPrompt: "deleteAgentPrompt",
 
+  // Prompt Agent Routes (agent assignment to prompts)
+  GetPromptAgents: "getPromptAgents",
+  SyncPromptAgents: "syncPromptAgents",
+  DeletePromptAgent: "deletePromptAgent",
+
   // Limits Routes
   GetLimits: "getLimits",
   CreateLimit: "createLimit",

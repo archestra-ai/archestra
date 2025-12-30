@@ -373,17 +373,35 @@ export async function validateTeamToken(
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
+    logger.debug(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateTeamToken: token not found in team_token table",
+    );
     return null;
   }
+
+  logger.debug(
+    {
+      profileId,
+      tokenId: token.id,
+      isOrganizationToken: token.isOrganizationToken,
+      tokenTeamId: token.teamId,
+    },
+    "validateTeamToken: token found",
+  );
 
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
     // Team token: profile must be assigned to this team
     const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
     const hasAccess = token.teamId && profileTeamIds.includes(token.teamId);
+    logger.debug(
+      { profileId, tokenTeamId: token.teamId, profileTeamIds, hasAccess },
+      "validateTeamToken: checking team access",
+    );
     if (!hasAccess) {
       logger.warn(
-        { profileId, tokenTeamId: token.teamId },
+        { profileId, tokenTeamId: token.teamId, profileTeamIds },
         "Profile not accessible via team token",
       );
       return null;
@@ -416,8 +434,21 @@ export async function validateUserToken(
   // Validate the token itself
   const token = await UserTokenModel.validateToken(tokenValue);
   if (!token) {
+    logger.debug(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateUserToken: token not found in user_token table",
+    );
     return null;
   }
+
+  logger.debug(
+    {
+      profileId,
+      tokenId: token.id,
+      userId: token.userId,
+    },
+    "validateUserToken: token found",
+  );
 
   // Get user's team IDs
   const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
@@ -428,6 +459,11 @@ export async function validateUserToken(
   // Check if there's any overlap between user's teams and profile's teams
   const hasAccess = userTeamIds.some((teamId) =>
     profileTeamIds.includes(teamId),
+  );
+
+  logger.debug(
+    { profileId, userId: token.userId, userTeamIds, profileTeamIds, hasAccess },
+    "validateUserToken: checking team access",
   );
 
   if (!hasAccess) {
@@ -457,18 +493,38 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
+  logger.debug(
+    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    "validateMCPGatewayToken: starting validation",
+  );
+
   // First try team/org token validation
   const teamTokenResult = await validateTeamToken(profileId, tokenValue);
   if (teamTokenResult) {
+    logger.debug(
+      {
+        profileId,
+        tokenType: teamTokenResult.isOrganizationToken ? "org" : "team",
+      },
+      "validateMCPGatewayToken: validated as team/org token",
+    );
     return teamTokenResult;
   }
 
   // Then try user token validation
   const userTokenResult = await validateUserToken(profileId, tokenValue);
   if (userTokenResult) {
+    logger.debug(
+      { profileId, userId: userTokenResult.userId },
+      "validateMCPGatewayToken: validated as user token",
+    );
     return userTokenResult;
   }
 
+  logger.warn(
+    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
+  );
   return null;
 }
 

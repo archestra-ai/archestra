@@ -7,14 +7,18 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   InternalMcpCatalogModel,
   LimitModel,
   McpServerModel,
+  PromptAgentModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import type { TokenAuthResult } from "@/routes/mcp-gateway.utils";
+import { executeA2AMessage } from "@/services/a2a-executor";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
@@ -52,6 +56,19 @@ const TOOL_GET_MCP_SERVERS_NAME = "get_mcp_servers";
 const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
 const TOOL_GET_PROFILE_NAME = "get_profile";
 
+// Agent tool prefix for dynamically generated agent tools
+const AGENT_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+
+/**
+ * Convert a name to a URL-safe slug for tool naming
+ */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
@@ -85,6 +102,12 @@ export interface ArchestraContext {
     id: string;
     name: string;
   };
+  /** The ID of the current prompt (for agent tool lookup) */
+  promptId?: string;
+  /** The organization ID */
+  organizationId?: string;
+  /** Token authentication result */
+  tokenAuth?: TokenAuthResult;
 }
 
 /**
@@ -95,7 +118,116 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { profile } = context;
+  const { profile, promptId, organizationId, tokenAuth } = context;
+
+  // Handle dynamic agent tools (e.g., archestra__agent__research_bot)
+  if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
+    const message = args?.message as string;
+
+    if (!message) {
+      return {
+        content: [{ type: "text", text: "Error: message is required." }],
+        isError: true,
+      };
+    }
+
+    if (!promptId) {
+      return {
+        content: [
+          { type: "text", text: "Error: No prompt context available." },
+        ],
+        isError: true,
+      };
+    }
+
+    if (!organizationId) {
+      return {
+        content: [
+          { type: "text", text: "Error: Organization context not available." },
+        ],
+        isError: true,
+      };
+    }
+
+    // Extract agent slug from tool name
+    const agentSlug = toolName.replace(AGENT_TOOL_PREFIX, "");
+
+    // Get all agents configured for this prompt
+    const allAgents =
+      await PromptAgentModel.findByPromptIdWithDetails(promptId);
+
+    // Find matching agent by slug
+    const agent = allAgents.find((a) => slugify(a.name) === agentSlug);
+
+    if (!agent) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: Agent not found or not configured for this prompt.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Check user has access if user token is being used
+    const userId = tokenAuth?.userId;
+    if (userId) {
+      const userAccessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      if (!userAccessibleAgentIds.includes(agent.profileId)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: You don't have access to this agent.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    try {
+      logger.info(
+        {
+          promptId,
+          agentPromptId: agent.agentPromptId,
+          agentName: agent.name,
+          organizationId,
+          userId: userId || "system",
+        },
+        "Executing agent tool",
+      );
+
+      const result = await executeA2AMessage({
+        promptId: agent.agentPromptId,
+        message,
+        organizationId,
+        userId: userId || "system",
+      });
+
+      return {
+        content: [{ type: "text", text: result.text }],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error(
+        { error, promptId, agentPromptId: agent.agentPromptId },
+        "Agent tool execution failed",
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
 
   if (toolName === TOOL_WHOAMI_FULL_NAME) {
     logger.info(
@@ -2069,4 +2201,64 @@ export function getArchestraMcpTools(): Tool[] {
       _meta: {},
     },
   ];
+}
+
+/**
+ * Get dynamic agent tools for a prompt
+ * Each configured agent becomes a separate tool (e.g., archestra__agent__research_bot)
+ */
+export async function getAgentTools(context: {
+  promptId: string;
+  organizationId: string;
+  userId?: string;
+}): Promise<Tool[]> {
+  const { promptId, organizationId, userId } = context;
+
+  // Get all agents configured for this prompt
+  const allAgents = await PromptAgentModel.findByPromptIdWithDetails(promptId);
+
+  // Filter by user access if user ID is provided
+  let accessibleAgents = allAgents;
+  if (userId) {
+    const userAccessibleAgentIds =
+      await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false, // Not admin - check actual access
+      );
+    accessibleAgents = allAgents.filter((a) =>
+      userAccessibleAgentIds.includes(a.profileId),
+    );
+  }
+
+  logger.debug(
+    {
+      promptId,
+      organizationId,
+      userId,
+      allAgentCount: allAgents.length,
+      accessibleAgentCount: accessibleAgents.length,
+    },
+    "Generated agent tools for prompt",
+  );
+
+  // Generate tool for each agent
+  return accessibleAgents.map((agent) => ({
+    name: `${AGENT_TOOL_PREFIX}${slugify(agent.name)}`,
+    title: agent.name,
+    description:
+      agent.systemPrompt?.substring(0, 500) ||
+      `Call the "${agent.name}" agent to perform tasks.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        message: {
+          type: "string",
+          description: "The message to send to this agent",
+        },
+      },
+      required: ["message"],
+    },
+    annotations: {},
+    _meta: { agentPromptId: agent.agentPromptId },
+  }));
 }

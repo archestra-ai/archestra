@@ -1,5 +1,5 @@
 {
-  "id": "052dbae3-3351-4ab9-94e0-dda01e2f58c0",
+  "id": "dfd7e017-170a-4034-b4a7-b887e8f2fc5a",
   "prevId": "99e471a1-1720-4831-a39f-fe1e6cf33807",
   "version": "7",
   "dialect": "postgresql",
@@ -980,6 +980,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'gpt-4o'"
+        },
+        "has_custom_tool_selection": {
+          "name": "has_custom_tool_selection",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

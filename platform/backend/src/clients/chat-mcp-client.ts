@@ -643,7 +643,8 @@ export async function getChatMcpTools({
 
 /**
  * Filter tools by enabled tool IDs
- * If enabledToolIds is undefined or empty, returns all tools (default = all enabled)
+ * If enabledToolIds is undefined, returns all tools (no custom selection = all enabled)
+ * If enabledToolIds is empty array, returns no tools (explicit selection of zero tools)
  * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
  *
  * @param tools - All available tools (keyed by tool name)
@@ -654,17 +655,29 @@ async function filterToolsByEnabledIds(
   tools: Record<string, Tool>,
   enabledToolIds?: string[],
 ): Promise<Record<string, Tool>> {
-  // Empty array or undefined = all tools enabled (default behavior)
-  if (!enabledToolIds || enabledToolIds.length === 0) {
+  // undefined = no custom selection, return all tools (default behavior)
+  if (enabledToolIds === undefined) {
     logger.info(
       {
         totalTools: Object.keys(tools).length,
-        enabledToolIds: enabledToolIds?.length ?? 0,
-        reason: !enabledToolIds ? "undefined" : "empty array",
+        reason: "undefined - no custom selection",
       },
-      "No tool filtering applied - all tools enabled",
+      "No tool filtering applied - all tools enabled by default",
     );
     return tools;
+  }
+
+  // Empty array = explicit selection of zero tools
+  if (enabledToolIds.length === 0) {
+    logger.info(
+      {
+        totalTools: Object.keys(tools).length,
+        enabledToolIds: 0,
+        reason: "empty array - all tools explicitly disabled",
+      },
+      "All tools filtered out - user disabled all tools",
+    );
+    return {};
   }
 
   // Fetch tool names for the enabled IDs

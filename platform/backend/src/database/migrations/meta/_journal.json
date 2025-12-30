@@ -701,6 +701,13 @@
       "when": 1766509921821,
       "tag": "0099_sturdy_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1767097600473,
+      "tag": "0100_public_zodiak",
+      "breakpoints": true
     }
   ]
 }

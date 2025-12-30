@@ -13,14 +13,7 @@ import {
 } from "react";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
+import ArchestraPromptInput from "./prompt-input";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
@@ -564,21 +557,14 @@ export default function ChatPage() {
                   }}
                 </WithPermissions>
               )}
-              <PromptInput onSubmit={handleSubmit}>
-                <PromptInputBody>
-                  <PromptInputTextarea
-                    placeholder="Type a message..."
-                    canSubmit={status === "ready"}
-                  />
-                </PromptInputBody>
-                <PromptInputToolbar>
-                  <PromptInputTools />
-                  <PromptInputSubmit
-                    status={status === "error" ? "ready" : status}
-                    onStop={stop}
-                  />
-                </PromptInputToolbar>
-              </PromptInput>
+              <ArchestraPromptInput
+                onSubmit={handleSubmit}
+                status={status}
+                selectedModel={conversation?.selectedModel ?? ""}
+                messageCount={messages.length}
+                agentId={conversation?.agent.id}
+                conversationId={conversation?.id}
+              />
             </div>
           </div>
         </div>

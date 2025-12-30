@@ -225,11 +225,6 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
-  // Placeholder for model selection (can be wired to backend when models list is available)
-  const handleModelChange = useCallback((model: string) => {
-    console.info("Model change requested", { model });
-  }, []);
-
   // Extract chat session properties (or use defaults if session not ready)
   const messages = chatSession?.messages ?? [];
   const sendMessage = chatSession?.sendMessage;
@@ -367,12 +362,9 @@ export default function ChatPage() {
       // If a message is currently being generated, queue this message instead
       if (status === "submitted" || status === "streaming") {
         chatSession?.addQueuedMessage?.({
-          id:
-            typeof crypto !== "undefined" && "randomUUID" in crypto
-              ? crypto.randomUUID()
-              : `queued-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          text: trimmed,
-          files: message.files,
+          id: crypto.randomUUID(),
+          role: "user",
+          parts: [{ type: "text", text: trimmed }],
         });
         focusTextarea();
         return;
@@ -423,10 +415,7 @@ export default function ChatPage() {
       chatSession.removeMessagesUpTo(id);
 
       // Send the selected message immediately
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: queued.text }],
-      });
+      sendMessage(queued);
 
       // Reset the manual send flag after a brief delay so the status can settle
       setTimeout(() => {
@@ -645,22 +634,27 @@ export default function ChatPage() {
               )}
               {chatSession?.queuedMessages && chatSession.queuedMessages.length > 0 && (
                 <div className="space-y-2">
-                  {chatSession.queuedMessages.map((queuedMsg, index) => (
-                    <QueuedMessage
-                      key={queuedMsg.id}
-                      message={queuedMsg.text}
-                      position={index}
-                      onDelete={() => handleDeleteQueued(queuedMsg.id)}
-                      onSendNow={() => handleSendNow(queuedMsg.id)}
-                    />
-                  ))}
+                  {chatSession.queuedMessages.map((queuedMsg, index) => {
+                    const textPart = queuedMsg.parts.find(
+                      (part) => part.type === "text" && "text" in part,
+                    );
+
+                    return (
+                      <QueuedMessage
+                        key={queuedMsg.id}
+                        message={textPart && "text" in textPart ? textPart.text : ""}
+                        position={index}
+                        onDelete={() => handleDeleteQueued(queuedMsg.id)}
+                        onSendNow={() => handleSendNow(queuedMsg.id)}
+                      />
+                    );
+                  })}
                 </div>
               )}
               <ArchestraPromptInput
                 onSubmit={handleSubmit}
                 status={status}
                 selectedModel={conversation?.selectedModel ?? ""}
-                onModelChange={handleModelChange}
                 messageCount={messages.length}
                 agentId={conversation?.agent.id}
                 conversationId={conversation?.id}

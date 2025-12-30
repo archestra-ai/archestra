@@ -58,6 +58,9 @@ class AnthropicStreamTransformer
   /** Whether we've started a text content block */
   private hasStartedTextBlock = false;
 
+  /** Whether we've emitted message_start event */
+  private hasEmittedMessageStart = false;
+
   toOpenAI(event: AnthropicStreamEvent): OpenAIStreamChunk | null {
     // Handle "ping" event which exists at runtime but not in TypeScript types
     // TODO: ikonstantinov - investigate what is the ping event
@@ -97,12 +100,51 @@ class AnthropicStreamTransformer
     return delta !== undefined && "tool_calls" in delta;
   }
 
-  writeFromOpenAI(reply: FastifyReply, chunk: OpenAIStreamChunk): void {
+  writeFromOpenAI(
+    reply: FastifyReply,
+    chunk: OpenAIStreamChunk,
+    options?: { endContent?: boolean },
+  ): void {
+    // Handle endContent flag - close any open text block before processing chunk
+    if (options?.endContent && this.hasStartedTextBlock) {
+      const stopEvent = {
+        type: "content_block_stop",
+        index: this.encodeContentBlockIndex,
+      };
+      reply.raw.write(
+        `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
+      );
+      this.hasStartedTextBlock = false;
+    }
     const choice = chunk.choices?.[0];
     if (!choice) return;
 
     const delta = choice.delta;
     if (!delta) return;
+
+    // Emit message_start before any content (required by Anthropic format)
+    if (!this.hasEmittedMessageStart) {
+      this.hasEmittedMessageStart = true;
+      const messageStartEvent = {
+        type: "message_start",
+        message: {
+          id: chunk.id,
+          type: "message",
+          role: "assistant",
+          content: [],
+          model: chunk.model,
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: chunk.usage?.prompt_tokens ?? 0,
+            output_tokens: chunk.usage?.completion_tokens ?? 0,
+          },
+        },
+      };
+      reply.raw.write(
+        `event: message_start\ndata: ${JSON.stringify(messageStartEvent)}\n\n`,
+      );
+    }
 
     // Handle text content
     if ("content" in delta && delta.content) {

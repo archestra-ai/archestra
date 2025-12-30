@@ -102,10 +102,16 @@ export interface StreamTransformer<TStreamEvent> {
 
   /**
    * Write an OpenAI chunk to the provider response.
-   * Converts chunk to provider specific formar before.
+   * Converts chunk to provider specific format before writing.
    *
    * @param reply - Fastify reply object
    * @param chunk - OpenAI stream chunk to convert and write
+   * @param options - Optional flags for stream control
+   * @param options.endContent - If true, close any open content block before processing chunk
    */
-  writeFromOpenAI(reply: FastifyReply, chunk: OpenAIStreamChunk): void;
+  writeFromOpenAI(
+    reply: FastifyReply,
+    chunk: OpenAIStreamChunk,
+    options?: { endContent?: boolean },
+  ): void;
 }

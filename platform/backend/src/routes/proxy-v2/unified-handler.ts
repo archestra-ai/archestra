@@ -269,9 +269,7 @@ export async function handleRequest<TRequest, TResponse, TStreamEvent>(
   };
 
   // Convert back to provider format for API call
-  const providerRequest = transformer.requestFromOpenAI(
-    processedOpenaiRequest,
-  );
+  const providerRequest = transformer.requestFromOpenAI(processedOpenaiRequest);
 
   // Build context for API calls
   const proxyContext: ProxyContext = {
@@ -396,10 +394,8 @@ async function handleNonStreaming<TRequest, TResponse, TStreamEvent>(
     externalAgentId,
     userId,
     // Converters for storing in native format
-    requestFromOpenAI: (req) =>
-      provider.transformer.requestFromOpenAI(req),
-    responseFromOpenAI: (res) =>
-      provider.transformer.responseFromOpenAI(res),
+    requestFromOpenAI: (req) => provider.transformer.requestFromOpenAI(req),
+    responseFromOpenAI: (res) => provider.transformer.responseFromOpenAI(res),
   });
 
   // Convert back to provider format and send
@@ -454,12 +450,19 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
 
     if (!chunk) continue;
 
+    const choice = chunk.choices?.[0];
+
     // Buffer tool chunks for policy evaluation
-    // Non-tool chunks are streamed immediately
     if (streamTransformer.isToolChunk(chunk)) {
       hasToolCalls = true;
       bufferedToolChunks.push(chunk);
-    } else {
+    }
+    // Skip finish chunk if we have pending tool calls (we'll send our own after policy evaluation)
+    else if (hasToolCalls && choice?.finish_reason) {
+      // Don't stream - we'll create the finish chunk after post-processing
+    }
+    // Non-tool chunks are streamed immediately
+    else {
       streamTransformer.writeFromOpenAI(reply, chunk);
     }
   }
@@ -484,27 +487,34 @@ async function handleStreaming<TRequest, TResponse, TStreamEvent>(
     interactionType: provider.interactionType,
     externalAgentId,
     userId,
-    requestFromOpenAI: (req) =>
-      provider.transformer.requestFromOpenAI(req),
-    responseFromOpenAI: (res) =>
-      provider.transformer.responseFromOpenAI(res),
+    requestFromOpenAI: (req) => provider.transformer.requestFromOpenAI(req),
+    responseFromOpenAI: (res) => provider.transformer.responseFromOpenAI(res),
   });
 
   // Handle tool calls based on policy result
   if (hasToolCalls) {
     if (wasBlocked) {
       // Stream refusal message as a text content chunk
+      // Use endContent flag to close any open content block first (provider handles appropriately)
       const refusalContent =
         processedResponse.choices[0]?.message?.content ?? "Blocked by policy";
-      streamTransformer.writeFromOpenAI(reply, {
-        id: openaiResponse.id,
-        object: "chat.completion.chunk",
-        created: Math.floor(Date.now() / 1000),
-        model: openaiResponse.model,
-        choices: [
-          { index: 0, delta: { content: refusalContent }, finish_reason: null },
-        ],
-      });
+      streamTransformer.writeFromOpenAI(
+        reply,
+        {
+          id: openaiResponse.id,
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: openaiResponse.model,
+          choices: [
+            {
+              index: 0,
+              delta: { content: refusalContent },
+              finish_reason: null,
+            },
+          ],
+        },
+        { endContent: true },
+      );
     } else {
       // Encode and stream the buffered tool call chunks (in native SSE format)
       for (const chunk of bufferedToolChunks) {

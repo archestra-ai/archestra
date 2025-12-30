@@ -111,6 +111,7 @@ export function PromptDialog({
   // Use a stable string representation to avoid infinite loops
   const currentAgentIds = currentAgents.map((a) => a.agentPromptId).join(",");
   const promptId = prompt?.id;
+
   useEffect(() => {
     if (open && promptId && currentAgentIds) {
       setSelectedAgentPromptIds(currentAgentIds.split(",").filter(Boolean));
@@ -141,7 +142,8 @@ export function PromptDialog({
       let promptId: string;
 
       if (prompt) {
-        await updatePrompt.mutateAsync({
+        // Update creates a new version with a new ID
+        const updated = await updatePrompt.mutateAsync({
           id: prompt.id,
           data: {
             name: trimmedName,
@@ -150,7 +152,8 @@ export function PromptDialog({
             systemPrompt: trimmedSystemPrompt || undefined,
           },
         });
-        promptId = prompt.id;
+        // Use the new version's ID for agent sync
+        promptId = updated?.id ?? prompt.id;
         toast.success("New version created successfully");
       } else {
         const created = await createPrompt.mutateAsync({

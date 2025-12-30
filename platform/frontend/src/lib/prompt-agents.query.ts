@@ -21,9 +21,11 @@ export function usePromptAgents(promptId: string | undefined) {
     queryKey: promptAgentsQueryKeys.byPrompt(promptId ?? ""),
     queryFn: async () => {
       if (!promptId) return [];
-      return (await getPromptAgents({ path: { promptId } })).data ?? [];
+      const response = await getPromptAgents({ path: { promptId } });
+      return response.data ?? [];
     },
     enabled: !!promptId,
+    staleTime: 0, // Always refetch to ensure fresh data
   });
 }
 

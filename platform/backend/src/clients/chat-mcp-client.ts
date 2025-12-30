@@ -47,12 +47,16 @@ function getCacheKey(agentId: string, userId: string): string {
 
 /**
  * Generate the full cache key for tool cache
+ * Includes promptId because agent tools depend on the prompt context
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
+  promptId?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
-  return `${CacheKey.ChatMcpTools}-${getCacheKey(agentId, userId)}`;
+  const baseKey = getCacheKey(agentId, userId);
+  const fullKey = promptId ? `${baseKey}:${promptId}` : baseKey;
+  return `${CacheKey.ChatMcpTools}-${fullKey}`;
 }
 
 export const __test = {
@@ -415,7 +419,7 @@ export async function getChatMcpTools({
   promptId?: string;
   organizationId?: string;
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(agentId, userId);
+  const toolCacheKey = getToolCacheKey(agentId, userId, promptId);
 
   // Check cache first using cacheManager
   const cachedTools =

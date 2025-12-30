@@ -8,7 +8,7 @@ const PromptAgentWithDetailsSchema = z.object({
   id: z.string().uuid(),
   promptId: z.string().uuid(),
   agentPromptId: z.string().uuid(),
-  createdAt: z.date(),
+  createdAt: z.coerce.date(),
   name: z.string(),
   systemPrompt: z.string().nullable(),
   profileId: z.string().uuid(),

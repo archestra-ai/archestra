@@ -210,6 +210,8 @@ set -e
 
 # Track if we created a KinD cluster for cleanup
 KIND_CLUSTER=""
+# Track supervisord PID for cleanup
+SUPERVISOR_PID=""
 
 # Cleanup function for graceful shutdown
 # Usage: cleanup [exit_code]

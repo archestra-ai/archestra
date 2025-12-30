@@ -1,6 +1,6 @@
 {
-  "id": "dfd7e017-170a-4034-b4a7-b887e8f2fc5a",
-  "prevId": "99e471a1-1720-4831-a39f-fe1e6cf33807",
+  "id": "7c99636c-091b-48d1-9c4b-2805aec0d9fc",
+  "prevId": "dfd7e017-170a-4034-b4a7-b887e8f2fc5a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2826,6 +2826,94 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.prompt_agents": {
+      "name": "prompt_agents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "prompt_id": {
+          "name": "prompt_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_prompt_id": {
+          "name": "agent_prompt_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "prompt_agent_unique": {
+          "name": "prompt_agent_unique",
+          "columns": [
+            {
+              "expression": "prompt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "agent_prompt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "prompt_agents_prompt_id_prompts_id_fk": {
+          "name": "prompt_agents_prompt_id_prompts_id_fk",
+          "tableFrom": "prompt_agents",
+          "tableTo": "prompts",
+          "columnsFrom": [
+            "prompt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "prompt_agents_agent_prompt_id_prompts_id_fk": {
+          "name": "prompt_agents_agent_prompt_id_prompts_id_fk",
+          "tableFrom": "prompt_agents",
+          "tableTo": "prompts",
+          "columnsFrom": [
+            "agent_prompt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -61,7 +61,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   }
   return [
     {
-      title: "New Chat",
+      title: "Chats",
       url: "/chat",
       icon: MessageCircle,
       customIsActive: (pathname: string, searchParams: URLSearchParams) =>
@@ -195,6 +195,9 @@ const MainSideBarSection = ({
 }) => {
   const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  if (permissionMap === null) {
+    return null;
+  }
   const permittedItems = allItems.filter(
     (item) => permissionMap[item.url] ?? true,
   );

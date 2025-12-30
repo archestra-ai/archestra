@@ -232,7 +232,7 @@ describe("usePermissionMap", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.canReadOrg).toBe(true);
+      expect(result.current?.canReadOrg).toBe(true);
     });
 
     expect(result.current).toEqual({
@@ -263,11 +263,11 @@ describe("usePermissionMap", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.hasPermissions).toBe(true);
+      expect(result.current?.hasPermissions).toBe(true);
     });
 
-    expect(result.current.noPermissionsRequired).toBe(true);
-    expect(result.current.hasPermissions).toBe(true);
+    expect(result.current?.noPermissionsRequired).toBe(true);
+    expect(result.current?.hasPermissions).toBe(true);
   });
 
   it("should return false for all keys when permissions are not loaded", async () => {
@@ -286,10 +286,10 @@ describe("usePermissionMap", () => {
 
     await waitFor(() => {
       // Wait for query to settle
-      expect(result.current.canRead).toBeDefined();
+      expect(result.current?.canRead).toBeDefined();
     });
 
-    expect(result.current.canRead).toBe(false);
-    expect(result.current.canCreate).toBe(false);
+    expect(result.current?.canRead).toBe(false);
+    expect(result.current?.canCreate).toBe(false);
   });
 });

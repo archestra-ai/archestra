@@ -208,6 +208,39 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Track if we created a KinD cluster for cleanup
+KIND_CLUSTER=""
+# Track supervisord PID for cleanup
+SUPERVISOR_PID=""
+
+# Cleanup function for graceful shutdown
+# Usage: cleanup [exit_code]
+# If exit_code not provided, defaults to 0 (signal-triggered cleanup)
+cleanup() {
+    CLEANUP_EXIT_CODE="${1:-0}"
+
+    echo "Shutting down..."
+
+    # Stop supervisord gracefully before cleaning up KinD cluster
+    if [ -n "$SUPERVISOR_PID" ] && kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
+        echo "Stopping services..."
+        kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
+        wait "$SUPERVISOR_PID" 2>/dev/null || true
+    fi
+
+    # Delete KinD cluster if we created one in quickstart mode
+    if [ -n "$KIND_CLUSTER" ]; then
+        echo "Deleting KinD cluster '${KIND_CLUSTER}'..."
+        if kind delete cluster --name "${KIND_CLUSTER}" 2>/dev/null; then
+            echo "KinD cluster deleted successfully"
+        else
+            echo "Warning: Failed to delete KinD cluster"
+        fi
+    fi
+
+    exit "$CLEANUP_EXIT_CODE"
+}
+
 # Generate and persist ARCHESTRA_AUTH_SECRET if not set
 if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     SECRET_FILE="/app/data/.auth_secret"
@@ -261,6 +294,8 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             exit 1
         fi
         echo "KinD cluster created successfully"
+        # Mark for cleanup on shutdown
+        KIND_CLUSTER="${CLUSTER_NAME}"
     fi
 
     # Export kubeconfig
@@ -407,8 +442,23 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 CONF
 
-# Start supervisord
-exec /usr/bin/supervisord -c /etc/supervisord.conf
+# Set up signal handlers now that all initialization is complete
+trap cleanup SIGTERM SIGINT
+
+# Start supervisord in foreground but allow signal handling
+# Run in background and wait so trap can catch signals
+/usr/bin/supervisord -c /etc/supervisord.conf &
+SUPERVISOR_PID=$!
+
+# Wait for supervisord to exit (or for a signal)
+wait "$SUPERVISOR_PID"
+# Note: if supervisord is terminated by a signal, `wait` returns 128 + signal.
+# We intentionally propagate this composite exit code to `cleanup` for diagnostics.
+EXIT_CODE=$?
+
+# If we get here, supervisord exited on its own or was terminated by a signal.
+# Run cleanup with the raw exit code from `wait` (may be 128 + signal on signals).
+cleanup "$EXIT_CODE"
 EOF
 
 RUN chmod +x /docker-entrypoint.sh

@@ -39,14 +39,18 @@ export interface TokensListResponse {
 }
 
 /**
- * Hook to fetch all tokens for the organization
+ * Hook to fetch tokens for the organization
  * Returns both tokens and permission flags
+ *
+ * When profileId is provided, team tokens are filtered to only include
+ * tokens for teams that the profile is also assigned to.
  */
-export function useTokens() {
+export function useTokens(params?: { profileId?: string }) {
+  const { profileId } = params ?? {};
   return useQuery({
-    queryKey: ["tokens"],
+    queryKey: ["tokens", { profileId }],
     queryFn: async () => {
-      const response = await getTokens();
+      const response = await getTokens({ query: { profileId } });
       const data = response.data as TokensListResponse | undefined;
       return {
         tokens: data?.tokens ?? [],

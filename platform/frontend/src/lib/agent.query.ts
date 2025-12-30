@@ -142,6 +142,8 @@ export function useUpdateProfile() {
       queryClient.invalidateQueries({
         queryKey: ["profileTokens", variables.id],
       });
+      // Invalidate tokens queries since team changes affect which tokens are visible for a profile
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
     },
   });
 }

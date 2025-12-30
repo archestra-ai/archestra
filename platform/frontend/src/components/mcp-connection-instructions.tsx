@@ -45,17 +45,19 @@ export function McpConnectionInstructions({
 }: McpConnectionInstructionsProps) {
   const { data: profiles } = useProfiles();
   const { data: mcpServers } = useMcpServers();
-  const { data: tokensData } = useTokens();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
 
-  const tokens = tokensData?.tokens;
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [isCopyingConfig, setIsCopyingConfig] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(agentId);
+
+  // Fetch tokens filtered by the selected profile's teams
+  const { data: tokensData } = useTokens({ profileId: selectedProfileId });
+  const tokens = tokensData?.tokens;
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
     null,

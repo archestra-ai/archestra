@@ -53,7 +53,7 @@ describe("Anthropic cost tracking", () => {
 
     // Find the created interaction
     const { InteractionModel } = await import("@/models");
-    const interactions = await InteractionModel.getAllInteractionsForAgent(
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
       agent.id,
     );
     expect(interactions.length).toBeGreaterThan(0);
@@ -93,7 +93,7 @@ describe("Anthropic streaming mode", () => {
 
     // Get initial interaction count
     const initialInteractions =
-      await InteractionModel.getAllInteractionsForAgent(agent.id);
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
     const initialCount = initialInteractions.length;
 
     const response = await app.inject({
@@ -126,7 +126,7 @@ describe("Anthropic streaming mode", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Find the created interaction
-    const interactions = await InteractionModel.getAllInteractionsForAgent(
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
       agent.id,
     );
     expect(interactions.length).toBe(initialCount + 1);
@@ -180,7 +180,7 @@ describe("Anthropic streaming mode", () => {
 
         // Get initial interaction count
         const initialInteractions =
-          await InteractionModel.getAllInteractionsForAgent(agent.id);
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
         const initialCount = initialInteractions.length;
 
         const response = await app.inject({
@@ -208,9 +208,8 @@ describe("Anthropic streaming mode", () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
 
         // Verify interaction was still recorded despite interruption
-        const interactions = await InteractionModel.getAllInteractionsForAgent(
-          agent.id,
-        );
+        const interactions =
+          await InteractionModel.getAllInteractionsForProfile(agent.id);
         expect(interactions.length).toBe(initialCount + 1);
 
         const interaction = interactions[interactions.length - 1];
@@ -228,6 +227,75 @@ describe("Anthropic streaming mode", () => {
       }
     },
   );
+});
+
+describe("Anthropic tool call accumulation", () => {
+  test("accumulates tool call input without [object Object] bug", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(anthropicProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Configure mock to include tool_use block
+    const { MockAnthropicClient } = await import("./mock-anthropic-client");
+    MockAnthropicClient.setStreamOptions({ includeToolUse: true });
+
+    try {
+      // Create token pricing for the model
+      await TokenPriceModel.create({
+        provider: "anthropic",
+        model: "claude-opus-4-20250514",
+        pricePerMillionInput: "15.00",
+        pricePerMillionOutput: "75.00",
+      });
+
+      // Create a test agent
+      const agent = await AgentModel.create({
+        name: "Test Tool Call Agent",
+        teams: [],
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "test-anthropic-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          max_tokens: 1024,
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.body;
+
+      // Verify stream contains tool_use events
+      expect(body).toContain("event: content_block_start");
+      expect(body).toContain('"type":"tool_use"');
+      expect(body).toContain('"name":"get_weather"');
+
+      // Verify tool input is properly accumulated without [object Object]
+      expect(body).not.toContain("[object Object]");
+
+      // Verify the tool input contains valid JSON parts
+      expect(body).toContain("location");
+      expect(body).toContain("San Francisco");
+      expect(body).toContain("fahrenheit");
+    } finally {
+      // Reset mock options for other tests
+      MockAnthropicClient.resetStreamOptions();
+    }
+  });
 });
 
 describe("Anthropic proxy routing", () => {

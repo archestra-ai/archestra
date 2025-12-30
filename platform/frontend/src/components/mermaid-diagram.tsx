@@ -2,7 +2,7 @@
 
 import mermaid from "mermaid";
 import { useTheme } from "next-themes";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface MermaidDiagramProps {
   chart: string;
@@ -15,8 +15,10 @@ export function MermaidDiagram({
 }: MermaidDiagramProps) {
   const ref = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    setIsLoaded(false);
     const isDark = theme === "dark";
 
     mermaid.initialize({
@@ -56,10 +58,16 @@ export function MermaidDiagram({
           // Generate a unique ID to avoid conflicts
           const uniqueId = `${id}-${Date.now()}`;
           const { svg } = await mermaid.render(uniqueId, chart);
-          ref.current.innerHTML = svg;
+          if (ref.current) {
+            ref.current.innerHTML = svg;
+            requestAnimationFrame(() => setIsLoaded(true));
+          }
         } catch (error) {
           console.error("Error rendering mermaid diagram:", error);
-          ref.current.innerHTML = `<pre>${chart}</pre>`;
+          if (ref.current) {
+            ref.current.innerHTML = `<pre>${chart}</pre>`;
+            setIsLoaded(true);
+          }
         }
       }
     };
@@ -70,7 +78,9 @@ export function MermaidDiagram({
   return (
     <div
       ref={ref}
-      className="flex justify-center w-full [&_svg]:!max-w-full [&_svg]:!h-auto"
+      className={`flex justify-center w-full [&_svg]:!max-w-full [&_svg]:!h-auto transition-opacity duration-300 motion-reduce:transition-none ${
+        isLoaded ? "opacity-100" : "opacity-0"
+      }`}
     />
   );
 }

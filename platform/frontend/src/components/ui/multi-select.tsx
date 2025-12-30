@@ -17,6 +17,8 @@ interface MultiSelectProps {
   items: Array<{ value: string; label: string }>;
   className?: string;
   disabled?: boolean;
+  showSelectedBadges?: boolean;
+  triggerTestId?: string;
 }
 
 export function MultiSelect({
@@ -26,6 +28,8 @@ export function MultiSelect({
   items,
   className,
   disabled = false,
+  showSelectedBadges = true,
+  triggerTestId,
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -79,7 +83,7 @@ export function MultiSelect({
           <div className="flex flex-wrap gap-1 flex-1">
             {selectedItems.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
-            ) : (
+            ) : showSelectedBadges ? (
               selectedItems.map((item) => (
                 <Badge
                   key={item.value}
@@ -105,6 +109,10 @@ export function MultiSelect({
                   </button>
                 </Badge>
               ))
+            ) : (
+              <span data-testid={triggerTestId}>
+                {selectedItems.length} selected
+              </span>
             )}
           </div>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
+  turbopack: {
+    resolveAlias: {
+      "@shared/access-control.ee": "../shared/access-control.ee.ts",
+      "@shared/access-control": "../shared/access-control.ts",
+    },
+  },
   logging: {
     fetches: {
       fullUrl: true,

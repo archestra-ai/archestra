@@ -1,41 +1,51 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
-import { auth as betterAuth } from "./better-auth";
+import type { Action, Permissions, Resource } from "@shared";
+import config from "@/config";
 
-export const hasPermission = async (
-  permissions: Permissions,
-  requestHeaders: IncomingHttpHeaders,
-): Promise<{ success: boolean; error: Error | null }> => {
-  const headers = new Headers(requestHeaders as HeadersInit);
-  try {
-    return await betterAuth.api.hasPermission({
-      headers,
-      body: {
-        permissions,
-      },
-    });
-  } catch (_error) {
-    /**
-     * Handle API key sessions that don't have organization context
-     * API keys have all permissions by default (see auth config)
-     */
-    const authHeader = headers.get("authorization");
+export async function hasPermission(
+  ...args: [Permissions, IncomingHttpHeaders]
+): Promise<{ success: boolean; error: Error | null }> {
+  const { hasPermission } = config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: conditional EE import
+      await import("./utils.ee")
+    : {
+        hasPermission: async (
+          _permissions: Permissions,
+          _requestHeaders: IncomingHttpHeaders,
+        ): Promise<{ success: boolean; error: Error | null }> => {
+          return {
+            success: true, // Always allow - no permission check in non-enterprise version
+            error: null,
+          };
+        },
+      };
+  return hasPermission.apply(null, args);
+}
 
-    if (authHeader) {
-      try {
-        // Verify if this is a valid API key
-        const apiKeyResult = await betterAuth.api.verifyApiKey({
-          body: { key: authHeader },
-        });
-        if (apiKeyResult?.valid) {
-          // API keys have all permissions, so allow the request
-          return { success: true, error: null };
-        }
-      } catch (_apiKeyError) {
-        // Not a valid API key, return original error
-        return { success: false, error: new Error("Invalid API key") };
-      }
-    }
-    return { success: false, error: new Error("No API key provided") };
-  }
-};
+/**
+ * Check if a user has a specific permission.
+ * Different form hasPermission, because it doesn't require the request headers, but user and organization IDs.
+ * In EE mode: checks the user's role permissions
+ * In non-EE mode: returns true (no permission restrictions)
+ */
+export async function userHasPermission(
+  userId: string,
+  organizationId: string,
+  resource: Resource,
+  action: Action,
+): Promise<boolean> {
+  const { userHasPermission } = config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: conditional EE import
+      await import("./utils.ee")
+    : {
+        userHasPermission: async (
+          _userId: string,
+          _organizationId: string,
+          _resource: Resource,
+          _action: Action,
+        ): Promise<boolean> => {
+          return true; // Always allow - no permission check in non-enterprise version
+        },
+      };
+  return userHasPermission(userId, organizationId, resource, action);
+}

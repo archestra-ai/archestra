@@ -1,6 +1,6 @@
 "use client";
 
-import { OnboardingDialog } from "@/components/onboarding-dialog";
+import { AlternativeOnboardingDialog } from "@/components/alternative-onboarding-dialog";
 import { useOrganization } from "@/lib/organization.query";
 
 export function OnboardingDialogWrapper() {
@@ -10,5 +10,7 @@ export function OnboardingDialogWrapper() {
     return null;
   }
 
-  return <OnboardingDialog open={!organization?.onboardingComplete} />;
+  return (
+    <AlternativeOnboardingDialog open={!organization?.onboardingComplete} />
+  );
 }

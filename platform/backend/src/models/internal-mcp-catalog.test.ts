@@ -3,7 +3,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
 describe("InternalMcpCatalogModel", () => {
   describe("findAll with expandSecrets", () => {
-    test("expands OAuth client_secret and localConfig environment secrets", async ({
+    test("expands secrets by default (expandSecrets: true)", async ({
       makeSecret,
     }) => {
       // Create secrets
@@ -70,6 +70,63 @@ describe("InternalMcpCatalogModel", () => {
       expect(foundCatalog?.localConfig?.environment?.[1].value).toBe(
         "test-db-pass-789",
       );
+    });
+
+    test("does not expand secrets when expandSecrets: false", async ({
+      makeSecret,
+    }) => {
+      // Create secrets
+      const oauthSecret = await makeSecret({
+        name: "oauth-secret-no-expand",
+        secret: { client_secret: "secret-should-not-appear" },
+      });
+      const envSecret = await makeSecret({
+        name: "env-secret-no-expand",
+        secret: {
+          API_KEY: "key-should-not-appear",
+        },
+      });
+
+      // Create catalog item with secret references
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "test-catalog-no-expand",
+        serverType: "remote",
+        clientSecretId: oauthSecret.id,
+        localConfigSecretId: envSecret.id,
+        oauthConfig: {
+          name: "Test OAuth",
+          server_url: "https://example.com",
+          client_id: "test-client-id",
+          redirect_uris: ["http://localhost:3000/oauth/callback"],
+          scopes: ["read"],
+          default_scopes: ["read"],
+          supports_resource_metadata: false,
+        },
+        localConfig: {
+          command: "npx",
+          arguments: ["-y", "@test/server"],
+          environment: [
+            {
+              key: "API_KEY",
+              type: "secret",
+              required: true,
+              description: "API Key",
+              promptOnInstallation: false,
+            },
+          ],
+        },
+      });
+
+      // Call findAll with expandSecrets: false
+      const catalogItems = await InternalMcpCatalogModel.findAll({
+        expandSecrets: false,
+      });
+      const foundCatalog = catalogItems.find((item) => item.id === catalog.id);
+
+      expect(foundCatalog).toBeDefined();
+      // Secrets should NOT be expanded
+      expect(foundCatalog?.oauthConfig?.client_secret).toBeUndefined();
+      expect(foundCatalog?.localConfig?.environment?.[0].value).toBeUndefined();
     });
   });
 

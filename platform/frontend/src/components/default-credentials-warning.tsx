@@ -1,10 +1,9 @@
 "use client";
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
-import { Copy, Link } from "lucide-react";
-import { useState } from "react";
+import { Link } from "lucide-react";
+import { CopyButton } from "@/components/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { useDefaultCredentialsEnabled } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
@@ -17,42 +16,6 @@ export function DefaultCredentialsWarning({
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading } =
     useDefaultCredentialsEnabled();
-  const [copiedEmail, setCopiedEmail] = useState(false);
-  const [copiedPassword, setCopiedPassword] = useState(false);
-
-  const copyToClipboard = async (text: string, type: "email" | "password") => {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (type === "email") {
-        setCopiedEmail(true);
-        setTimeout(() => setCopiedEmail(false), 2000);
-      } else {
-        setCopiedPassword(true);
-        setTimeout(() => setCopiedPassword(false), 2000);
-      }
-    } catch (_error) {
-      // Fallback for older browsers or when clipboard API is not available
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed";
-      textArea.style.left = "-999999px";
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        document.execCommand("copy");
-        if (type === "email") {
-          setCopiedEmail(true);
-          setTimeout(() => setCopiedEmail(false), 2000);
-        } else {
-          setCopiedPassword(true);
-          setTimeout(() => setCopiedPassword(false), 2000);
-        }
-      } catch (err) {
-        console.error("Failed to copy:", err);
-      }
-      document.body.removeChild(textArea);
-    }
-  };
 
   // Loading state - don't show anything yet
   if (isLoading || defaultCredentialsEnabled === undefined) {
@@ -78,29 +41,21 @@ export function DefaultCredentialsWarning({
         <div className="space-y-1">
           <div className="flex items-center gap-1">
             <code className="break-all">- {DEFAULT_ADMIN_EMAIL}</code>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-4 w-4 p-0 hover:bg-transparent"
-              onClick={() => copyToClipboard(DEFAULT_ADMIN_EMAIL, "email")}
-            >
-              <Copy size={10} />
-            </Button>
-            {copiedEmail && <span className="ml-1 text-xs">Copied!</span>}
+            <CopyButton
+              text={DEFAULT_ADMIN_EMAIL}
+              className="h-4 w-4 hover:bg-transparent"
+              size={10}
+              behavior="text"
+            />
           </div>
           <div className="flex items-center gap-1">
             <code className="break-all">- {DEFAULT_ADMIN_PASSWORD}</code>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-4 w-4 p-0 hover:bg-transparent"
-              onClick={() =>
-                copyToClipboard(DEFAULT_ADMIN_PASSWORD, "password")
-              }
-            >
-              <Copy size={10} />
-            </Button>
-            {copiedPassword && <span className="ml-1 text-xs">Copied!</span>}
+            <CopyButton
+              text={DEFAULT_ADMIN_PASSWORD}
+              className="h-4 w-4 hover:bg-transparent"
+              size={10}
+              behavior="text"
+            />
           </div>
         </div>
         <p className="mt-1">

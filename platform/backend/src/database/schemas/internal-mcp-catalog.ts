@@ -14,6 +14,7 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   name: text("name").notNull(),
   version: text("version"),
   description: text("description"),
+  instructions: text("instructions"),
   repository: text("repository"),
   installationCommand: text("installation_command"),
   requiresAuth: boolean("requires_auth").notNull().default(false),

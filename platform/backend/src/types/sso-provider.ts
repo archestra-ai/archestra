@@ -2,6 +2,7 @@ import {
   SsoProviderOidcConfigSchema,
   SsoProviderSamlConfigSchema,
   SsoRoleMappingConfigSchema,
+  SsoTeamSyncConfigSchema,
 } from "@shared";
 import {
   createInsertSchema,
@@ -15,6 +16,7 @@ const extendedFields = {
   oidcConfig: SsoProviderOidcConfigSchema.optional(),
   samlConfig: SsoProviderSamlConfigSchema.optional(),
   roleMapping: SsoRoleMappingConfigSchema.optional(),
+  teamSyncConfig: SsoTeamSyncConfigSchema.optional(),
 };
 
 export const SelectSsoProviderSchema = createSelectSchema(

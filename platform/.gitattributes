@@ -30,3 +30,10 @@ Dockerfile text eol=lf
 *.ttf binary
 *.eot binary
 *.tgz binary
+
+# Generated files - hide from GitHub statistics and diffs
+# Drizzle ORM migration snapshots
+backend/src/database/migrations/meta/** linguist-generated=true
+backend/src/database/migrations/meta/** -diff
+backend/src/database/migrations/meta/*.json linguist-generated=true
+backend/src/database/migrations/meta/*.json -diff

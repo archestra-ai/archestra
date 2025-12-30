@@ -4,7 +4,7 @@
     "urlPath": "/v1/messages",
     "headers": {
       "x-api-key": {
-        "contains": "test-case-1-anthropic-tool-call"
+        "contains": "anthropic-blocks-tool-untrusted-data"
       }
     }
   },

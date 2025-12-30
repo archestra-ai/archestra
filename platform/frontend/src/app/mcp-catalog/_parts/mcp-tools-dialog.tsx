@@ -1,6 +1,6 @@
 "use client";
 
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -135,7 +135,8 @@ export function McpToolsDialog({
       selectedToolIds.includes(tool.id),
     );
     onBulkAssignTools(selectedTools);
-    // Don't clear selection here - it will be cleared when the bulk assign dialog closes
+    // Clear selections immediately after bulk assignment
+    setSelectedToolIds([]);
   };
 
   const handleDialogChange = (newOpen: boolean) => {
@@ -149,7 +150,11 @@ export function McpToolsDialog({
   const hasSelection = selectedToolIds.length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogChange}>
+    <Dialog
+      open={open}
+      onOpenChange={handleDialogChange}
+      data-testid={E2eTestId.McpToolsDialog}
+    >
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Tools - {serverName}</DialogTitle>

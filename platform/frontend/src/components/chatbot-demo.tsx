@@ -4,12 +4,11 @@ import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
   CopyIcon,
-  GlobeIcon,
   RefreshCcwIcon,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
   Conversation,
@@ -18,27 +17,6 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
-  PromptInputAttachment,
-  PromptInputAttachments,
-  PromptInputBody,
-  PromptInputButton,
-  type PromptInputMessage,
-  PromptInputModelSelect,
-  PromptInputModelSelectContent,
-  PromptInputModelSelectItem,
-  PromptInputModelSelectTrigger,
-  PromptInputModelSelectValue,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
 import {
   Reasoning,
   ReasoningContent,
@@ -59,25 +37,15 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
+import { parsePolicyDenied } from "@/lib/llmProviders/common";
 import { cn } from "@/lib/utils";
+import { PolicyDeniedTool } from "./chat/policy-denied-tool";
 import Divider from "./divider";
-
-const models = [
-  {
-    name: "GPT 4o",
-    value: "openai/gpt-4o",
-  },
-  {
-    name: "Deepseek R1",
-    value: "deepseek/deepseek-r1",
-  },
-];
 
 const ChatBotDemo = ({
   messages,
   reload,
   isEnded,
-  showPromptInput,
   containerClassName,
   topPart,
   hideDivider,
@@ -85,45 +53,10 @@ const ChatBotDemo = ({
   messages: PartialUIMessage[];
   reload?: () => void;
   isEnded?: boolean;
-  showPromptInput?: boolean;
   containerClassName?: string;
   topPart?: React.ReactNode;
   hideDivider?: boolean;
 }) => {
-  const [input, setInput] = useState("");
-  const [model, setModel] = useState<string>(models[0].value);
-  const [webSearch, setWebSearch] = useState(false);
-  // const { messages, reload, isEnded } = useMockedMessages({ isMitigated });
-  // We are mocking those parts
-  // const { messages, sendMessage, status } = useChat({
-  //   transport: new DefaultChatTransport({
-  //     api: "/api/chat-demo",
-  //   }),
-  // });
-  // sendMessage(
-  //   {
-  //     text: message.text || "Sent with attachments",
-  //     files: message.files,
-  //   },
-  //   {
-  //     body: {
-  //       model: model,
-  //       webSearch: webSearch,
-  //     },
-  //   },
-  // );
-
-  const handleSubmit = (message: PromptInputMessage) => {
-    const hasText = Boolean(message.text);
-    const hasAttachments = Boolean(message.files?.length);
-
-    if (!(hasText || hasAttachments)) {
-      return;
-    }
-
-    setInput("");
-  };
-
   const status: ChatStatus = "streaming" as ChatStatus;
 
   return (
@@ -199,7 +132,17 @@ const ChatBotDemo = ({
                     }
 
                     switch (part.type) {
-                      case "text":
+                      case "text": {
+                        const policyDenied = parsePolicyDenied(part.text);
+                        if (policyDenied) {
+                          return (
+                            <PolicyDeniedTool
+                              key={`${message.id}-${i}`}
+                              policyDenied={policyDenied}
+                              editable={false}
+                            />
+                          );
+                        }
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message from={message.role}>
@@ -227,6 +170,7 @@ const ChatBotDemo = ({
                               )}
                           </Fragment>
                         );
+                      }
                       case "tool-invocation":
                       case "dynamic-tool": {
                         const toolName =
@@ -466,63 +410,6 @@ const ChatBotDemo = ({
             <RefreshCcwIcon /> Start again
           </Button>
         )}
-        {showPromptInput && (
-          <PromptInput
-            onSubmit={handleSubmit}
-            className="mt-4"
-            globalDrop
-            multiple
-          >
-            <PromptInputBody>
-              <PromptInputAttachments>
-                {(attachment) => <PromptInputAttachment data={attachment} />}
-              </PromptInputAttachments>
-              <PromptInputTextarea
-                onChange={(e) => setInput(e.target.value)}
-                value={input}
-                disabled
-              />
-            </PromptInputBody>
-            <PromptInputToolbar>
-              <PromptInputTools>
-                <PromptInputActionMenu>
-                  <PromptInputActionMenuTrigger />
-                  <PromptInputActionMenuContent>
-                    <PromptInputActionAddAttachments />
-                  </PromptInputActionMenuContent>
-                </PromptInputActionMenu>
-                <PromptInputButton
-                  variant={webSearch ? "default" : "ghost"}
-                  onClick={() => setWebSearch(!webSearch)}
-                >
-                  <GlobeIcon size={16} />
-                  <span>Search</span>
-                </PromptInputButton>
-                <PromptInputModelSelect
-                  onValueChange={(value) => {
-                    setModel(value);
-                  }}
-                  value={model}
-                >
-                  <PromptInputModelSelectTrigger>
-                    <PromptInputModelSelectValue />
-                  </PromptInputModelSelectTrigger>
-                  <PromptInputModelSelectContent>
-                    {models.map((model) => (
-                      <PromptInputModelSelectItem
-                        key={model.value}
-                        value={model.value}
-                      >
-                        {model.name}
-                      </PromptInputModelSelectItem>
-                    ))}
-                  </PromptInputModelSelectContent>
-                </PromptInputModelSelect>
-              </PromptInputTools>
-              <PromptInputSubmit disabled status="ready" />
-            </PromptInputToolbar>
-          </PromptInput>
-        )}
       </div>
     </div>
   );
@@ -534,6 +421,14 @@ export type BlockedToolPart = {
   toolArguments?: string;
   reason: string;
   fullRefusal?: string;
+};
+
+export type PolicyDeniedPart = {
+  type: string; // "tool-<toolName>"
+  toolCallId: string;
+  state: "output-denied";
+  input: Record<string, unknown>;
+  errorText: string;
 };
 
 export type DualLlmPart = {
@@ -548,7 +443,12 @@ export type DualLlmPart = {
 
 export type PartialUIMessage = Partial<UIMessage> & {
   role: UIMessage["role"];
-  parts: (UIMessage["parts"][number] | BlockedToolPart | DualLlmPart)[];
+  parts: (
+    | UIMessage["parts"][number]
+    | BlockedToolPart
+    | DualLlmPart
+    | PolicyDeniedPart
+  )[];
   metadata?: {
     trusted?: boolean;
     blocked?: boolean;

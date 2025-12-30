@@ -1,9 +1,9 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { groupBy } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
@@ -13,6 +13,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentToolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
@@ -105,6 +106,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
             executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+            useDynamicTeamCredential: z.boolean().optional(),
           })
           .nullish(),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -112,14 +114,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const { credentialSourceMcpServerId, executionSourceMcpServerId } =
-        request.body || {};
+      const {
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+        useDynamicTeamCredential,
+      } = request.body || {};
 
       const result = await assignToolToAgent(
         agentId,
         toolId,
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
+        undefined,
+        useDynamicTeamCredential,
       );
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -148,6 +155,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               toolId: UuidIdSchema,
               credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
               executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+              useDynamicTeamCredential: z.boolean().optional(),
             }),
           ),
         }),
@@ -220,6 +228,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
             preFetchedData,
+            assignment.useDynamicTeamCredential,
           ),
         ),
       );
@@ -277,15 +286,94 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { ids, field, value } = request.body;
+      const { ids, field, value, clearAutoConfigured } = request.body;
 
       const updatedCount = await AgentToolModel.bulkUpdateSameValue(
         ids,
         field,
         value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+        clearAutoConfigured,
       );
 
       return reply.send({ updatedCount });
+    },
+  );
+
+  fastify.post(
+    "/api/agent-tools/auto-configure-policies",
+    {
+      schema: {
+        operationId: RouteId.AutoConfigureAgentToolPolicies,
+        description:
+          "Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis",
+        tags: ["Agent Tools"],
+        body: z.object({
+          agentToolIds: z.array(z.string().uuid()).min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            results: z.array(
+              z.object({
+                agentToolId: z.string().uuid(),
+                success: z.boolean(),
+                config: z
+                  .object({
+                    allowUsageWhenUntrustedDataIsPresent: z.boolean(),
+                    toolResultTreatment: z.enum([
+                      "trusted",
+                      "sanitize_with_dual_llm",
+                      "untrusted",
+                    ]),
+                    reasoning: z.string(),
+                  })
+                  .optional(),
+                error: z.string().optional(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId, user }, reply) => {
+      const { agentToolIds } = body;
+
+      logger.info(
+        { organizationId, userId: user.id, count: agentToolIds.length },
+        "POST /api/agent-tools/auto-configure-policies: request received",
+      );
+
+      // Check if service is available for this organization
+      const available =
+        await agentToolAutoPolicyService.isAvailable(organizationId);
+      if (!available) {
+        logger.warn(
+          { organizationId, userId: user.id },
+          "POST /api/agent-tools/auto-configure-policies: service not available",
+        );
+        throw new ApiError(
+          503,
+          "Auto-policy requires a default Anthropic chat API key to be configured",
+        );
+      }
+
+      const result =
+        await agentToolAutoPolicyService.configurePoliciesForAgentTools(
+          agentToolIds,
+          organizationId,
+        );
+
+      logger.info(
+        {
+          organizationId,
+          userId: user.id,
+          success: result.success,
+          resultsCount: result.results.length,
+        },
+        "POST /api/agent-tools/auto-configure-policies: completed",
+      );
+
+      return reply.send(result);
     },
   );
 
@@ -360,12 +448,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
+          useDynamicTeamCredential: true,
+          policiesAutoConfiguredAt: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
-      const { credentialSourceMcpServerId, executionSourceMcpServerId } = body;
+      const {
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+        useDynamicTeamCredential,
+      } = body;
 
       // Get the agent-tool relationship for validation (needed for both credential and execution source)
       let agentToolForValidation:
@@ -419,27 +513,33 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentToolForValidation &&
         agentToolForValidation.tool.catalogId
       ) {
+        // Only need serverType for validation, no secrets needed
         const catalogItem = await InternalMcpCatalogModel.findById(
           agentToolForValidation.tool.catalogId,
+          { expandSecrets: false },
         );
         // Check if tool is from local server and executionSourceMcpServerId is being set to null
+        // (allowed if useDynamicTeamCredential is being set to true)
         if (
           catalogItem?.serverType === "local" &&
-          !executionSourceMcpServerId
+          !executionSourceMcpServerId &&
+          !useDynamicTeamCredential
         ) {
           throw new ApiError(
             400,
-            "Execution source installation is required for local MCP server tools and cannot be set to null",
+            "Execution source installation or dynamic team credential is required for local MCP server tools",
           );
         }
         // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+        // (allowed if useDynamicTeamCredential is being set to true)
         if (
           catalogItem?.serverType === "remote" &&
-          !credentialSourceMcpServerId
+          !credentialSourceMcpServerId &&
+          !useDynamicTeamCredential
         ) {
           throw new ApiError(
             400,
-            "Credential source is required for remote MCP server tools and cannot be set to null",
+            "Credential source or dynamic team credential is required for remote MCP server tools",
           );
         }
       }
@@ -457,92 +557,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       clearChatMcpClient(agentTool.agentId);
 
       return reply.send(agentTool);
-    },
-  );
-
-  fastify.get(
-    "/api/agents/available-tokens",
-    {
-      schema: {
-        operationId: RouteId.GetAgentAvailableTokens,
-        description:
-          "Get MCP servers that can be used as credential sources for the specified agents' tools, grouped by catalogId",
-        tags: ["Agent Tools"],
-        querystring: z.object({
-          catalogId: UuidIdSchema.optional(),
-        }),
-        response: constructResponseSchema(
-          z.record(
-            z.string(),
-            z.array(
-              z.object({
-                id: z.string(),
-                name: z.string(),
-                serverType: z.enum(["local", "remote"]),
-                catalogId: z.string().nullable(),
-                ownerId: z.string().nullable(),
-                ownerEmail: z.string().nullable(),
-                teamDetails: z
-                  .array(
-                    z.object({
-                      teamId: z.string(),
-                      name: z.string(),
-                      createdAt: z.coerce.date(),
-                    }),
-                  )
-                  .optional(),
-              }),
-            ),
-          ),
-        ),
-      },
-    },
-    async ({ query: { catalogId }, headers, user }, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
-
-      // Get all MCP servers accessible to the user
-      const allServers = await McpServerModel.findAll(user.id, isAgentAdmin);
-
-      // Filter by catalogId if provided, otherwise include all
-      const filteredServers = catalogId
-        ? allServers.filter((server) => server.catalogId === catalogId)
-        : allServers;
-
-      // Map servers to the response format
-      const mappedServers = filteredServers.map((server) => ({
-        id: server.id,
-        name: server.name,
-        serverType: server.serverType as "local" | "remote",
-        catalogId: server.catalogId,
-        ownerId: server.ownerId,
-        ownerEmail: server.ownerEmail ?? null,
-        teamDetails: server.teamDetails,
-      }));
-
-      // Sort servers: current user's credentials first, then others
-      const currentUserId = user.id;
-      const sortedServers = mappedServers.sort((a, b) => {
-        const aIsCurrentUser = a.ownerId === currentUserId;
-        const bIsCurrentUser = b.ownerId === currentUserId;
-
-        // Current user's credentials come first
-        if (aIsCurrentUser && !bIsCurrentUser) return -1;
-        if (!aIsCurrentUser && bIsCurrentUser) return 1;
-
-        // Keep original order otherwise
-        return 0;
-      });
-
-      // Group by catalogId
-      const groupedByCatalogId = groupBy(
-        sortedServers,
-        (server) => server.catalogId,
-      );
-
-      return reply.send(groupedByCatalogId);
     },
   );
 };
@@ -563,6 +577,7 @@ export async function assignToolToAgent(
     toolsMap?: Map<string, Tool>;
     catalogItemsMap?: Map<string, InternalMcpCatalog>;
   },
+  useDynamicTeamCredential?: boolean,
 ): Promise<
   | {
       status: 400 | 404;
@@ -614,29 +629,32 @@ export async function assignToolToAgent(
     if (preFetchedData?.catalogItemsMap) {
       catalogItem = preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
     } else {
-      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+      // Only need serverType for validation, no secrets needed
+      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId, {
+        expandSecrets: false,
+      });
     }
 
     if (catalogItem?.serverType === "local") {
-      if (!executionSourceMcpServerId) {
+      if (!executionSourceMcpServerId && !useDynamicTeamCredential) {
         return {
           status: 400,
           error: {
             message:
-              "Execution source installation is required for local MCP server tools",
+              "Execution source installation or dynamic team credential is required for local MCP server tools",
             type: "validation_error",
           },
         };
       }
     }
-    // Check if tool is from remote server (requires credentialSourceMcpServerId)
+    // Check if tool is from remote server (requires credentialSourceMcpServerId OR useDynamicTeamCredential)
     if (catalogItem?.serverType === "remote") {
-      if (!credentialSourceMcpServerId) {
+      if (!credentialSourceMcpServerId && !useDynamicTeamCredential) {
         return {
           status: 400,
           error: {
             message:
-              "Credential source is required for remote MCP server tools",
+              "Credential source or dynamic team credential is required for remote MCP server tools",
             type: "validation_error",
           },
         };
@@ -674,6 +692,7 @@ export async function assignToolToAgent(
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
+    useDynamicTeamCredential,
   );
 
   // Return appropriate status

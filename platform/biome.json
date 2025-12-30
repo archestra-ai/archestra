@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.7/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -12,6 +12,7 @@
       "**/*.ts",
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
+      "standalone-scripts/**/*.ts",
       "!node_modules",
       "!.next",
       "!**/dist",
@@ -51,6 +52,46 @@
       "react": "recommended"
     }
   },
+  "overrides": [
+    {
+      "includes": [
+        "**/*.ts",
+        "**/*.tsx",
+        "!**/*.ee.ts",
+        "!**/*.ee.tsx",
+        "!**/*.ee.test.ts",
+        "!**/*.ee.test.tsx",
+        "!**/*.ee.spec.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseLicenseActivated instead to avoid bundling enterprise code into OSS builds."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["standalone-scripts/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {

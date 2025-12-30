@@ -10,6 +10,7 @@ import {
   createSortingQuerySchema,
   PaginationQuerySchema,
   SelectInteractionSchema,
+  UserInfoSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -23,14 +24,28 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Interaction"],
         querystring: z
           .object({
-            agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
+            profileId: UuidIdSchema.optional().describe(
+              "Filter by profile ID (internal Archestra profile)",
+            ),
+            externalAgentId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by external agent ID (from X-Archestra-Agent-Id header)",
+              ),
+            userId: z
+              .string()
+              .optional()
+              .describe("Filter by user ID (from X-Archestra-User-Id header)"),
           })
           .merge(PaginationQuerySchema)
           .merge(
             createSortingQuerySchema([
               "createdAt",
-              "agentId",
+              "profileId",
+              "externalAgentId",
               "model",
+              "userId",
             ] as const),
           ),
         response: constructResponseSchema(
@@ -40,7 +55,15 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { agentId, limit, offset, sortBy, sortDirection },
+        query: {
+          profileId,
+          externalAgentId,
+          userId,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
         user,
         headers,
       },
@@ -48,16 +71,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
-
-      if (agentId) {
-        return reply.send(
-          await InteractionModel.getAllInteractionsForAgentPaginated(
-            agentId,
-            pagination,
-            sorting,
-          ),
-        );
-      }
 
       const { success: isAgentAdmin } = await hasPermission(
         { profile: ["admin"] },
@@ -69,6 +82,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           email: user.email,
           isAgentAdmin,
+          profileId,
+          externalAgentId,
+          filterUserId: userId,
           pagination,
           sorting,
         },
@@ -80,6 +96,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sorting,
         user.id,
         isAgentAdmin,
+        { profileId, externalAgentId, userId },
       );
 
       fastify.log.info(
@@ -91,6 +108,62 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(result);
+    },
+  );
+
+  // Note: This specific route must come before the :interactionId param route
+  // to prevent Fastify from matching "external-agent-ids" as an interactionId
+  fastify.get(
+    "/api/interactions/external-agent-ids",
+    {
+      schema: {
+        operationId: RouteId.GetUniqueExternalAgentIds,
+        description:
+          "Get all unique external agent IDs for filtering (from X-Archestra-Agent-Id header)",
+        tags: ["Interaction"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
+        user.id,
+        isAgentAdmin,
+      );
+
+      return reply.send(externalAgentIds);
+    },
+  );
+
+  // Note: This specific route must come before the :interactionId param route
+  // to prevent Fastify from matching "user-ids" as an interactionId
+  fastify.get(
+    "/api/interactions/user-ids",
+    {
+      schema: {
+        operationId: RouteId.GetUniqueUserIds,
+        description:
+          "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)",
+        tags: ["Interaction"],
+        response: constructResponseSchema(z.array(UserInfoSchema)),
+      },
+    },
+    async ({ user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const userIds = await InteractionModel.getUniqueUserIds(
+        user.id,
+        isAgentAdmin,
+      );
+
+      return reply.send(userIds);
     },
   );
 

@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@/types";
+import type { SupportedProvider } from "@shared";
 import { AnthropicTokenizer } from "./anthropic";
 import type { Tokenizer } from "./base";
 import { TiktokenTokenizer } from "./tiktoken";

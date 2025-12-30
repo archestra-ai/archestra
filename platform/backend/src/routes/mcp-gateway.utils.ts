@@ -15,6 +15,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { userHasPermission } from "@/auth/utils";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
@@ -401,27 +402,6 @@ export async function validateTeamToken(
 }
 
 /**
- * Check if a user has profile admin permission
- * In EE mode: checks the user's role permissions
- * In non-EE mode: returns true (no permission restrictions)
- */
-async function userHasProfileAdminPermission(
-  userId: string,
-  organizationId: string,
-): Promise<boolean> {
-  if (!config.enterpriseLicenseActivated) {
-    // Non-EE mode: all users have full access
-    return true;
-  }
-
-  // EE mode: check user's role permissions
-  // biome-ignore lint/style/noRestrictedImports: conditional EE import
-  const { getUserPermissions } = await import("@/models/user.ee");
-  const permissions = await getUserPermissions(userId, organizationId);
-  return permissions.profile?.includes("admin") ?? false;
-}
-
-/**
  * Validate a user token for a specific profile
  * Returns token auth info if valid, null otherwise
  *
@@ -442,9 +422,11 @@ export async function validateUserToken(
   }
 
   // Check if user has profile admin permission (can access all profiles)
-  const isProfileAdmin = await userHasProfileAdminPermission(
+  const isProfileAdmin = await userHasPermission(
     token.userId,
     token.organizationId,
+    "profile",
+    "admin",
   );
 
   if (isProfileAdmin) {

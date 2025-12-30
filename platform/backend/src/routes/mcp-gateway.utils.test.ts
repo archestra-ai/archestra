@@ -1,6 +1,6 @@
+import { TeamTokenModel, UserTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { validateMCPGatewayToken } from "./mcp-gateway.utils";
-import { TeamTokenModel, UserTokenModel } from "@/models";
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -14,7 +14,9 @@ describe("validateMCPGatewayToken", () => {
   });
 
   describe("team token validation", () => {
-    test("validates org token for any profile", async ({ makeOrganization }) => {
+    test("validates org token for any profile", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
 
       const { token, value } = await TeamTokenModel.create({
@@ -164,7 +166,9 @@ describe("validateMCPGatewayToken", () => {
       await makeMember(regularUser.id, org.id, { role: "member" });
 
       // Create a team with regular user only (admin is NOT in this team)
-      const team = await makeTeam(org.id, regularUser.id, { name: "Other Team" });
+      const team = await makeTeam(org.id, regularUser.id, {
+        name: "Other Team",
+      });
 
       // Agent assigned to team
       const agent = await makeAgent({ teams: [team.id] });

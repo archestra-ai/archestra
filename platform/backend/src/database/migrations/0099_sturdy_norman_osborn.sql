@@ -1,1 +1,1 @@
-CREATE INDEX IF NOT EXISTS "messages_conversation_id_idx" ON "messages" USING btree ("conversation_id");
+CREATE INDEX "messages_conversation_id_idx" ON "messages" USING btree ("conversation_id");

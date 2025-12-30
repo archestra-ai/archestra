@@ -1,2 +1,1 @@
-ALTER TABLE "conversations" ADD COLUMN "has_custom_tool_selection" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-CREATE INDEX "messages_conversation_id_idx" ON "messages" USING btree ("conversation_id");
+ALTER TABLE "conversations" ADD COLUMN "has_custom_tool_selection" boolean DEFAULT false NOT NULL;

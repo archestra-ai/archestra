@@ -195,6 +195,9 @@ const MainSideBarSection = ({
 }) => {
   const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  if (permissionMap === null) {
+    return null;
+  }
   const permittedItems = allItems.filter(
     (item) => permissionMap[item.url] ?? true,
   );

@@ -2,34 +2,27 @@
 # Uses the official Microsoft Playwright MCP server package (@playwright/mcp)
 # Reference: https://github.com/microsoft/playwright-mcp
 
+# Use official Playwright image with all browser dependencies pre-installed
 FROM mcr.microsoft.com/playwright:v1.49.1-noble
 
 # Set working directory
 WORKDIR /app
 
-# Create package.json and install dependencies
+# Install @playwright/mcp (version compatible with Playwright 1.49.1)
 RUN echo '{"name": "archestra-browser-mcp", "version": "1.0.0", "private": true}' > package.json && \
-    npm install @playwright/mcp@latest
+    npm install @playwright/mcp@0.0.32
 
 # Environment variables
 ENV NODE_ENV=production
-ENV MCP_ENV=production
-# Disable Playwright browser download prompts (browsers are pre-installed in base image)
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Health check - verify node and playwright are working
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD node -e "process.exit(0)"
 
-# The Playwright MCP server uses stdio transport by default
-# Command and arguments are specified in the catalog localConfig
-# Example: command: "npx", arguments: ["@playwright/mcp@latest"]
-#
-# Available arguments:
-#   --browser <browser>    Browser to use (chrome, firefox, webkit, msedge)
-#   --headless            Run browser in headless mode (default for containers)
-#   --caps <caps>         Additional capabilities (vision, pdf)
-#   --device <device>     Device to emulate (e.g., "iPhone 15")
-
-# Default command - can be overridden by K8s deployment
-CMD ["npx", "@playwright/mcp@latest", "--headless"]
+# Default command - uses stdio transport
+# --headless: run browser without display
+# --isolated: allow multiple browser instances
+# --no-sandbox: required for Docker containers
+# --executable-path: use pre-installed Chromium from the image
+CMD ["npx", "@playwright/mcp@0.0.32", "--headless", "--isolated", "--no-sandbox", "--executable-path", "/ms-playwright/chromium-1148/chrome-linux/chrome"]

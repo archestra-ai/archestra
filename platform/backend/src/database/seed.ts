@@ -515,18 +515,15 @@ async function seedBrowserMcpServer(): Promise<void> {
     localConfig: {
       dockerImage: "archestra-browser-mcp:latest",
       command: "npx",
-      arguments: ["@playwright/mcp@latest", "--headless"],
-      transportType: "stdio",
-      environment: [
-        {
-          key: "PLAYWRIGHT_BROWSERS_PATH",
-          type: "plain_text",
-          value: "/ms-playwright",
-          promptOnInstallation: false,
-          required: false,
-          description: "Path to Playwright browser binaries",
-        },
+      arguments: [
+        "@playwright/mcp@0.0.32",
+        "--headless",
+        "--isolated",
+        "--no-sandbox",
+        "--executable-path",
+        "/ms-playwright/chromium-1148/chrome-linux/chrome",
       ],
+      transportType: "stdio",
     },
   });
   logger.info("✓ Seeded Browser MCP server");

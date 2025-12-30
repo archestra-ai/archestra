@@ -662,14 +662,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatConversation,
-        description: "Update conversation title, model, or API key",
+        description: "Update conversation title, model, agent, or API key",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
       // Validate chatApiKeyId if provided
       if (body.chatApiKeyId) {
         await validateChatApiKeyAccess(
@@ -677,6 +677,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           user.id,
           organizationId,
         );
+      }
+
+      // Validate agentId if provided
+      if (body.agentId) {
+        const { success: isAgentAdmin } = await hasPermission(
+          { profile: ["admin"] },
+          headers,
+        );
+
+        const agent = await AgentModel.findById(
+          body.agentId,
+          user.id,
+          isAgentAdmin,
+        );
+        if (!agent) {
+          throw new ApiError(404, "Agent not found");
+        }
       }
 
       const conversation = await ConversationModel.update(
@@ -1035,7 +1052,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
       await ConversationEnabledToolModel.setEnabledTools(id, toolIds);
 
       return reply.send({
-        hasCustomSelection: toolIds.length > 0,
+        hasCustomSelection: true, // Always true when explicitly setting tools
         enabledToolIds: toolIds,
       });
     },

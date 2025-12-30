@@ -6782,6 +6782,7 @@ export type UpdateChatConversationData = {
         title?: string | null;
         selectedModel?: string;
         chatApiKeyId?: string | null;
+        agentId?: string;
     };
     path: {
         id: string;

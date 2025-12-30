@@ -61,7 +61,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   }
   return [
     {
-      title: "New Chat",
+      title: "Chats",
       url: "/chat",
       icon: MessageCircle,
       customIsActive: (pathname: string, searchParams: URLSearchParams) =>

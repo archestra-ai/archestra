@@ -4,8 +4,8 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { Info, Loader2, Plus, Settings, X } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -15,13 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useChatProfileMcpTools,
   useConversationEnabledTools,
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
 import { Button } from "../ui/button";
-import { ManageChatToolsDialog } from "./manage-chat-tools-dialog";
 
 interface ChatToolsDisplayProps {
   agentId: string;
@@ -39,22 +37,38 @@ export function ChatToolsDisplay({
   conversationId,
   className,
 }: ChatToolsDisplayProps) {
-  const { data: mcpTools = [], isLoading } = useChatProfileMcpTools(agentId);
-  const { data: profileTools = [] } = useProfileToolsWithIds(agentId);
-
-  // State for manage tools dialog
-  const [isManageToolsDialogOpen, setIsManageToolsDialogOpen] = useState(false);
-
-  const [initialDisabledToolIds, setInitialDisabledToolIds] = useState<
-    string[]
-  >([]);
+  const { data: profileTools = [], isLoading } =
+    useProfileToolsWithIds(agentId);
 
   // State for tooltip open state per server
-  const [openTooltips, setOpenTooltips] = useState<Record<string, boolean>>({});
-  // Track hover state to prevent closing when hovering over nested tooltips
-  const [hoveringTooltip, setHoveringTooltip] = useState<
-    Record<string, boolean>
-  >({});
+  const [openTooltip, setOpenTooltip] = useState<string | null>(null);
+  const componentRef = useRef<HTMLDivElement>(null);
+  const tooltipContentRef = useRef<HTMLDivElement | null>(null);
+
+  // Handle click outside to close tooltips
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      // Check if click is within the component
+      if (componentRef.current?.contains(target)) {
+        return;
+      }
+
+      // Check if click is within the main tooltip content
+      if (tooltipContentRef.current?.contains(target)) {
+        return;
+      }
+
+      // If we got here, click was outside everything
+      setOpenTooltip(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Fetch enabled tools for the conversation
   const { data: enabledToolsData } =
@@ -65,11 +79,11 @@ export function ChatToolsDisplay({
   // Mutation for updating enabled tools
   const updateEnabledTools = useUpdateConversationEnabledTools();
 
-  // Handler to open manage tools dialog with specific tools to disable
-  const handleOpenManageToolsDialog = (toolIdsToDisable: string[]) => {
-    setInitialDisabledToolIds(toolIdsToDisable);
-    setIsManageToolsDialogOpen(true);
-  };
+  // Get the current list of enabled tools
+  // If no custom selection, all profile tools are enabled by default
+  const currentEnabledToolIds = hasCustomSelection
+    ? enabledToolIds
+    : profileTools.map((t) => t.id);
 
   // Create a map of tool name -> tool ID for quick lookup
   const toolNameToId: Record<string, string> = {};
@@ -78,20 +92,12 @@ export function ChatToolsDisplay({
   }
 
   // Create enabled tool IDs set for quick lookup
-  const enabledToolIdsSet = new Set(enabledToolIds);
+  // Use currentEnabledToolIds to handle both custom and default states
+  const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
-  // Filter tools based on enabled status (only when custom selection exists)
-  let displayedTools = mcpTools;
-  if (hasCustomSelection && enabledToolIds.length > 0) {
-    displayedTools = mcpTools.filter((tool) => {
-      const toolId = toolNameToId[tool.name];
-      return toolId && enabledToolIdsSet.has(toolId);
-    });
-  }
-
-  // Group tools by MCP server name (everything before the last __)
-  const groupedTools: Record<string, typeof displayedTools> = {};
-  for (const tool of displayedTools) {
+  // Group ALL tools by MCP server name (don't filter by enabled status)
+  const groupedTools: Record<string, typeof profileTools> = {};
+  for (const tool of profileTools) {
     const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     const serverName =
       parts.length > 1
@@ -113,13 +119,7 @@ export function ChatToolsDisplay({
   // Handle enabling a tool
   const handleEnableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    let newEnabledToolIds: string[];
-    if (hasCustomSelection) {
-      newEnabledToolIds = [...enabledToolIds, toolId];
-    } else {
-      // If no custom selection, get all tool IDs and add this one
-      newEnabledToolIds = [...profileTools.map((t) => t.id), toolId];
-    }
+    const newEnabledToolIds = [...currentEnabledToolIds, toolId];
     updateEnabledTools.mutateAsync({
       conversationId,
       toolIds: newEnabledToolIds,
@@ -129,15 +129,9 @@ export function ChatToolsDisplay({
   // Handle disabling a tool
   const handleDisableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    let newEnabledToolIds: string[];
-    if (hasCustomSelection) {
-      newEnabledToolIds = enabledToolIds.filter((id) => id !== toolId);
-    } else {
-      // If no custom selection, get all tool IDs except this one
-      newEnabledToolIds = profileTools
-        .map((t) => t.id)
-        .filter((id) => id !== toolId);
-    }
+    const newEnabledToolIds = currentEnabledToolIds.filter(
+      (id) => id !== toolId,
+    );
     updateEnabledTools.mutateAsync({
       conversationId,
       toolIds: newEnabledToolIds,
@@ -147,15 +141,9 @@ export function ChatToolsDisplay({
   // Handle disabling all enabled tools for a server
   const handleDisableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
-    let newEnabledToolIds: string[];
-    if (hasCustomSelection) {
-      newEnabledToolIds = enabledToolIds.filter((id) => !toolIds.includes(id));
-    } else {
-      // If no custom selection, get all tool IDs except these
-      newEnabledToolIds = profileTools
-        .map((t) => t.id)
-        .filter((id) => !toolIds.includes(id));
-    }
+    const newEnabledToolIds = currentEnabledToolIds.filter(
+      (id) => !toolIds.includes(id),
+    );
     updateEnabledTools.mutateAsync({
       conversationId,
       toolIds: newEnabledToolIds,
@@ -165,102 +153,53 @@ export function ChatToolsDisplay({
   // Handle enabling all disabled tools for a server
   const handleEnableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
-    let newEnabledToolIds: string[];
-    if (hasCustomSelection) {
-      newEnabledToolIds = [...enabledToolIds, ...toolIds];
-    } else {
-      // If no custom selection, get all tool IDs and add these
-      newEnabledToolIds = [...profileTools.map((t) => t.id), ...toolIds];
-    }
+    // Filter out duplicates by creating a Set
+    const newEnabledToolIds = [
+      ...new Set([...currentEnabledToolIds, ...toolIds]),
+    ];
     updateEnabledTools.mutateAsync({
       conversationId,
       toolIds: newEnabledToolIds,
     });
   };
 
-  // Handle opening manage dialog with no pre-disabled tools
-  const handleOpenManageDialog = () => {
-    handleOpenManageToolsDialog([]);
-  };
-
   // Render a single tool row
   const renderToolRow = (
     tool: { id: string; name: string; description: string | null },
     isDisabled: boolean,
-    currentServerName: string,
+    _currentServerName: string,
   ) => {
     const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     const toolName = parts.length > 1 ? parts[parts.length - 1] : tool.name;
     const borderColor = isDisabled ? "border-red-500" : "border-green-500";
 
     return (
-      <div
-        key={tool.id}
-        className={`flex items-center gap-2 border-l-2 ${borderColor} pl-2 ml-1 py-1`}
-      >
-        <span className="font-medium text-sm">{toolName}</span>
-        {tool.description && (
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-4 w-4 p-0 cursor-help"
-                onMouseEnter={() => {
-                  setHoveringTooltip((prev) => ({
-                    ...prev,
-                    [currentServerName]: true,
-                  }));
-                }}
-              >
-                <Info className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent
-              className="max-w-[300px]"
-              onMouseEnter={() => {
-                setHoveringTooltip((prev) => ({
-                  ...prev,
-                  [currentServerName]: true,
-                }));
-              }}
-              onMouseLeave={() => {
-                // Small delay to allow moving back to main tooltip
-                setTimeout(() => {
-                  setHoveringTooltip((prev) => ({
-                    ...prev,
-                    [currentServerName]: false,
-                  }));
-                }, 30);
-              }}
+      <div key={tool.id} className={`border-l-2 ${borderColor} pl-2 ml-1 py-1`}>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm">{toolName}</span>
+          <div className="flex-1" />
+          {isDisabled ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 rounded-full"
+              onClick={(e) => handleEnableTool(tool.id, e)}
+              title={`Enable ${toolName} for this chat`}
             >
-              {tool.description}
-            </TooltipContent>
-          </Tooltip>
-        )}
-        <div className="flex-1" />
-        {isDisabled ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 rounded-full"
-            onClick={(e) => handleEnableTool(tool.id, e)}
-            title={`Enable ${toolName} for this chat`}
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 hover:text-destructive"
-            onClick={(e) => handleDisableTool(tool.id, e)}
-            title={`Disable ${toolName} for this chat`}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        )}
+              <Plus className="h-3 w-3" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 hover:text-destructive"
+              onClick={(e) => handleDisableTool(tool.id, e)}
+              title={`Disable ${toolName} for this chat`}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
       </div>
     );
   };
@@ -276,34 +215,16 @@ export function ChatToolsDisplay({
     );
   }
 
-  const editToolsButton = (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          onClick={handleOpenManageDialog}
-          variant="ghost"
-          size="sm"
-          className="text-xs"
-        >
-          <Settings className="h-2 w-2" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>Enable or disable tools for this chat</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-
   if (Object.keys(groupedTools).length === 0) {
     return (
       <div className={className}>
-        <div className="flex flex-wrap gap-2">{editToolsButton}</div>
+        <div className="flex flex-wrap gap-2" />
       </div>
     );
   }
 
   return (
-    <div className={className}>
+    <div className={className} ref={componentRef}>
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {sortedServerEntries.map(([serverName]) => {
@@ -317,44 +238,31 @@ export function ChatToolsDisplay({
               return toolServerName === serverName;
             });
 
-            // Split into enabled and disabled
-            let enabledTools: typeof allServerTools = [];
-            let disabledTools: typeof allServerTools = [];
+            // Split into enabled and disabled using the consistent enabledToolIdsSet
+            const enabledTools: typeof allServerTools = [];
+            const disabledTools: typeof allServerTools = [];
 
-            if (hasCustomSelection) {
-              for (const tool of allServerTools) {
-                if (enabledToolIdsSet.has(tool.id)) {
-                  enabledTools.push(tool);
-                } else {
-                  disabledTools.push(tool);
-                }
+            for (const tool of allServerTools) {
+              if (enabledToolIdsSet.has(tool.id)) {
+                enabledTools.push(tool);
+              } else {
+                disabledTools.push(tool);
               }
-            } else {
-              // All tools are enabled when no custom selection
-              enabledTools = allServerTools;
-              disabledTools = [];
             }
 
             const totalToolsCount = allServerTools.length;
-            const isOpen = openTooltips[serverName] ?? false;
+            const isOpen = openTooltip === serverName;
 
             return (
-              <Tooltip
-                key={serverName}
-                open={isOpen || hoveringTooltip[serverName]}
-                onOpenChange={(open) => {
-                  // Update openTooltips, but keep tooltip open if hovering
-                  setOpenTooltips((prev) => ({
-                    ...prev,
-                    [serverName]: open,
-                  }));
-                }}
-              >
+              <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
                 <TooltipTrigger asChild>
                   <PromptInputButton
                     className="w-[fit-content]"
                     size="sm"
                     variant="outline"
+                    onClick={() => {
+                      setOpenTooltip(isOpen ? null : serverName);
+                    }}
                   >
                     <span className="font-medium text-xs text-foreground">
                       {serverName}
@@ -365,31 +273,15 @@ export function ChatToolsDisplay({
                   </PromptInputButton>
                 </TooltipTrigger>
                 <TooltipContent
+                  ref={tooltipContentRef}
                   side="top"
                   align="center"
                   className="min-w-80 max-h-96 p-0 overflow-y-auto"
                   sideOffset={10}
                   onWheel={(e) => e.stopPropagation()}
                   onTouchMove={(e) => e.stopPropagation()}
-                  onMouseEnter={() => {
-                    setHoveringTooltip((prev) => ({
-                      ...prev,
-                      [serverName]: true,
-                    }));
-                  }}
-                  onMouseLeave={() => {
-                    // Delay to allow moving to nested tooltip
-                    setTimeout(() => {
-                      setHoveringTooltip((prev) => ({
-                        ...prev,
-                        [serverName]: false,
-                      }));
-                      // Also close the tooltip
-                      setOpenTooltips((prev) => ({
-                        ...prev,
-                        [serverName]: false,
-                      }));
-                    }, 30);
+                  onPointerDownOutside={(e) => {
+                    e.preventDefault();
                   }}
                 >
                   <ScrollArea className="max-h-96">
@@ -455,18 +347,8 @@ export function ChatToolsDisplay({
               </Tooltip>
             );
           })}
-          {editToolsButton}
         </div>
       </TooltipProvider>
-      {conversationId && agentId && (
-        <ManageChatToolsDialog
-          open={isManageToolsDialogOpen}
-          onOpenChange={setIsManageToolsDialogOpen}
-          conversationId={conversationId}
-          agentId={agentId}
-          initialDisabledToolIds={initialDisabledToolIds}
-        />
-      )}
     </div>
   );
 }

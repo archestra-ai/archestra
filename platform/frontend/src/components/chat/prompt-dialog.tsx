@@ -89,6 +89,7 @@ export function PromptDialog({
         setProfileId(prompt.agentId);
         setUserPrompt(prompt.userPrompt || "");
         setSystemPrompt(prompt.systemPrompt || "");
+        // Note: agents are loaded separately via currentAgents query
       } else {
         // create
         setName("");
@@ -106,12 +107,15 @@ export function PromptDialog({
     }
   }, [open, prompt]);
 
-  // Load current agents when editing
+  // Sync selectedAgentPromptIds with currentAgents when data loads
+  // Use a stable string representation to avoid infinite loops
+  const currentAgentIds = currentAgents.map((a) => a.agentPromptId).join(",");
+  const promptId = prompt?.id;
   useEffect(() => {
-    if (open && prompt && currentAgents.length >= 0) {
-      setSelectedAgentPromptIds(currentAgents.map((a) => a.agentPromptId));
+    if (open && promptId && currentAgentIds) {
+      setSelectedAgentPromptIds(currentAgentIds.split(",").filter(Boolean));
     }
-  }, [open, prompt, currentAgents]);
+  }, [open, promptId, currentAgentIds]);
 
   useEffect(() => {
     if (open) {

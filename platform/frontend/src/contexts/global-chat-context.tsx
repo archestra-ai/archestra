@@ -32,7 +32,6 @@ interface ChatSession {
   error: Error | undefined;
   setMessages: (messages: UIMessage[]) => void;
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
-  lastAccessTime: number;
   pendingCustomServerToolCall: {
     toolCallId: string;
     toolName: string;
@@ -84,10 +83,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // Schedule new cleanup
     const timer = setTimeout(() => {
       const session = sessionsRef.current.get(conversationId);
-      if (
-        session &&
-        Date.now() - session.lastAccessTime >= SESSION_CLEANUP_TIMEOUT
-      ) {
+      if (session) {
         sessionsRef.current.delete(conversationId);
         cleanupTimersRef.current.delete(conversationId);
         setActiveSessions((prev) => {
@@ -118,15 +114,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const getSession = useCallback(
     (conversationId: string) => {
       const session = sessionsRef.current.get(conversationId);
-      if (session) {
-        // Update last access time
-        session.lastAccessTime = Date.now();
-        // Reschedule cleanup
-        scheduleCleanup(conversationId);
-      }
       return session;
     },
-    [scheduleCleanup, sessionVersion],
+    [sessionVersion],
   );
 
   // Clear a session manually
@@ -289,7 +279,6 @@ function ChatSessionHook({
       error,
       setMessages,
       addToolResult,
-      lastAccessTime: Date.now(),
       pendingCustomServerToolCall,
       setPendingCustomServerToolCall,
     };
@@ -333,13 +322,9 @@ export function useChatSession(conversationId: string | undefined) {
     cancelCleanup(conversationId);
 
     return () => {
-      const session = getSession(conversationId);
-      if (session) {
-        session.lastAccessTime = Date.now();
-      }
       scheduleCleanup(conversationId);
     };
-  }, [conversationId, registerSession, getSession, scheduleCleanup, cancelCleanup]);
+  }, [conversationId, registerSession, scheduleCleanup, cancelCleanup]);
 
   return conversationId ? getSession(conversationId) : null;
 }

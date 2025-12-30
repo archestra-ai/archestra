@@ -4,19 +4,35 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import ArchestraPromptInput from "./prompt-input";
-import { ChatError } from "@/components/chat/chat-error";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
+
+import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,7 +47,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
@@ -48,7 +63,6 @@ import {
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
-import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -60,16 +74,6 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | undefined>(
     () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
   );
-
-  // Hide version display only when viewing a specific conversation
-  useEffect(() => {
-    if (conversationId) {
-      document.body.classList.add("hide-version");
-    } else {
-      document.body.classList.remove("hide-version");
-    }
-    return () => document.body.classList.remove("hide-version");
-  }, [conversationId]);
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -80,6 +84,7 @@ export default function ChatPage() {
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const userMessageJustEdited = useRef(false);
 
   // Dialog management for MCP installation
@@ -337,6 +342,16 @@ export default function ChatPage() {
     openDialog,
   ]);
 
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  useEffect(() => {
+    if (status === "ready") {
+      // Use requestAnimationFrame for more reliable focusing
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  }, [status]);
+
   // Sync messages when conversation loads or changes
   useEffect(() => {
     if (!setMessages || !sendMessage) {
@@ -387,83 +402,30 @@ export default function ChatPage() {
     messages.length,
   ]);
 
-  // Merge database UUIDs from backend into local message state
-  // This runs after streaming completes and backend query has fetched
-  useEffect(() => {
-    if (
-      !setMessages ||
-      !conversation?.messages ||
-      conversation.id !== conversationId ||
-      status === "streaming" ||
-      status === "submitted"
-    ) {
-      return;
-    }
-
-    // Only merge IDs if backend has same or more messages than local state
-    if (conversation.messages.length < messages.length) {
-      return;
-    }
-
-    // Check if any message has a non-UUID ID that needs updating
-    const needsIdUpdate = messages.some((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      return (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        // Check if backend ID looks like a UUID (has dashes)
-        backendMsg.id.includes("-")
-      );
-    });
-
-    if (!needsIdUpdate) {
-      return;
-    }
-
-    // Merge IDs from backend into local messages
-    const mergedMessages = messages.map((localMsg, idx) => {
-      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
-      if (
-        backendMsg &&
-        backendMsg.id !== localMsg.id &&
-        backendMsg.id.includes("-")
-      ) {
-        // Update only the ID, keep everything else from local state
-        return { ...localMsg, id: backendMsg.id };
+  const handleSubmit = useCallback(
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
+      message: { text?: string; files?: any[] },
+      e: FormEvent<HTMLFormElement>,
+    ) => {
+      e.preventDefault();
+      if (!sendMessage || !message.text?.trim()) {
+        return;
       }
-      return localMsg;
-    });
 
-    setMessages(mergedMessages as UIMessage[]);
-  }, [
-    conversationId,
-    conversation?.messages,
-    conversation?.id,
-    messages,
-    setMessages,
-    status,
-  ]);
+      // Send the message
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: message.text }],
+      });
 
-  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
-    e.preventDefault();
-    if (status === "submitted" || status === "streaming") {
-      stop?.();
-    }
-
-    if (
-      !sendMessage ||
-      !message.text?.trim() ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
-      return;
-    }
-
-    sendMessage?.({
-      role: "user",
-      parts: [{ type: "text", text: message.text }],
-    });
-  };
+      // Auto-focus the textarea after sending
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    },
+    [sendMessage],
+  );
 
   // If API key is not configured, show setup message
   // Only show after loading completes to avoid flash of incorrect content
@@ -643,7 +605,6 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
               conversationId={conversationId}
-              agentId={currentProfileId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
@@ -686,7 +647,7 @@ export default function ChatPage() {
 
           <div className="sticky bottom-0 bg-background border-t p-4">
             <div className="max-w-3xl mx-auto space-y-3">
-              {currentProfileId && (
+              {currentProfileId && conversationId && (
                 <WithPermissions
                   permissions={{ profile: ["read"] }}
                   noPermissionHandle="tooltip"
@@ -694,8 +655,9 @@ export default function ChatPage() {
                   {({ hasPermission }) => {
                     return hasPermission ===
                       undefined ? null : hasPermission ? (
-                      <McpToolsDisplay
+                      <ChatToolsDisplay
                         agentId={currentProfileId}
+                        conversationId={conversationId}
                         className="text-xs text-muted-foreground"
                       />
                     ) : (
@@ -706,16 +668,30 @@ export default function ChatPage() {
                   }}
                 </WithPermissions>
               )}
-              <ArchestraPromptInput
-                onSubmit={handleSubmit}
-                status={status}
-                selectedModel={conversation?.selectedModel ?? ""}
-                messageCount={messages.length}
-                agentId={conversation?.agent.id}
-                conversationId={conversation?.id}
-              />
+
+              <PromptInput onSubmit={handleSubmit} status={status === "error" ? "ready" : status}>
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    ref={textareaRef}
+                    placeholder="Type a message..."
+                    status={status === "error" ? "ready" : status}
+                  />
+                </PromptInputBody>
+                <PromptInputFooter className="flex items-center justify-between">
+                  <PromptInputTools />
+                  <PromptInputSubmit
+                    status={status === "error" ? "ready" : status}
+                    onClick={(e) => {
+                      if (status === "streaming") {
+                        e.preventDefault();
+                        stop?.();
+                      }
+                    }}
+                  />
+                </PromptInputFooter>
+              </PromptInput>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -731,3 +707,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+

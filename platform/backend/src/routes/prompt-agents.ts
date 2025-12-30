@@ -1,8 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
-import { AgentTeamModel, PromptAgentModel, PromptModel } from "@/models";
+import { PromptAgentModel, PromptModel } from "@/models";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 const PromptAgentWithDetailsSchema = z.object({
@@ -45,7 +44,7 @@ const promptAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { promptId }, organizationId, user, headers }, reply) => {
+    async ({ params: { promptId }, organizationId }, reply) => {
       // Verify the prompt exists and belongs to this organization
       const prompt = await PromptModel.findByIdAndOrganizationId(
         promptId,
@@ -57,25 +56,11 @@ const promptAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Get agents with details
+      // Note: User already has prompt:read permission to access this endpoint,
+      // so we return all configured agents without additional filtering
       const agents = await PromptAgentModel.findByPromptIdWithDetails(promptId);
 
-      // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
-
-      // Filter by user's accessible agents
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        user.id,
-        isAgentAdmin,
-      );
-
-      const filteredAgents = agents.filter((agent) =>
-        accessibleAgentIds.includes(agent.profileId),
-      );
-
-      return reply.send(filteredAgents);
+      return reply.send(agents);
     },
   );
 

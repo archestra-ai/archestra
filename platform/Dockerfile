@@ -277,8 +277,8 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
-        # Mark for cleanup even if it already exists (we're using it)
-        KIND_CLUSTER="${CLUSTER_NAME}"
+        # Reuse existing cluster without marking it for cleanup
+        :
     else
         echo "Creating KinD cluster '${CLUSTER_NAME}'..."
         if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then

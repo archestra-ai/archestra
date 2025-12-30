@@ -566,7 +566,6 @@ export const PromptInputTextarea = React.forwardRef<
   );
 });
 
-PromptInputTextarea.displayName = "PromptInputTextarea";
 
 export type PromptInputToolbarProps = HTMLAttributes<HTMLDivElement>;
 

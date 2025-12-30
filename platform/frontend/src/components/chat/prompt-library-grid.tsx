@@ -6,6 +6,7 @@ import {
 } from "@shared";
 import {
   History as HistoryIcon,
+  Link2,
   MessageSquarePlus,
   MoreVertical,
   Pencil,
@@ -42,6 +43,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
+import { A2AConnectionInstructions } from "../a2a-connection-instructions";
 import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
 
@@ -65,6 +67,7 @@ export function PromptLibraryGrid({
   const { data: allProfiles = [] } = useProfiles();
   const agents = allProfiles;
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
+  const [promptToConnect, setPromptToConnect] = useState<Prompt | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Filter prompts based on search query
@@ -163,6 +166,7 @@ export function PromptLibraryGrid({
                     onEdit={onEdit}
                     onDelete={setPromptToDelete}
                     onViewVersionHistory={onViewVersionHistory}
+                    onConnect={setPromptToConnect}
                     disabled={hasPermission === false}
                   />
                 );
@@ -201,6 +205,27 @@ export function PromptLibraryGrid({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* A2A Connection Dialog */}
+      <Dialog
+        open={!!promptToConnect}
+        onOpenChange={(open) => !open && setPromptToConnect(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Connect to &quot;{promptToConnect?.name}&quot;
+            </DialogTitle>
+            <DialogDescription>
+              Use these details to connect to this prompt as an A2A agent from
+              your application.
+            </DialogDescription>
+          </DialogHeader>
+          {promptToConnect && (
+            <A2AConnectionInstructions prompt={promptToConnect} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -213,6 +238,7 @@ interface PromptTileProps {
   onEdit: (prompt: Prompt) => void;
   onDelete: (promptId: string) => void;
   onViewVersionHistory: (prompt: Prompt) => void;
+  onConnect: (prompt: Prompt) => void;
   disabled?: boolean;
 }
 
@@ -294,6 +320,7 @@ function PromptTile({
   onEdit,
   onDelete,
   onViewVersionHistory,
+  onConnect,
   disabled = false,
 }: PromptTileProps) {
   const handlePromptClick = () => onPromptClick(prompt);
@@ -371,6 +398,15 @@ function PromptTile({
               >
                 <HistoryIcon className="mr-2 h-4 w-4" />
                 Version History
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConnect(prompt);
+                }}
+              >
+                <Link2 className="mr-2 h-4 w-4" />
+                A2A Connect
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {

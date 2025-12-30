@@ -55,8 +55,13 @@ export async function fetchPlatformPodNodeSelector(
 
   try {
     // Try to find the current pod by reading the POD_NAME environment variable
-    // which is typically set via the Kubernetes downward API
-    const podName = process.env.POD_NAME || process.env.HOSTNAME;
+    // which is typically set via the Kubernetes downward API.
+    // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
+    // will be the Docker container ID which won't exist as a K8s pod.
+    const podName = config.orchestrator.kubernetes
+      .loadKubeconfigFromCurrentCluster
+      ? process.env.POD_NAME || process.env.HOSTNAME
+      : process.env.POD_NAME;
 
     if (podName) {
       // Read the current pod's spec directly

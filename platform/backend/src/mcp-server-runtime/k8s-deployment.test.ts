@@ -2656,34 +2656,82 @@ describe("fetchPlatformPodNodeSelector", () => {
     process.env.POD_NAME = originalPodName;
   });
 
-  test("returns nodeSelector from pod when HOSTNAME env var is set", async () => {
-    // Save and clear POD_NAME, set HOSTNAME
+  test("ignores HOSTNAME when not running in-cluster (only uses POD_NAME)", async () => {
+    // When running outside K8s (Docker mode, local dev), HOSTNAME is the container ID
+    // which doesn't correspond to a K8s pod. Only POD_NAME should be used.
+    const originalConfig =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
     const originalPodName = process.env.POD_NAME;
     const originalHostname = process.env.HOSTNAME;
-    delete process.env.POD_NAME;
-    process.env.HOSTNAME = "archestra-platform-xyz789";
 
-    const mockReadPod = vi.fn().mockResolvedValue({
-      spec: {
-        nodeSelector: {
-          "node.kubernetes.io/instance-type": "m5.large",
+    try {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
+      delete process.env.POD_NAME;
+      process.env.HOSTNAME = "b960428dea4c"; // Docker container ID
+
+      const mockListPods = vi.fn().mockResolvedValue({
+        items: [], // No pods found via label selector
+      });
+
+      const mockK8sApi = {
+        listNamespacedPod: mockListPods,
+      } as unknown as k8s.CoreV1Api;
+
+      const result = await fetchPlatformPodNodeSelector(mockK8sApi, "test-ns");
+
+      // Should fall back to label selector (not try to read pod by HOSTNAME)
+      expect(result).toBeNull();
+      expect(mockListPods).toHaveBeenCalledWith({
+        namespace: "test-ns",
+        labelSelector: "app.kubernetes.io/name=archestra-platform",
+      });
+    } finally {
+      process.env.POD_NAME = originalPodName;
+      process.env.HOSTNAME = originalHostname;
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalConfig;
+    }
+  });
+
+  test("uses HOSTNAME as fallback when running in-cluster", async () => {
+    // When running inside K8s cluster, HOSTNAME is the pod name
+    const originalConfig =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalPodName = process.env.POD_NAME;
+    const originalHostname = process.env.HOSTNAME;
+
+    try {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+      delete process.env.POD_NAME;
+      process.env.HOSTNAME = "archestra-platform-xyz789";
+
+      const mockReadPod = vi.fn().mockResolvedValue({
+        spec: {
+          nodeSelector: {
+            "node.kubernetes.io/instance-type": "m5.large",
+          },
         },
-      },
-    });
+      });
 
-    const mockK8sApi = {
-      readNamespacedPod: mockReadPod,
-    } as unknown as k8s.CoreV1Api;
+      const mockK8sApi = {
+        readNamespacedPod: mockReadPod,
+      } as unknown as k8s.CoreV1Api;
 
-    const result = await fetchPlatformPodNodeSelector(mockK8sApi, "test-ns");
+      const result = await fetchPlatformPodNodeSelector(mockK8sApi, "test-ns");
 
-    expect(result).toEqual({
-      "node.kubernetes.io/instance-type": "m5.large",
-    });
-
-    // Restore env vars
-    process.env.POD_NAME = originalPodName;
-    process.env.HOSTNAME = originalHostname;
+      expect(result).toEqual({
+        "node.kubernetes.io/instance-type": "m5.large",
+      });
+      expect(mockReadPod).toHaveBeenCalledWith({
+        name: "archestra-platform-xyz789",
+        namespace: "test-ns",
+      });
+    } finally {
+      process.env.POD_NAME = originalPodName;
+      process.env.HOSTNAME = originalHostname;
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalConfig;
+    }
   });
 
   test("returns null when pod has no nodeSelector", async () => {

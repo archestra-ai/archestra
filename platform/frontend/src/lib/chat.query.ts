@@ -83,15 +83,17 @@ export function useUpdateConversation() {
       title,
       selectedModel,
       chatApiKeyId,
+      agentId,
     }: {
       id: string;
       title?: string | null;
       selectedModel?: string;
       chatApiKeyId?: string | null;
+      agentId?: string;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel, chatApiKeyId },
+        body: { title, selectedModel, chatApiKeyId, agentId },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;

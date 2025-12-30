@@ -13,7 +13,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +31,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -43,13 +42,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -59,7 +51,6 @@ import { useProfiles } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
-import { AssignToolsToProfile } from "./assign-tools-to-profile";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -80,16 +71,8 @@ export function PromptLibraryGrid({
 }: PromptLibraryGridProps) {
   const { data: allProfiles = [] } = useProfiles();
   const agents = allProfiles;
-  const [isFreeChatDialogOpen, setIsFreeChatDialogOpen] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    if (isFreeChatDialogOpen && !selectedProfileId && agents.length > 0) {
-      setSelectedProfileId(agents[0].id);
-    }
-  }, [isFreeChatDialogOpen, agents, selectedProfileId]);
 
   // Filter prompts based on search query
   const filteredPrompts = useMemo(() => {
@@ -109,10 +92,9 @@ export function PromptLibraryGrid({
   }, [prompts, searchQuery, allProfiles]);
 
   const handleFreeChatStart = () => {
-    if (selectedProfileId) {
-      onSelectPrompt(selectedProfileId);
-      setIsFreeChatDialogOpen(false);
-      setSelectedProfileId("");
+    // Use the first available profile
+    if (agents.length > 0) {
+      onSelectPrompt(agents[0].id);
     }
   };
 
@@ -155,7 +137,7 @@ export function PromptLibraryGrid({
             return (
               <Card
                 className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${hasPermission === false ? "opacity-50 pointer-events-none" : ""}`}
-                onClick={() => setIsFreeChatDialogOpen(true)}
+                onClick={handleFreeChatStart}
               >
                 <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
                   <MessageSquarePlus className="h-4 w-4" />
@@ -196,66 +178,6 @@ export function PromptLibraryGrid({
           );
         })}
       </div>
-
-      {/* Free Chat Profile Selection Dialog */}
-      <Dialog
-        open={isFreeChatDialogOpen}
-        onOpenChange={setIsFreeChatDialogOpen}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Start Free Chat</DialogTitle>
-            <DialogDescription>
-              Select a profile to start a new conversation
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-6">
-            <div className="space-y-2">
-              <Select
-                value={selectedProfileId}
-                onValueChange={setSelectedProfileId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a profile" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedProfileId && (
-                <WithPermissions
-                  permissions={{ profile: ["read"] }}
-                  noPermissionHandle="hide"
-                >
-                  <AssignToolsToProfile
-                    agentId={selectedProfileId}
-                    showAssignedToolsList
-                    className="text-xs text-muted-foreground"
-                  />
-                </WithPermissions>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsFreeChatDialogOpen(false);
-                setSelectedProfileId("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleFreeChatStart} disabled={!selectedProfileId}>
-              Start Chat
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog

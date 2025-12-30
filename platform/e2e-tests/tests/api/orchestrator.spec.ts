@@ -3,7 +3,7 @@ import {
   expect,
   type TestFixtures,
   test,
-} from "../../fixtures";
+} from "./fixtures";
 
 /**
  * Retry wrapper for external service calls that may fail due to network issues.
@@ -124,7 +124,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           const installResponse = await installMcpServer(request, {
             name: "Test Context7 Remote Server",
             catalogId: catalogId,
-            teamId: defaultTeam.id,
+            teams: [defaultTeam.id],
           });
           return installResponse.json();
         });
@@ -196,7 +196,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 NPX Server",
           catalogId: catalogId,
-          teamId: defaultTeam.id,
+          teams: [defaultTeam.id],
         });
         const server = await installResponse.json();
         serverId = server.id;
@@ -307,7 +307,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 Docker Server",
           catalogId: catalogId,
-          teamId: defaultTeam.id,
+          teams: [defaultTeam.id],
         });
         const server = await installResponse.json();
         serverId = server.id;

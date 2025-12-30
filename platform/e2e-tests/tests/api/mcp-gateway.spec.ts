@@ -420,7 +420,7 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)",
         const installResponse = await installMcpServer(request, {
           name: catalogItem.name,
           catalogId: catalogItem.id,
-          teamId: defaultTeam.id,
+          teams: [defaultTeam.id],
           environmentValues: {
             ARCHESTRA_TEST: "e2e-test-value",
           },
@@ -592,7 +592,7 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
       const installResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
-        teamId: defaultTeam.id,
+        teams: [defaultTeam.id],
         environmentValues: {
           ARCHESTRA_TEST: "e2e-test-value",
         },

@@ -136,7 +136,7 @@ export function extractUIResourceFromOutput(
         typeof resource.mimeType === "string"
       ) {
         const result = {
-          type: "resource",
+          type: "resource" as const,
           resource: {
             uri: resource.uri,
             mimeType: resource.mimeType as UIResourceMimeType,
@@ -161,10 +161,10 @@ export function extractUIResourceFromOutput(
         const htmlContent = convertObjectToHtml(obj);
         if (htmlContent) {
           const result = {
-            type: "resource",
+            type: "resource" as const,
             resource: {
               uri: `ui://auto-generated/${Date.now()}`,
-              mimeType: "text/html",
+              mimeType: "text/html" as const,
               text: htmlContent,
             },
           };

@@ -12,18 +12,15 @@ test.describe("MCP UI Extended Tests", () => {
     const catalogItem = await findCatalogItem(request, MCP_UI_SERVER_ACTIONS);
     if (!catalogItem) throw new Error(`Catalog item '${MCP_UI_SERVER_ACTIONS}' not found.`);
     let server = await findInstalledServer(request, catalogItem.id);
-    if (!server) {
-      const res = await installMcpServer(request, { name: MCP_UI_SERVER_ACTIONS, catalogId: catalogItem.id });
-      server = await res.json();
-      await waitForServerInstallation(request, server.id);
-    }
+    if (!server) throw new Error("Failed to install or find MCP server.");
+    await waitForServerInstallation(request, server.id);
 
     const defaultProfileRes = await makeApiRequest({ request, method: "get", urlSuffix: "/api/agents/default" });
     const defaultProfile = await defaultProfileRes.json();
     const toolsRes = await makeApiRequest({ request, method: "get", urlSuffix: "/api/tools" });
     const tools = (await toolsRes.json()).data;
     
-    const tool = tools.find(t => t.name.includes(MCP_UI_SERVER_ACTIONS));
+    const tool = tools.find((t: any) => t.name.includes(MCP_UI_SERVER_ACTIONS));
 
     if (!tool) throw new Error("Could not find the newly installed tool.");
 

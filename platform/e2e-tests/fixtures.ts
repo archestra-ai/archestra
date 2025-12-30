@@ -23,7 +23,7 @@ type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
  * Playwright test extension with fixtures
  * https://playwright.dev/docs/test-fixtures#creating-a-fixture
  */
-interface TestFixtures {
+export interface TestFixtures {
   goToPage: typeof goToPage;
   makeRandomString: typeof makeRandomString;
   extractCookieHeaders: (page: Page) => Promise<string>;

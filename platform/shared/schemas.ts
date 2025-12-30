@@ -28,7 +28,7 @@ export const UIActionToolSchema = z.object({
   type: z.literal("tool"),
   payload: z.object({
     toolName: z.string(),
-    params: z.record(z.unknown()),
+    params: z.record(z.string(), z.unknown()),
   }),
   messageId: z.string().optional(),
 });
@@ -37,7 +37,7 @@ export const UIActionIntentSchema = z.object({
   type: z.literal("intent"),
   payload: z.object({
     intent: z.string(),
-    params: z.record(z.unknown()),
+    params: z.record(z.string(), z.unknown()),
   }),
   messageId: z.string().optional(),
 });

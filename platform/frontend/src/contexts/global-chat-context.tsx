@@ -52,7 +52,7 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef(new Map<string, ChatSession>());
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
-  const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
+  const [sessions, setSessions] = useState<Set<string>>(new Set());
   // Version counter to trigger re-renders when sessions update
   const [sessionVersion, setSessionVersion] = useState(0);
 
@@ -83,7 +83,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (session) {
         sessionsRef.current.delete(conversationId);
         cleanupTimersRef.current.delete(conversationId);
-        setActiveSessions((prev) => {
+        setSessions((prev) => {
           const next = new Set(prev);
           next.delete(conversationId);
           return next;
@@ -96,7 +96,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // Register a new session (creates the useChat hook instance)
   const registerSession = useCallback((conversationId: string) => {
-    setActiveSessions((prev) => {
+    setSessions((prev) => {
       if (prev.has(conversationId)) {
         return prev;
       }
@@ -125,7 +125,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         clearTimeout(timer);
         cleanupTimersRef.current.delete(conversationId);
       }
-      setActiveSessions((prev) => {
+      setSessions((prev) => {
         const next = new Set(prev);
         next.delete(conversationId);
         return next;
@@ -161,7 +161,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return (
     <ChatContext.Provider value={value}>
       {/* Render hidden session components for each active conversation */}
-      {Array.from(activeSessions).map((conversationId) => (
+      {Array.from(sessions).map((conversationId) => (
         <ChatSessionHook
           key={conversationId}
           conversationId={conversationId}

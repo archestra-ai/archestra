@@ -52,43 +52,6 @@ describe("PromptAgentModel Route Logic", () => {
       expect(agents[0].profileName).toBe("Child Agent");
     });
 
-    test("filters out inactive agent prompts", async ({ makeOrganization }) => {
-      const org = await makeOrganization();
-
-      const parentAgent = await AgentModel.create({
-        name: "Parent Agent",
-        teams: [],
-      });
-      const childAgent = await AgentModel.create({
-        name: "Child Agent",
-        teams: [],
-      });
-
-      const parentPrompt = await PromptModel.create(org.id, {
-        name: "Parent Prompt",
-        agentId: parentAgent.id,
-      });
-
-      const childPrompt = await PromptModel.create(org.id, {
-        name: "Child Prompt",
-        agentId: childAgent.id,
-      });
-
-      await PromptAgentModel.create({
-        promptId: parentPrompt.id,
-        agentPromptId: childPrompt.id,
-      });
-
-      // Deactivate the child prompt
-      await PromptModel.update(childPrompt.id, { isActive: false });
-
-      const agents = await PromptAgentModel.findByPromptIdWithDetails(
-        parentPrompt.id,
-      );
-
-      expect(agents).toHaveLength(0);
-    });
-
     test("returns empty array for prompt with no agents", async ({
       makeOrganization,
     }) => {

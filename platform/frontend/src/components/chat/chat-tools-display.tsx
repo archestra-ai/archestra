@@ -1,11 +1,12 @@
 "use client";
 
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -19,11 +20,13 @@ import {
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
+import { usePromptAgents } from "@/lib/prompt-agents.query";
 import { Button } from "../ui/button";
 
 interface ChatToolsDisplayProps {
   agentId: string;
   conversationId: string;
+  promptId?: string | null;
   className?: string;
 }
 
@@ -32,13 +35,41 @@ interface ChatToolsDisplayProps {
  * Use this component for chat-level tool management (enable/disable).
  * For profile-level tool assignment, use McpToolsDisplay instead.
  */
+/**
+ * Convert a name to a URL-safe slug (must match backend slugify function)
+ */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export function ChatToolsDisplay({
   agentId,
   conversationId,
+  promptId,
   className,
 }: ChatToolsDisplayProps) {
-  const { data: profileTools = [], isLoading } =
+  const { data: profileTools = [], isLoading: isLoadingProfileTools } =
     useProfileToolsWithIds(agentId);
+
+  // Fetch prompt agents (for agent delegation tools)
+  const { data: promptAgents = [], isLoading: isLoadingPromptAgents } =
+    usePromptAgents(promptId ?? undefined);
+
+  // Generate agent delegation tools from prompt agents
+  const agentDelegationTools = useMemo(() => {
+    return promptAgents.map((agent) => ({
+      id: `agent-tool-${agent.agentPromptId}`, // Virtual ID for agent tools
+      name: `${AGENT_TOOL_PREFIX}${slugify(agent.name)}`,
+      description:
+        agent.systemPrompt?.substring(0, 100) || `Agent: ${agent.name}`,
+      isAgentTool: true,
+    }));
+  }, [promptAgents]);
+
+  const isLoading = isLoadingProfileTools || isLoadingPromptAgents;
 
   // State for tooltip open state per server
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
@@ -95,9 +126,18 @@ export function ChatToolsDisplay({
   // Use currentEnabledToolIds to handle both custom and default states
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
+  // Combine profile tools with agent delegation tools
+  type ToolItem = {
+    id: string;
+    name: string;
+    description: string | null;
+    isAgentTool?: boolean;
+  };
+  const allTools: ToolItem[] = [...profileTools, ...agentDelegationTools];
+
   // Group ALL tools by MCP server name (don't filter by enabled status)
-  const groupedTools: Record<string, typeof profileTools> = {};
-  for (const tool of profileTools) {
+  const groupedTools: Record<string, ToolItem[]> = {};
+  for (const tool of allTools) {
     const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     const serverName =
       parts.length > 1
@@ -116,25 +156,36 @@ export function ChatToolsDisplay({
     return a.localeCompare(b);
   });
 
+  // Helper to check if a tool ID is an agent tool (virtual ID)
+  const isAgentToolId = (toolId: string) => toolId.startsWith("agent-tool-");
+
+  // Filter out agent tool IDs - they can't be stored in the database
+  const filterOutAgentToolIds = (toolIds: string[]) =>
+    toolIds.filter((id) => !isAgentToolId(id));
+
   // Handle enabling a tool
   const handleEnableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    // Skip agent tools - they can't be persisted
+    if (isAgentToolId(toolId)) return;
     const newEnabledToolIds = [...currentEnabledToolIds, toolId];
     updateEnabledTools.mutateAsync({
       conversationId,
-      toolIds: newEnabledToolIds,
+      toolIds: filterOutAgentToolIds(newEnabledToolIds),
     });
   };
 
   // Handle disabling a tool
   const handleDisableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    // Skip agent tools - they can't be persisted
+    if (isAgentToolId(toolId)) return;
     const newEnabledToolIds = currentEnabledToolIds.filter(
       (id) => id !== toolId,
     );
     updateEnabledTools.mutateAsync({
       conversationId,
-      toolIds: newEnabledToolIds,
+      toolIds: filterOutAgentToolIds(newEnabledToolIds),
     });
   };
 
@@ -146,59 +197,63 @@ export function ChatToolsDisplay({
     );
     updateEnabledTools.mutateAsync({
       conversationId,
-      toolIds: newEnabledToolIds,
+      toolIds: filterOutAgentToolIds(newEnabledToolIds),
     });
   };
 
   // Handle enabling all disabled tools for a server
   const handleEnableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
-    // Filter out duplicates by creating a Set
+    // Filter out agent tool IDs before saving
+    const profileToolIds = toolIds.filter((id) => !isAgentToolId(id));
     const newEnabledToolIds = [
-      ...new Set([...currentEnabledToolIds, ...toolIds]),
+      ...new Set([...currentEnabledToolIds, ...profileToolIds]),
     ];
     updateEnabledTools.mutateAsync({
       conversationId,
-      toolIds: newEnabledToolIds,
+      toolIds: filterOutAgentToolIds(newEnabledToolIds),
     });
   };
 
   // Render a single tool row
   const renderToolRow = (
-    tool: { id: string; name: string; description: string | null },
+    tool: ToolItem,
     isDisabled: boolean,
     _currentServerName: string,
   ) => {
     const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     const toolName = parts.length > 1 ? parts[parts.length - 1] : tool.name;
     const borderColor = isDisabled ? "border-red-500" : "border-green-500";
+    const isAgentTool = tool.isAgentTool === true;
 
     return (
       <div key={tool.id} className={`border-l-2 ${borderColor} pl-2 ml-1 py-1`}>
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm">{toolName}</span>
           <div className="flex-1" />
-          {isDisabled ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 rounded-full"
-              onClick={(e) => handleEnableTool(tool.id, e)}
-              title={`Enable ${toolName} for this chat`}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 hover:text-destructive"
-              onClick={(e) => handleDisableTool(tool.id, e)}
-              title={`Disable ${toolName} for this chat`}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          )}
+          {/* Agent tools can't be toggled - they're always enabled */}
+          {!isAgentTool &&
+            (isDisabled ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 rounded-full"
+                onClick={(e) => handleEnableTool(tool.id, e)}
+                title={`Enable ${toolName} for this chat`}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 hover:text-destructive"
+                onClick={(e) => handleDisableTool(tool.id, e)}
+                title={`Disable ${toolName} for this chat`}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            ))}
         </div>
       </div>
     );
@@ -228,8 +283,8 @@ export function ChatToolsDisplay({
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {sortedServerEntries.map(([serverName]) => {
-            // Get all tools for this server from profileTools
-            const allServerTools = profileTools.filter((tool) => {
+            // Get all tools for this server from allTools (profile tools + agent tools)
+            const allServerTools = allTools.filter((tool) => {
               const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
               const toolServerName =
                 parts.length > 1
@@ -239,11 +294,17 @@ export function ChatToolsDisplay({
             });
 
             // Split into enabled and disabled using the consistent enabledToolIdsSet
-            const enabledTools: typeof allServerTools = [];
-            const disabledTools: typeof allServerTools = [];
+            // Agent tools are always considered enabled
+            const enabledTools: ToolItem[] = [];
+            const disabledTools: ToolItem[] = [];
 
             for (const tool of allServerTools) {
-              if (enabledToolIdsSet.has(tool.id)) {
+              // Agent tools are always enabled - they can't be disabled (no DB persistence)
+              // Profile tools: check the enabledToolIdsSet
+              const isEnabled =
+                tool.isAgentTool || enabledToolIdsSet.has(tool.id);
+
+              if (isEnabled) {
                 enabledTools.push(tool);
               } else {
                 disabledTools.push(tool);
@@ -292,19 +353,24 @@ export function ChatToolsDisplay({
                           <span className="text-xs font-semibold text-muted-foreground">
                             Enabled ({enabledTools.length})
                           </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={(e) =>
-                              handleDisableAll(
-                                enabledTools.map((t) => t.id),
-                                e,
-                              )
-                            }
-                          >
-                            Disable All
-                          </Button>
+                          {/* Only show Disable All if there are non-agent tools */}
+                          {enabledTools.some((t) => !t.isAgentTool) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              onClick={(e) =>
+                                handleDisableAll(
+                                  enabledTools
+                                    .filter((t) => !t.isAgentTool)
+                                    .map((t) => t.id),
+                                  e,
+                                )
+                              }
+                            >
+                              Disable All
+                            </Button>
+                          )}
                         </div>
                         <div className="space-y-1 px-2 pb-2">
                           {enabledTools.map((tool) =>

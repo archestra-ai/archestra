@@ -1,4 +1,5 @@
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "./consts";
@@ -7,6 +8,14 @@ export function isArchestraMcpServerTool(toolName: string): boolean {
   return toolName.startsWith(
     `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
   );
+}
+
+/**
+ * Check if a tool name is an agent delegation tool (agent__<name>)
+ * Agent tools are separate from Archestra tools - they enable prompt-to-prompt delegation
+ */
+export function isAgentTool(toolName: string): boolean {
+  return toolName.startsWith(AGENT_TOOL_PREFIX);
 }
 
 /**

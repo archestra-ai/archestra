@@ -35,6 +35,7 @@ interface ArchestraPromptInputProps {
   // Tools integration props
   agentId: string;
   conversationId: string;
+  promptId?: string | null;
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
@@ -49,6 +50,7 @@ const PromptInputContent = ({
   messageCount,
   agentId,
   conversationId,
+  promptId,
   currentConversationChatApiKeyId,
   currentProvider,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -77,6 +79,7 @@ const PromptInputContent = ({
             <ChatToolsDisplay
               agentId={agentId}
               conversationId={conversationId}
+              promptId={promptId}
             />
           </div>
         )}
@@ -127,6 +130,7 @@ const ArchestraPromptInput = ({
   messageCount = 0,
   agentId,
   conversationId,
+  promptId,
   currentConversationChatApiKeyId,
   currentProvider,
 }: ArchestraPromptInputProps) => {
@@ -141,6 +145,7 @@ const ArchestraPromptInput = ({
           messageCount={messageCount}
           agentId={agentId}
           conversationId={conversationId}
+          promptId={promptId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
         />

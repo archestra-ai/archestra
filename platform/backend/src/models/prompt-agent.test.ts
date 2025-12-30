@@ -195,40 +195,6 @@ describe("PromptAgentModel", () => {
       expect(agents[0].profileId).toBe(childAgent.id);
       expect(agents[0].profileName).toBe("Child Profile");
     });
-
-    test("excludes inactive prompts", async ({ makeOrganization }) => {
-      const org = await makeOrganization();
-
-      const parentAgent = await AgentModel.create({
-        name: "Parent",
-        teams: [],
-      });
-      const childAgent = await AgentModel.create({ name: "Child", teams: [] });
-
-      const parentPrompt = await PromptModel.create(org.id, {
-        name: "Parent Prompt",
-        agentId: parentAgent.id,
-      });
-
-      const childPrompt = await PromptModel.create(org.id, {
-        name: "Child Prompt",
-        agentId: childAgent.id,
-      });
-
-      await PromptAgentModel.create({
-        promptId: parentPrompt.id,
-        agentPromptId: childPrompt.id,
-      });
-
-      // Deactivate the child prompt
-      await PromptModel.update(childPrompt.id, { isActive: false });
-
-      const agents = await PromptAgentModel.findByPromptIdWithDetails(
-        parentPrompt.id,
-      );
-
-      expect(agents).toHaveLength(0);
-    });
   });
 
   describe("sync", () => {

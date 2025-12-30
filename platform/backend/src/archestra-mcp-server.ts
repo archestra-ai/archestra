@@ -1,5 +1,6 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
@@ -55,9 +56,6 @@ const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_NAME = "bulk_assign_tools_to_profiles";
 const TOOL_GET_MCP_SERVERS_NAME = "get_mcp_servers";
 const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
 const TOOL_GET_PROFILE_NAME = "get_profile";
-
-// Agent tool prefix for dynamically generated agent tools
-const AGENT_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
 /**
  * Convert a name to a URL-safe slug for tool naming
@@ -120,7 +118,7 @@ export async function executeArchestraTool(
 ): Promise<CallToolResult> {
   const { profile, promptId, organizationId, tokenAuth } = context;
 
-  // Handle dynamic agent tools (e.g., archestra__agent__research_bot)
+  // Handle dynamic agent tools (e.g., agent__research_bot)
   if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
     const message = args?.message as string;
 
@@ -2205,7 +2203,8 @@ export function getArchestraMcpTools(): Tool[] {
 
 /**
  * Get dynamic agent tools for a prompt
- * Each configured agent becomes a separate tool (e.g., archestra__agent__research_bot)
+ * Each configured agent becomes a separate tool (e.g., agent__research_bot)
+ * Note: Agent tools are separate from Archestra tools - they enable prompt-to-prompt delegation
  */
 export async function getAgentTools(context: {
   promptId: string;

@@ -450,10 +450,12 @@ SUPERVISOR_PID=$!
 
 # Wait for supervisord to exit (or for a signal)
 wait "$SUPERVISOR_PID"
+# Note: if supervisord is terminated by a signal, `wait` returns 128 + signal.
+# We intentionally propagate this composite exit code to `cleanup` for diagnostics.
 EXIT_CODE=$?
 
-# If we get here, supervisord exited on its own (not via signal)
-# Run cleanup with the actual exit code
+# If we get here, supervisord exited on its own or was terminated by a signal.
+# Run cleanup with the raw exit code from `wait` (may be 128 + signal on signals).
 cleanup "$EXIT_CODE"
 EOF
 

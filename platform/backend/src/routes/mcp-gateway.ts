@@ -73,18 +73,32 @@ async function handleMcpPostRequest(
           "Re-initialize on existing session - will reuse existing server",
         );
       }
-    } else if (isInitialize) {
+    } else {
+      // Either initialize request OR request with invalid/expired session
+      // In both cases, create a new session
       const effectiveSessionId =
         sessionId || `session-${Date.now()}-${randomUUID()}`;
 
-      fastify.log.info(
-        {
-          profileId,
-          sessionId: effectiveSessionId,
-          hasTokenAuth: !!tokenAuthContext,
-        },
-        "Initialize request - creating NEW session",
-      );
+      if (isInitialize) {
+        fastify.log.info(
+          {
+            profileId,
+            sessionId: effectiveSessionId,
+            hasTokenAuth: !!tokenAuthContext,
+          },
+          "Initialize request - creating NEW session",
+        );
+      } else {
+        fastify.log.info(
+          {
+            profileId,
+            sessionId: effectiveSessionId,
+            method: body?.method,
+            hasTokenAuth: !!tokenAuthContext,
+          },
+          "Request received with invalid/expired session - auto-creating new session",
+        );
+      }
 
       const { server: newServer, agent } = await createAgentServer(
         profileId,
@@ -138,20 +152,6 @@ async function handleMcpPostRequest(
         },
         "Session stored before handleRequest",
       );
-    } else if (!server || !transport) {
-      fastify.log.error(
-        { profileId, sessionId, method: body?.method },
-        "Request received without valid session",
-      );
-      reply.status(400);
-      return {
-        jsonrpc: "2.0",
-        error: {
-          code: -32000,
-          message: "Bad Request: Invalid or expired session",
-        },
-        id: null,
-      };
     }
 
     fastify.log.info(

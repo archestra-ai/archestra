@@ -24,6 +24,7 @@ export * from "./organization";
 export * from "./prompt";
 export * from "./role";
 export * from "./secret";
+export * from "./secrets-manager";
 export * from "./session";
 export * from "./sso-provider";
 export * from "./statistics";

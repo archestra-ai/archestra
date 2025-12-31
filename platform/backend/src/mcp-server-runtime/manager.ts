@@ -4,7 +4,7 @@ import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
 import K8sDeployment, { fetchPlatformPodNodeSelector } from "./k8s-deployment";
 import type {

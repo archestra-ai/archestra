@@ -433,7 +433,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     },
     {
       id: "actions",
-      header: "Actions",
+      header: () => <span className="font-medium">Actions</span>,
       size: 176,
       enableHiding: false,
       cell: ({ row }) => {

@@ -1,5 +1,5 @@
-import type { SecretsManagerType } from "../../shared";
-import type { SecretValue, SelectSecret } from "./types";
+import type { SecretsManagerType } from "@shared";
+import type { SecretValue, SelectSecret } from "./secret";
 
 /**
  * SecretManager interface for managing secrets

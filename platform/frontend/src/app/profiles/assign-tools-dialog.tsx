@@ -54,11 +54,13 @@ export function AssignToolsDialog({
   const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
-  // Fetch currently assigned tools for this agent (use getAllProfileTools to get credentialSourceMcpServerId)
-  const { data: allProfileTools } = useAllProfileTools({});
+  // Fetch currently assigned tools for this agent (agentId filter bypasses pagination)
+  const { data: allProfileTools } = useAllProfileTools({
+    filters: { agentId: agent.id },
+  });
   const agentToolRelations = useMemo(
-    () => allProfileTools?.data?.filter((at) => at.agent.id === agent.id) || [],
-    [allProfileTools, agent.id],
+    () => allProfileTools?.data || [],
+    [allProfileTools],
   );
 
   // Track selected tools with their credentials, execution source, and agent-tool IDs
@@ -198,12 +200,12 @@ export function AssignToolsDialog({
         return prev.map((tool) =>
           tool.toolId === toolId
             ? {
-              ...tool,
-              credentialsSourceId: isDynamic
-                ? undefined
-                : credentialsSourceId,
-              useDynamicTeamCredential: isDynamic,
-            }
+                ...tool,
+                credentialsSourceId: isDynamic
+                  ? undefined
+                  : credentialsSourceId,
+                useDynamicTeamCredential: isDynamic,
+              }
             : tool,
         );
       });
@@ -218,10 +220,10 @@ export function AssignToolsDialog({
         return prev.map((tool) =>
           tool.toolId === toolId
             ? {
-              ...tool,
-              executionSourceId: isDynamic ? undefined : executionSourceId,
-              useDynamicTeamCredential: isDynamic,
-            }
+                ...tool,
+                executionSourceId: isDynamic ? undefined : executionSourceId,
+                useDynamicTeamCredential: isDynamic,
+              }
             : tool,
         );
       });
@@ -307,9 +309,9 @@ export function AssignToolsDialog({
         (current.credentialSourceMcpServerId !==
           (tool.credentialsSourceId || null) ||
           current.executionSourceMcpServerId !==
-          (tool.executionSourceId || null) ||
+            (tool.executionSourceId || null) ||
           current.useDynamicTeamCredential !==
-          (tool.useDynamicTeamCredential || false))
+            (tool.useDynamicTeamCredential || false))
       );
     });
 
@@ -527,13 +529,13 @@ export function AssignToolsDialog({
                                 onValueChange={(credentialSourceId) =>
                                   isLocalServer
                                     ? handleExecutionSourceChange(
-                                      tool.id,
-                                      credentialSourceId ?? undefined,
-                                    )
+                                        tool.id,
+                                        credentialSourceId ?? undefined,
+                                      )
                                     : handleCredentialsSourceChange(
-                                      tool.id,
-                                      credentialSourceId ?? undefined,
-                                    )
+                                        tool.id,
+                                        credentialSourceId ?? undefined,
+                                      )
                                 }
                                 value={displayValue ?? undefined}
                                 className="mb-4"

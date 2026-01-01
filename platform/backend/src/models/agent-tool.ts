@@ -491,6 +491,7 @@ class AgentToolModel {
 
   /**
    * Find all agent-tool relationships with pagination, sorting, and filtering support
+   * @param skipPagination - When true and agentId filter is provided, bypasses pagination limits
    */
   static async findAllPaginated(
     pagination: PaginationQuery,
@@ -501,9 +502,13 @@ class AgentToolModel {
     filters?: AgentToolFilters,
     userId?: string,
     isAgentAdmin?: boolean,
+    skipPagination?: boolean,
   ): Promise<PaginatedResult<AgentTool>> {
     // Build WHERE conditions
     const whereConditions: SQL[] = [];
+
+    // Determine if we should skip pagination (only allowed when filtering by specific agentId)
+    const shouldSkipPagination = skipPagination && filters?.agentId;
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {
@@ -607,45 +612,52 @@ class AgentToolModel {
         break;
     }
 
+    // Build the base data query
+    let dataQuery = db
+      .select({
+        ...getTableColumns(schema.agentToolsTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        tool: {
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          description: schema.toolsTable.description,
+          parameters: schema.toolsTable.parameters,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
+          mcpServerId: schema.toolsTable.mcpServerId,
+          mcpServerName: schema.mcpServersTable.name,
+          mcpServerCatalogId: schema.mcpServersTable.catalogId,
+        },
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(whereClause)
+      .orderBy(orderByClause)
+      .$dynamic();
+
+    // Apply pagination only if not skipping
+    if (!shouldSkipPagination) {
+      dataQuery = dataQuery.limit(pagination.limit).offset(pagination.offset);
+    }
+
     // Run both queries in parallel
     const [data, [{ total }]] = await Promise.all([
-      db
-        .select({
-          ...getTableColumns(schema.agentToolsTable),
-          agent: {
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-          },
-          tool: {
-            id: schema.toolsTable.id,
-            name: schema.toolsTable.name,
-            description: schema.toolsTable.description,
-            parameters: schema.toolsTable.parameters,
-            createdAt: schema.toolsTable.createdAt,
-            updatedAt: schema.toolsTable.updatedAt,
-            catalogId: schema.toolsTable.catalogId,
-            mcpServerId: schema.toolsTable.mcpServerId,
-            mcpServerName: schema.mcpServersTable.name,
-            mcpServerCatalogId: schema.mcpServersTable.catalogId,
-          },
-        })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.agentsTable,
-          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-        )
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .leftJoin(
-          schema.mcpServersTable,
-          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-        )
-        .where(whereClause)
-        .orderBy(orderByClause)
-        .limit(pagination.limit)
-        .offset(pagination.offset),
+      dataQuery,
       db
         .select({ total: count() })
         .from(schema.agentToolsTable)
@@ -663,6 +675,21 @@ class AgentToolModel {
         )
         .where(whereClause),
     ]);
+
+    // When skipping pagination, return all data with updated pagination meta
+    if (shouldSkipPagination) {
+      return {
+        data,
+        pagination: {
+          currentPage: 1,
+          limit: data.length,
+          total: data.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      };
+    }
 
     return createPaginatedResult(data, Number(total), pagination);
   }

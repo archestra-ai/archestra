@@ -73,6 +73,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
+      // When filtering by specific agentId, skip pagination to return all tools
+      const skipPagination = !!agentId;
+
       const result = await AgentToolModel.findAllPaginated(
         { limit, offset },
         { sortBy, sortDirection },
@@ -85,6 +88,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         user.id,
         isAgentAdmin,
+        skipPagination,
       );
 
       return reply.send(result);

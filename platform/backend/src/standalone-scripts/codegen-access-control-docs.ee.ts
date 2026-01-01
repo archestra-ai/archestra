@@ -5,7 +5,7 @@ import type { Action, PredefinedRoleName, Resource } from "@shared";
 import {
   allAvailableActions,
   predefinedPermissionsMap,
-} from "@shared/access-control.ee";
+} from "@shared/access-control";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);

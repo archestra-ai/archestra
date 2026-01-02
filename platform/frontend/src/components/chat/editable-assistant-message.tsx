@@ -127,7 +127,7 @@ export function EditableAssistantMessage({
   }
 
   return (
-    <Message from="assistant" className="relative pt-0 group/message">
+    <Message from="assistant" className="relative pt-0 group/message flex-col items-start pl-4 ml-[-1rem]">
       <MessageContent>
         <Response>{text}</Response>
       </MessageContent>
@@ -135,7 +135,7 @@ export function EditableAssistantMessage({
         <MessageActions
           textToCopy={text}
           onEditClick={handleStartEdit}
-          className="absolute top-[100%] opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-0.5rem]"
+          className="opacity-0 group-hover/message:opacity-100 transition-opacity"
         />
       )}
     </Message>

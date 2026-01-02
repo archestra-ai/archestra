@@ -128,14 +128,14 @@ export function EditableUserMessage({
   }
 
   return (
-    <Message from="user" className="relative pb-9 group/message">
+    <Message from="user" className="relative pb-4 group/message flex-col items-end pr-4 mr-[-1rem]">
       <MessageContent>
         <Response>{text}</Response>
       </MessageContent>
       <MessageActions
         textToCopy={text}
         onEditClick={handleStartEdit}
-        className="absolute top-[100%] right-0 opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-1.75rem]"
+        className="opacity-0 group-hover/message:opacity-100 transition-opacity"
       />
     </Message>
   );

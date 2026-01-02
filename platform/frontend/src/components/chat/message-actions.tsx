@@ -17,7 +17,7 @@ export function MessageActions({
         text={textToCopy}
         buttonSize="icon"
         size={12}
-        className="text-muted-foreground"
+        className="text-muted-foreground hover:bg-transparent"
       />
       <Button
         size="icon"

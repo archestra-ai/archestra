@@ -792,11 +792,9 @@ export const openaiAdapterFactory: LLMProvider<
   },
 
   extractApiKey(headers: OpenAiHeaders): string | undefined {
-    const authHeader = headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      return authHeader.slice(7);
-    }
-    return undefined;
+    // Return the authorization header as-is (legacy behavior)
+    // OpenAI SDK handles both "Bearer sk-xxx" and "sk-xxx" formats
+    return headers.authorization;
   },
 
   getBaseUrl(): string | undefined {

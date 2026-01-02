@@ -446,16 +446,17 @@ describe("OpenAIRequestAdapter", () => {
 
 describe("openaiAdapterFactory", () => {
   describe("extractApiKey", () => {
-    test("extracts API key from Bearer token", () => {
+    test("returns authorization header as-is (Bearer token)", () => {
       const headers = { authorization: "Bearer sk-test-key-123" };
       const apiKey = openaiAdapterFactory.extractApiKey(headers);
-      expect(apiKey).toBe("sk-test-key-123");
+      // Returns full header - OpenAI SDK handles "Bearer " prefix
+      expect(apiKey).toBe("Bearer sk-test-key-123");
     });
 
-    test("returns undefined for non-Bearer auth", () => {
-      const headers = { authorization: "Basic credentials" };
+    test("returns authorization header as-is (non-Bearer)", () => {
+      const headers = { authorization: "sk-test-key-123" };
       const apiKey = openaiAdapterFactory.extractApiKey(headers);
-      expect(apiKey).toBeUndefined();
+      expect(apiKey).toBe("sk-test-key-123");
     });
 
     test("returns undefined when no authorization header", () => {

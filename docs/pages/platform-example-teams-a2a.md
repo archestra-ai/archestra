@@ -21,6 +21,8 @@ In this guide, we'll build a simple MS Teams app that connects to your Archestra
 
 ## Get A2A Endpoint of your Archestra agent from Archestra
 
+In Archestra, you can build an agent by defining its prompt and connecting MCP tools. Once configured, you can interact with it directly from the Archestra chat or trigger it via A2A from anywhere — including MS Teams.
+
 1. Open Archestra and go to **Chats**
 2. Find your prompt and click the connect icon (plug icon)
 3. Copy the **A2A Endpoint URL** and **Authentication Token**

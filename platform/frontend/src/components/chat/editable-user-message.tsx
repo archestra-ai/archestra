@@ -124,28 +124,32 @@ export function EditableUserMessage({
               disabled={isSaving}
               placeholder="Edit your message..."
             />
-            <div className="flex gap-2 py-2 justify-end items-start">
-              <Info className="h-3 w-3 text-primary-foreground/70 shrink-0 mt-0.5" />
-              <span className="text-xs text-primary-foreground/70">
-                Editing this message will regenerate the response and remove all
-                subsequent messages.
-              </span>
-              <Button
-                size="sm"
-                variant="outline-transparent"
-                onClick={handleCancelEdit}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleSaveEdit}
-                disabled={isSaving || editedText.trim() === ""}
-              >
-                Send
-              </Button>
+            <div className="flex gap-2 py-2 justify-between items-start">
+              <div className="flex gap-2 items-start">
+                <Info className="h-3 w-3 text-primary-foreground/70 shrink-0 mt-0.5" />
+                <span className="text-xs text-primary-foreground/70">
+                  Editing this message will regenerate the response and remove all
+                  subsequent messages.
+                </span>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline-transparent"
+                  onClick={handleCancelEdit}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleSaveEdit}
+                  disabled={isSaving || editedText.trim() === ""}
+                >
+                  Send
+                </Button>
+              </div>
             </div>
           </div>
         </MessageContent>

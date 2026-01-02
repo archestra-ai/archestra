@@ -126,27 +126,31 @@ export function EditableAssistantMessage({
               disabled={isSaving}
               placeholder="Edit this response..."
             />
-            <div className="flex gap-2 py-2 justify-end items-start">
-              <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
-              <span className="text-xs text-muted-foreground">
-                Edit to correct errors or refine the context. This won't
-                regenerate the conversation.
-              </span>
-              <Button
-                size="sm"
-                variant="outline-transparent"
-                onClick={handleCancelEdit}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveEdit}
-                disabled={isSaving || editedText.trim() === ""}
-              >
-                Save
-              </Button>
+            <div className="flex gap-2 py-2 justify-between items-start">
+              <div className="flex gap-2 items-start">
+                <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+                <span className="text-xs text-muted-foreground">
+                  Edit to correct errors or refine the context. This won't
+                  regenerate the conversation.
+                </span>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline-transparent"
+                  onClick={handleCancelEdit}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveEdit}
+                  disabled={isSaving || editedText.trim() === ""}
+                >
+                  Save
+                </Button>
+              </div>
             </div>
           </div>
         </MessageContent>

@@ -23,6 +23,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { cn } from "@/lib/utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -78,17 +79,31 @@ export function ChatMessages({
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
+  // Track the message ID when editing a user message (to dim subsequent messages)
+  const [editingUserMessageId, setEditingUserMessageId] = useState<
+    string | null
+  >(null);
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
 
-  const handleStartEdit = (partKey: string) => {
+  const handleStartEdit = (partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
+    // If messageId is provided, it's a user message edit
+    if (messageId) {
+      setEditingUserMessageId(messageId);
+    }
   };
 
   const handleCancelEdit = () => {
     setEditingPartKey(null);
+    setEditingUserMessageId(null);
   };
+
+  // Find index of the message being edited (for dimming subsequent messages)
+  const editingUserMessageIndex = editingUserMessageId
+    ? messages.findIndex((m) => m.id === editingUserMessageId)
+    : -1;
 
   const handleSaveAssistantMessage = async (
     messageId: string,
@@ -175,8 +190,13 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {
+            const isDimmed =
+              editingUserMessageIndex !== -1 && idx > editingUserMessageIndex;
             return (
-              <div key={message.id || idx}>
+              <div
+                key={message.id || idx}
+                className={cn(isDimmed && "opacity-40 transition-opacity")}
+              >
                 {message.parts?.map((part, i) => {
                   // Skip tool result parts that immediately follow a tool invocation with same toolCallId
                   if (

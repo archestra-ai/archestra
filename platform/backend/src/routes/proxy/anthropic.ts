@@ -29,7 +29,7 @@ import {
   constructResponseSchema,
   UuidIdSchema,
 } from "@/types";
-import { convertToolResultsToToon } from "./adapters/anthropic";
+import { convertToolResultsToToon } from "./adapterV2/anthropic";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";

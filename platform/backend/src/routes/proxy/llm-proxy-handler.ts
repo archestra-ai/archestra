@@ -234,7 +234,7 @@ export async function handleLLMProxy<
         requestAdapter.isStreaming()
           ? () => {
               reply.raw.write(
-                streamAdapter.formatTextSSE("Analyzing with Dual LLM:\n\n"),
+                streamAdapter.formatTextDeltaSSE("Analyzing with Dual LLM:\n\n"),
               );
             }
           : undefined,
@@ -248,7 +248,7 @@ export async function handleLLMProxy<
                 .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                 .join("\n");
               reply.raw.write(
-                streamAdapter.formatTextSSE(
+                streamAdapter.formatTextDeltaSSE(
                   `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
                 ),
               );
@@ -471,10 +471,7 @@ async function handleStreaming<
       const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
       // Stream refusal
-      const refusalEvents = streamAdapter.formatRefusalSSE(
-        _refusalMessage,
-        contentMessage,
-      );
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
         reply.raw.write(event);
       }

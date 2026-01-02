@@ -196,8 +196,8 @@ export interface StreamAccumulatorState {
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];
   usage: UsageView | null;
-  /** Provider-specific stop reason (stored as-is, not normalized) */
   stopReason: string | null;
+  // timing for metrics
   timing: {
     startTime: number;
     firstChunkTime: number | null;
@@ -237,9 +237,10 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   // ---------------------------------------------------------------------------
 
   /**
-   * Process a stream chunk
-   * Updates internal state and returns SSE data if should be sent immediately
-   * Tool call chunks are accumulated but not sent (for policy evaluation)
+   * processChunk process straming chunkgs one-by-one to:
+   * 1. Tell LLMProxy how to handle current streaming chunk, depending on it's type (stream immediately, buffer for tool result inspection, etc.)
+   * 2. Updates concrete StreamAdapter's internal StreamingAccumulatorState. This state is also used by the LLMProxy
+   *    to build final response and other business logic.
    */
   processChunk(chunk: TChunk): ChunkProcessingResult;
 
@@ -251,19 +252,20 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   getSSEHeaders(): Record<string, string>;
 
   /**
-   * Format a text chunk as SSE (provider-specific format)
-   * Used for dual LLM progress, arbitrary text during streaming
+   * Format a text fragment as SSE to inject into an ongoing stream.
+   * Used for progress messages (e.g., dual LLM status) during streaming.
    */
-  formatTextSSE(text: string): string;
+  formatTextDeltaSSE(text: string): string;
 
   /** Get raw tool call events as SSE strings (for replay after policy approval) */
   getRawToolCallEvents(): string[];
 
-  /** Format accumulated tool calls as SSE events (after policy approval) */
-  formatToolCallsSSE(): string[];
-
-  /** Format a refusal as SSE events */
-  formatRefusalSSE(refusalMessage: string, contentMessage: string): string[];
+  /**
+   * Format a complete, self-contained text response as SSE events.
+   * Used when replacing the response entirely (e.g., policy refusal).
+   * Returns provider-specific events that form a valid complete response.
+   */
+  formatCompleteTextSSE(text: string): string[];
 
   /** Format the stream end marker */
   formatEndSSE(): string;

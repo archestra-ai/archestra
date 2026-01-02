@@ -570,7 +570,7 @@ class AnthropicStreamAdapter
     };
   }
 
-  formatTextSSE(text: string): string {
+  formatTextDeltaSSE(text: string): string {
     const event = {
       type: "content_block_delta",
       index: 0,
@@ -589,53 +589,7 @@ class AnthropicStreamAdapter
     );
   }
 
-  formatToolCallsSSE(): string[] {
-    const events: string[] = [];
-
-    // We need to reconstruct tool call events from accumulated state
-    for (let i = 0; i < this.state.toolCalls.length; i++) {
-      const toolCall = this.state.toolCalls[i];
-      const baseIndex = this.state.text ? 1 : 0; // If there's text, tool calls start at index 1
-
-      // content_block_start for tool_use
-      events.push(
-        `event: content_block_start\ndata: ${JSON.stringify({
-          type: "content_block_start",
-          index: baseIndex + i,
-          content_block: {
-            type: "tool_use",
-            id: toolCall.id,
-            name: toolCall.name,
-            input: {},
-          },
-        })}\n\n`,
-      );
-
-      // input_json_delta with full arguments
-      events.push(
-        `event: content_block_delta\ndata: ${JSON.stringify({
-          type: "content_block_delta",
-          index: baseIndex + i,
-          delta: {
-            type: "input_json_delta",
-            partial_json: toolCall.arguments,
-          },
-        })}\n\n`,
-      );
-
-      // content_block_stop
-      events.push(
-        `event: content_block_stop\ndata: ${JSON.stringify({
-          type: "content_block_stop",
-          index: baseIndex + i,
-        })}\n\n`,
-      );
-    }
-
-    return events;
-  }
-
-  formatRefusalSSE(_refusalMessage: string, contentMessage: string): string[] {
+  formatCompleteTextSSE(text: string): string[] {
     return [
       `event: content_block_start\ndata: ${JSON.stringify({
         type: "content_block_start",
@@ -645,7 +599,7 @@ class AnthropicStreamAdapter
       `event: content_block_delta\ndata: ${JSON.stringify({
         type: "content_block_delta",
         index: 0,
-        delta: { type: "text_delta", text: contentMessage },
+        delta: { type: "text_delta", text },
       })}\n\n`,
       `event: content_block_stop\ndata: ${JSON.stringify({
         type: "content_block_stop",

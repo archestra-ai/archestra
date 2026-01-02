@@ -1,3 +1,7 @@
+/*
+  Legacy. Adapters are copy-pasted to adapterV2.
+  This file is still used by legacy llm-proxy anthropic handler and should be removed after migration.
+*/
 import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
 import type {

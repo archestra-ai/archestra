@@ -295,7 +295,7 @@ export async function handleLLMProxy<
 
     // Create client
     const client = provider.createClient(apiKey, {
-      baseUrl: getBaseUrl(providerName),
+      baseUrl: provider.getBaseUrl(),
       fetch: getObservableFetch(providerName, resolvedAgent, externalAgentId),
       mockMode: config.benchmark.mockMode,
     });
@@ -750,19 +750,6 @@ async function handleNonStreaming<
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-function getBaseUrl(provider: string): string | undefined {
-  switch (provider) {
-    case "anthropic":
-      return config.llm.anthropic.baseUrl;
-    case "openai":
-      return config.llm.openai.baseUrl;
-    case "gemini":
-      return config.llm.gemini.baseUrl;
-    default:
-      return undefined;
-  }
-}
 
 function handleError(
   error: unknown,

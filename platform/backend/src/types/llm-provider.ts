@@ -344,6 +344,9 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Extract API key from headers */
   extractApiKey(headers: THeaders): string | undefined;
 
+  /** Get base URL for the provider (from config), undefined means use SDK default */
+  getBaseUrl(): string | undefined;
+
   /** Create provider client */
   createClient(
     apiKey: string | undefined,

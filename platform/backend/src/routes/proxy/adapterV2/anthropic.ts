@@ -1,6 +1,7 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
+import config from "@/config";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -952,6 +953,10 @@ export const anthropicAdapterFactory: LLMProvider<
 
   extractApiKey(headers: AnthropicHeaders): string | undefined {
     return headers["x-api-key"];
+  },
+
+  getBaseUrl(): string | undefined {
+    return config.llm.anthropic.baseUrl;
   },
 
   createClient(

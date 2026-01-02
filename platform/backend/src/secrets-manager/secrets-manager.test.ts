@@ -1,7 +1,15 @@
+import { SecretsManagerType } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
 import SecretModel from "@/models/secret";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { DbSecretsManager } from "./db";
+import {
+  createSecretManager,
+  getSecretsManagerTypeBasedOnEnvVars,
+  getVaultConfigFromEnv,
+  SecretsManagerConfigurationError,
+} from "./index";
 
 // Use vi.hoisted to ensure mockVaultClient is available before vi.mock runs
 const mockVaultClient = vi.hoisted(() => ({
@@ -17,19 +25,9 @@ vi.mock("node-vault", () => {
   };
 });
 
-import { SecretsManagerType } from "@shared";
-import {
-  createSecretManager,
-  getSecretsManagerTypeBasedOnEnvVars,
-  getVaultConfigFromEnv,
-  SecretsManagerConfigurationError,
-} from "./secretsmanager";
-import { DbSecretsManager } from "./secretsmanager.db";
-
 describe("SecretsManager", async () => {
   // biome-ignore lint/style/noRestrictedImports: dynamic import
-  const VaultSecretManager = (await import("./secretsmanager.vault.ee"))
-    .default;
+  const VaultSecretManager = (await import("./vault.ee")).default;
 
   describe("getSecretsManagerTypeBasedOnEnvVars", () => {
     const originalEnv = process.env;

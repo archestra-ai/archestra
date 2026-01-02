@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import type {
   InsertTeamToken,
   SelectTeamToken,

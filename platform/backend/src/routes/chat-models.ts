@@ -11,7 +11,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import { getSecretValueForLlmProviderApiKey } from "@/secretsmanager";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { constructResponseSchema, SupportedChatProviderSchema } from "@/types";
 
 /** TTL for caching chat models from provider APIs */

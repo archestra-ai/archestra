@@ -29416,6 +29416,9 @@
                           "dockerImage": {
                             "type": "string"
                           },
+                          "serviceAccount": {
+                            "type": "string"
+                          },
                           "transportType": {
                             "type": "string",
                             "enum": [
@@ -30354,6 +30357,9 @@
                         "dockerImage": {
                           "type": "string"
                         },
+                        "serviceAccount": {
+                          "type": "string"
+                        },
                         "transportType": {
                           "type": "string",
                           "enum": [
@@ -30954,6 +30960,9 @@
                           }
                         },
                         "dockerImage": {
+                          "type": "string"
+                        },
+                        "serviceAccount": {
                           "type": "string"
                         },
                         "transportType": {
@@ -31898,6 +31907,9 @@
                           }
                         },
                         "dockerImage": {
+                          "type": "string"
+                        },
+                        "serviceAccount": {
                           "type": "string"
                         },
                         "transportType": {

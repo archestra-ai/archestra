@@ -495,77 +495,86 @@ export type PromptInputTextareaProps = ComponentProps<typeof Textarea>;
 export const PromptInputTextarea = React.forwardRef<
   HTMLTextAreaElement,
   PromptInputTextareaProps
->(({ onChange, className, placeholder = "What would you like to know?", ...props }, ref) => {
-  const attachments = usePromptInputAttachments();
+>(
+  (
+    {
+      onChange,
+      className,
+      placeholder = "What would you like to know?",
+      ...props
+    },
+    ref,
+  ) => {
+    const attachments = usePromptInputAttachments();
 
-  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === "Enter") {
-      // Don't submit if IME composition is in progress
-      if (e.nativeEvent.isComposing) {
-        return;
-      }
+    const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+      if (e.key === "Enter") {
+        // Don't submit if IME composition is in progress
+        if (e.nativeEvent.isComposing) {
+          return;
+        }
 
-      if (e.shiftKey) {
-        // Allow newline
-        return;
-      }
+        if (e.shiftKey) {
+          // Allow newline
+          return;
+        }
 
-      // Submit on Enter (without Shift)
-      e.preventDefault();
-      const form = e.currentTarget.form;
-      if (form) {
-        form.requestSubmit();
-      }
-    }
-  };
-
-  const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
-    const items = event.clipboardData?.items;
-
-    if (!items) {
-      return;
-    }
-
-    const files: File[] = [];
-
-    for (const item of items) {
-      if (item.kind === "file") {
-        const file = item.getAsFile();
-        if (file) {
-          files.push(file);
+        // Submit on Enter (without Shift)
+        e.preventDefault();
+        const form = e.currentTarget.form;
+        if (form) {
+          form.requestSubmit();
         }
       }
-    }
+    };
 
-    if (files.length > 0) {
-      event.preventDefault();
-      attachments.add(files);
-    }
-  };
+    const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
+      const items = event.clipboardData?.items;
 
-  return (
-    <Textarea
-      ref={ref}
-      key={attachments.textareaKey}
-      className={cn(
-        "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
-        "field-sizing-content bg-transparent dark:bg-transparent",
-        "max-h-48 min-h-16",
-        "focus-visible:ring-0",
-        className,
-      )}
-      name="message"
-      onChange={(e) => {
-        onChange?.(e);
-      }}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
-      placeholder={placeholder}
-      {...props}
-    />
-  );
-});
+      if (!items) {
+        return;
+      }
 
+      const files: File[] = [];
+
+      for (const item of items) {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) {
+            files.push(file);
+          }
+        }
+      }
+
+      if (files.length > 0) {
+        event.preventDefault();
+        attachments.add(files);
+      }
+    };
+
+    return (
+      <Textarea
+        ref={ref}
+        key={attachments.textareaKey}
+        className={cn(
+          "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
+          "field-sizing-content bg-transparent dark:bg-transparent",
+          "max-h-48 min-h-16",
+          "focus-visible:ring-0",
+          className,
+        )}
+        name="message"
+        onChange={(e) => {
+          onChange?.(e);
+        }}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder={placeholder}
+        {...props}
+      />
+    );
+  },
+);
 
 export type PromptInputToolbarProps = HTMLAttributes<HTMLDivElement>;
 
@@ -728,7 +737,7 @@ export const PromptInputModelSelectTrigger = ({
   <SelectTrigger
     className={cn(
       "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
-      'hover:bg-accent hover:text-foreground [&[aria-expanded="true"]]:bg-accent [&[aria-expanded="true"]]:text-foreground',
+      "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
       className,
     )}
     {...props}
@@ -765,5 +774,3 @@ export const PromptInputModelSelectValue = ({
 }: PromptInputModelSelectValueProps) => (
   <SelectValue className={cn(className)} {...props} />
 );
-
-

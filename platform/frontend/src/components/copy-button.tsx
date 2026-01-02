@@ -9,11 +9,17 @@ export function CopyButton({
   className,
   size = 14,
   behavior = "checkmark",
+  buttonSize = "sm",
+  iconClassName,
+  copiedIconClassName,
 }: {
   text: string;
   className?: string;
   size?: number;
   behavior?: "checkmark" | "text";
+  buttonSize?: "default" | "sm" | "lg" | "icon";
+  iconClassName?: string;
+  copiedIconClassName?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -46,12 +52,12 @@ export function CopyButton({
       <>
         <Button
           variant="ghost"
-          size="sm"
+          size={buttonSize}
           className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
-          title="Copy to Clipboard"
           onClick={handleCopy}
         >
-          <Copy size={size} />
+          <Copy size={size} className={iconClassName} />
+          <span className="sr-only">Copy to clipboard</span>
         </Button>
         {copied && <span className="ml-1 text-xs">Copied!</span>}
       </>
@@ -61,12 +67,22 @@ export function CopyButton({
   return (
     <Button
       variant="ghost"
-      size="sm"
+      size={buttonSize}
       className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
-      title="Copy to Clipboard"
       onClick={handleCopy}
+      disabled={copied}
     >
-      {copied ? <Check size={size} /> : <Copy size={size} />}
+      {copied ? (
+        <Check
+          size={size}
+          className={copiedIconClassName ?? "text-green-500"}
+        />
+      ) : (
+        <Copy size={size} className={iconClassName} />
+      )}
+      <span className="sr-only">
+        {copied ? "Copied!" : "Copy to clipboard"}
+      </span>
     </Button>
   );
 }

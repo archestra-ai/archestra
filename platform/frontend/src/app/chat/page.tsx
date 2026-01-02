@@ -13,7 +13,6 @@ import {
 } from "react";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import ArchestraPromptInput from "./prompt-input";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
@@ -46,6 +45,7 @@ import { useConversation, useCreateConversation } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -65,7 +65,7 @@ export default function ChatPage() {
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
-  const textareaRef = useRef<HTMLTextAreaElement>(null!);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -291,7 +291,7 @@ export default function ChatPage() {
         textareaRef.current?.focus();
       });
     }
-  }, [status, chatSession?.queuedMessages]);
+  }, [status]);
 
   // Sync messages when conversation loads or changes
   useEffect(() => {
@@ -392,7 +392,11 @@ export default function ChatPage() {
 
   const handleSendNow = useCallback(
     (id: string) => {
-      if (!chatSession?.queuedMessages || !sendMessage || !chatSession.removeMessagesUpTo) {
+      if (
+        !chatSession?.queuedMessages ||
+        !sendMessage ||
+        !chatSession.removeMessagesUpTo
+      ) {
         return;
       }
 
@@ -632,25 +636,28 @@ export default function ChatPage() {
                   }}
                 </WithPermissions>
               )}
-              {chatSession?.queuedMessages && chatSession.queuedMessages.length > 0 && (
-                <div className="space-y-2">
-                  {chatSession.queuedMessages.map((queuedMsg, index) => {
-                    const textPart = queuedMsg.parts.find(
-                      (part) => part.type === "text" && "text" in part,
-                    );
+              {chatSession?.queuedMessages &&
+                chatSession.queuedMessages.length > 0 && (
+                  <div className="space-y-2">
+                    {chatSession.queuedMessages.map((queuedMsg, index) => {
+                      const textPart = queuedMsg.parts.find(
+                        (part) => part.type === "text" && "text" in part,
+                      );
 
-                    return (
-                      <QueuedMessage
-                        key={queuedMsg.id}
-                        message={textPart && "text" in textPart ? textPart.text : ""}
-                        position={index}
-                        onDelete={() => handleDeleteQueued(queuedMsg.id)}
-                        onSendNow={() => handleSendNow(queuedMsg.id)}
-                      />
-                    );
-                  })}
-                </div>
-              )}
+                      return (
+                        <QueuedMessage
+                          key={queuedMsg.id}
+                          message={
+                            textPart && "text" in textPart ? textPart.text : ""
+                          }
+                          position={index}
+                          onDelete={() => handleDeleteQueued(queuedMsg.id)}
+                          onSendNow={() => handleSendNow(queuedMsg.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               <ArchestraPromptInput
                 onSubmit={handleSubmit}
                 status={status}
@@ -658,7 +665,7 @@ export default function ChatPage() {
                 messageCount={messages.length}
                 agentId={conversation?.agent.id}
                 conversationId={conversation?.id}
-                textareaRef={textareaRef}
+               
               />
             </div>
           </div>

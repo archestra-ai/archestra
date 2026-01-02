@@ -181,6 +181,8 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
 
+  const isResponseInProgress = status === "streaming" || status === "submitted";
+
   return (
     <Conversation className="h-full">
       <ConversationContent>
@@ -260,9 +262,6 @@ export function ChatMessages({
                           isLastTextPart &&
                           status !== "streaming";
 
-                        const isResponseInProgress =
-                          status === "streaming" || status === "submitted";
-
                         return (
                           <Fragment key={partKey}>
                             <EditableAssistantMessage
@@ -283,9 +282,6 @@ export function ChatMessages({
 
                       // Use editable component for user messages
                       if (message.role === "user") {
-                        const isResponseInProgress =
-                          status === "streaming" || status === "submitted";
-
                         return (
                           <Fragment key={partKey}>
                             <EditableUserMessage

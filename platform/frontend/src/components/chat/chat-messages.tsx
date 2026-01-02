@@ -477,7 +477,9 @@ function MessageTool({
       return (
         <PolicyDeniedTool
           policyDenied={policyDenied}
-          {...(agentId ? { editable: true, profileId: agentId } : { editable: false })}
+          {...(agentId
+            ? { editable: true, profileId: agentId }
+            : { editable: false })}
         />
       );
     }

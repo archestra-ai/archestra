@@ -49,7 +49,7 @@ const ChatBotDemo = ({
   containerClassName,
   topPart,
   hideDivider,
-  profileId
+  profileId,
 }: {
   messages: PartialUIMessage[];
   reload?: () => void;
@@ -57,7 +57,7 @@ const ChatBotDemo = ({
   containerClassName?: string;
   topPart?: React.ReactNode;
   hideDivider?: boolean;
-  profileId: string;
+  profileId?: string;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
 
@@ -141,8 +141,9 @@ const ChatBotDemo = ({
                             <PolicyDeniedTool
                               key={`${message.id}-${i}`}
                               policyDenied={policyDenied}
-                              editable={true}
-                              profileId={profileId}
+                              {...(profileId
+                                ? { editable: true, profileId }
+                                : { editable: false })}
                             />
                           );
                         }
@@ -319,7 +320,7 @@ const ChatBotDemo = ({
                           </Reasoning>
                         );
                       default: {
-                        // Handle custom blocked-tool type
+                        // Handle custom blocked-tool type (legacy)
                         if (_isBlockedToolPart(part)) {
                           const blockedPart = part as BlockedToolPart;
                           return (

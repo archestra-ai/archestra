@@ -238,7 +238,7 @@ function LogDetail({
               messages={requestMessages}
               containerClassName="h-auto"
               hideDivider={true}
-              profileId={agent.id}
+              profileId={agent?.id}
             />
           </div>
         </div>

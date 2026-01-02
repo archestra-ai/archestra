@@ -1,13 +1,11 @@
 "use client";
 
-import { Pencil } from "lucide-react";
 import { type KeyboardEventHandler, useEffect, useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
-import { CopyButton } from "@/components/copy-button";
+import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageActions } from '@/components/chat/message-actions';
 
 interface EditableAssistantMessageProps {
   messageId: string;
@@ -133,8 +131,13 @@ export function EditableAssistantMessage({
       <MessageContent>
         <Response>{text}</Response>
       </MessageContent>
-      {showActions && <MessageActions textToCopy={text} onEditClick={handleStartEdit}
-                                      className="absolute top-[100%] opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-0.5rem]"/>}
+      {showActions && (
+        <MessageActions
+          textToCopy={text}
+          onEditClick={handleStartEdit}
+          className="absolute top-[100%] opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-0.5rem]"
+        />
+      )}
     </Message>
   );
 }

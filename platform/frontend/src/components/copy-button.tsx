@@ -73,11 +73,16 @@ export function CopyButton({
       disabled={copied}
     >
       {copied ? (
-        <Check size={size} className={copiedIconClassName ?? "text-green-500"} />
+        <Check
+          size={size}
+          className={copiedIconClassName ?? "text-green-500"}
+        />
       ) : (
         <Copy size={size} className={iconClassName} />
       )}
-      <span className="sr-only">{copied ? 'Copied!' : 'Copy to clipboard'}</span>
+      <span className="sr-only">
+        {copied ? "Copied!" : "Copy to clipboard"}
+      </span>
     </Button>
   );
 }

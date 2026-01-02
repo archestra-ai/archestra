@@ -1,23 +1,33 @@
-import { CopyButton } from '@/components/copy-button';
-import { Button } from '@/components/ui/button';
-import { Pencil } from 'lucide-react';
+import { Pencil } from "lucide-react";
+import { CopyButton } from "@/components/copy-button";
+import { Button } from "@/components/ui/button";
 
-export function MessageActions({ textToCopy, onEditClick, className }:{ className?: string, textToCopy: string, onEditClick: () => void }) {
-  return <div className={`flex gap-1 ${className ?? ""}`}>
-    <CopyButton
-      text={textToCopy}
-      buttonSize="icon"
-      size={12}
-      className="text-muted-foreground"
-    />
-    <Button
-      size="icon"
-      variant="ghost"
-      className="h-6 w-6 p-0 hover:bg-transparent group/edit"
-      onClick={onEditClick}
-    >
-      <Pencil className="h-3 w-3 text-muted-foreground group-hover/edit:text-foreground transition-colors"/>
-      <span className="sr-only">Edit message</span>
-    </Button>
-  </div>
+export function MessageActions({
+  textToCopy,
+  onEditClick,
+  className,
+}: {
+  className?: string;
+  textToCopy: string;
+  onEditClick: () => void;
+}) {
+  return (
+    <div className={`flex gap-1 ${className ?? ""}`}>
+      <CopyButton
+        text={textToCopy}
+        buttonSize="icon"
+        size={12}
+        className="text-muted-foreground"
+      />
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-6 w-6 p-0 hover:bg-transparent group/edit"
+        onClick={onEditClick}
+      >
+        <Pencil className="h-3 w-3 text-muted-foreground group-hover/edit:text-foreground transition-colors" />
+        <span className="sr-only">Edit message</span>
+      </Button>
+    </div>
+  );
 }

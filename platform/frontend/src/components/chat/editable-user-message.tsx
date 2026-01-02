@@ -1,12 +1,12 @@
 "use client";
 
-import { Check, Copy, Pencil } from "lucide-react";
 import { type KeyboardEventHandler, useEffect, useState } from "react";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageActions } from '@/components/chat/message-actions';
 
 interface EditableUserMessageProps {
   messageId: string;
@@ -35,7 +35,6 @@ export function EditableUserMessage({
 }: EditableUserMessageProps) {
   const [editedText, setEditedText] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
 
   // Reset edited text when entering edit mode
@@ -128,19 +127,16 @@ export function EditableUserMessage({
     );
   }
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 500);
-  };
-
   return (
     <Message from="user" className="relative pb-9 group/message">
-        <MessageContent>
-          <Response>{text}</Response>
-        </MessageContent>
-        <MessageActions textToCopy={text} onEditClick={handleStartEdit}
-                        className="absolute top-[100%] right-0 opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-1.75rem]"/>
+      <MessageContent>
+        <Response>{text}</Response>
+      </MessageContent>
+      <MessageActions
+        textToCopy={text}
+        onEditClick={handleStartEdit}
+        className="absolute top-[100%] right-0 opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-1.75rem]"
+      />
     </Message>
-);
+  );
 }

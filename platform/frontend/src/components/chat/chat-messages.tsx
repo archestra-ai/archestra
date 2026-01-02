@@ -78,21 +78,16 @@ export function ChatMessages({
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
 
-  const handleStartEdit = (partKey: string, messageId?: string) => {
+  const handleStartEdit = (partKey: string) => {
     setEditingPartKey(partKey);
-    // Always reset editingMessageId to prevent stale state when switching
-    // between editing user messages (which pass messageId) and assistant messages (which don't)
-    setEditingMessageId(messageId ?? null);
   };
 
   const handleCancelEdit = () => {
     setEditingPartKey(null);
-    setEditingMessageId(null);
   };
 
   const handleSaveAssistantMessage = async (
@@ -156,11 +151,6 @@ export function ChatMessages({
     );
   }
 
-  // Find the index of the message being edited
-  const editingMessageIndex = editingMessageId
-    ? messages.findIndex((m) => m.id === editingMessageId)
-    : -1;
-
   // Determine which assistant messages are the last in their consecutive sequence
   // An assistant message is "last in sequence" if:
   // 1. It's the last message overall, OR
@@ -185,15 +175,6 @@ export function ChatMessages({
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {
-            // Hide messages below the one being edited (for user messages only)
-            if (
-              editingMessageIndex !== -1 &&
-              idx > editingMessageIndex &&
-              editingPartKey?.startsWith(messages[editingMessageIndex].id)
-            ) {
-              return null;
-            }
-
             return (
               <div key={message.id || idx}>
                 {message.parts?.map((part, i) => {

@@ -1,14 +1,33 @@
 ---
-title: "Microsoft Teams A2A Integration"
+title: "Connect Agent to MS Teams"
 category: "Examples"
 order: 9
 description: "Connect Microsoft Teams to Archestra prompts via A2A protocol"
 lastUpdated: "2025-12-30"
 ---
 
-# Microsoft Teams A2A Integration
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
 
-Forward Teams messages to an Archestra prompt using the A2A protocol.
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+
+Exception:
+- Screenshot
+-->
+
+![Teams A2A Demo](/docs/platform-example-teams-a2a_demo.png)
+
+In this guide, we'll build a simple MS Teams app that connects to your Archestra agent via A2A. When mentioned in a thread, the app forwards the full thread history to your agent. The agent follows your prompts, performs actions, and the app displays the reply.
+
+## Get A2A Endpoint of your Archestra agent from Archestra
+
+1. Open Archestra and go to **Chats**
+2. Find your prompt and click the connect icon (plug icon)
+3. Copy the **A2A Endpoint URL** and **Authentication Token**
+
+You'll need these later for your MS Teams app as `ARCHESTRA_PROMPT_A2A_ENDPOINT` and `ARCHESTRA_PROMPT_A2A_TOKEN`.
+
+![A2A Connect Dialog](/docs/automated_screenshots/platform-example-teams-a2a_connect-dialog.png)
 
 ## Create Azure Bot
 
@@ -28,10 +47,7 @@ Forward Teams messages to an Archestra prompt using the A2A protocol.
 
 ## Teams App Manifest
 
-Create a folder with `manifest.json` and these icons:
-
-- [color.png](/docs/assets/teams-bot-color.png) (192x192)
-- [outline.png](/docs/assets/teams-bot-outline.png) (32x32)
+Create a folder with [color.png](/docs/color.png) (192x192), [outline.png](/docs/outline.png) (32x32) and `manifest.json`:
 
 ```json
 {
@@ -63,7 +79,7 @@ Create a folder with `manifest.json` and these icons:
 }
 ```
 
-Replace `{{BOT_ID}}` with your Azure Bot App ID. Zip the folder contents.
+Replace `{{BOT_ID}}` with your Azure Bot App ID. Zip the folder contents, you'll need it later to upload to MS Teams apps.
 
 ## Bot Code
 

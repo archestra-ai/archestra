@@ -1,13 +1,16 @@
 /**
  * Anthropic Adapter Implementation
  *
- * Implements the LLMProviderAdapterFactory interface for Anthropic.
+ * Implements the LLMProvider interface for Anthropic.
  * Provides adapter objects that wrap Anthropic-specific request/response data
  * while exposing a uniform API for business logic.
  */
 
 import AnthropicProvider from "@anthropic-ai/sdk";
+import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
+import { TokenPriceModel } from "@/models";
+import { getTokenizer } from "@/tokenizers";
 import type {
   Anthropic,
   ChunkProcessingResult,
@@ -15,7 +18,7 @@ import type {
   CommonMessage,
   CommonToolCall,
   CommonToolResult,
-  LLMProviderAdapterFactory,
+  LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
   LLMStreamAdapter,
@@ -25,8 +28,8 @@ import type {
   UsageView,
 } from "@/types";
 import { MockAnthropicClient } from "../mock-anthropic-client";
-// TODO: Make convertToolResultsToToon unified across providers (currently has tokenizer/pricing dependencies)
-import { convertToolResultsToToon } from "../utils/adapters/anthropic";
+import type { CompressionStats } from "../utils/toon-conversion";
+import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
 // TYPE ALIASES
@@ -66,7 +69,7 @@ class AnthropicRequestAdapter
     return this.request.stream === true;
   }
 
-  getMessagesForPolicyEvaluation(): CommonMessage[] {
+  getMessages(): CommonMessage[] {
     return this.toCommonFormat(this.request.messages);
   }
 
@@ -467,15 +470,13 @@ class AnthropicStreamAdapter
 {
   readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
-  private model: string;
   private toolUseBlockIndices = new Set<number>();
   private currentToolCallIndex = -1;
 
-  constructor(model: string) {
-    this.model = model;
+  constructor() {
     this.state = {
       responseId: "",
-      model: model,
+      model: "",
       text: "",
       toolCalls: [],
       rawToolCallEvents: [],
@@ -811,10 +812,219 @@ class AnthropicStreamAdapter
 }
 
 // =============================================================================
+// TOON COMPRESSION
+// =============================================================================
+
+/**
+ * Convert tool results in messages to TOON format
+ * Returns both the converted messages and compression stats (tokens and cost savings)
+ */
+export async function convertToolResultsToToon(
+  messages: AnthropicMessages,
+  model: string,
+): Promise<{
+  messages: AnthropicMessages;
+  stats: CompressionStats;
+}> {
+  const tokenizer = getTokenizer("anthropic");
+  let toolResultCount = 0;
+  let totalTokensBefore = 0;
+  let totalTokensAfter = 0;
+
+  const result = messages.map((message) => {
+    // Only process user messages with content arrays that contain tool_result blocks
+    if (message.role === "user" && Array.isArray(message.content)) {
+      const updatedContent = message.content.map((contentBlock) => {
+        if (contentBlock.type === "tool_result" && !contentBlock.is_error) {
+          toolResultCount++;
+          logger.info(
+            {
+              toolCallId: contentBlock.tool_use_id,
+              contentType: typeof contentBlock.content,
+              isArray: Array.isArray(contentBlock.content),
+            },
+            "Processing tool_result for TOON conversion",
+          );
+
+          // Handle string content
+          if (typeof contentBlock.content === "string") {
+            try {
+              // Unwrap any extra text block wrapping from clients
+              const unwrapped = unwrapToolContent(contentBlock.content);
+              const parsed = JSON.parse(unwrapped);
+              const noncompressed = unwrapped;
+              const compressed = toonEncode(parsed);
+
+              // Count tokens for before and after
+              const tokensBefore = tokenizer.countTokens([
+                { role: "user", content: noncompressed },
+              ]);
+              const tokensAfter = tokenizer.countTokens([
+                { role: "user", content: compressed },
+              ]);
+              totalTokensBefore += tokensBefore;
+              totalTokensAfter += tokensAfter;
+
+              logger.info(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  beforeLength: noncompressed.length,
+                  afterLength: compressed.length,
+                  tokensBefore,
+                  tokensAfter,
+                  toonPreview: compressed.substring(0, 150),
+                  provider: "anthropic",
+                },
+                "convertToolResultsToToon: compressed (string content)",
+              );
+              logger.debug(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  before: noncompressed,
+                  after: compressed,
+                  provider: "anthropic",
+                  supposedToBeJson: parsed,
+                },
+                "convertToolResultsToToon: before/after",
+              );
+
+              return {
+                ...contentBlock,
+                content: compressed,
+              };
+            } catch {
+              logger.info(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  contentPreview:
+                    typeof contentBlock.content === "string"
+                      ? contentBlock.content.substring(0, 100)
+                      : "non-string",
+                },
+                "convertToolResultsToToon: skipping - string content is not JSON",
+              );
+              return contentBlock;
+            }
+          }
+
+          // Handle array content (content blocks format)
+          if (Array.isArray(contentBlock.content)) {
+            const updatedBlocks = contentBlock.content.map((block) => {
+              if (block.type === "text" && typeof block.text === "string") {
+                try {
+                  // Unwrap any extra text block wrapping from clients
+                  const unwrapped = unwrapToolContent(block.text);
+                  // Try to parse as JSON
+                  const parsed = JSON.parse(unwrapped);
+                  const noncompressed = unwrapped;
+                  const compressed = toonEncode(parsed);
+
+                  // Count tokens for before and after
+                  const tokensBefore = tokenizer.countTokens([
+                    { role: "user", content: noncompressed },
+                  ]);
+                  const tokensAfter = tokenizer.countTokens([
+                    { role: "user", content: compressed },
+                  ]);
+
+                  // Track compression stats in tokens
+                  totalTokensBefore += tokensBefore;
+                  totalTokensAfter += tokensAfter;
+
+                  logger.info(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      beforeLength: noncompressed.length,
+                      afterLength: compressed.length,
+                      tokensBefore,
+                      tokensAfter,
+                      toonPreview: compressed.substring(0, 150),
+                    },
+                    "convertToolResultsToToon: compressed (array content)",
+                  );
+                  logger.debug(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      before: noncompressed,
+                      after: compressed,
+                      provider: "anthropic",
+                      supposedToBeJson: parsed,
+                    },
+                    "convertToolResultsToToon: before/after",
+                  );
+
+                  return {
+                    ...block,
+                    text: compressed,
+                  };
+                } catch {
+                  // Not JSON, keep as-is
+                  logger.info(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      blockType: block.type,
+                      textPreview: block.text?.substring(0, 100),
+                    },
+                    "convertToolResultsToToon: skipping - content is not JSON",
+                  );
+                  return block;
+                }
+              }
+              return block;
+            });
+
+            return {
+              ...contentBlock,
+              content: updatedBlocks,
+            };
+          }
+        }
+        return contentBlock;
+      });
+
+      return {
+        ...message,
+        content: updatedContent,
+      };
+    }
+
+    return message;
+  });
+
+  logger.info(
+    { messageCount: messages.length, toolResultCount },
+    "convertToolResultsToToon completed",
+  );
+
+  // Calculate cost savings
+  let toonCostSavings: number | null = null;
+  if (toolResultCount > 0) {
+    const tokensSaved = totalTokensBefore - totalTokensAfter;
+    if (tokensSaved > 0) {
+      const tokenPrice = await TokenPriceModel.findByModel(model);
+      if (tokenPrice) {
+        const inputPricePerToken =
+          Number(tokenPrice.pricePerMillionInput) / 1000000;
+        toonCostSavings = tokensSaved * inputPricePerToken;
+      }
+    }
+  }
+
+  return {
+    messages: result,
+    stats: {
+      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
+      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
+      toonCostSavings,
+    },
+  };
+}
+
+// =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
 
-export const anthropicAdapterFactory: LLMProviderAdapterFactory<
+export const anthropicAdapterFactory: LLMProvider<
   AnthropicRequest,
   AnthropicResponse,
   AnthropicMessages,
@@ -836,10 +1046,11 @@ export const anthropicAdapterFactory: LLMProviderAdapterFactory<
     return new AnthropicResponseAdapter(response);
   },
 
-  createStreamAdapter(
-    model: string,
-  ): LLMStreamAdapter<AnthropicStreamChunk, AnthropicResponse> {
-    return new AnthropicStreamAdapter(model);
+  createStreamAdapter(): LLMStreamAdapter<
+    AnthropicStreamChunk,
+    AnthropicResponse
+  > {
+    return new AnthropicStreamAdapter();
   },
 
   extractApiKey(headers: AnthropicHeaders): string | undefined {

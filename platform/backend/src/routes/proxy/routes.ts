@@ -1,6 +1,8 @@
+import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import logger from "@/logging";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "./adapters";
@@ -13,6 +15,72 @@ const routes: FastifyPluginAsyncZod = async (fastify) => {
   const MESSAGES_SUFFIX = "/messages";
 
   logger.info("[UnifiedProxy] Registering unified Anthropic routes");
+
+  /**
+   * Register HTTP proxy for Anthropic routes
+   * Handles both patterns:
+   * - /v1/anthropic/:agentId/* -> https://api.anthropic.com/v1/* (agentId stripped if UUID)
+   * - /v1/anthropic/* -> https://api.anthropic.com/v1/* (direct proxy)
+   *
+   * Messages are excluded and handled separately below with full agent support
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: config.llm.anthropic.baseUrl,
+    prefix: ANTHROPIC_PREFIX,
+    rewritePrefix: "/v1",
+    preHandler: (request, _reply, next) => {
+      // Skip messages route (we handle it specially below with full agent support)
+      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+        logger.info(
+          {
+            method: request.method,
+            url: request.url,
+            action: "skip-proxy",
+            reason: "handled-by-custom-handler",
+          },
+          "Anthropic proxy preHandler: skipping messages route",
+        );
+        next(new Error("skip"));
+        return;
+      }
+
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(ANTHROPIC_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
+
+      if (uuidMatch) {
+        // Strip UUID: /v1/anthropic/:uuid/path -> /v1/anthropic/path
+        const remainingPath = uuidMatch[2] || "";
+        const originalUrl = request.raw.url;
+        request.raw.url = `${ANTHROPIC_PREFIX}${remainingPath}`;
+
+        logger.info(
+          {
+            method: request.method,
+            originalUrl,
+            rewrittenUrl: request.raw.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${remainingPath}`,
+          },
+          "Anthropic proxy preHandler: URL rewritten (UUID stripped)",
+        );
+      } else {
+        logger.info(
+          {
+            method: request.method,
+            url: request.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${pathAfterPrefix}`,
+          },
+          "Anthropic proxy preHandler: proxying request",
+        );
+      }
+
+      next();
+    },
+  });
 
   /**
    * Anthropic SDK standard format (with /v1 prefix)
@@ -39,6 +107,7 @@ const routes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleLLMProxy(
         request.body,
         request.headers,
@@ -48,6 +117,7 @@ const routes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: undefined,
           externalAgentId,
+          userId,
         },
       );
     },
@@ -84,6 +154,7 @@ const routes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleLLMProxy(
         request.body,
         request.headers,
@@ -93,6 +164,7 @@ const routes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId: request.organizationId,
           agentId: request.params.agentId,
           externalAgentId,
+          userId,
         },
       );
     },

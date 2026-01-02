@@ -28,41 +28,18 @@
 
  */
 
-import type { SupportedProvider } from "@shared";
+import type {
+  SupportedProvider,
+  SupportedProviderDiscriminator,
+} from "@shared";
 
-
-// Common... types are reused, since all existing business logic operates on these types
-// TODO: ikonstantinov: move these to this file
-export type { CommonMessage, ToolResultUpdates } from "./llm-proxy";
-export type {
+import type {
   CommonMcpToolDefinition,
+  CommonMessage,
   CommonToolCall,
   CommonToolResult,
-} from "./tool-execution";
-
-/**
- * Token usage from response
- */
-export interface UsageView {
-  inputTokens: number;
-  outputTokens: number;
-}
-
-/**
- * Why model stopped generating
- */
-export type StopReasonView =
-  | "end_turn"
-  | "tool_use"
-  | "max_tokens"
-  | "stop_sequence"
-  | "content_filter"
-  | "error"
-  | "unknown";
-
-// =============================================================================
-// REQUEST ADAPTER INTERFACE
-// =============================================================================
+} from "./common-llm-format";
+import type { ToonCompressionResult } from "./tool-result-compression";
 
 /**
  * Adapter interface for LLM requests
@@ -88,13 +65,13 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   isStreaming(): boolean;
 
   /** Get messages in common format (for trusted data evaluation) */
-  getMessagesForPolicyEvaluation(): import("./llm-proxy").CommonMessage[];
+  getMessages(): CommonMessage[];
 
   /** Get tool results from messages (for trusted data evaluation) */
-  getToolResults(): import("./tool-execution").CommonToolResult[];
+  getToolResults(): CommonToolResult[];
 
   /** Get tool definitions (for persistence, hasTools check) */
-  getTools(): import("./tool-execution").CommonMcpToolDefinition[];
+  getTools(): CommonMcpToolDefinition[];
 
   /** Check if request has tools */
   hasTools(): boolean;
@@ -177,7 +154,7 @@ export interface LLMResponseAdapter<TResponse> {
   getText(): string;
 
   /** Get tool calls from response (for tool invocation policies) */
-  getToolCalls(): import("./tool-execution").CommonToolCall[];
+  getToolCalls(): CommonToolCall[];
 
   /** Check if response has tool calls */
   hasToolCalls(): boolean;
@@ -326,21 +303,12 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
  * @typeParam TChunk - Provider-specific stream chunk type
  * @typeParam THeaders - Provider-specific headers type
  */
-export interface LLMProviderAdapterFactory<
-  TRequest,
-  TResponse,
-  TMessages,
-  TChunk,
-  THeaders,
-> {
+export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Provider name */
   readonly provider: SupportedProvider;
 
   /** Interaction type for database storage */
-  readonly interactionType:
-    | "openai:chatCompletions"
-    | "gemini:generateContent"
-    | "anthropic:messages";
+  readonly interactionType: SupportedProviderDiscriminator;
 
   // ---------------------------------------------------------------------------
   // Adapter Creation
@@ -355,7 +323,7 @@ export interface LLMProviderAdapterFactory<
   createResponseAdapter(response: TResponse): LLMResponseAdapter<TResponse>;
 
   /** Create a stream adapter */
-  createStreamAdapter(model: string): LLMStreamAdapter<TChunk, TResponse>;
+  createStreamAdapter(): LLMStreamAdapter<TChunk, TResponse>;
 
   // ---------------------------------------------------------------------------
   // Client & Headers
@@ -384,125 +352,31 @@ export interface LLMProviderAdapterFactory<
   ): Promise<AsyncIterable<TChunk>>;
 }
 
-// =============================================================================
-// RESULT TYPES
-// =============================================================================
-
 /**
- * Result of cost optimization
+ * Token usage from response
  */
-export interface CostOptimizationResult {
-  baselineModel: string;
-  optimizedModel: string;
-  wasOptimized: boolean;
+export interface UsageView {
+  inputTokens: number;
+  outputTokens: number;
 }
 
 /**
- * Result of TOON compression
+ * Why model stopped generating
  */
-export interface ToonCompressionResult {
-  tokensBefore: number | null;
-  tokensAfter: number | null;
-  costSavings: number | null;
-}
-
-/**
- * Result of trusted data evaluation
- */
-export interface TrustedDataResult {
-  /** Map of tool call IDs to updated content */
-  toolResultUpdates: Record<string, string>;
-  /** Whether context is trusted */
-  contextIsTrusted: boolean;
-  /** Whether dual LLM was used */
-  usedDualLlm: boolean;
-}
-
-/**
- * Tool invocation policy refusal
- */
-export interface ToolRefusal {
-  toolName: string;
-  toolArguments: Record<string, unknown>;
-  reason: string;
-  /** Full message with archestra metadata */
-  refusalMessage: string;
-  /** Human-readable message */
-  contentMessage: string;
-}
-
-// =============================================================================
-// INTERACTION DATA
-// =============================================================================
-
-/**
- * Data for recording an interaction
- */
-export interface InteractionData {
-  profileId: string;
-  externalAgentId?: string;
-  type:
-    | "openai:chatCompletions"
-    | "gemini:generateContent"
-    | "anthropic:messages";
-  model: string;
-
-  inputTokens: number | null;
-  outputTokens: number | null;
-
-  baselineCost: number | null;
-  cost: number | null;
-
-  toonTokensBefore: number | null;
-  toonTokensAfter: number | null;
-  toonCostSavings: number | null;
-
-  /** Original provider request */
-  request: unknown;
-  /** Modified provider request (after policies, TOON) */
-  processedRequest: unknown;
-  /** Provider response */
-  response: unknown;
-}
-
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/**
- * Build tool refusal message
- */
-export function buildToolRefusal(
-  toolName: string,
-  toolArguments: Record<string, unknown>,
-  reason: string,
-): ToolRefusal {
-  const metadata = `
-<archestra-tool-name>${toolName}</archestra-tool-name>
-<archestra-tool-arguments>${JSON.stringify(toolArguments)}</archestra-tool-arguments>
-<archestra-tool-reason>${reason}</archestra-tool-reason>`;
-
-  const contentMessage = `
-I tried to invoke the ${toolName} tool with the following arguments: ${JSON.stringify(toolArguments)}.
-
-However, I was denied by a tool invocation policy:
-
-${reason}`;
-
-  return {
-    toolName,
-    toolArguments,
-    reason,
-    refusalMessage: `${metadata}\n${contentMessage}`,
-    contentMessage,
-  };
-}
+export type StopReasonView =
+  | "end_turn"
+  | "tool_use"
+  | "max_tokens"
+  | "stop_sequence"
+  | "content_filter"
+  | "error"
+  | "unknown";
 
 /**
  * Convert CommonToolCall[] to format expected by tool invocation policies
  */
 export function toolCallsForPolicyEvaluation(
-  toolCalls: import("./tool-execution").CommonToolCall[],
+  toolCalls: CommonToolCall[],
 ): Array<{ toolCallName: string; toolCallArgs: string }> {
   return toolCalls.map((tc) => ({
     toolCallName: tc.name,

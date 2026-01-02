@@ -71,6 +71,7 @@ export const LocalConfigFormSchema = z.object({
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.string().optional(), // UI uses string, gets parsed to number
   httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
+  serviceAccount: z.string().optional(), // Preserved from catalog item, not editable in form
 });
 
 /**

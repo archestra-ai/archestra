@@ -2756,6 +2756,94 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
+export type GetV1A2aByPromptIdWellKnownAgentJsonData = {
+    body?: never;
+    path: {
+        promptId: string;
+    };
+    query?: never;
+    url: '/v1/a2a/{promptId}/.well-known/agent.json';
+};
+
+export type GetV1A2aByPromptIdWellKnownAgentJsonResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        description: string;
+        url: string;
+        version: string;
+        capabilities: {
+            streaming: boolean;
+            pushNotifications: boolean;
+            stateTransitionHistory: boolean;
+        };
+        defaultInputModes: Array<string>;
+        defaultOutputModes: Array<string>;
+        skills: Array<{
+            id: string;
+            name: string;
+            description: string;
+            tags: Array<string>;
+            inputModes: Array<string>;
+            outputModes: Array<string>;
+        }>;
+    };
+};
+
+export type GetV1A2aByPromptIdWellKnownAgentJsonResponse = GetV1A2aByPromptIdWellKnownAgentJsonResponses[keyof GetV1A2aByPromptIdWellKnownAgentJsonResponses];
+
+export type PostV1A2aByPromptIdData = {
+    body: {
+        jsonrpc: '2.0';
+        id: string | number;
+        method: string;
+        params?: {
+            message?: {
+                parts?: Array<{
+                    kind: 'text';
+                    text: string;
+                }>;
+            };
+        };
+    };
+    path: {
+        promptId: string;
+    };
+    query?: never;
+    url: '/v1/a2a/{promptId}';
+};
+
+export type PostV1A2aByPromptIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        jsonrpc: '2.0';
+        id: string | number;
+        result?: {
+            messageId: string;
+            role: 'user' | 'agent';
+            parts: Array<{
+                kind: 'text';
+                text: string;
+            }>;
+            contextId?: string;
+            taskId?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        error?: {
+            code: number;
+            message: string;
+        };
+    };
+};
+
+export type PostV1A2aByPromptIdResponse = PostV1A2aByPromptIdResponses[keyof PostV1A2aByPromptIdResponses];
+
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -5635,6 +5723,9 @@ export type GetChatApiKeysResponses = {
         updatedAt: string;
         teamName?: string | null;
         userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
 
@@ -5644,9 +5735,11 @@ export type CreateChatApiKeyData = {
     body: {
         name: string;
         provider: 'anthropic' | 'openai' | 'gemini';
-        apiKey: string;
+        apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
     };
     path?: never;
     query?: never;
@@ -5817,6 +5910,9 @@ export type GetAvailableChatApiKeysResponses = {
         updatedAt: string;
         teamName?: string | null;
         userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
 
@@ -5986,6 +6082,9 @@ export type GetChatApiKeyResponses = {
         updatedAt: string;
         teamName?: string | null;
         userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
 
@@ -5997,6 +6096,8 @@ export type UpdateChatApiKeyData = {
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string | null;
+        vaultSecretPath?: string;
+        vaultSecretKey?: string;
     };
     path: {
         id: string;
@@ -6315,6 +6416,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6412,6 +6514,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6584,6 +6687,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6601,6 +6705,7 @@ export type UpdateChatConversationData = {
         title?: string | null;
         selectedModel?: string;
         chatApiKeyId?: string | null;
+        agentId?: string;
     };
     path: {
         id: string;
@@ -6681,6 +6786,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6862,6 +6968,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6959,6 +7066,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        hasCustomToolSelection: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -8809,6 +8917,7 @@ export type GetInternalMcpCatalogResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -9038,6 +9147,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -9270,6 +9380,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -9501,6 +9612,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -16423,7 +16535,12 @@ export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTok
 export type GetTokensData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter team tokens to only show tokens for teams the profile is assigned to
+         */
+        profileId?: string;
+    };
     url: '/api/tokens';
 };
 

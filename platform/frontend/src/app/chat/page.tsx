@@ -30,6 +30,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
@@ -58,6 +59,16 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | undefined>(
     () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
   );
+
+  // Hide version display only when viewing a specific conversation
+  useEffect(() => {
+    if (conversationId) {
+      document.body.classList.add("hide-version");
+    } else {
+      document.body.classList.remove("hide-version");
+    }
+    return () => document.body.classList.remove("hide-version");
+  }, [conversationId]);
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -479,56 +490,12 @@ export default function ChatPage() {
     );
   }
 
-  const profileName = conversationPrompt?.agentId
-    ? allProfiles.find((a) => a.id === conversationPrompt.agentId)?.name
-    : null;
-  const promptBadge = (
-    <>
-      {conversationPrompt ? (
-        <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs font-medium cursor-help">
-                  Prompt: {conversationPrompt.name}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                className="max-w-md max-h-64 overflow-y-auto"
-              >
-                <div className="space-y-2">
-                  {profileName && (
-                    <div>
-                      <div className="font-semibold text-xs mb-1">Profile:</div>
-                      <div className="text-xs">{profileName}</div>
-                    </div>
-                  )}
-                  {conversationPrompt.systemPrompt && (
-                    <div>
-                      <div className="font-semibold text-xs mb-1">
-                        System Prompt:
-                      </div>
-                      <pre className="text-xs whitespace-pre-wrap">
-                        {conversationPrompt.systemPrompt}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      ) : null}
-    </>
-  );
-
   if (!conversationId) {
     const hasNoProfiles = allProfiles.length === 0;
 
     return (
       <PageLayout
-        title="New Chat"
+        title="Chats"
         description="Start a free chat or select a prompt from your library to start a guided chat"
         actionButton={
           <WithPermissions
@@ -598,15 +565,12 @@ export default function ChatPage() {
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
             <div className="flex-1" />
-            {conversation?.agent?.name && (
-              <div className="flex-1 text-center">
-                <span className="text-sm font-medium text-muted-foreground">
-                  {conversation.agent.name}
-                </span>
-              </div>
-            )}
+            <div className="flex-1 text-center">
+              <span className="text-sm font-medium text-muted-foreground">
+                {conversationPrompt ? conversationPrompt.name : "Free chat"}
+              </span>
+            </div>
             <div className="flex-1 flex justify-end gap-2 items-center">
-              {promptBadge}
               <Button
                 variant="ghost"
                 size="sm"
@@ -631,6 +595,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
               conversationId={conversationId}
+              agentId={currentProfileId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
@@ -685,6 +650,9 @@ export default function ChatPage() {
                   currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
                 />
+                <div className="text-center">
+                  <Version inline />
+                </div>
               </div>
             </div>
           )}

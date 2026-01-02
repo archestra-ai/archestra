@@ -55,8 +55,13 @@ export async function fetchPlatformPodNodeSelector(
 
   try {
     // Try to find the current pod by reading the POD_NAME environment variable
-    // which is typically set via the Kubernetes downward API
-    const podName = process.env.POD_NAME || process.env.HOSTNAME;
+    // which is typically set via the Kubernetes downward API.
+    // Only attempt this when running inside K8s cluster - otherwise HOSTNAME
+    // will be the Docker container ID which won't exist as a K8s pod.
+    const podName = config.orchestrator.kubernetes
+      .loadKubeconfigFromCurrentCluster
+      ? process.env.POD_NAME || process.env.HOSTNAME
+      : process.env.POD_NAME;
 
     if (podName) {
       // Read the current pod's spec directly
@@ -502,6 +507,12 @@ export default class K8sDeployment {
         {
           name: "mcp-server",
           image: dockerImage,
+          // Use Never for local images (without registry/domain prefix)
+          // Registry images typically have a domain or slash (e.g., docker.io/image, myregistry.com/image, or username/image)
+          imagePullPolicy:
+            dockerImage.includes("/") || dockerImage.includes(".")
+              ? undefined // Let K8s decide (defaults to Always for :latest, IfNotPresent for others)
+              : ("Never" as k8s.V1Container["imagePullPolicy"]), // For local images like "gaggimate-mcp:latest" without registry
           env: this.createContainerEnvFromConfig(),
           ...(localConfig.command
             ? {

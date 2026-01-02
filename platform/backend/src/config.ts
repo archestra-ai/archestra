@@ -189,6 +189,9 @@ export default {
   mcpGateway: {
     endpoint: "/v1/mcp",
   },
+  a2aGateway: {
+    endpoint: "/v1/a2a",
+  },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),

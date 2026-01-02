@@ -15,6 +15,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { userHasPermission } from "@/auth/utils";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
@@ -34,10 +35,12 @@ import { type CommonToolCall, UuidIdSchema } from "@/types";
 /**
  * Token authentication result
  */
-interface TokenAuthResult {
+export interface TokenAuthResult {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  /** Organization ID the token belongs to */
+  organizationId: string;
   /** True if this is a personal user token */
   isUserToken?: boolean;
   /** User ID for user tokens */
@@ -311,16 +314,24 @@ export function createTransport(
   return transport;
 }
 
-export function extractProfileIdAndTokenFromRequest(
-  request: FastifyRequest,
-): { profileId: string; token: string } | null {
+/**
+ * Extract bearer token from Authorization header
+ * Returns the token string if valid, null otherwise
+ */
+export function extractBearerToken(request: FastifyRequest): string | null {
   const authHeader = request.headers.authorization as string | undefined;
   if (!authHeader) {
     return null;
   }
 
-  const tokenFromHeaderMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-  const token = tokenFromHeaderMatch?.[1];
+  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  return tokenMatch?.[1] ?? null;
+}
+
+export function extractProfileIdAndTokenFromRequest(
+  request: FastifyRequest,
+): { profileId: string; token: string } | null {
+  const token = extractBearerToken(request);
   if (!token) {
     return null;
   }
@@ -386,6 +397,7 @@ export async function validateTeamToken(
     tokenId: token.id,
     teamId: token.teamId,
     isOrganizationToken: token.isOrganizationToken,
+    organizationId: token.organizationId,
   };
 }
 
@@ -396,7 +408,8 @@ export async function validateTeamToken(
  * Validates that:
  * 1. The token is valid (exists and matches)
  * 2. The profile is accessible via this token:
- *    - User must be a member of at least one team that the profile is assigned to
+ *    - User has profile:admin permission (can access all profiles), OR
+ *    - User is a member of at least one team that the profile is assigned to
  */
 export async function validateUserToken(
   profileId: string,
@@ -408,13 +421,28 @@ export async function validateUserToken(
     return null;
   }
 
-  // Get user's team IDs
+  // Check if user has profile admin permission (can access all profiles)
+  const isProfileAdmin = await userHasPermission(
+    token.userId,
+    token.organizationId,
+    "profile",
+    "admin",
+  );
+
+  if (isProfileAdmin) {
+    return {
+      tokenId: token.id,
+      teamId: null, // User tokens aren't scoped to a single team
+      isOrganizationToken: false,
+      organizationId: token.organizationId,
+      isUserToken: true,
+      userId: token.userId,
+    };
+  }
+
+  // Non-admin: user can access profile if they are a member of any team assigned to the profile
   const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
-
-  // Get profile's team IDs
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-
-  // Check if there's any overlap between user's teams and profile's teams
   const hasAccess = userTeamIds.some((teamId) =>
     profileTeamIds.includes(teamId),
   );
@@ -431,6 +459,7 @@ export async function validateUserToken(
     tokenId: token.id,
     teamId: null, // User tokens aren't scoped to a single team
     isOrganizationToken: false,
+    organizationId: token.organizationId,
     isUserToken: true,
     userId: token.userId,
   };

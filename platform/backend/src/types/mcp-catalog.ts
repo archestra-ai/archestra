@@ -52,6 +52,7 @@ const LocalConfigSelectSchema = z.object({
     )
     .optional(),
   dockerImage: z.string().optional(),
+  serviceAccount: z.string().optional(),
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.number().optional(),
   httpPath: z.string().optional(),
@@ -71,6 +72,7 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
+    name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
@@ -90,6 +92,7 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
+    name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z

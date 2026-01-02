@@ -79,31 +79,22 @@ export function ChatMessages({
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
-  // Track the message ID when editing a user message (to dim subsequent messages)
-  const [editingUserMessageId, setEditingUserMessageId] = useState<
-    string | null
-  >(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
 
   const handleStartEdit = (partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
-    // If messageId is provided, it's a user message edit
-    if (messageId) {
-      setEditingUserMessageId(messageId);
-    }
+    // Always reset editingMessageId to prevent stale state when switching
+    // between editing user messages (which pass messageId) and assistant messages (which don't)
+    setEditingMessageId(messageId ?? null);
   };
 
   const handleCancelEdit = () => {
     setEditingPartKey(null);
-    setEditingUserMessageId(null);
+    setEditingMessageId(null);
   };
-
-  // Find index of the message being edited (for dimming subsequent messages)
-  const editingUserMessageIndex = editingUserMessageId
-    ? messages.findIndex((m) => m.id === editingUserMessageId)
-    : -1;
 
   const handleSaveAssistantMessage = async (
     messageId: string,
@@ -166,6 +157,11 @@ export function ChatMessages({
     );
   }
 
+  // Find the index of the message being edited
+  const editingMessageIndex = editingMessageId
+    ? messages.findIndex((m) => m.id === editingMessageId)
+    : -1;
+
   // Determine which assistant messages are the last in their consecutive sequence
   // An assistant message is "last in sequence" if:
   // 1. It's the last message overall, OR
@@ -191,7 +187,7 @@ export function ChatMessages({
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {
             const isDimmed =
-              editingUserMessageIndex !== -1 && idx > editingUserMessageIndex;
+              editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
               <div
                 key={message.id || idx}

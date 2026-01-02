@@ -128,8 +128,8 @@ export function EditableUserMessage({
               <div className="flex gap-2 items-start">
                 <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0 mt-0.5" />
                 <span className="text-xs text-primary-foreground/80">
-                  Editing this message will <strong>regenerate</strong> the response and <strong>remove</strong> all
-                  subsequent messages.
+                  Editing this message will <strong>regenerate</strong> the
+                  response and <strong>remove</strong> all subsequent messages.
                 </span>
               </div>
               <div className="flex gap-2 shrink-0">

@@ -362,6 +362,13 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
     client: unknown,
     request: TRequest,
   ): Promise<AsyncIterable<TChunk>>;
+
+  /**
+   * Extract error message from provider-specific SDK error.
+   * Each provider SDK wraps errors differently (e.g., Anthropic uses nested
+   * error.error.message structure), so this normalizes them to a string.
+   */
+  extractErrorMessage(error: unknown): string;
 }
 
 /**

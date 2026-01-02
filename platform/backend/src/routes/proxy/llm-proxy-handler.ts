@@ -6,7 +6,6 @@
  */
 
 import type { FastifyReply } from "fastify";
-import { get } from "lodash-es";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
@@ -343,7 +342,7 @@ export async function handleLLMProxy<
     return handleError(
       error,
       reply,
-      providerName,
+      provider.extractErrorMessage,
       requestAdapter.isStreaming(),
     );
   }
@@ -566,7 +565,7 @@ async function handleStreaming<
 
     return reply;
   } catch (error) {
-    return handleError(error, reply, providerName, true);
+    return handleError(error, reply, provider.extractErrorMessage, true);
   }
 }
 
@@ -768,7 +767,7 @@ function getBaseUrl(provider: string): string | undefined {
 function handleError(
   error: unknown,
   reply: FastifyReply,
-  _provider: string,
+  extractErrorMessage: (error: unknown) => string,
   isStreaming: boolean,
 ): FastifyReply {
   logger.error(error);
@@ -778,21 +777,7 @@ function handleError(
       ? (error.status as 200 | 400 | 404 | 403 | 500)
       : 500;
 
-  // Extract error message
-  const getErrorMessage = (err: unknown): string => {
-    // Try to extract from nested error structures (common in provider SDKs)
-    const nestedMessage = get(err, "error.error.message");
-    if (typeof nestedMessage === "string") {
-      return nestedMessage;
-    }
-
-    if (err instanceof Error) {
-      return err.message;
-    }
-    return "Internal server error";
-  };
-
-  const errorMessage = getErrorMessage(error);
+  const errorMessage = extractErrorMessage(error);
 
   if (isStreaming) {
     const errorEvent = {

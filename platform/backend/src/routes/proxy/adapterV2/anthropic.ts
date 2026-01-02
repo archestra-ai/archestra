@@ -1,5 +1,6 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { encode as toonEncode } from "@toon-format/toon";
+import { get } from "lodash-es";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -995,5 +996,19 @@ export const anthropicAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractErrorMessage(error: unknown): string {
+    // Anthropic SDK wraps errors as: { error: { error: { message: "..." } } }
+    const anthropicMessage = get(error, "error.error.message");
+    if (typeof anthropicMessage === "string") {
+      return anthropicMessage;
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return "Internal server error";
   },
 };

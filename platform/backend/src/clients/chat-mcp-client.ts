@@ -3,7 +3,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { isArchestraMcpServerTool, TimeInMs } from "@shared";
 import { jsonSchema, type Tool } from "ai";
-import { executeArchestraTool } from "@/archestra-mcp-server";
+import {
+  type ArchestraContext,
+  executeArchestraTool,
+  getAgentTools,
+} from "@/archestra-mcp-server";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
@@ -43,12 +47,16 @@ function getCacheKey(agentId: string, userId: string): string {
 
 /**
  * Generate the full cache key for tool cache
+ * Includes promptId because agent tools depend on the prompt context
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
+  promptId?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
-  return `${CacheKey.ChatMcpTools}-${getCacheKey(agentId, userId)}`;
+  const baseKey = getCacheKey(agentId, userId);
+  const fullKey = promptId ? `${baseKey}:${promptId}` : baseKey;
+  return `${CacheKey.ChatMcpTools}-${fullKey}`;
 }
 
 export const __test = {
@@ -390,6 +398,8 @@ function normalizeJsonSchema(schema: any): any {
  * @param userId - The user ID for authentication
  * @param userIsProfileAdmin - Whether the user is a profile admin
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
+ * @param promptId - Optional prompt ID for agent tools lookup
+ * @param organizationId - Optional organization ID for agent tools lookup
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools({
@@ -398,14 +408,18 @@ export async function getChatMcpTools({
   userId,
   userIsProfileAdmin,
   enabledToolIds,
+  promptId,
+  organizationId,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
   userIsProfileAdmin: boolean;
   enabledToolIds?: string[];
+  promptId?: string;
+  organizationId?: string;
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(agentId, userId);
+  const toolCacheKey = getToolCacheKey(agentId, userId, promptId);
 
   // Check cache first using cacheManager
   const cachedTools =
@@ -626,6 +640,122 @@ export async function getChatMcpTools({
       { agentId, userId, convertedToolCount: Object.keys(aiTools).length },
       "Successfully converted MCP tools to AI SDK Tool format",
     );
+
+    // Fetch and add agent tools if promptId and organizationId are available
+    if (promptId && organizationId) {
+      try {
+        const agentToolsList = await getAgentTools({
+          promptId,
+          organizationId,
+          userId,
+        });
+
+        // Build the context for agent tool execution
+        const archestraContext: ArchestraContext = {
+          profile: { id: agentId, name: agentName },
+          promptId,
+          organizationId,
+          tokenAuth: mcpGwToken
+            ? {
+                tokenId: mcpGwToken.tokenId,
+                teamId: mcpGwToken.teamId,
+                isOrganizationToken: mcpGwToken.isOrganizationToken,
+                organizationId,
+                isUserToken: mcpGwToken.isUserToken,
+                userId: mcpGwToken.isUserToken ? userId : undefined,
+              }
+            : undefined,
+        };
+
+        // Convert agent tools to AI SDK Tool format
+        for (const agentTool of agentToolsList) {
+          const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
+
+          aiTools[agentTool.name] = {
+            description:
+              agentTool.description || `Agent tool: ${agentTool.name}`,
+            inputSchema: jsonSchema(normalizedSchema),
+            execute: async (args: Record<string, unknown>) => {
+              logger.info(
+                {
+                  agentId,
+                  userId,
+                  toolName: agentTool.name,
+                  promptId,
+                  arguments: args,
+                },
+                "Executing agent tool from chat",
+              );
+
+              try {
+                const response = await executeArchestraTool(
+                  agentTool.name,
+                  args,
+                  archestraContext,
+                );
+
+                if (response.isError) {
+                  const errorText = (
+                    response.content as Array<{ type: string; text?: string }>
+                  )
+                    .map((item) =>
+                      item.type === "text" && item.text
+                        ? item.text
+                        : JSON.stringify(item),
+                    )
+                    .join("\n");
+                  throw new Error(errorText);
+                }
+
+                const content = (
+                  response.content as Array<{ type: string; text?: string }>
+                )
+                  .map((item) =>
+                    item.type === "text" && item.text
+                      ? item.text
+                      : JSON.stringify(item),
+                  )
+                  .join("\n");
+
+                logger.info(
+                  { agentId, userId, toolName: agentTool.name },
+                  "Agent tool execution completed",
+                );
+
+                return content;
+              } catch (error) {
+                logger.error(
+                  {
+                    agentId,
+                    userId,
+                    toolName: agentTool.name,
+                    err: error,
+                  },
+                  "Agent tool execution failed",
+                );
+                throw error;
+              }
+            },
+          };
+        }
+
+        logger.info(
+          {
+            agentId,
+            userId,
+            promptId,
+            agentToolCount: agentToolsList.length,
+            totalToolCount: Object.keys(aiTools).length,
+          },
+          "Added agent tools to chat tools",
+        );
+      } catch (error) {
+        logger.error(
+          { agentId, userId, promptId, error },
+          "Failed to fetch agent tools, continuing without them",
+        );
+      }
+    }
 
     // Cache the tools using cacheManager with TTL
     await cacheManager.set(toolCacheKey, aiTools, TOOL_CACHE_TTL_MS);

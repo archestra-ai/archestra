@@ -647,6 +647,7 @@ export default function ChatPage() {
                   messageCount={messages.length}
                   agentId={conversation?.agent.id}
                   conversationId={conversation?.id}
+                  promptId={conversation?.promptId}
                   currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
                 />

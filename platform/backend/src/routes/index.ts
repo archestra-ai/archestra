@@ -25,6 +25,7 @@ export { default as oauthRoutes } from "./oauth";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
+export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
 // Anthropic proxy routes - V2 (unified handler) by default, V1 (legacy) via env var
 export const anthropicProxyRoutes = config.llm.anthropic.useV1Routes

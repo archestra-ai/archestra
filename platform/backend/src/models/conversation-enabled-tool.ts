@@ -32,7 +32,7 @@ class ConversationEnabledToolModel {
 
   /**
    * Check if conversation has custom tool selection
-   * Returns true if there are entries in the junction table
+   * Returns the value of the has_custom_tool_selection field
    */
   static async hasCustomSelection(conversationId: string): Promise<boolean> {
     logger.debug(
@@ -41,14 +41,15 @@ class ConversationEnabledToolModel {
     );
 
     const result = await db
-      .select({ toolId: schema.conversationEnabledToolsTable.toolId })
-      .from(schema.conversationEnabledToolsTable)
-      .where(
-        eq(schema.conversationEnabledToolsTable.conversationId, conversationId),
-      )
+      .select({
+        hasCustomToolSelection:
+          schema.conversationsTable.hasCustomToolSelection,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversationId))
       .limit(1);
 
-    const hasCustom = result.length > 0;
+    const hasCustom = result[0]?.hasCustomToolSelection ?? false;
 
     logger.debug(
       { conversationId, hasCustomSelection: hasCustom },
@@ -60,7 +61,7 @@ class ConversationEnabledToolModel {
 
   /**
    * Set enabled tools for a conversation (replaces all existing)
-   * Pass empty array to clear custom selection (all tools enabled)
+   * Pass empty array to disable all tools (custom selection with zero tools)
    */
   static async setEnabledTools(
     conversationId: string,
@@ -72,6 +73,12 @@ class ConversationEnabledToolModel {
     );
 
     await db.transaction(async (tx) => {
+      // Update the conversation to mark it as having custom tool selection
+      await tx
+        .update(schema.conversationsTable)
+        .set({ hasCustomToolSelection: true })
+        .where(eq(schema.conversationsTable.id, conversationId));
+
       // Delete all existing enabled tool entries
       await tx
         .delete(schema.conversationEnabledToolsTable)
@@ -82,7 +89,7 @@ class ConversationEnabledToolModel {
           ),
         );
 
-      // Insert new enabled tool entries (if any)
+      // Insert new enabled tool entries (only if there are tools to insert)
       if (toolIds.length > 0) {
         await tx.insert(schema.conversationEnabledToolsTable).values(
           toolIds.map((toolId) => ({
@@ -108,11 +115,23 @@ class ConversationEnabledToolModel {
       "ConversationEnabledToolModel.clearCustomSelection: clearing",
     );
 
-    await db
-      .delete(schema.conversationEnabledToolsTable)
-      .where(
-        eq(schema.conversationEnabledToolsTable.conversationId, conversationId),
-      );
+    await db.transaction(async (tx) => {
+      // Update the conversation to mark it as not having custom tool selection
+      await tx
+        .update(schema.conversationsTable)
+        .set({ hasCustomToolSelection: false })
+        .where(eq(schema.conversationsTable.id, conversationId));
+
+      // Delete all enabled tool entries
+      await tx
+        .delete(schema.conversationEnabledToolsTable)
+        .where(
+          eq(
+            schema.conversationEnabledToolsTable.conversationId,
+            conversationId,
+          ),
+        );
+    });
 
     logger.debug(
       { conversationId },

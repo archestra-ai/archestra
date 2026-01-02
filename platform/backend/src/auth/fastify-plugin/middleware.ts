@@ -103,6 +103,8 @@ export class Authnz {
       url === "/health" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint) ||
+      // A2A routes use token auth handled in route, similar to MCP Gateway
+      url.startsWith(config.a2aGateway.endpoint) ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)

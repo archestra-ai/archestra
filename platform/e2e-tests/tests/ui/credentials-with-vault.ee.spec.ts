@@ -100,7 +100,81 @@ test("Then we configure vault for Default Team", async ({ adminPage }) => {
   }
 });
 
-test.describe("Test self-hosted MCP server with Vault", () => {
+test.describe("Chat API Keys with Readonly Vault", () => {
+  ["team", "personal"].forEach((scope) => {
+    test(`should create a ${scope} scoped chat API key with vault secret`, async ({
+      adminPage,
+      makeRandomString,
+    }) => {
+      const keyName = makeRandomString(8, "Test Key");
+
+      // Open Create personal chat API key form and fill in the form
+      await goToPage(adminPage, "/settings/chat");
+      await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
+      await adminPage.getByRole("textbox", { name: "Name" }).fill(keyName);
+
+      if (scope === "personal") {
+        await adminPage
+          .getByTestId("external-secret-selector-team-trigger")
+          .click();
+        await adminPage
+          .getByRole("option", { name: DEFAULT_TEAM_NAME })
+          .click();
+        await adminPage
+          .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
+          .click();
+        await adminPage.getByText(secretName).click();
+        await adminPage.waitForLoadState("networkidle");
+        await adminPage
+          .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
+          .click();
+        await adminPage.getByText(secretKey).click();
+      } else {
+        await adminPage.getByRole("combobox", { name: "Scope" }).click();
+        await adminPage.getByRole("option", { name: "Team" }).click();
+        await adminPage.getByRole("combobox", { name: "Team" }).click();
+        await adminPage.waitForLoadState("networkidle");
+        await adminPage
+          .getByRole("option", { name: DEFAULT_TEAM_NAME })
+          .click();
+        await adminPage
+          .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTrigger)
+          .click();
+        await adminPage.getByText(secretName).click();
+        await adminPage.waitForLoadState("networkidle");
+        await adminPage
+          .getByTestId(E2eTestId.InlineVaultSecretSelectorSecretTriggerKey)
+          .click();
+        await adminPage.getByText(secretKey).click();
+      }
+
+      // Click create button
+      await clickButton({
+        page: adminPage,
+        options: { name: "Test & Create" },
+      });
+      await expect(
+        adminPage.getByText("API key created successfully"),
+      ).toBeVisible({
+        timeout: 5000,
+      });
+
+      // Verify API key is created
+      await expect(
+        adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${keyName}`),
+      ).toBeVisible();
+
+      // Cleanup
+      await goToPage(adminPage, "/settings/chat");
+      await adminPage
+        .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
+        .click();
+      await clickButton({ page: adminPage, options: { name: "Delete" } });
+    });
+  });
+});
+
+test.describe("Test self-hosted MCP server with Readonly Vault", () => {
   test("Test self-hosted MCP server with Vault - with prompt on installation", async ({
     adminPage,
     extractCookieHeaders,

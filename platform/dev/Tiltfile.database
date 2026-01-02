@@ -20,7 +20,16 @@ helm_remote(
     # https://github.com/bitnami/containers/issues/83267
     'image.repository=bitnamisecure/postgresql',
     'image.tag=latest',
-    'global.security.allowInsecureImages=true'
+    'global.security.allowInsecureImages=true',
+
+    # Increase resource limits to prevent health check timeouts
+    # https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
+    'primary.resourcesPreset=small',
+
+    # Increase probe timeout to accommodate slower responses
+    'primary.livenessProbe.timeoutSeconds=10',
+    'primary.readinessProbe.timeoutSeconds=10',
+    'primary.startupProbe.timeoutSeconds=10'
   ]
 )
 

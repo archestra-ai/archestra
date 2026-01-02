@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
+import chatApiKeysTable from "./chat-api-key";
 import promptsTable from "./prompt";
 
 const conversationsTable = pgTable("conversations", {
@@ -12,8 +13,14 @@ const conversationsTable = pgTable("conversations", {
   promptId: uuid("prompt_id").references(() => promptsTable.id, {
     onDelete: "set null",
   }),
+  chatApiKeyId: uuid("chat_api_key_id").references(() => chatApiKeysTable.id, {
+    onDelete: "set null",
+  }),
   title: text("title"),
   selectedModel: text("selected_model").notNull().default("gpt-4o"),
+  hasCustomToolSelection: boolean("has_custom_tool_selection")
+    .notNull()
+    .default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

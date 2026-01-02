@@ -74,6 +74,17 @@ export type TeamTokenWithValueResponse = z.infer<
   typeof TeamTokenWithValueResponseSchema
 >;
 
+// Response schema for GET /api/tokens with permission info
+export const TokensListResponseSchema = z.object({
+  tokens: z.array(TeamTokenResponseSchema),
+  permissions: z.object({
+    canAccessOrgToken: z.boolean(),
+    canAccessTeamTokens: z.boolean(),
+  }),
+});
+
+export type TokensListResponse = z.infer<typeof TokensListResponseSchema>;
+
 // Helper function to check if a token has the archestra prefix
 export function isArchestraPrefixedToken(value: string): boolean {
   return value.startsWith(TEAM_TOKEN_PREFIX);

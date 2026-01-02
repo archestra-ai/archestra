@@ -252,6 +252,10 @@ class LimitModel {
     inputTokens: number,
     outputTokens: number,
   ): Promise<void> {
+    logger.debug(
+      { entityType, entityId, model, inputTokens, outputTokens },
+      "[LimitModel] Update token limit usage",
+    );
     try {
       // Find all token_cost limits for this entity that include this model
       const limits = await db

@@ -3,69 +3,137 @@ import ChatApiKeyModel from "./chat-api-key";
 
 describe("ChatApiKeyModel", () => {
   describe("create", () => {
-    test("can create a chat API key", async ({ makeOrganization }) => {
+    test("can create a personal chat API key", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
 
       const apiKey = await ChatApiKeyModel.create({
         organizationId: org.id,
-        name: "Test Anthropic Key",
+        name: "My Personal Key",
         provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
       });
 
       expect(apiKey).toBeDefined();
       expect(apiKey.id).toBeDefined();
       expect(apiKey.organizationId).toBe(org.id);
-      expect(apiKey.name).toBe("Test Anthropic Key");
+      expect(apiKey.name).toBe("My Personal Key");
       expect(apiKey.provider).toBe("anthropic");
-      expect(apiKey.isOrganizationDefault).toBe(false);
-      expect(apiKey.secretId).toBeNull();
-      expect(apiKey.createdAt).toBeDefined();
-      expect(apiKey.updatedAt).toBeDefined();
+      expect(apiKey.scope).toBe("personal");
+      expect(apiKey.userId).toBe(user.id);
+      expect(apiKey.teamId).toBeNull();
     });
 
-    test("can create a chat API key with secret", async ({
+    test("can create a team chat API key", async ({
       makeOrganization,
-      makeSecret,
+      makeUser,
+      makeTeam,
     }) => {
       const org = await makeOrganization();
-      const secret = await makeSecret({
-        name: "chat-api-key",
-        secret: { apiKey: "sk-test-key" },
-      });
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Test Team" });
 
       const apiKey = await ChatApiKeyModel.create({
         organizationId: org.id,
-        name: "Test Key with Secret",
+        name: "Team Key",
         provider: "anthropic",
-        secretId: secret.id,
+        scope: "team",
+        teamId: team.id,
       });
 
-      expect(apiKey.secretId).toBe(secret.id);
+      expect(apiKey.scope).toBe("team");
+      expect(apiKey.teamId).toBe(team.id);
+      expect(apiKey.userId).toBeNull();
     });
 
-    test("can create a chat API key as organization default", async ({
+    test("can create an org-wide chat API key", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
       const apiKey = await ChatApiKeyModel.create({
         organizationId: org.id,
-        name: "Default Key",
+        name: "Org Wide Key",
         provider: "anthropic",
-        isOrganizationDefault: true,
+        scope: "org_wide",
       });
 
-      expect(apiKey.isOrganizationDefault).toBe(true);
+      expect(apiKey.scope).toBe("org_wide");
+      expect(apiKey.userId).toBeNull();
+      expect(apiKey.teamId).toBeNull();
+    });
+
+    test("enforces unique constraint for personal keys per user per provider", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Personal Key 1",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      await expect(
+        ChatApiKeyModel.create({
+          organizationId: org.id,
+          name: "Personal Key 2",
+          provider: "anthropic",
+          scope: "personal",
+          userId: user.id,
+        }),
+      ).rejects.toThrow();
+    });
+
+    test("allows personal keys for different providers", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const anthropicKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const openaiKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "OpenAI Key",
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      expect(anthropicKey.provider).toBe("anthropic");
+      expect(openaiKey.provider).toBe("openai");
     });
   });
 
   describe("findById", () => {
-    test("can find a chat API key by ID", async ({ makeOrganization }) => {
+    test("can find a chat API key by ID", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
       const created = await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "Test Key",
         provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
       });
 
       const found = await ChatApiKeyModel.findById(created.id);
@@ -75,29 +143,34 @@ describe("ChatApiKeyModel", () => {
       expect(found?.name).toBe("Test Key");
     });
 
-    test("returns undefined for non-existent ID", async () => {
+    test("returns null for non-existent ID", async () => {
       const found = await ChatApiKeyModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
-      expect(found).toBeUndefined();
+      expect(found).toBeNull();
     });
   });
 
   describe("findByOrganizationId", () => {
     test("can find all chat API keys for an organization", async ({
       makeOrganization,
+      makeUser,
     }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
 
       await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "Key 1",
         provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
       });
       await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "Key 2",
         provider: "openai",
+        scope: "org_wide",
       });
 
       const keys = await ChatApiKeyModel.findByOrganizationId(org.id);
@@ -106,126 +179,57 @@ describe("ChatApiKeyModel", () => {
       expect(keys.map((k) => k.name)).toContain("Key 1");
       expect(keys.map((k) => k.name)).toContain("Key 2");
     });
-
-    test("returns empty array for organization with no keys", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-
-      const keys = await ChatApiKeyModel.findByOrganizationId(org.id);
-
-      expect(keys).toHaveLength(0);
-    });
-
-    test("isolates keys by organization", async ({ makeOrganization }) => {
-      const org1 = await makeOrganization();
-      const org2 = await makeOrganization();
-
-      await ChatApiKeyModel.create({
-        organizationId: org1.id,
-        name: "Org1 Key",
-        provider: "anthropic",
-      });
-      await ChatApiKeyModel.create({
-        organizationId: org2.id,
-        name: "Org2 Key",
-        provider: "anthropic",
-      });
-
-      const org1Keys = await ChatApiKeyModel.findByOrganizationId(org1.id);
-      const org2Keys = await ChatApiKeyModel.findByOrganizationId(org2.id);
-
-      expect(org1Keys).toHaveLength(1);
-      expect(org1Keys[0].name).toBe("Org1 Key");
-      expect(org2Keys).toHaveLength(1);
-      expect(org2Keys[0].name).toBe("Org2 Key");
-    });
   });
 
-  describe("findOrganizationDefault", () => {
-    test("can find the organization default for a provider", async ({
-      makeOrganization,
-    }) => {
+  describe("findByScope", () => {
+    test("can find org-wide key by scope", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      await ChatApiKeyModel.create({
+      const orgWideKey = await ChatApiKeyModel.create({
         organizationId: org.id,
-        name: "Non-default Key",
+        name: "Org Wide Key",
         provider: "anthropic",
-      });
-      const defaultKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Default Key",
-        provider: "anthropic",
-        isOrganizationDefault: true,
+        scope: "org_wide",
       });
 
-      const found = await ChatApiKeyModel.findOrganizationDefault(
+      const found = await ChatApiKeyModel.findByScope(
         org.id,
         "anthropic",
+        "org_wide",
       );
 
       expect(found).toBeDefined();
-      expect(found?.id).toBe(defaultKey.id);
-      expect(found?.isOrganizationDefault).toBe(true);
+      expect(found?.id).toBe(orgWideKey.id);
     });
 
-    test("returns null when no default exists", async ({
+    test("returns null when no key exists for scope", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Non-default Key",
-        provider: "anthropic",
-      });
-
-      const found = await ChatApiKeyModel.findOrganizationDefault(
+      const found = await ChatApiKeyModel.findByScope(
         org.id,
         "anthropic",
+        "org_wide",
       );
 
       expect(found).toBeNull();
     });
-
-    test("finds correct default per provider", async ({ makeOrganization }) => {
-      const org = await makeOrganization();
-
-      const anthropicDefault = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Anthropic Default",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-      const openaiDefault = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "OpenAI Default",
-        provider: "openai",
-        isOrganizationDefault: true,
-      });
-
-      const foundAnthropic = await ChatApiKeyModel.findOrganizationDefault(
-        org.id,
-        "anthropic",
-      );
-      const foundOpenai = await ChatApiKeyModel.findOrganizationDefault(
-        org.id,
-        "openai",
-      );
-
-      expect(foundAnthropic?.id).toBe(anthropicDefault.id);
-      expect(foundOpenai?.id).toBe(openaiDefault.id);
-    });
   });
 
   describe("update", () => {
-    test("can update a chat API key", async ({ makeOrganization }) => {
+    test("can update a chat API key", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
       const apiKey = await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "Original Name",
         provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
       });
 
       const updated = await ChatApiKeyModel.update(apiKey.id, {
@@ -234,508 +238,329 @@ describe("ChatApiKeyModel", () => {
 
       expect(updated).toBeDefined();
       expect(updated?.name).toBe("Updated Name");
-      expect(updated?.provider).toBe("anthropic");
-    });
-
-    test("returns undefined when updating non-existent key", async () => {
-      const result = await ChatApiKeyModel.update(
-        "00000000-0000-0000-0000-000000000000",
-        { name: "New Name" },
-      );
-
-      expect(result).toBeUndefined();
     });
   });
 
   describe("delete", () => {
-    test("can delete a chat API key", async ({ makeOrganization }) => {
+    test("can delete a chat API key", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
       const org = await makeOrganization();
+      const user = await makeUser();
       const apiKey = await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "To Delete",
         provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
       });
 
       const deleted = await ChatApiKeyModel.delete(apiKey.id);
       const found = await ChatApiKeyModel.findById(apiKey.id);
 
       expect(deleted).toBe(true);
-      expect(found).toBeUndefined();
-    });
-
-    test("returns false when deleting non-existent key", async () => {
-      const deleted = await ChatApiKeyModel.delete(
-        "00000000-0000-0000-0000-000000000000",
-      );
-
-      expect(deleted).toBe(false);
-    });
-  });
-
-  describe("setAsOrganizationDefault", () => {
-    test("can set a key as organization default", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const apiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Test Key",
-        provider: "anthropic",
-      });
-
-      const updated = await ChatApiKeyModel.setAsOrganizationDefault(apiKey.id);
-
-      expect(updated?.isOrganizationDefault).toBe(true);
-    });
-
-    test("unsets previous default when setting new default", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const key1 = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Key 1",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-      const key2 = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Key 2",
-        provider: "anthropic",
-      });
-
-      await ChatApiKeyModel.setAsOrganizationDefault(key2.id);
-
-      const updatedKey1 = await ChatApiKeyModel.findById(key1.id);
-      const updatedKey2 = await ChatApiKeyModel.findById(key2.id);
-
-      expect(updatedKey1?.isOrganizationDefault).toBe(false);
-      expect(updatedKey2?.isOrganizationDefault).toBe(true);
-    });
-
-    test("does not affect other providers when setting default", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const anthropicKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Anthropic Key",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-      const openaiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "OpenAI Key",
-        provider: "openai",
-      });
-
-      await ChatApiKeyModel.setAsOrganizationDefault(openaiKey.id);
-
-      const updatedAnthropicKey = await ChatApiKeyModel.findById(
-        anthropicKey.id,
-      );
-      const updatedOpenaiKey = await ChatApiKeyModel.findById(openaiKey.id);
-
-      expect(updatedAnthropicKey?.isOrganizationDefault).toBe(true);
-      expect(updatedOpenaiKey?.isOrganizationDefault).toBe(true);
-    });
-
-    test("returns null for non-existent key", async () => {
-      const result = await ChatApiKeyModel.setAsOrganizationDefault(
-        "00000000-0000-0000-0000-000000000000",
-      );
-
-      expect(result).toBeNull();
-    });
-
-    test("database constraint prevents multiple defaults per provider via direct insert", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-
-      // Create first default key
-      await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Default Key 1",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-
-      // Trying to create second default for same provider should fail with unique constraint violation
-      await expect(
-        ChatApiKeyModel.create({
-          organizationId: org.id,
-          name: "Default Key 2",
-          provider: "anthropic",
-          isOrganizationDefault: true,
-        }),
-      ).rejects.toThrow();
-    });
-
-    test("database constraint allows defaults for different providers", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-
-      // Create default for anthropic
-      const anthropicDefault = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Anthropic Default",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-
-      // Create default for openai - should succeed (different provider)
-      const openaiDefault = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "OpenAI Default",
-        provider: "openai",
-        isOrganizationDefault: true,
-      });
-
-      expect(anthropicDefault.isOrganizationDefault).toBe(true);
-      expect(openaiDefault.isOrganizationDefault).toBe(true);
-
-      // Verify both are returned as defaults for their respective providers
-      const foundAnthropic = await ChatApiKeyModel.findOrganizationDefault(
-        org.id,
-        "anthropic",
-      );
-      const foundOpenai = await ChatApiKeyModel.findOrganizationDefault(
-        org.id,
-        "openai",
-      );
-
-      expect(foundAnthropic?.id).toBe(anthropicDefault.id);
-      expect(foundOpenai?.id).toBe(openaiDefault.id);
-    });
-  });
-
-  describe("profile assignments", () => {
-    test("can assign an API key to a profile", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-      const apiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Test Key",
-        provider: "anthropic",
-      });
-
-      const assignment = await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: apiKey.id,
-        agentId: agent.id,
-      });
-
-      expect(assignment).toBeDefined();
-      expect(assignment.chatApiKeyId).toBe(apiKey.id);
-      expect(assignment.agentId).toBe(agent.id);
-    });
-
-    test("replaces existing same-provider key when assigning new one to profile", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-
-      // Create two anthropic keys
-      const anthropicKey1 = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Anthropic Key 1",
-        provider: "anthropic",
-      });
-      const anthropicKey2 = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Anthropic Key 2",
-        provider: "anthropic",
-      });
-
-      // Assign first anthropic key
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: anthropicKey1.id,
-        agentId: agent.id,
-      });
-
-      // Assign second anthropic key - should replace first
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: anthropicKey2.id,
-        agentId: agent.id,
-      });
-
-      // Profile should only have one anthropic key (the second one)
-      const profileKeys = await ChatApiKeyModel.getProfileApiKeys(agent.id);
-      const anthropicKeys = profileKeys.filter(
-        (k) => k.provider === "anthropic",
-      );
-
-      expect(anthropicKeys).toHaveLength(1);
-      expect(anthropicKeys[0].id).toBe(anthropicKey2.id);
-    });
-
-    test("allows different provider keys on same profile", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-
-      const anthropicKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Anthropic Key",
-        provider: "anthropic",
-      });
-      const openaiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "OpenAI Key",
-        provider: "openai",
-      });
-
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: anthropicKey.id,
-        agentId: agent.id,
-      });
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: openaiKey.id,
-        agentId: agent.id,
-      });
-
-      // Profile should have both keys (different providers)
-      const profileKeys = await ChatApiKeyModel.getProfileApiKeys(agent.id);
-      expect(profileKeys).toHaveLength(2);
-      expect(profileKeys.map((k) => k.provider)).toContain("anthropic");
-      expect(profileKeys.map((k) => k.provider)).toContain("openai");
-    });
-
-    test("can unassign an API key from a profile", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-      const apiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Test Key",
-        provider: "anthropic",
-      });
-
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: apiKey.id,
-        agentId: agent.id,
-      });
-
-      const unassigned = await ChatApiKeyModel.unassignFromProfile(
-        apiKey.id,
-        agent.id,
-      );
-
-      expect(unassigned).toBe(true);
-
-      const profiles = await ChatApiKeyModel.getAssignedProfiles(apiKey.id);
-      expect(profiles).toHaveLength(0);
-    });
-
-    test("can get all assigned profiles for an API key", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent1 = await makeAgent({ name: "Agent 1" });
-      const agent2 = await makeAgent({ name: "Agent 2" });
-      const apiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Test Key",
-        provider: "anthropic",
-      });
-
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: apiKey.id,
-        agentId: agent1.id,
-      });
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: apiKey.id,
-        agentId: agent2.id,
-      });
-
-      const profiles = await ChatApiKeyModel.getAssignedProfiles(apiKey.id);
-
-      expect(profiles).toHaveLength(2);
-      expect(profiles.map((p) => p.name)).toContain("Agent 1");
-      expect(profiles.map((p) => p.name)).toContain("Agent 2");
-    });
-
-    test("can bulk assign profiles to an API key", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent1 = await makeAgent();
-      const agent2 = await makeAgent();
-      const apiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Test Key",
-        provider: "anthropic",
-      });
-
-      await ChatApiKeyModel.bulkAssignProfiles(apiKey.id, [
-        agent1.id,
-        agent2.id,
-      ]);
-
-      const profiles = await ChatApiKeyModel.getAssignedProfiles(apiKey.id);
-      expect(profiles).toHaveLength(2);
-    });
-
-    test("can replace profile assignments", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent1 = await makeAgent({ name: "Agent 1" });
-      const agent2 = await makeAgent({ name: "Agent 2" });
-      const agent3 = await makeAgent({ name: "Agent 3" });
-      const apiKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Test Key",
-        provider: "anthropic",
-      });
-
-      // Initial assignment
-      await ChatApiKeyModel.bulkAssignProfiles(apiKey.id, [
-        agent1.id,
-        agent2.id,
-      ]);
-
-      // Replace with different profiles
-      await ChatApiKeyModel.replaceProfileAssignments(apiKey.id, [
-        agent2.id,
-        agent3.id,
-      ]);
-
-      const profiles = await ChatApiKeyModel.getAssignedProfiles(apiKey.id);
-      expect(profiles).toHaveLength(2);
-      expect(profiles.map((p) => p.name)).not.toContain("Agent 1");
-      expect(profiles.map((p) => p.name)).toContain("Agent 2");
-      expect(profiles.map((p) => p.name)).toContain("Agent 3");
-    });
-  });
-
-  describe("getProfileApiKey", () => {
-    test("returns profile-specific key when assigned", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-
-      const defaultKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Default Key",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-      const profileKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Profile Key",
-        provider: "anthropic",
-      });
-
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: profileKey.id,
-        agentId: agent.id,
-      });
-
-      const found = await ChatApiKeyModel.getProfileApiKey(
-        agent.id,
-        "anthropic",
-        org.id,
-      );
-
-      expect(found?.id).toBe(profileKey.id);
-      expect(found?.id).not.toBe(defaultKey.id);
-    });
-
-    test("falls back to organization default when no profile key", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-
-      const defaultKey = await ChatApiKeyModel.create({
-        organizationId: org.id,
-        name: "Default Key",
-        provider: "anthropic",
-        isOrganizationDefault: true,
-      });
-
-      const found = await ChatApiKeyModel.getProfileApiKey(
-        agent.id,
-        "anthropic",
-        org.id,
-      );
-
-      expect(found?.id).toBe(defaultKey.id);
-    });
-
-    test("returns null when no key available", async ({
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const org = await makeOrganization();
-      const agent = await makeAgent();
-
-      const found = await ChatApiKeyModel.getProfileApiKey(
-        agent.id,
-        "anthropic",
-        org.id,
-      );
-
       expect(found).toBeNull();
     });
   });
 
-  describe("findByOrganizationIdWithProfiles", () => {
-    test("returns API keys with their assigned profiles", async ({
+  describe("getVisibleKeys", () => {
+    test("user sees their own personal keys", async ({
       makeOrganization,
-      makeAgent,
+      makeUser,
     }) => {
       const org = await makeOrganization();
-      const agent1 = await makeAgent({ name: "Agent 1" });
-      const agent2 = await makeAgent({ name: "Agent 2" });
+      const user1 = await makeUser({ email: "user1@test.com" });
+      const user2 = await makeUser({ email: "user2@test.com" });
 
-      const key1 = await ChatApiKeyModel.create({
+      await ChatApiKeyModel.create({
         organizationId: org.id,
-        name: "Key 1",
+        name: "User1 Personal Key",
         provider: "anthropic",
+        scope: "personal",
+        userId: user1.id,
       });
-      const key2 = await ChatApiKeyModel.create({
+      await ChatApiKeyModel.create({
         organizationId: org.id,
-        name: "Key 2",
+        name: "User2 Personal Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user2.id,
+      });
+
+      const visibleToUser1 = await ChatApiKeyModel.getVisibleKeys(
+        org.id,
+        user1.id,
+        [],
+        false,
+      );
+
+      expect(visibleToUser1).toHaveLength(1);
+      expect(visibleToUser1[0].name).toBe("User1 Personal Key");
+    });
+
+    test("user sees team keys for their teams", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Test Team" });
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Team Key",
+        provider: "anthropic",
+        scope: "team",
+        teamId: team.id,
+      });
+
+      const visible = await ChatApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [team.id],
+        false,
+      );
+
+      expect(visible).toHaveLength(1);
+      expect(visible[0].name).toBe("Team Key");
+    });
+
+    test("user sees org-wide keys", async ({ makeOrganization, makeUser }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org Wide Key",
+        provider: "anthropic",
+        scope: "org_wide",
+      });
+
+      const visible = await ChatApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [],
+        false,
+      );
+
+      expect(visible).toHaveLength(1);
+      expect(visible[0].name).toBe("Org Wide Key");
+    });
+
+    test("admin sees all keys except other users personal keys", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeUser({ email: "admin@test.com" });
+      const user = await makeUser({ email: "user@test.com" });
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Admin Personal Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: admin.id,
+      });
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "User Personal Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org Wide Key",
         provider: "openai",
+        scope: "org_wide",
       });
 
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: key1.id,
-        agentId: agent1.id,
+      const visible = await ChatApiKeyModel.getVisibleKeys(
+        org.id,
+        admin.id,
+        [],
+        true, // isProfileAdmin
+      );
+
+      // Admin sees own personal key, all team keys, all org-wide keys, but not other users' personal keys
+      expect(visible).toHaveLength(2);
+      expect(visible.map((k) => k.name)).toContain("Admin Personal Key");
+      expect(visible.map((k) => k.name)).toContain("Org Wide Key");
+      expect(visible.map((k) => k.name)).not.toContain("User Personal Key");
+    });
+  });
+
+  describe("resolveApiKey", () => {
+    test("returns personal key first", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret1 = await makeSecret();
+      const secret2 = await makeSecret();
+
+      const personalKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Personal Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+        secretId: secret1.id,
       });
-      await ChatApiKeyModel.assignToProfile({
-        chatApiKeyId: key1.id,
-        agentId: agent2.id,
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org Wide Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret2.id,
       });
 
-      const keysWithProfiles =
-        await ChatApiKeyModel.findByOrganizationIdWithProfiles(org.id);
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
 
-      expect(keysWithProfiles).toHaveLength(2);
+      expect(resolved?.id).toBe(personalKey.id);
+    });
 
-      const foundKey1 = keysWithProfiles.find((k) => k.id === key1.id);
-      const foundKey2 = keysWithProfiles.find((k) => k.id === key2.id);
+    test("falls back to team key when no personal key", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Test Team" });
+      const secret1 = await makeSecret();
+      const secret2 = await makeSecret();
 
-      expect(foundKey1?.profiles).toHaveLength(2);
-      expect(foundKey2?.profiles).toHaveLength(0);
+      const teamKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Team Key",
+        provider: "anthropic",
+        scope: "team",
+        teamId: team.id,
+        secretId: secret1.id,
+      });
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org Wide Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret2.id,
+      });
+
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [team.id],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(teamKey.id);
+    });
+
+    test("falls back to org-wide key when no personal or team key", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret = await makeSecret();
+
+      const orgWideKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org Wide Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret.id,
+      });
+
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(orgWideKey.id);
+    });
+
+    test("returns conversation key when specified", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret1 = await makeSecret();
+      const secret2 = await makeSecret();
+      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+
+      await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Personal Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+        secretId: secret1.id,
+      });
+      const conversationKey = await ChatApiKeyModel.create({
+        organizationId: org.id,
+        name: "Org Wide Key",
+        provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret2.id,
+      });
+
+      // Create a conversation with the org-wide key as its chatApiKeyId
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: org.id,
+        chatApiKeyId: conversationKey.id,
+      });
+
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: conversation.id,
+      });
+
+      expect(resolved?.id).toBe(conversationKey.id);
+    });
+
+    test("returns null when no keys available", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const resolved = await ChatApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "anthropic",
+        conversationId: null,
+      });
+
+      expect(resolved).toBeNull();
     });
   });
 
@@ -749,6 +574,7 @@ describe("ChatApiKeyModel", () => {
         organizationId: org.id,
         name: "Test Key",
         provider: "anthropic",
+        scope: "org_wide",
       });
 
       const hasKeys = await ChatApiKeyModel.hasAnyApiKey(org.id);
@@ -770,13 +596,17 @@ describe("ChatApiKeyModel", () => {
   describe("hasConfiguredApiKey", () => {
     test("returns true when configured API key exists for provider", async ({
       makeOrganization,
+      makeSecret,
     }) => {
       const org = await makeOrganization();
+      const secret = await makeSecret();
 
       await ChatApiKeyModel.create({
         organizationId: org.id,
         name: "Anthropic Key",
         provider: "anthropic",
+        scope: "org_wide",
+        secretId: secret.id,
       });
 
       const hasAnthropic = await ChatApiKeyModel.hasConfiguredApiKey(

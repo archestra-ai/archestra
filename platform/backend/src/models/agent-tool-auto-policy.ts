@@ -1,5 +1,5 @@
 import logger from "@/logging";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import { policyConfigSubagent } from "@/subagents";
 import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
@@ -32,7 +32,7 @@ interface BulkAutoPolicyResult {
 export class AgentToolAutoPolicyService {
   /**
    * Check if auto-policy service is available for an organization
-   * Requires Anthropic API key to be configured as default chat API key
+   * Requires Anthropic API key to be configured (org-wide scope)
    */
   async isAvailable(organizationId: string): Promise<boolean> {
     logger.debug(
@@ -40,15 +40,16 @@ export class AgentToolAutoPolicyService {
       "isAvailable: checking auto-policy availability",
     );
 
-    const chatApiKey = await ChatApiKeyModel.findOrganizationDefault(
+    const chatApiKey = await ChatApiKeyModel.findByScope(
       organizationId,
       "anthropic",
+      "org_wide",
     );
 
     if (!chatApiKey?.secretId) {
       logger.debug(
         { organizationId },
-        "isAvailable: no Anthropic API key configured",
+        "isAvailable: no org-wide Anthropic API key configured",
       );
       return false;
     }
@@ -60,22 +61,23 @@ export class AgentToolAutoPolicyService {
   }
 
   /**
-   * Get Anthropic API key for an organization from default chat API key
+   * Get Anthropic API key for an organization from org-wide chat API key
    */
   private async getAnthropicApiKey(
     organizationId: string,
   ): Promise<string | null> {
     logger.debug({ organizationId }, "getAnthropicApiKey: fetching API key");
 
-    const chatApiKey = await ChatApiKeyModel.findOrganizationDefault(
+    const chatApiKey = await ChatApiKeyModel.findByScope(
       organizationId,
       "anthropic",
+      "org_wide",
     );
 
     if (!chatApiKey?.secretId) {
       logger.debug(
         { organizationId },
-        "getAnthropicApiKey: no default Anthropic chat API key configured",
+        "getAnthropicApiKey: no org-wide Anthropic chat API key configured",
       );
       return null;
     }

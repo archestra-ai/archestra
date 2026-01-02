@@ -77,6 +77,7 @@ const PromptInputContent = ({
           placeholder="Type a message..."
           ref={textareaRef}
           className="px-4"
+          disableEnterSubmit={status !== "ready"}
         />
       </PromptInputBody>
       <PromptInputFooter>

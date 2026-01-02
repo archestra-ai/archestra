@@ -1,4 +1,5 @@
 "use client";
+import type { FileUIPart } from "ai";
 import {
   PromptInput,
   PromptInputBody,
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 export type ArchestraPromptInputProps = {
   onSubmit: (
-    message: { text?: string; files?: any[] },
+    message: { text?: string; files?: FileUIPart[] },
     event: React.FormEvent<HTMLFormElement>,
   ) => void;
   status: "ready" | "submitted" | "streaming" | "error";
@@ -62,9 +63,7 @@ export default function ArchestraPromptInput({
         </PromptInputBody>
         <PromptInputToolbar>
           <PromptInputTools />
-          <PromptInputSubmit
-            status={status === "error" ? "ready" : status}
-          />
+          <PromptInputSubmit status={status === "error" ? "ready" : status} />
         </PromptInputToolbar>
       </PromptInput>
     </div>

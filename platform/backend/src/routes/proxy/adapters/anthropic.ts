@@ -1,11 +1,3 @@
-/**
- * Anthropic Adapter Implementation
- *
- * Implements the LLMProvider interface for Anthropic.
- * Provides adapter objects that wrap Anthropic-specific request/response data
- * while exposing a uniform API for business logic.
- */
-
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
@@ -22,7 +14,6 @@ import type {
   LLMRequestAdapter,
   LLMResponseAdapter,
   LLMStreamAdapter,
-  StopReasonView,
   StreamAccumulatorState,
   ToonCompressionResult,
   UsageView,
@@ -424,21 +415,6 @@ class AnthropicResponseAdapter
     };
   }
 
-  getStopReason(): StopReasonView {
-    switch (this.response.stop_reason) {
-      case "end_turn":
-        return "end_turn";
-      case "tool_use":
-        return "tool_use";
-      case "max_tokens":
-        return "max_tokens";
-      case "stop_sequence":
-        return "stop_sequence";
-      default:
-        return "unknown";
-    }
-  }
-
   getOriginalResponse(): AnthropicResponse {
     return this.response;
   }
@@ -556,7 +532,7 @@ class AnthropicStreamAdapter
 
       case "message_delta":
         if (chunk.delta.stop_reason) {
-          this.state.stopReason = this.mapStopReason(chunk.delta.stop_reason);
+          this.state.stopReason = chunk.delta.stop_reason;
         }
         if (chunk.usage?.output_tokens !== undefined) {
           if (this.state.usage) {
@@ -744,7 +720,7 @@ class AnthropicStreamAdapter
       role: "assistant",
       content,
       model: this.state.model,
-      stop_reason: this.mapStopReasonBack(this.state.stopReason),
+      stop_reason: (this.state.stopReason as AnthropicResponse["stop_reason"]) ?? "end_turn",
       stop_sequence: null,
       usage: {
         input_tokens: this.state.usage?.inputTokens ?? 0,
@@ -776,38 +752,6 @@ class AnthropicStreamAdapter
         output_tokens: this.state.usage?.outputTokens ?? 0,
       },
     };
-  }
-
-  private mapStopReason(reason: string | null): StopReasonView {
-    switch (reason) {
-      case "end_turn":
-        return "end_turn";
-      case "tool_use":
-        return "tool_use";
-      case "max_tokens":
-        return "max_tokens";
-      case "stop_sequence":
-        return "stop_sequence";
-      default:
-        return "unknown";
-    }
-  }
-
-  private mapStopReasonBack(
-    reason: StopReasonView | null,
-  ): AnthropicResponse["stop_reason"] {
-    switch (reason) {
-      case "end_turn":
-        return "end_turn";
-      case "tool_use":
-        return "tool_use";
-      case "max_tokens":
-        return "max_tokens";
-      case "stop_sequence":
-        return "stop_sequence";
-      default:
-        return "end_turn";
-    }
   }
 }
 

@@ -162,9 +162,6 @@ export interface LLMResponseAdapter<TResponse> {
   /** Get token usage */
   getUsage(): UsageView;
 
-  /** Get stop reason */
-  getStopReason(): StopReasonView;
-
   /** Get original response */
   getOriginalResponse(): TResponse;
 
@@ -199,7 +196,8 @@ export interface StreamAccumulatorState {
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];
   usage: UsageView | null;
-  stopReason: StopReasonView | null;
+  /** Provider-specific stop reason (stored as-is, not normalized) */
+  stopReason: string | null;
   timing: {
     startTime: number;
     firstChunkTime: number | null;
@@ -358,30 +356,6 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
 export interface UsageView {
   inputTokens: number;
   outputTokens: number;
-}
-
-/**
- * Why model stopped generating
- */
-export type StopReasonView =
-  | "end_turn"
-  | "tool_use"
-  | "max_tokens"
-  | "stop_sequence"
-  | "content_filter"
-  | "error"
-  | "unknown";
-
-/**
- * Convert CommonToolCall[] to format expected by tool invocation policies
- */
-export function toolCallsForPolicyEvaluation(
-  toolCalls: CommonToolCall[],
-): Array<{ toolCallName: string; toolCallArgs: string }> {
-  return toolCalls.map((tc) => ({
-    toolCallName: tc.name,
-    toolCallArgs: JSON.stringify(tc.arguments),
-  }));
 }
 
 /**

@@ -10,7 +10,7 @@ import {
   assertByosEnabled,
   isByosEnabled,
   secretManager,
-} from "@/secretsmanager";
+} from "@/secrets-manager";
 import {
   ApiError,
   ChatApiKeyScopeSchema,

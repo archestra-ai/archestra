@@ -2,14 +2,15 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, Plus, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DebouncedInput } from "@/components/debounced-input";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/dialog.hook";
@@ -52,6 +53,13 @@ export function InternalMCPCatalog({
   initialData?: CatalogItem[];
   installedServers?: InstalledServer[];
 }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Get search query from URL
+  const searchQueryFromUrl = searchParams.get("search") || "";
+
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
@@ -81,7 +89,20 @@ export function InternalMCPCatalog({
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+
+  // Update URL when search query changes (debounced via DebouncedInput)
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value.trim()) {
+        params.set("search", value);
+      } else {
+        params.delete("search");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
   const [selectedCatalogItem, setSelectedCatalogItem] =
     useState<CatalogItem | null>(null);
   const [catalogItemForReinstall, setCatalogItemForReinstall] =
@@ -437,7 +458,7 @@ export function InternalMCPCatalog({
   };
 
   const filteredCatalogItems = sortInstalledFirst(
-    filterCatalogItems(catalogItems || [], searchQuery),
+    filterCatalogItems(catalogItems || [], searchQueryFromUrl),
   );
 
   const getInstalledServerInfo = (item: CatalogItem) => {
@@ -495,10 +516,11 @@ export function InternalMCPCatalog({
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
+          <DebouncedInput
             placeholder="Search registry by name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            initialValue={searchQueryFromUrl}
+            onChange={handleSearchChange}
+            debounceMs={300}
             className="pl-9 h-11 bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors"
           />
         </div>
@@ -543,8 +565,8 @@ export function InternalMCPCatalog({
         ) : (
           <div className="py-8 text-center">
             <p className="text-muted-foreground">
-              {searchQuery.trim()
-                ? `No MCP servers match "${searchQuery}".`
+              {searchQueryFromUrl.trim()
+                ? `No MCP servers match "${searchQueryFromUrl}".`
                 : "No MCP servers found."}
             </p>
           </div>

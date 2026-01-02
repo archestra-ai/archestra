@@ -19,6 +19,7 @@ import {
 import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { ProfileSelector } from "@/components/chat/profile-selector";
 import Divider from "@/components/divider";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
@@ -68,7 +69,16 @@ const PromptInputContent = ({
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
       <PromptInputHeader className="pt-3">
         {agentId && conversationId && (
-          <ChatToolsDisplay agentId={agentId} conversationId={conversationId} />
+          <div className="flex items-center gap-2">
+            <ProfileSelector
+              currentAgentId={agentId}
+              conversationId={conversationId}
+            />
+            <ChatToolsDisplay
+              agentId={agentId}
+              conversationId={conversationId}
+            />
+          </div>
         )}
       </PromptInputHeader>
       <Divider className="my-1 w-[calc(100%-2rem)] mx-auto" />

@@ -1,13 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
-import {
-  type ChatErrorResponse,
-  EXTERNAL_AGENT_ID_HEADER,
-  RouteId,
-  SupportedProviders,
-  USER_ID_HEADER,
-} from "@shared";
+import { type ChatErrorResponse, RouteId, SupportedProviders } from "@shared";
 import {
   convertToModelMessages,
   generateText,
@@ -34,8 +26,11 @@ import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
-} from "@/secretsmanager";
-import type { SupportedChatProvider } from "@/types";
+} from "@/secrets-manager";
+import {
+  createLLMModelForAgent,
+  detectProviderFromModel,
+} from "@/services/llm-client";
 import {
   ApiError,
   constructResponseSchema,
@@ -47,32 +42,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { mapProviderError } from "./errors";
-
-/**
- * Detect which provider a model belongs to based on its name
- */
-function detectProviderFromModel(model: string): SupportedChatProvider {
-  const lowerModel = model.toLowerCase();
-
-  if (lowerModel.includes("claude")) {
-    return "anthropic";
-  }
-
-  if (lowerModel.includes("gemini") || lowerModel.includes("google")) {
-    return "gemini";
-  }
-
-  if (
-    lowerModel.includes("gpt") ||
-    lowerModel.includes("o1") ||
-    lowerModel.includes("o3")
-  ) {
-    return "openai";
-  }
-
-  // Default to anthropic for backwards compatibility
-  return "anthropic";
-}
 
 /**
  * Get a smart default model based on available API keys for the user.
@@ -177,19 +146,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Fetch enabled tool IDs, MCP tools, and agent prompts in parallel
-      const [enabledToolIds, prompt] = await Promise.all([
+      // Fetch enabled tool IDs, custom selection status, and agent prompts in parallel
+      const [enabledToolIds, hasCustomSelection, prompt] = await Promise.all([
         ConversationEnabledToolModel.findByConversation(conversationId),
+        ConversationEnabledToolModel.hasCustomSelection(conversationId),
         PromptModel.findById(conversation.promptId),
       ]);
 
       // Fetch MCP tools with enabled tool filtering
+      // Pass undefined if no custom selection (use all tools)
+      // Pass the actual array (even if empty) if there is custom selection
       const mcpTools = await getChatMcpTools({
         agentName: conversation.agent.name,
         agentId: conversation.agentId,
         userId: user.id,
         userIsProfileAdmin,
-        enabledToolIds,
+        enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
       });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -221,6 +193,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
+          hasCustomToolSelection: hasCustomSelection,
+          enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
           model: conversation.selectedModel,
           provider,
           promptId: prompt?.id,
@@ -232,113 +206,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Resolve API key using priority: conversation > personal > team > org_wide > env var
-      let providerApiKey: string | undefined;
-      let apiKeySource = "environment";
-
-      // Get user's team IDs for API key resolution
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-      // Try scope-based resolution (checks conversation's chatApiKeyId first, then personal > team > org_wide)
-      const resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
+      // Create LLM model using shared service
+      const { model } = await createLLMModelForAgent({
         organizationId,
         userId: user.id,
-        userTeamIds,
-        provider,
+        agentId: conversation.agentId,
+        model: conversation.selectedModel,
         conversationId,
+        externalAgentId,
       });
-
-      if (resolvedApiKey?.secretId) {
-        const secret = await secretManager().getSecret(resolvedApiKey.secretId);
-        // Support both old format (anthropicApiKey) and new format (apiKey)
-        const secretValue =
-          secret?.secret?.apiKey ??
-          secret?.secret?.anthropicApiKey ??
-          secret?.secret?.geminiApiKey ??
-          secret?.secret?.openaiApiKey;
-        if (secretValue) {
-          providerApiKey = secretValue as string;
-          apiKeySource = resolvedApiKey.scope;
-        }
-      }
-
-      // Fall back to environment variable
-      if (!providerApiKey) {
-        if (provider === "anthropic" && config.chat.anthropic.apiKey) {
-          providerApiKey = config.chat.anthropic.apiKey;
-          apiKeySource = "environment";
-        } else if (provider === "openai" && config.chat.openai.apiKey) {
-          providerApiKey = config.chat.openai.apiKey;
-          apiKeySource = "environment";
-        } else if (provider === "gemini" && config.chat.gemini.apiKey) {
-          providerApiKey = config.chat.gemini.apiKey;
-          apiKeySource = "environment";
-        }
-      }
-
-      // For Gemini with Vertex AI enabled, API key is not required
-      // The LLM Proxy handles authentication via ADC
-      const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
-
-      logger.info(
-        { apiKeySource, provider, isGeminiWithVertexAi },
-        "Using LLM provider API key",
-      );
-
-      if (!providerApiKey && !isGeminiWithVertexAi) {
-        throw new ApiError(
-          400,
-          "LLM Provider API key not configured. Please configure it in Chat Settings.",
-        );
-      }
-
-      // Create provider client pointing to LLM Proxy
-      // Forward external agent ID and user ID headers to LLM Proxy
-      // so interactions can be properly associated with the user
-      const clientHeaders: Record<string, string> = {};
-      if (externalAgentId) {
-        clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
-      }
-      // Always include user ID header so interactions are saved with user association
-      clientHeaders[USER_ID_HEADER] = user.id;
-
-      // Create model based on provider
-      // Note: OpenAI uses .chat() to force Chat Completions API (not Responses API)
-      // so our proxy's tool policy evaluation is applied
-      let model: Parameters<typeof streamText>[0]["model"];
-
-      if (provider === "anthropic") {
-        // URL format: /v1/anthropic/:agentId/v1/messages
-        const llmClient = createAnthropic({
-          apiKey: providerApiKey,
-          baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-          headers:
-            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
-        });
-        model = llmClient(conversation.selectedModel);
-      } else if (provider === "gemini") {
-        // URL format: /v1/gemini/:agentId/v1beta/models
-        // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
-        const llmClient = createGoogleGenerativeAI({
-          apiKey: providerApiKey || "vertex-ai-mode",
-          baseURL: `http://localhost:${config.api.port}/v1/gemini/${conversation.agentId}/v1beta`,
-          headers:
-            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
-        });
-        model = llmClient(conversation.selectedModel);
-      } else if (provider === "openai") {
-        // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
-        // Use .chat() to force Chat Completions API instead of Responses API
-        const llmClient = createOpenAI({
-          apiKey: providerApiKey,
-          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
-          headers:
-            Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined,
-        });
-        model = llmClient.chat(conversation.selectedModel);
-      } else {
-        throw new ApiError(400, `Unsupported provider: ${provider}`);
-      }
 
       // Stream with AI SDK
       // Build streamText config conditionally
@@ -666,14 +542,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatConversation,
-        description: "Update conversation title, model, or API key",
+        description: "Update conversation title, model, agent, or API key",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
       // Validate chatApiKeyId if provided
       if (body.chatApiKeyId) {
         await validateChatApiKeyAccess(
@@ -681,6 +557,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           user.id,
           organizationId,
         );
+      }
+
+      // Validate agentId if provided
+      if (body.agentId) {
+        const { success: isAgentAdmin } = await hasPermission(
+          { profile: ["admin"] },
+          headers,
+        );
+
+        const agent = await AgentModel.findById(
+          body.agentId,
+          user.id,
+          isAgentAdmin,
+        );
+        if (!agent) {
+          throw new ApiError(404, "Agent not found");
+        }
       }
 
       const conversation = await ConversationModel.update(
@@ -1039,7 +932,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
       await ConversationEnabledToolModel.setEnabledTools(id, toolIds);
 
       return reply.send({
-        hasCustomSelection: toolIds.length > 0,
+        hasCustomSelection: true, // Always true when explicitly setting tools
         enabledToolIds: toolIds,
       });
     },

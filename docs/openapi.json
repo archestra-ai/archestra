@@ -7717,6 +7717,330 @@
         }
       }
     },
+    "/v1/a2a/{promptId}/.well-known/agent.json": {
+      "get": {
+        "tags": [
+          "A2A"
+        ],
+        "description": "Get A2A AgentCard for a prompt",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "promptId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "capabilities": {
+                      "type": "object",
+                      "properties": {
+                        "streaming": {
+                          "type": "boolean"
+                        },
+                        "pushNotifications": {
+                          "type": "boolean"
+                        },
+                        "stateTransitionHistory": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "streaming",
+                        "pushNotifications",
+                        "stateTransitionHistory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "defaultInputModes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultOutputModes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "inputModes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "outputModes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "tags",
+                          "inputModes",
+                          "outputModes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description",
+                    "url",
+                    "version",
+                    "capabilities",
+                    "defaultInputModes",
+                    "defaultOutputModes",
+                    "skills"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/a2a/{promptId}": {
+      "post": {
+        "tags": [
+          "A2A"
+        ],
+        "description": "Execute A2A JSON-RPC message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "jsonrpc": {
+                    "type": "string",
+                    "enum": [
+                      "2.0"
+                    ]
+                  },
+                  "id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "method": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "object",
+                        "properties": {
+                          "parts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text"
+                                  ]
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "text"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "jsonrpc",
+                  "id",
+                  "method"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "promptId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jsonrpc": {
+                      "type": "string",
+                      "enum": [
+                        "2.0"
+                      ]
+                    },
+                    "id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "agent"
+                          ]
+                        },
+                        "parts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "contextId": {
+                          "type": "string"
+                        },
+                        "taskId": {
+                          "type": "string"
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "role",
+                        "parts"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "jsonrpc",
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "operationId": "getAgents",
@@ -20210,6 +20534,9 @@
                       "selectedModel": {
                         "type": "string"
                       },
+                      "hasCustomToolSelection": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -20248,6 +20575,7 @@
                       "chatApiKeyId",
                       "title",
                       "selectedModel",
+                      "hasCustomToolSelection",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -20559,6 +20887,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -20597,6 +20928,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -20882,6 +21214,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -20920,6 +21255,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -21147,7 +21483,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "Update conversation title, model, or API key",
+        "description": "Update conversation title, model, agent, or API key",
         "requestBody": {
           "content": {
             "application/json": {
@@ -21163,6 +21499,11 @@
                   },
                   "chatApiKeyId": {
                     "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "agentId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -21227,6 +21568,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -21265,6 +21609,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -22080,6 +22425,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22118,6 +22466,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -22431,6 +22780,9 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -22469,6 +22821,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "hasCustomToolSelection",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -28825,6 +29178,9 @@
                           "dockerImage": {
                             "type": "string"
                           },
+                          "serviceAccount": {
+                            "type": "string"
+                          },
                           "transportType": {
                             "type": "string",
                             "enum": [
@@ -29763,6 +30119,9 @@
                         "dockerImage": {
                           "type": "string"
                         },
+                        "serviceAccount": {
+                          "type": "string"
+                        },
                         "transportType": {
                           "type": "string",
                           "enum": [
@@ -30363,6 +30722,9 @@
                           }
                         },
                         "dockerImage": {
+                          "type": "string"
+                        },
+                        "serviceAccount": {
                           "type": "string"
                         },
                         "transportType": {
@@ -31307,6 +31669,9 @@
                           }
                         },
                         "dockerImage": {
+                          "type": "string"
+                        },
+                        "serviceAccount": {
                           "type": "string"
                         },
                         "transportType": {
@@ -55891,6 +56256,19 @@
           "Tokens"
         ],
         "description": "Get tokens visible to the user based on their permissions",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "profileId",
+            "required": false,
+            "description": "Filter team tokens to only show tokens for teams the profile is assigned to"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",

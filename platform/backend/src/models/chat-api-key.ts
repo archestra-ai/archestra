@@ -1,7 +1,7 @@
 import { isVaultReference, parseVaultReference } from "@shared";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { computeSecretStorageType } from "@/secretmanager.utils";
+import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
   ChatApiKey,
   ChatApiKeyScope,

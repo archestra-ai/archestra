@@ -26,6 +26,13 @@ archestra:
         annotations:
           iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
 
+      # Additional RBAC for MCP K8s operator service account
+      # Grants cluster-wide read access for the Kubernetes MCP server
+      # The ClusterRole is created in archestra-ai/infra repo (gke/archestra-rbac.tf)
+      mcpServerRbac:
+        additionalClusterRoleBindings:
+          - clusterRoleName: archestra-cluster-reader
+
   service:
     annotations:
       # GKE BackendConfig for custom health checks

@@ -260,6 +260,9 @@ export function ChatMessages({
                           isLastTextPart &&
                           status !== "streaming";
 
+                        const isResponseInProgress =
+                          status === "streaming" || status === "submitted";
+
                         return (
                           <Fragment key={partKey}>
                             <EditableAssistantMessage
@@ -269,6 +272,7 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
+                              editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveAssistantMessage}
@@ -279,6 +283,9 @@ export function ChatMessages({
 
                       // Use editable component for user messages
                       if (message.role === "user") {
+                        const isResponseInProgress =
+                          status === "streaming" || status === "submitted";
+
                         return (
                           <Fragment key={partKey}>
                             <EditableUserMessage
@@ -287,6 +294,7 @@ export function ChatMessages({
                               partKey={partKey}
                               text={part.text}
                               isEditing={editingPartKey === partKey}
+                              editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}

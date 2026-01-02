@@ -21,6 +21,7 @@ interface EditableAssistantMessageProps {
   text: string;
   isEditing: boolean;
   showActions: boolean;
+  editDisabled?: boolean;
   onStartEdit: (partKey: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -37,6 +38,7 @@ export function EditableAssistantMessage({
   text,
   isEditing,
   showActions,
+  editDisabled = false,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -170,6 +172,7 @@ export function EditableAssistantMessage({
         <MessageActions
           textToCopy={text}
           onEditClick={handleStartEdit}
+          editDisabled={editDisabled}
           className="opacity-0 group-hover/message:opacity-100 transition-opacity"
         />
       )}

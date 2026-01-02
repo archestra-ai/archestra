@@ -4,7 +4,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
@@ -470,10 +470,7 @@ export default function ChatPage() {
       role: "user",
       parts: [{ type: "text", text: message.text }],
     });
-
-      // Auto-focus the textarea after sending
-      textareaRef.current?.focus();
-    };
+  };
 
   // If API key is not configured, show setup message
   // Only show after loading completes to avoid flash of incorrect content
@@ -661,6 +658,7 @@ export default function ChatPage() {
                   promptId={conversation?.promptId}
                   currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
+                  textareaRef={textareaRef}
                 />
                 <div className="text-center">
                   <Version inline />

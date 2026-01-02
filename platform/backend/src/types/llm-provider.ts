@@ -274,13 +274,25 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   // Build Response
   // ---------------------------------------------------------------------------
 
-  /** Build a response adapter from accumulated state */
-  toResponseAdapter(): LLMResponseAdapter<TResponse>;
-
-  /** Build provider response from accumulated state */
+  /**
+   * Reconstructs a complete provider-native response from accumulated streaming chunks.
+   *
+   * During streaming, responses arrive as many small chunks (text deltas, tool call fragments, etc.).
+   * This method combines all accumulated state into a single complete response object,
+   * which is needed for saving the interaction to the database.
+   */
   toProviderResponse(): TResponse;
 
-  /** Build provider refusal response */
+  /**
+   * Creates a provider-native response that replaces tool calls with a refusal message.
+   *
+   * When tool invocation policies block a tool call, we cannot return the original response
+   * containing the blocked tool. Instead, we return a valid response with the same metadata
+   * (id, model, usage) but with content replaced by a text message explaining the refusal.
+   *
+   * @param refusalMessage - Full message with metadata (for logging)
+   * @param contentMessage - Human-readable message (sent to client)
+   */
   toProviderRefusalResponse(
     refusalMessage: string,
     contentMessage: string,

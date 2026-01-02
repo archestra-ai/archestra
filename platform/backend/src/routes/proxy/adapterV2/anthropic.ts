@@ -635,10 +635,6 @@ class AnthropicStreamAdapter
     return events.join("");
   }
 
-  toResponseAdapter(): LLMResponseAdapter<AnthropicResponse> {
-    return new AnthropicResponseAdapter(this.toProviderResponse());
-  }
-
   toProviderResponse(): AnthropicResponse {
     const content: AnthropicResponse["content"] = [];
 

@@ -1,4 +1,8 @@
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  AGENT_TOOL_PREFIX,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  slugify,
+} from "@shared";
 import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
@@ -173,6 +177,7 @@ class ToolModel {
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
+        promptAgentId: schema.toolsTable.promptAgentId,
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -850,6 +855,168 @@ class ToolModel {
     return tools
       .map((t) => resultToolsByName.get(t.name))
       .filter((t): t is Tool => t !== undefined);
+  }
+
+  /**
+   * Create or get an agent delegation tool for a prompt agent
+   * These tools are NOT assigned to agents via agent_tools - they're prompt-specific
+   * @param params.promptAgentId - The prompt_agents.id
+   * @param params.agentName - The name of the delegated agent (used for tool name)
+   * @param params.description - Description from the delegated prompt's systemPrompt
+   */
+  static async createAgentDelegationTool(params: {
+    promptAgentId: string;
+    agentName: string;
+    description?: string | null;
+  }): Promise<Tool> {
+    const { promptAgentId, agentName, description } = params;
+
+    // Check if tool already exists for this prompt agent
+    const [existingTool] = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.promptAgentId, promptAgentId))
+      .limit(1);
+
+    if (existingTool) {
+      return existingTool;
+    }
+
+    // Create the tool (NOT assigned to agent_tools - it's prompt-specific)
+    const [tool] = await db
+      .insert(schema.toolsTable)
+      .values({
+        name: `${AGENT_TOOL_PREFIX}${slugify(agentName)}`,
+        promptAgentId,
+        agentId: null,
+        catalogId: null,
+        mcpServerId: null,
+        parameters: {
+          type: "object",
+          properties: {
+            message: {
+              type: "string",
+              description: "The message to send to this agent",
+            },
+          },
+          required: ["message"],
+        },
+        description: description || `Delegate to ${agentName}`,
+      })
+      .returning();
+
+    return tool;
+  }
+
+  /**
+   * Get agent delegation tools for a prompt
+   * Fetches tools that are linked to prompt_agents for the given promptId
+   */
+  static async getAgentDelegationToolsByPrompt(
+    promptId: string,
+  ): Promise<Tool[]> {
+    // Get prompt_agents for this prompt
+    const promptAgents = await db
+      .select({ id: schema.promptAgentsTable.id })
+      .from(schema.promptAgentsTable)
+      .where(eq(schema.promptAgentsTable.promptId, promptId));
+
+    if (promptAgents.length === 0) {
+      return [];
+    }
+
+    const promptAgentIds = promptAgents.map((pa) => pa.id);
+
+    // Get tools with promptAgentId in that list
+    const tools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.promptAgentId, promptAgentIds));
+
+    return tools;
+  }
+
+  /**
+   * Get agent delegation tools with profile info for user access filtering
+   * Returns tools along with the profile ID of the delegated-to prompt
+   */
+  static async getAgentDelegationToolsWithDetails(promptId: string): Promise<
+    Array<{
+      tool: Tool;
+      profileId: string;
+      agentPromptId: string;
+      agentPromptName: string;
+      agentPromptSystemPrompt: string | null;
+    }>
+  > {
+    // Join tools with prompt_agents and prompts to get profile info
+    const results = await db
+      .select({
+        tool: schema.toolsTable,
+        profileId: schema.agentsTable.id,
+        agentPromptId: schema.promptAgentsTable.agentPromptId,
+        agentPromptName: schema.promptsTable.name,
+        agentPromptSystemPrompt: schema.promptsTable.systemPrompt,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.promptAgentsTable,
+        eq(schema.toolsTable.promptAgentId, schema.promptAgentsTable.id),
+      )
+      .innerJoin(
+        schema.promptsTable,
+        eq(schema.promptAgentsTable.agentPromptId, schema.promptsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.promptsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.promptAgentsTable.promptId, promptId),
+          eq(schema.promptsTable.isActive, true),
+        ),
+      );
+
+    return results;
+  }
+
+  /**
+   * Sync agent delegation tool names when a prompt is renamed
+   * Updates the tool name for all tools that delegate to this prompt
+   * @param agentPromptId - The prompt ID that was renamed (the delegated-to prompt)
+   * @param newName - The new name of the prompt
+   */
+  static async syncAgentDelegationToolNames(
+    agentPromptIds: string | string[],
+    newName: string,
+  ): Promise<void> {
+    const idsArray = Array.isArray(agentPromptIds)
+      ? agentPromptIds
+      : [agentPromptIds];
+
+    if (idsArray.length === 0) {
+      return;
+    }
+
+    // Find all prompt_agents that point to any of these prompts (agentPromptId)
+    const promptAgents = await db
+      .select({ id: schema.promptAgentsTable.id })
+      .from(schema.promptAgentsTable)
+      .where(inArray(schema.promptAgentsTable.agentPromptId, idsArray));
+
+    if (promptAgents.length === 0) {
+      return;
+    }
+
+    const promptAgentIds = promptAgents.map((pa) => pa.id);
+    const newToolName = `${AGENT_TOOL_PREFIX}${slugify(newName)}`;
+
+    // Update all tools that reference these prompt_agents
+    await db
+      .update(schema.toolsTable)
+      .set({ name: newToolName })
+      .where(inArray(schema.toolsTable.promptAgentId, promptAgentIds));
   }
 }
 

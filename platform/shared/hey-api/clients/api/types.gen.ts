@@ -2937,6 +2937,7 @@ export type GetAgentsResponses = {
                 agentId: string | null;
                 catalogId: string | null;
                 mcpServerId: string | null;
+                promptAgentId: string | null;
                 name: string;
                 /**
                  *
@@ -3076,6 +3077,7 @@ export type CreateAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
+            promptAgentId: string | null;
             name: string;
             /**
              *
@@ -3194,6 +3196,7 @@ export type GetAllAgentsResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
+            promptAgentId: string | null;
             name: string;
             /**
              *
@@ -3312,6 +3315,7 @@ export type GetDefaultAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
+            promptAgentId: string | null;
             name: string;
             /**
              *
@@ -3511,6 +3515,7 @@ export type GetAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
+            promptAgentId: string | null;
             name: string;
             /**
              *
@@ -3643,6 +3648,7 @@ export type UpdateAgentResponses = {
             agentId: string | null;
             catalogId: string | null;
             mcpServerId: string | null;
+            promptAgentId: string | null;
             name: string;
             /**
              *
@@ -4489,6 +4495,7 @@ export type GetAgentToolsResponses = {
         agentId: string | null;
         catalogId: string | null;
         mcpServerId: string | null;
+        promptAgentId: string | null;
         name: string;
         /**
          *
@@ -13929,6 +13936,254 @@ export type GetPolicyConfigSubagentPromptResponses = {
 
 export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
 
+export type GetPromptAgentsData = {
+    body?: never;
+    path: {
+        promptId: string;
+    };
+    query?: never;
+    url: '/api/prompts/{promptId}/agents';
+};
+
+export type GetPromptAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptAgentsError = GetPromptAgentsErrors[keyof GetPromptAgentsErrors];
+
+export type GetPromptAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        promptId: string;
+        agentPromptId: string;
+        createdAt: string;
+        name: string;
+        systemPrompt: string | null;
+        profileId: string;
+        profileName: string;
+    }>;
+};
+
+export type GetPromptAgentsResponse = GetPromptAgentsResponses[keyof GetPromptAgentsResponses];
+
+export type SyncPromptAgentsData = {
+    body: {
+        agentPromptIds: Array<string>;
+    };
+    path: {
+        promptId: string;
+    };
+    query?: never;
+    url: '/api/prompts/{promptId}/agents';
+};
+
+export type SyncPromptAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SyncPromptAgentsError = SyncPromptAgentsErrors[keyof SyncPromptAgentsErrors];
+
+export type SyncPromptAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        added: Array<string>;
+        removed: Array<string>;
+    };
+};
+
+export type SyncPromptAgentsResponse = SyncPromptAgentsResponses[keyof SyncPromptAgentsResponses];
+
+export type DeletePromptAgentData = {
+    body?: never;
+    path: {
+        promptId: string;
+        agentPromptId: string;
+    };
+    query?: never;
+    url: '/api/prompts/{promptId}/agents/{agentPromptId}';
+};
+
+export type DeletePromptAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeletePromptAgentError = DeletePromptAgentErrors[keyof DeletePromptAgentErrors];
+
+export type DeletePromptAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeletePromptAgentResponse = DeletePromptAgentResponses[keyof DeletePromptAgentResponses];
+
 export type GetPromptsData = {
     body?: never;
     path?: never;
@@ -14461,6 +14716,108 @@ export type GetPromptVersionsResponses = {
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
+
+export type GetPromptToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/tools';
+};
+
+export type GetPromptToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptToolsError = GetPromptToolsErrors[keyof GetPromptToolsErrors];
+
+export type GetPromptToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string | null;
+        catalogId: string | null;
+        mcpServerId: string | null;
+        promptAgentId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetPromptToolsResponse = GetPromptToolsResponses[keyof GetPromptToolsResponses];
 
 export type RollbackPromptData = {
     body: {
@@ -17038,6 +17395,7 @@ export type GetToolsResponses = {
     200: Array<{
         id: string;
         catalogId: string | null;
+        promptAgentId: string | null;
         name: string;
         /**
          *

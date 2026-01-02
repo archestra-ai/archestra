@@ -29,6 +29,7 @@ export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as promptsTable } from "./prompt";
+export { default as promptAgentsTable } from "./prompt-agent";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
 export { default as ssoProvidersTable } from "./sso-provider";

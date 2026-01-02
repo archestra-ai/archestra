@@ -92,6 +92,13 @@ export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
 export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 
 /**
+ * Prefix for agent delegation tools
+ * Format: agent__{slugified_agent_name}
+ * These are NOT archestra tools - they are dynamically generated per prompt
+ */
+export const AGENT_TOOL_PREFIX = `agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+
+/**
  * Special tools which have handlers on the frontend...
  */
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;

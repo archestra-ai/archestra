@@ -234,7 +234,9 @@ export async function handleLLMProxy<
         requestAdapter.isStreaming()
           ? () => {
               reply.raw.write(
-                streamAdapter.formatTextDeltaSSE("Analyzing with Dual LLM:\n\n"),
+                streamAdapter.formatTextDeltaSSE(
+                  "Analyzing with Dual LLM:\n\n",
+                ),
               );
             }
           : undefined,

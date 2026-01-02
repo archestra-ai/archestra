@@ -670,7 +670,9 @@ class AnthropicStreamAdapter
       role: "assistant",
       content,
       model: this.state.model,
-      stop_reason: (this.state.stopReason as AnthropicResponse["stop_reason"]) ?? "end_turn",
+      stop_reason:
+        (this.state.stopReason as AnthropicResponse["stop_reason"]) ??
+        "end_turn",
       stop_sequence: null,
       usage: {
         input_tokens: this.state.usage?.inputTokens ?? 0,

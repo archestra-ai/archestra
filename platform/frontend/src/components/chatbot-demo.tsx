@@ -320,7 +320,7 @@ const ChatBotDemo = ({
                           </Reasoning>
                         );
                       default: {
-                        // Handle custom blocked-tool type (legacy)
+                        // Handle custom blocked-tool type
                         if (_isBlockedToolPart(part)) {
                           const blockedPart = part as BlockedToolPart;
                           return (

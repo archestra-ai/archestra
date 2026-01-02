@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { useGenerateConversationTitle } from "@/lib/chat.query";
+
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 
 type QueuedMessage = UIMessage & { id: string };
@@ -196,19 +197,19 @@ function ChatSessionHook({
     useState<{ toolCallId: string; toolName: string } | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const isManuallySendingRef = useRef(false);
-  
+
   const addQueuedMessage = useCallback((message: QueuedMessage) => {
     setQueuedMessages((prev) => [...prev, message]);
   }, []);
-  
+
   const removeQueuedMessage = useCallback((id: string) => {
     setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
   }, []);
-  
+
   const clearQueuedMessages = useCallback(() => {
     setQueuedMessages([]);
   }, []);
-  
+
   const removeMessagesUpTo = useCallback((id: string) => {
     setQueuedMessages((prev) => {
       const messageIndex = prev.findIndex((msg) => msg.id === id);
@@ -260,15 +261,49 @@ function ChatSessionHook({
     },
   } as Parameters<typeof useChat>[0]);
 
+  const retryQueuedSendTimeoutRef = useRef<number | null>(null);
+
   // Auto-send queued message when stream finishes
   useEffect(() => {
-    if (isManuallySendingRef.current) return;
+    // If a manual send is in-flight, schedule a retry after the manual window ends
+    if (isManuallySendingRef.current) {
+      if (retryQueuedSendTimeoutRef.current) {
+        clearTimeout(retryQueuedSendTimeoutRef.current);
+      }
+      retryQueuedSendTimeoutRef.current = window.setTimeout(() => {
+        retryQueuedSendTimeoutRef.current = null;
+        if (
+          !isManuallySendingRef.current &&
+          status === "ready" &&
+          sendMessage &&
+          queuedMessages.length > 0
+        ) {
+          const queued = queuedMessages[0];
+          setQueuedMessages((prev) => prev.slice(1));
+          sendMessage(queued);
+        }
+      }, 450);
+      return () => {
+        if (retryQueuedSendTimeoutRef.current) {
+          clearTimeout(retryQueuedSendTimeoutRef.current);
+          retryQueuedSendTimeoutRef.current = null;
+        }
+      };
+    }
+
     if (status !== "ready" || !sendMessage || queuedMessages.length === 0)
       return;
 
     const queued = queuedMessages[0];
     setQueuedMessages((prev) => prev.slice(1));
     sendMessage(queued);
+
+    return () => {
+      if (retryQueuedSendTimeoutRef.current) {
+        clearTimeout(retryQueuedSendTimeoutRef.current);
+        retryQueuedSendTimeoutRef.current = null;
+      }
+    };
   }, [status, queuedMessages, sendMessage]);
 
   // Auto-generate title after first assistant response
@@ -340,17 +375,15 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     pendingCustomServerToolCall,
-    setPendingCustomServerToolCall,
-      queuedMessages,
-      addQueuedMessage,
-      removeQueuedMessage,
-      clearQueuedMessages,
-      removeMessagesUpTo,
-      isManuallySendingRef,
-      sessionsRef,
-      scheduleCleanup,
-      notifySessionUpdate,
-    ]);
+    queuedMessages,
+    addQueuedMessage,
+    removeQueuedMessage,
+    clearQueuedMessages,
+    removeMessagesUpTo,
+    sessionsRef,
+    scheduleCleanup,
+    notifySessionUpdate,
+  ]);
 
   return null;
 }

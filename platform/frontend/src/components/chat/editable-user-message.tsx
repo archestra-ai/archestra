@@ -110,7 +110,7 @@ export function EditableUserMessage({
       <Message from="user" className="relative pb-9">
         <MessageContent
           aria-label="Message content"
-          className="max-w-[70%] min-w-[50%] px-2 py-0 pt-2 ring-2 !bg-primary/80 ring-primary/50"
+          className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-primary/80 ring-primary/50"
         >
           <div>
             <Textarea
@@ -124,7 +124,7 @@ export function EditableUserMessage({
               disabled={isSaving}
               placeholder="Edit your message..."
             />
-            <div className="flex gap-2 py-2 justify-between items-start">
+            <div className="flex gap-2 py-3 justify-between items-start">
               <div className="flex gap-2 items-start">
                 <Info className="h-3 w-3 text-primary-foreground/70 shrink-0 mt-0.5" />
                 <span className="text-xs text-primary-foreground/70">

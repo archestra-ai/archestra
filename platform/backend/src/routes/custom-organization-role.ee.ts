@@ -170,7 +170,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate permissions if being changed
       if (permission) {
-        const userPermissions = await getUserPermissions(
+        const userPermissions = await UserModel.getUserPermissions(
           user.id,
           organizationId,
         );

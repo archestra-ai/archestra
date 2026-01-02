@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import UserModel from "./user";
 
-describe("getUserPermissions", () => {
+describe("UserModel.getUserPermissions", () => {
   let testOrgId: string;
   let testUserId: string;
 

@@ -1,7 +1,7 @@
 import { PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import OrganizationRoleModel from "@/models/organization-role";
+import { OrganizationRoleModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,

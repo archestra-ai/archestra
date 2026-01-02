@@ -55,7 +55,9 @@ export function ChatToolsDisplay({
       }
 
       // Check if click is on any of the tool buttons
-      const clickedButton = (target as HTMLElement).closest('[data-tool-button]');
+      const clickedButton = (target as HTMLElement).closest(
+        "[data-tool-button]",
+      );
       if (clickedButton) {
         return;
       }
@@ -220,130 +222,128 @@ export function ChatToolsDisplay({
   }
 
   return (
-    <>
-      <TooltipProvider>
-        {sortedServerEntries.map(([serverName]) => {
-            // Get all tools for this server from profileTools
-            const allServerTools = profileTools.filter((tool) => {
-              const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-              const toolServerName =
-                parts.length > 1
-                  ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-                  : "default";
-              return toolServerName === serverName;
-            });
+    <TooltipProvider>
+      {sortedServerEntries.map(([serverName]) => {
+        // Get all tools for this server from profileTools
+        const allServerTools = profileTools.filter((tool) => {
+          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+          const toolServerName =
+            parts.length > 1
+              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+              : "default";
+          return toolServerName === serverName;
+        });
 
-            // Split into enabled and disabled using the consistent enabledToolIdsSet
-            const enabledTools: typeof allServerTools = [];
-            const disabledTools: typeof allServerTools = [];
+        // Split into enabled and disabled using the consistent enabledToolIdsSet
+        const enabledTools: typeof allServerTools = [];
+        const disabledTools: typeof allServerTools = [];
 
-            for (const tool of allServerTools) {
-              if (enabledToolIdsSet.has(tool.id)) {
-                enabledTools.push(tool);
-              } else {
-                disabledTools.push(tool);
-              }
-            }
+        for (const tool of allServerTools) {
+          if (enabledToolIdsSet.has(tool.id)) {
+            enabledTools.push(tool);
+          } else {
+            disabledTools.push(tool);
+          }
+        }
 
-            const totalToolsCount = allServerTools.length;
-            const isOpen = openTooltip === serverName;
+        const totalToolsCount = allServerTools.length;
+        const isOpen = openTooltip === serverName;
 
-            return (
-              <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
-                <TooltipTrigger asChild>
-                  <PromptInputButton
-                    data-tool-button
-                    className="w-[fit-content]"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setOpenTooltip(isOpen ? null : serverName);
-                    }}
-                  >
-                    <span className="font-medium text-xs text-foreground">
-                      {serverName}
-                    </span>
-                    <span className="text-muted-foreground text-xs">
-                      ({enabledTools.length}/{totalToolsCount})
-                    </span>
-                  </PromptInputButton>
-                </TooltipTrigger>
-                <TooltipContent
-                  ref={tooltipContentRef}
-                  side="top"
-                  align="center"
-                  className="min-w-80 max-h-96 p-0 overflow-y-auto"
-                  sideOffset={10}
-                  onWheel={(e) => e.stopPropagation()}
-                  onTouchMove={(e) => e.stopPropagation()}
-                  onPointerDownOutside={(e) => {
-                    e.preventDefault();
-                  }}
-                >
-                  <ScrollArea className="max-h-96">
-                    {/* Enabled section */}
-                    {enabledTools.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between px-3 py-2">
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            Enabled ({enabledTools.length})
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={(e) =>
-                              handleDisableAll(
-                                enabledTools.map((t) => t.id),
-                                e,
-                              )
-                            }
-                          >
-                            Disable All
-                          </Button>
-                        </div>
-                        <div className="space-y-1 px-2 pb-2">
-                          {enabledTools.map((tool) =>
-                            renderToolRow(tool, false, serverName),
-                          )}
-                        </div>
-                      </div>
-                    )}
+        return (
+          <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
+            <TooltipTrigger asChild>
+              <PromptInputButton
+                data-tool-button
+                className="w-[fit-content]"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setOpenTooltip(isOpen ? null : serverName);
+                }}
+              >
+                <span className="font-medium text-xs text-foreground">
+                  {serverName}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  ({enabledTools.length}/{totalToolsCount})
+                </span>
+              </PromptInputButton>
+            </TooltipTrigger>
+            <TooltipContent
+              ref={tooltipContentRef}
+              side="top"
+              align="center"
+              className="min-w-80 max-h-96 p-0 overflow-y-auto"
+              sideOffset={10}
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onPointerDownOutside={(e) => {
+                e.preventDefault();
+              }}
+            >
+              <ScrollArea className="max-h-96">
+                {/* Enabled section */}
+                {enabledTools.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        Enabled ({enabledTools.length})
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={(e) =>
+                          handleDisableAll(
+                            enabledTools.map((t) => t.id),
+                            e,
+                          )
+                        }
+                      >
+                        Disable All
+                      </Button>
+                    </div>
+                    <div className="space-y-1 px-2 pb-2">
+                      {enabledTools.map((tool) =>
+                        renderToolRow(tool, false, serverName),
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                    {/* Disabled section */}
-                    {disabledTools.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between px-3 py-2">
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            Disabled ({disabledTools.length})
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={(e) =>
-                              handleEnableAll(
-                                disabledTools.map((t) => t.id),
-                                e,
-                              )
-                            }
-                          >
-                            Enable All
-                          </Button>
-                        </div>
-                        <div className="space-y-1 px-2 pb-2">
-                          {disabledTools.map((tool) =>
-                            renderToolRow(tool, true, serverName),
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </ScrollArea>
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-      </TooltipProvider>
-    </>
+                {/* Disabled section */}
+                {disabledTools.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        Disabled ({disabledTools.length})
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={(e) =>
+                          handleEnableAll(
+                            disabledTools.map((t) => t.id),
+                            e,
+                          )
+                        }
+                      >
+                        Enable All
+                      </Button>
+                    </div>
+                    <div className="space-y-1 px-2 pb-2">
+                      {disabledTools.map((tool) =>
+                        renderToolRow(tool, true, serverName),
+                      )}
+                    </div>
+                  </div>
+                )}
+              </ScrollArea>
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </TooltipProvider>
   );
 }

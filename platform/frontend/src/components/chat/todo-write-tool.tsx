@@ -1,14 +1,13 @@
 "use client";
 
+import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   CheckCircle2,
+  ChevronDown,
   Circle,
   Clock,
   ListTodo,
-  ChevronDown,
 } from "lucide-react";
-import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import type { ReactNode } from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -43,10 +42,10 @@ export function TodoWriteTool({
 
   // Count todos by status
   const completedCount = todos.filter((t) => t.status === "completed").length;
-  const inProgressCount = todos.filter(
+  const _inProgressCount = todos.filter(
     (t) => t.status === "in_progress",
   ).length;
-  const pendingCount = todos.filter((t) => t.status === "pending").length;
+  const _pendingCount = todos.filter((t) => t.status === "pending").length;
 
   const getStatusIcon = (status: Todo["status"]) => {
     switch (status) {
@@ -58,7 +57,6 @@ export function TodoWriteTool({
         return (
           <Clock className="w-3 h-3 text-blue-600 animate-pulse flex-shrink-0" />
         );
-      case "pending":
       default:
         return (
           <Circle className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
@@ -72,7 +70,6 @@ export function TodoWriteTool({
         return "text-muted-foreground/60 line-through";
       case "in_progress":
         return "text-foreground";
-      case "pending":
       default:
         return "text-muted-foreground";
     }
@@ -84,9 +81,12 @@ export function TodoWriteTool({
 
   return (
     <div className="mb-3 rounded-md border bg-card/50">
-      <div
-        className="px-3 py-2 border-b bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors"
+      <button
+        type="button"
+        className="w-full px-3 py-2 border-b bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors text-left"
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-controls="todo-list-content"
       >
         <div className="flex items-center gap-2">
           <ListTodo className="w-3.5 h-3.5 text-muted-foreground" />
@@ -105,13 +105,16 @@ export function TodoWriteTool({
             )}
           />
         </div>
-      </div>
+      </button>
       {isOpen && (
-        <div className="px-3 py-2">
+        <div id="todo-list-content" className="px-3 py-2">
           {todos.length > 0 ? (
             <div className="space-y-0.5">
-              {todos.map((todo, index) => (
-                <div key={index} className="flex items-center gap-2 py-0.5">
+              {todos.map((todo) => (
+                <div
+                  key={`${todo.content}-${todo.status}`}
+                  className="flex items-center gap-2 py-0.5"
+                >
                   {getStatusIcon(todo.status)}
                   <span
                     className={cn(

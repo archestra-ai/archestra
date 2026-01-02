@@ -15,21 +15,21 @@ class ConversationModel {
       .values(data)
       .returning();
 
-    // Disable Archestra tools by default for new conversations (except todo_write and artefact_write)
+    // Disable Archestra tools by default for new conversations (except todo_write and artifact_write)
     // Get all tools assigned to the agent
     const agentTools = await ToolModel.getToolsByAgent(data.agentId);
 
-    // Filter out Archestra tools (those starting with "archestra__"), but keep todo_write and artefact_write enabled
+    // Filter out Archestra tools (those starting with "archestra__"), but keep todo_write and artifact_write enabled
     const nonArchestraToolIds = agentTools
       .filter(
         (tool) =>
           !tool.name.startsWith("archestra__") ||
           tool.name === "archestra__todo_write" ||
-          tool.name === "archestra__artefact_write",
+          tool.name === "archestra__artifact_write",
       )
       .map((tool) => tool.id);
 
-    // Set enabled tools to non-Archestra tools plus todo_write and artefact_write
+    // Set enabled tools to non-Archestra tools plus todo_write and artifact_write
     // This creates a custom tool selection with most Archestra tools disabled
     await ConversationEnabledToolModel.setEnabledTools(
       conversation.id,

@@ -7,7 +7,7 @@ import {
   isByosEnabled,
   secretManager,
   secretManagerCoordinator,
-} from "@/secretsmanager";
+} from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,

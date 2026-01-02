@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,

@@ -46,7 +46,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ac: ["create", "read", "update", "delete"],
 };
 
-export const editorPermissions: Permissions = {
+export const editorPermissions: Record<Resource, Action[]> = {
   profile: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
@@ -64,9 +64,13 @@ export const editorPermissions: Permissions = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["create", "read", "update", "delete"],
   prompt: ["create", "read", "update", "delete"],
+  member: [],
+  invitation: [],
+  ssoProvider: [],
+  ac: [],
 };
 
-export const memberPermissions: Permissions = {
+export const memberPermissions: Record<Resource, Action[]> = {
   profile: ["read"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
@@ -84,6 +88,10 @@ export const memberPermissions: Permissions = {
   tokenPrice: ["read"],
   chatSettings: ["read"],
   prompt: ["read"],
+  member: [],
+  invitation: [],
+  ssoProvider: [],
+  ac: [],
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =

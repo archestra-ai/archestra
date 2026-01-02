@@ -1,7 +1,7 @@
-import { getUserPermissions } from "@/models/user.ee";
 import { beforeEach, describe, expect, test } from "@/test";
+import UserModel from "./user";
 
-describe("getUserPermissions - custom roles", () => {
+describe("getUserPermissions", () => {
   let testOrgId: string;
   let testUserId: string;
 
@@ -27,7 +27,7 @@ describe("getUserPermissions - custom roles", () => {
     // Add user with custom role
     await makeMember(testUserId, testOrgId, { role: createdRole.role });
 
-    const result = await getUserPermissions(testUserId, testOrgId);
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     expect(result).toEqual({
       profile: ["read", "create"],
@@ -40,7 +40,7 @@ describe("getUserPermissions - custom roles", () => {
     // Add user with custom role that doesn't exist
     await makeMember(testUserId, testOrgId, { role: crypto.randomUUID() });
 
-    const result = await getUserPermissions(testUserId, testOrgId);
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     // Should return empty permissions when role doesn't exist
     expect(result).toEqual({});

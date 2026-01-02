@@ -8,7 +8,7 @@ import {
   type MockedFunction,
   test,
 } from "@/test";
-import { hasPermission } from "./utils.ee";
+import { hasPermission } from "./utils";
 
 // Mock the better-auth module
 vi.mock("./better-auth", () => ({

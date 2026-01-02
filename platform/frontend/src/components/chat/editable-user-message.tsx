@@ -1,7 +1,13 @@
 "use client";
 
-import { type KeyboardEventHandler, useEffect, useState } from "react";
-import { useStickToBottomContext } from "use-stick-to-bottom";
+import { Info } from "lucide-react";
+import {
+  type KeyboardEventHandler,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
@@ -36,6 +42,7 @@ export function EditableUserMessage({
   const [editedText, setEditedText] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset edited text when entering edit mode
   useEffect(() => {
@@ -43,6 +50,16 @@ export function EditableUserMessage({
       setEditedText(text);
     }
   }, [isEditing, text]);
+
+  // Auto-focus textarea and move caret to end when entering edit mode
+  useLayoutEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const textarea = textareaRef.current;
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }, [isEditing]);
 
   const handleStartEdit = () => {
     onStartEdit(partKey, messageId);
@@ -91,22 +108,31 @@ export function EditableUserMessage({
   if (isEditing) {
     return (
       <Message from="user" className="relative pb-9">
-        <MessageContent className="max-w-[70%] min-w-[50%] px-0 py-0 ring-2 ring-primary/50">
+        <MessageContent
+          aria-label="Message content"
+          className="max-w-[70%] min-w-[50%] px-2 py-0 pt-2 ring-2 !bg-primary/80 ring-primary/50"
+        >
           <div>
             <Textarea
+              ref={textareaRef}
               value={editedText}
               onChange={(e) => setEditedText(e.target.value)}
               onKeyDown={handleKeyDown}
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
-              className="max-h-[160px] resize-none border-0 focus-visible:ring-0 shadow-none"
+              className="max-h-[160px] resize-none border-0 focus-visible:ring-0 shadow-none bg-primary text-sm"
               disabled={isSaving}
               placeholder="Edit your message..."
             />
-            <div className="flex gap-2 p-2 justify-end">
+            <div className="flex gap-2 py-2 justify-end items-start">
+              <Info className="h-3 w-3 text-primary-foreground/70 shrink-0 mt-0.5" />
+              <span className="text-xs text-primary-foreground/70">
+                Editing this message will regenerate the response and remove all
+                subsequent messages.
+              </span>
               <Button
                 size="sm"
-                variant="ghost"
+                variant="outline-transparent"
                 onClick={handleCancelEdit}
                 disabled={isSaving}
               >
@@ -128,7 +154,10 @@ export function EditableUserMessage({
   }
 
   return (
-    <Message from="user" className="relative pb-4 group/message flex-col items-end pr-4 mr-[-1rem]">
+    <Message
+      from="user"
+      className="relative pb-4 group/message flex-col items-end pr-4 mr-[-1rem]"
+    >
       <MessageContent>
         <Response>{text}</Response>
       </MessageContent>

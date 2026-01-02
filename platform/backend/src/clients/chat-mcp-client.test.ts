@@ -32,6 +32,7 @@ describe("chat-mcp-client tool caching", () => {
     await chatClient.__test.clearToolCache(cacheKey);
 
     const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
       listTools: vi.fn().mockResolvedValue({
         tools: [
           {

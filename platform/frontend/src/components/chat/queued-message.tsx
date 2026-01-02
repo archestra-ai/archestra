@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Send } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -66,4 +66,3 @@ export function QueuedMessage({
     </div>
   );
 }
-

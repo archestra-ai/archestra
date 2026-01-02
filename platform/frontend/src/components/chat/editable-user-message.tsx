@@ -6,6 +6,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MessageActions } from '@/components/chat/message-actions';
 
 interface EditableUserMessageProps {
   messageId: string;
@@ -134,37 +135,12 @@ export function EditableUserMessage({
   };
 
   return (
-    <Message from="user" className="relative pb-9">
-      <MessageContent className="group/message">
-        <Response>{text}</Response>
-        <div className="absolute bottom-1 right-0 flex gap-1 opacity-0 group-hover/message:opacity-100 transition-opacity z-10">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 hover:bg-transparent"
-            onClick={handleCopy}
-            disabled={isCopied}
-          >
-            {isCopied ? (
-              <Check className="h-3 w-3 text-green-500" />
-            ) : (
-              <Copy className="h-3 w-3 text-muted-foreground hover:text-primary/70 transition-colors" />
-            )}
-            <span className="sr-only">
-              {isCopied ? "Copied!" : "Copy message"}
-            </span>
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 hover:bg-transparent"
-            onClick={handleStartEdit}
-          >
-            <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary/70 transition-colors" />
-            <span className="sr-only">Edit message</span>
-          </Button>
-        </div>
-      </MessageContent>
+    <Message from="user" className="relative pb-9 group/message">
+        <MessageContent>
+          <Response>{text}</Response>
+        </MessageContent>
+        <MessageActions textToCopy={text} onEditClick={handleStartEdit}
+                        className="absolute top-[100%] right-0 opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-1.75rem]"/>
     </Message>
-  );
+);
 }

@@ -1,11 +1,13 @@
 "use client";
 
-import { Check, Copy, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { type KeyboardEventHandler, useEffect, useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MessageActions } from '@/components/chat/message-actions';
 
 interface EditableAssistantMessageProps {
   messageId: string;
@@ -36,7 +38,6 @@ export function EditableAssistantMessage({
 }: EditableAssistantMessageProps) {
   const [editedText, setEditedText] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
 
   // Reset edited text when entering edit mode
@@ -127,46 +128,13 @@ export function EditableAssistantMessage({
     );
   }
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 500);
-  };
-
   return (
-    <Message from="assistant" className="relative pt-0">
-      <MessageContent className="group/message">
+    <Message from="assistant" className="relative pt-0 group/message">
+      <MessageContent>
         <Response>{text}</Response>
-        {showActions && (
-          <div className="absolute -bottom-4 left-0 flex gap-1 opacity-0 group-hover/message:opacity-100 transition-opacity z-10">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 hover:bg-transparent"
-              onClick={handleCopy}
-              disabled={isCopied}
-            >
-              {isCopied ? (
-                <Check className="h-3 w-3 text-green-500" />
-              ) : (
-                <Copy className="h-3 w-3 text-muted-foreground hover:text-primary transition-colors" />
-              )}
-              <span className="sr-only">
-                {isCopied ? "Copied!" : "Copy message"}
-              </span>
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 hover:bg-transparent"
-              onClick={handleStartEdit}
-            >
-              <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary transition-colors" />
-              <span className="sr-only">Edit message</span>
-            </Button>
-          </div>
-        )}
       </MessageContent>
+      {showActions && <MessageActions textToCopy={text} onEditClick={handleStartEdit}
+                                      className="absolute top-[100%] opacity-0 group-hover/message:opacity-100 transition-opacity mt-[-0.5rem]"/>}
     </Message>
   );
 }

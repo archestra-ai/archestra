@@ -347,6 +347,9 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Get base URL for the provider (from config), undefined means use SDK default */
   getBaseUrl(): string | undefined;
 
+  /** Get span name for tracing (e.g., "openai.chat.completions", "anthropic.messages") */
+  getSpanName(streaming: boolean): string;
+
   /** Create provider client */
   createClient(
     apiKey: string | undefined,

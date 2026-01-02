@@ -376,6 +376,7 @@ async function handleStreaming<
   const providerName = provider.provider;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
+  let streamCompleted = false;
 
   logger.debug(
     { model: actualModel },
@@ -385,7 +386,7 @@ async function handleStreaming<
   try {
     // Execute streaming request with tracing
     const stream = await utils.tracing.startActiveLlmSpan(
-      `${providerName}.messages`,
+      provider.getSpanName(true),
       providerName,
       actualModel,
       true,
@@ -501,7 +502,18 @@ async function handleStreaming<
     reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
-    // Record interaction and report metrics
+    streamCompleted = true;
+    return reply;
+  } catch (error) {
+    return handleError(error, reply, provider.extractErrorMessage, true);
+  } finally {
+    // Always record interaction (whether stream completed or was aborted)
+    if (!streamCompleted) {
+      logger.info(
+        "Stream was aborted before completion, recording partial interaction",
+      );
+    }
+
     const usage = streamAdapter.state.usage;
     if (usage) {
       reportLLMTokens(
@@ -562,10 +574,6 @@ async function handleStreaming<
         toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
       });
     }
-
-    return reply;
-  } catch (error) {
-    return handleError(error, reply, provider.extractErrorMessage, true);
   }
 }
 
@@ -602,7 +610,7 @@ async function handleNonStreaming<
 
   // Execute request with tracing
   const response = await utils.tracing.startActiveLlmSpan(
-    `${providerName}.messages`,
+    provider.getSpanName(false),
     providerName,
     actualModel,
     false,

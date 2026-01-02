@@ -959,6 +959,10 @@ export const anthropicAdapterFactory: LLMProvider<
     return config.llm.anthropic.baseUrl;
   },
 
+  getSpanName(): string {
+    return "anthropic.messages";
+  },
+
   createClient(
     apiKey: string | undefined,
     options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },

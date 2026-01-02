@@ -489,6 +489,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPromptVersions]: {
     prompt: ["read"],
   },
+  [RouteId.GetPromptTools]: {
+    prompt: ["read"],
+  },
   [RouteId.RollbackPrompt]: {
     prompt: ["update"],
   },

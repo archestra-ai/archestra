@@ -2202,7 +2202,7 @@ export function getArchestraMcpTools(): Tool[] {
 }
 
 /**
- * Get dynamic agent tools for a prompt
+ * Get agent delegation tools for a prompt from the database
  * Each configured agent becomes a separate tool (e.g., agent__research_bot)
  * Note: Agent tools are separate from Archestra tools - they enable prompt-to-prompt delegation
  */
@@ -2213,19 +2213,20 @@ export async function getAgentTools(context: {
 }): Promise<Tool[]> {
   const { promptId, organizationId, userId } = context;
 
-  // Get all agents configured for this prompt
-  const allAgents = await PromptAgentModel.findByPromptIdWithDetails(promptId);
+  // Get all agent delegation tools from the database with profile info
+  const allToolsWithDetails =
+    await ToolModel.getAgentDelegationToolsWithDetails(promptId);
 
   // Filter by user access if user ID is provided
-  let accessibleAgents = allAgents;
+  let accessibleTools = allToolsWithDetails;
   if (userId) {
     const userAccessibleAgentIds =
       await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false, // Not admin - check actual access
       );
-    accessibleAgents = allAgents.filter((a) =>
-      userAccessibleAgentIds.includes(a.profileId),
+    accessibleTools = allToolsWithDetails.filter((t) =>
+      userAccessibleAgentIds.includes(t.profileId),
     );
   }
 
@@ -2234,30 +2235,22 @@ export async function getAgentTools(context: {
       promptId,
       organizationId,
       userId,
-      allAgentCount: allAgents.length,
-      accessibleAgentCount: accessibleAgents.length,
+      allToolCount: allToolsWithDetails.length,
+      accessibleToolCount: accessibleTools.length,
     },
-    "Generated agent tools for prompt",
+    "Fetched agent delegation tools from database",
   );
 
-  // Generate tool for each agent
-  return accessibleAgents.map((agent) => ({
-    name: `${AGENT_TOOL_PREFIX}${slugify(agent.name)}`,
-    title: agent.name,
+  // Convert DB tools to MCP Tool format
+  return accessibleTools.map((t) => ({
+    name: t.tool.name,
+    title: t.agentPromptName,
     description:
-      agent.systemPrompt?.substring(0, 500) ||
-      `Call the "${agent.name}" agent to perform tasks.`,
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        message: {
-          type: "string",
-          description: "The message to send to this agent",
-        },
-      },
-      required: ["message"],
-    },
+      t.tool.description ||
+      t.agentPromptSystemPrompt?.substring(0, 500) ||
+      `Call the "${t.agentPromptName}" agent to perform tasks.`,
+    inputSchema: t.tool.parameters as Tool["inputSchema"],
     annotations: {},
-    _meta: { agentPromptId: agent.agentPromptId },
+    _meta: { agentPromptId: t.agentPromptId },
   }));
 }

@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import ToolModel from "./tool";
 
 /**
  * Prompt agent with details for display
@@ -44,6 +45,25 @@ class PromptAgentModel {
         agentPromptId,
       })
       .returning();
+
+    // Get the delegated prompt's details for the tool
+    const [agentPrompt] = await db
+      .select({
+        name: schema.promptsTable.name,
+        systemPrompt: schema.promptsTable.systemPrompt,
+      })
+      .from(schema.promptsTable)
+      .where(eq(schema.promptsTable.id, agentPromptId))
+      .limit(1);
+
+    if (agentPrompt) {
+      // Create the agent delegation tool in the tools table
+      await ToolModel.createAgentDelegationTool({
+        promptAgentId: result.id,
+        agentName: agentPrompt.name,
+        description: agentPrompt.systemPrompt,
+      });
+    }
 
     return result;
   }
@@ -164,7 +184,7 @@ class PromptAgentModel {
     // Find agents to add
     const toAdd = agentPromptIds.filter((id) => !currentIds.has(id));
 
-    // Remove old assignments
+    // Remove old assignments (cascade will delete associated tools)
     if (toRemove.length > 0) {
       const idsToRemove = toRemove.map((c) => c.agentPromptId);
       await db
@@ -177,14 +197,41 @@ class PromptAgentModel {
         );
     }
 
-    // Add new assignments
+    // Add new assignments and create tools
     if (toAdd.length > 0) {
-      await db.insert(schema.promptAgentsTable).values(
-        toAdd.map((agentPromptId) => ({
-          promptId,
-          agentPromptId,
-        })),
-      );
+      const insertedRows = await db
+        .insert(schema.promptAgentsTable)
+        .values(
+          toAdd.map((agentPromptId) => ({
+            promptId,
+            agentPromptId,
+          })),
+        )
+        .returning();
+
+      // Get prompt details for all added agents
+      const promptDetails = await db
+        .select({
+          id: schema.promptsTable.id,
+          name: schema.promptsTable.name,
+          systemPrompt: schema.promptsTable.systemPrompt,
+        })
+        .from(schema.promptsTable)
+        .where(inArray(schema.promptsTable.id, toAdd));
+
+      const promptDetailsMap = new Map(promptDetails.map((p) => [p.id, p]));
+
+      // Create tools for each new prompt_agent
+      for (const row of insertedRows) {
+        const promptDetail = promptDetailsMap.get(row.agentPromptId);
+        if (promptDetail) {
+          await ToolModel.createAgentDelegationTool({
+            promptAgentId: row.id,
+            agentName: promptDetail.name,
+            description: promptDetail.systemPrompt,
+          });
+        }
+      }
     }
 
     return {
@@ -216,12 +263,39 @@ class PromptAgentModel {
     const duplicates = agentPromptIds.filter((id) => currentIds.has(id));
 
     if (toAssign.length > 0) {
-      await db.insert(schema.promptAgentsTable).values(
-        toAssign.map((agentPromptId) => ({
-          promptId,
-          agentPromptId,
-        })),
-      );
+      const insertedRows = await db
+        .insert(schema.promptAgentsTable)
+        .values(
+          toAssign.map((agentPromptId) => ({
+            promptId,
+            agentPromptId,
+          })),
+        )
+        .returning();
+
+      // Get prompt details for all assigned agents
+      const promptDetails = await db
+        .select({
+          id: schema.promptsTable.id,
+          name: schema.promptsTable.name,
+          systemPrompt: schema.promptsTable.systemPrompt,
+        })
+        .from(schema.promptsTable)
+        .where(inArray(schema.promptsTable.id, toAssign));
+
+      const promptDetailsMap = new Map(promptDetails.map((p) => [p.id, p]));
+
+      // Create tools for each new prompt_agent
+      for (const row of insertedRows) {
+        const promptDetail = promptDetailsMap.get(row.agentPromptId);
+        if (promptDetail) {
+          await ToolModel.createAgentDelegationTool({
+            promptAgentId: row.id,
+            agentName: promptDetail.name,
+            description: promptDetail.systemPrompt,
+          });
+        }
+      }
     }
 
     return {

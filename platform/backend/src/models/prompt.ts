@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertPrompt, Prompt, UpdatePrompt } from "@/types";
+import ToolModel from "./tool";
 
 /**
  * Model for managing prompts with versioning support
@@ -195,6 +196,24 @@ class PromptModel {
             eq(schema.promptsTable.agentId, oldAgentId),
           ),
         );
+
+      // Sync tool names if the prompt was renamed
+      // This updates all agent delegation tools that point to any version of this prompt
+      if (nameChanged) {
+        // Get all version IDs for this prompt family
+        const versions = await db
+          .select({ id: schema.promptsTable.id })
+          .from(schema.promptsTable)
+          .where(
+            and(
+              eq(schema.promptsTable.organizationId, promptById.organizationId),
+              eq(schema.promptsTable.name, newName),
+              eq(schema.promptsTable.agentId, newAgentId),
+            ),
+          );
+        const versionIds = versions.map((v) => v.id);
+        await ToolModel.syncAgentDelegationToolNames(versionIds, newName);
+      }
     }
 
     // Find the MOST RECENT version (highest version number) for this prompt family

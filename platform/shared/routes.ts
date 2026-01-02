@@ -169,6 +169,7 @@ export const RouteId = {
   CreatePrompt: "createPrompt",
   GetPrompt: "getPrompt",
   GetPromptVersions: "getPromptVersions",
+  GetPromptTools: "getPromptTools",
   RollbackPrompt: "rollbackPrompt",
   UpdatePrompt: "updatePrompt",
   DeletePrompt: "deletePrompt",

@@ -61,3 +61,14 @@ export function formatSecretStorageType(
       return "None";
   }
 }
+
+/**
+ * Slugify a name to create a URL-safe identifier
+ * Used for generating tool names from prompt/agent names
+ */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}

@@ -67,8 +67,13 @@ export function formatSecretStorageType(
  * Used for generating tool names from prompt/agent names
  */
 export function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+  const slugified = name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+  // Trim leading and trailing underscores without backtracking regex
+  let start = 0;
+  let end = slugified.length;
+  while (start < end && slugified[start] === "_") start++;
+  while (end > start && slugified[end - 1] === "_") end--;
+
+  return slugified.slice(start, end);
 }

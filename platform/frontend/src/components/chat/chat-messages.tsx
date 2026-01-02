@@ -235,7 +235,7 @@ export function ChatMessages({
                             key={partKey}
                             policyDenied={policyDenied}
                             {...(agentId
-                              ? { editable: true, agentId }
+                              ? { editable: true, profileId: agentId }
                               : { editable: false })}
                           />
                         );
@@ -477,7 +477,9 @@ function MessageTool({
       return (
         <PolicyDeniedTool
           policyDenied={policyDenied}
-          {...(agentId ? { editable: true, agentId } : { editable: false })}
+          {...(agentId
+            ? { editable: true, profileId: agentId }
+            : { editable: false })}
         />
       );
     }

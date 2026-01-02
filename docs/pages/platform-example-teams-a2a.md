@@ -10,13 +10,6 @@ lastUpdated: "2025-12-30"
 
 Forward Teams messages to an Archestra prompt using the A2A protocol.
 
-## Prerequisites
-
-- Microsoft 365 account with Teams
-- Azure subscription for Bot registration
-- Archestra prompt with A2A token (see [Prompts](/docs/platform-prompts))
-- Node.js 18+
-
 ## Create Azure Bot
 
 1. Go to [portal.azure.com](https://portal.azure.com) > **Create a resource** > **Azure Bot**

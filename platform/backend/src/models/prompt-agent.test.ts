@@ -564,5 +564,98 @@ describe("PromptAgentModel", () => {
       expect(tools).toHaveLength(1);
       expect(tools[0].name).toBe(`${AGENT_TOOL_PREFIX}new_name`);
     });
+
+    test("preserves delegation when parent prompt is renamed", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
+      const childAgent = await AgentModel.create({
+        name: "Child",
+        teams: [],
+      });
+
+      const parentPrompt = await PromptModel.create(org.id, {
+        name: "Parent Prompt",
+        agentId: parentAgent.id,
+      });
+
+      const childPrompt = await PromptModel.create(org.id, {
+        name: "Child Prompt",
+        agentId: childAgent.id,
+      });
+
+      await PromptAgentModel.create({
+        promptId: parentPrompt.id,
+        agentPromptId: childPrompt.id,
+      });
+
+      // Verify delegation exists
+      let agents = await PromptAgentModel.findByPromptId(parentPrompt.id);
+      expect(agents).toHaveLength(1);
+
+      // Rename the PARENT prompt (creates new version)
+      const updatedParent = await PromptModel.update(parentPrompt.id, {
+        name: "Renamed Parent",
+      });
+
+      // Verify delegation moved to new version
+      agents = await PromptAgentModel.findByPromptId(updatedParent?.id);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].agentPromptId).toBeDefined();
+
+      // Verify old version has no delegations
+      agents = await PromptAgentModel.findByPromptId(parentPrompt.id);
+      expect(agents).toHaveLength(0);
+    });
+
+    test("preserves delegation when child prompt is renamed", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const parentAgent = await AgentModel.create({
+        name: "Parent",
+        teams: [],
+      });
+      const childAgent = await AgentModel.create({
+        name: "Child",
+        teams: [],
+      });
+
+      const parentPrompt = await PromptModel.create(org.id, {
+        name: "Parent Prompt",
+        agentId: parentAgent.id,
+      });
+
+      const childPrompt = await PromptModel.create(org.id, {
+        name: "Child Prompt",
+        agentId: childAgent.id,
+      });
+
+      await PromptAgentModel.create({
+        promptId: parentPrompt.id,
+        agentPromptId: childPrompt.id,
+      });
+
+      // Verify delegation exists
+      let agents = await PromptAgentModel.findByPromptId(parentPrompt.id);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].agentPromptId).toBe(childPrompt.id);
+
+      // Rename the CHILD prompt (creates new version)
+      const updatedChild = await PromptModel.update(childPrompt.id, {
+        name: "Renamed Child",
+      });
+
+      // Verify delegation still exists but points to new child version
+      agents = await PromptAgentModel.findByPromptId(parentPrompt.id);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].agentPromptId).toBe(updatedChild?.id);
+    });
   });
 });

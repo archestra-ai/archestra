@@ -9085,6 +9085,7 @@ export type GetInternalMcpCatalogResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -9314,6 +9315,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -9546,6 +9548,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;
@@ -9777,6 +9780,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 default?: string | number | boolean;
             }>;
             dockerImage?: string;
+            serviceAccount?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
             httpPath?: string;

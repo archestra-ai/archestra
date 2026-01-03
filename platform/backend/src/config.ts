@@ -216,6 +216,7 @@ export default {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      useV1Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V1_ROUTES !== "false",
     },
     gemini: {
       baseUrl:

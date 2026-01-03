@@ -1144,4 +1144,218 @@ describe("AgentModel", () => {
       expect(testAgent?.tools).toHaveLength(0);
     });
   });
+
+  describe("findById Junction Table", () => {
+    test("findById returns tools from junction table", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      // Add tools via the junction table (agent_tools)
+      const tool1 = await makeTool({
+        name: "junction_tool_1",
+        description: "Tool 1",
+        parameters: {},
+      });
+      const tool2 = await makeTool({
+        name: "junction_tool_2",
+        description: "Tool 2",
+        parameters: {},
+      });
+      const tool3 = await makeTool({
+        name: "junction_tool_3",
+        description: "Tool 3",
+        parameters: {},
+      });
+
+      await makeAgentTool(agent.id, tool1.id);
+      await makeAgentTool(agent.id, tool2.id);
+      await makeAgentTool(agent.id, tool3.id);
+
+      // Retrieve the agent by ID
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent?.tools).toHaveLength(3);
+
+      const toolNames = foundAgent?.tools.map((t) => t.name).sort();
+      expect(toolNames).toEqual([
+        "junction_tool_1",
+        "junction_tool_2",
+        "junction_tool_3",
+      ]);
+    });
+
+    test("findById excludes Archestra MCP tools", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      // Add regular tools
+      const regularTool1 = await makeTool({
+        name: "findbyid_regular_tool_1",
+        description: "Regular tool 1",
+        parameters: {},
+      });
+      const regularTool2 = await makeTool({
+        name: "findbyid_regular_tool_2",
+        description: "Regular tool 2",
+        parameters: {},
+      });
+
+      // Add Archestra tools (should be excluded)
+      const archestraTool1 = await makeTool({
+        name: "archestra__findbyid_tool_1",
+        description: "Archestra tool 1",
+        parameters: {},
+      });
+      const archestraTool2 = await makeTool({
+        name: "archestra__findbyid_tool_2",
+        description: "Archestra tool 2",
+        parameters: {},
+      });
+
+      await makeAgentTool(agent.id, regularTool1.id);
+      await makeAgentTool(agent.id, regularTool2.id);
+      await makeAgentTool(agent.id, archestraTool1.id);
+      await makeAgentTool(agent.id, archestraTool2.id);
+
+      // Retrieve the agent by ID
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      // Should only include 2 regular tools, not the Archestra tools
+      expect(foundAgent?.tools).toHaveLength(2);
+
+      // Verify all returned tools are regular tools
+      for (const tool of foundAgent?.tools ?? []) {
+        expect(tool.name).not.toMatch(/^archestra__/);
+      }
+
+      const toolNames = foundAgent?.tools.map((t) => t.name).sort();
+      expect(toolNames).toEqual([
+        "findbyid_regular_tool_1",
+        "findbyid_regular_tool_2",
+      ]);
+    });
+
+    test("findById returns empty tools array when agent has no tools", async () => {
+      // Create an agent with no tools
+      const agent = await AgentModel.create({
+        name: "No Tools Agent",
+        teams: [],
+      });
+
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent?.tools).toHaveLength(0);
+    });
+
+    test("findById returns empty tools array when agent has only Archestra tools", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Archestra Only Agent",
+        teams: [],
+      });
+
+      // Add only Archestra tools
+      const archestraTool = await makeTool({
+        name: "archestra__some_tool",
+        description: "Archestra tool",
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, archestraTool.id);
+
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent?.tools).toHaveLength(0);
+    });
+  });
+
+  describe("getAgentOrCreateDefault Junction Table", () => {
+    test("getAgentOrCreateDefault returns tools from junction table", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Get the default agent
+      const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+      // Add tools to the default agent via junction table
+      const tool1 = await makeTool({
+        name: "default_agent_tool_1",
+        description: "Tool 1",
+        parameters: {},
+      });
+      const tool2 = await makeTool({
+        name: "default_agent_tool_2",
+        description: "Tool 2",
+        parameters: {},
+      });
+
+      await makeAgentTool(defaultAgent.id, tool1.id);
+      await makeAgentTool(defaultAgent.id, tool2.id);
+
+      // Get the default agent again - should include the tools
+      const foundAgent = await AgentModel.getAgentOrCreateDefault();
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent.tools.length).toBeGreaterThanOrEqual(2);
+
+      const toolNames = foundAgent.tools.map((t) => t.name);
+      expect(toolNames).toContain("default_agent_tool_1");
+      expect(toolNames).toContain("default_agent_tool_2");
+    });
+
+    test("getAgentOrCreateDefault excludes Archestra MCP tools", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Get the default agent
+      const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+      // Add regular tools
+      const regularTool = await makeTool({
+        name: "default_regular_tool",
+        description: "Regular tool",
+        parameters: {},
+      });
+
+      // Add Archestra tools (should be excluded)
+      const archestraTool = await makeTool({
+        name: "archestra__default_tool",
+        description: "Archestra tool",
+        parameters: {},
+      });
+
+      await makeAgentTool(defaultAgent.id, regularTool.id);
+      await makeAgentTool(defaultAgent.id, archestraTool.id);
+
+      // Get the default agent again
+      const foundAgent = await AgentModel.getAgentOrCreateDefault();
+
+      // Verify Archestra tools are excluded
+      for (const tool of foundAgent.tools) {
+        expect(tool.name).not.toMatch(/^archestra__/);
+      }
+
+      // Verify regular tool is included
+      const toolNames = foundAgent.tools.map((t) => t.name);
+      expect(toolNames).toContain("default_regular_tool");
+    });
+  });
 });

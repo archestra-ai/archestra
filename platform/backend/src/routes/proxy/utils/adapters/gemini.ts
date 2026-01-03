@@ -15,8 +15,13 @@ import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
-import type { CommonToolCall, CommonToolResult, Gemini } from "@/types";
-import type { CommonMessage, ToolResultUpdates } from "@/types/llm-proxy";
+import type {
+  CommonMessage,
+  CommonToolCall,
+  CommonToolResult,
+  Gemini,
+  ToolResultUpdates,
+} from "@/types";
 import type { CompressionStats } from "../toon-conversion";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];

@@ -99,6 +99,7 @@ export default function ChatPage() {
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const userMessageJustEdited = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<

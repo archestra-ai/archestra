@@ -1,3 +1,7 @@
+import config from "@/config";
+import anthropicProxyRoutesV1 from "./proxy/anthropic";
+import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
+
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
@@ -21,8 +25,12 @@ export { default as oauthRoutes } from "./oauth";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
+export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
-export { default as anthropicProxyRoutes } from "./proxy/anthropic";
+// Anthropic proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
+export const anthropicProxyRoutes = config.llm.anthropic.useV1Routes
+  ? anthropicProxyRoutesV1
+  : anthropicProxyRoutesV2;
 export { default as geminiProxyRoutes } from "./proxy/gemini";
 export { default as openAiProxyRoutes } from "./proxy/openai";
 export { default as secretsRoutes } from "./secrets";

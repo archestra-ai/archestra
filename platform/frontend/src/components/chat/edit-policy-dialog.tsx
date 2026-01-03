@@ -15,19 +15,19 @@ interface EditPolicyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   toolName: string;
-  agentId: string;
+  profileId: string;
 }
 
 export function EditPolicyDialog({
   open,
   onOpenChange,
   toolName,
-  agentId,
+  profileId,
 }: EditPolicyDialogProps) {
   const { data } = useAllProfileTools({
     filters: {
       search: toolName,
-      agentId,
+      agentId: profileId,
     },
     pagination: {
       limit: 1,

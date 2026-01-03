@@ -1,4 +1,5 @@
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "./consts";
@@ -7,6 +8,14 @@ export function isArchestraMcpServerTool(toolName: string): boolean {
   return toolName.startsWith(
     `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
   );
+}
+
+/**
+ * Check if a tool name is an agent delegation tool (agent__<name>)
+ * Agent tools are separate from Archestra tools - they enable prompt-to-prompt delegation
+ */
+export function isAgentTool(toolName: string): boolean {
+  return toolName.startsWith(AGENT_TOOL_PREFIX);
 }
 
 /**
@@ -51,4 +60,20 @@ export function formatSecretStorageType(
     default:
       return "None";
   }
+}
+
+/**
+ * Slugify a name to create a URL-safe identifier
+ * Used for generating tool names from prompt/agent names
+ */
+export function slugify(name: string): string {
+  const slugified = name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+  // Trim leading and trailing underscores without backtracking regex
+  let start = 0;
+  let end = slugified.length;
+  while (start < end && slugified[start] === "_") start++;
+  while (end > start && slugified[end - 1] === "_") end--;
+
+  return slugified.slice(start, end);
 }

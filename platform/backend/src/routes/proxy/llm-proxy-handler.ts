@@ -321,6 +321,7 @@ export async function handleLLMProxy<
         toonStats,
         enabledToolNames,
         externalAgentId,
+        context.userId,
       );
     } else {
       return handleNonStreaming(
@@ -336,6 +337,7 @@ export async function handleLLMProxy<
         toonStats,
         enabledToolNames,
         externalAgentId,
+        context.userId,
       );
     }
   } catch (error) {
@@ -372,6 +374,7 @@ async function handleStreaming<
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
   externalAgentId?: string,
+  userId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -558,6 +561,7 @@ async function handleStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        userId,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -600,6 +604,7 @@ async function handleNonStreaming<
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
   externalAgentId?: string,
+  userId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -690,6 +695,7 @@ async function handleNonStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        userId,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -736,6 +742,7 @@ async function handleNonStreaming<
   await InteractionModel.create({
     profileId: agent.id,
     externalAgentId,
+    userId,
     type: provider.interactionType,
     // Cast generic types to interaction types - valid at runtime
     request: originalRequest as unknown as InteractionRequest,

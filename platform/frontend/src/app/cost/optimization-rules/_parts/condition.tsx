@@ -24,7 +24,7 @@ type ChangeHandler = (condition: Condition) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-row gap-2 whitespace-nowrap items-center rounded-md bg-secondary h-9 px-4">
+    <div className="flex flex-row gap-2 whitespace-nowrap items-center rounded-md bg-muted h-9 px-4">
       {children}
     </div>
   );
@@ -74,7 +74,7 @@ export function Condition({
       return (
         <ConditionBlock>
           content length <span>&lt;</span>
-          <Badge variant="outline" className="text-sm bg-background">
+          <Badge variant="outline" className="text-sm bg-muted">
             {maxLength}
           </Badge>
           tokens
@@ -84,7 +84,7 @@ export function Condition({
       return (
         <ConditionBlock>
           tools{" "}
-          <Badge variant="outline" className="text-sm bg-background">
+          <Badge variant="outline" className="text-sm bg-muted">
             {hasTools ? "present" : "absent"}
           </Badge>
         </ConditionBlock>
@@ -101,7 +101,7 @@ export function Condition({
           name="maxTokens"
           value={maxLength}
           placeholder="count"
-          className="px-2 h-7 w-20 bg-background"
+          className="px-2 h-7 w-20 bg-muted"
           onChange={(e) => onMaxLengthChange(Number(e.target.value))}
           min="1"
           max="999999"
@@ -115,7 +115,7 @@ export function Condition({
         value={hasTools ? "true" : "false"}
         onValueChange={(value) => onToolsChange(value === "true")}
       >
-        <SelectTrigger size="sm" className="bg-background !h-7">
+        <SelectTrigger size="sm" className="bg-muted !h-7">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -212,11 +212,12 @@ export default {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
+      useV2Routes: process.env.ARCHESTRA_OPENAI_USE_V2_ROUTES === "true",
     },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
-      useV1Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V1_ROUTES !== "false",
+      useV2Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V2_ROUTES === "true",
     },
     gemini: {
       baseUrl:

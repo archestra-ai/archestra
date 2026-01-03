@@ -1,5 +1,6 @@
 import config from "@/config";
 import anthropicProxyRoutesV1 from "./proxy/anthropic";
+import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 
@@ -29,12 +30,14 @@ export { default as policyConfigSubagentRoutes } from "./policy-config-subagent"
 export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
 // Anthropic proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
-export const anthropicProxyRoutes = config.llm.anthropic.useV1Routes
-  ? anthropicProxyRoutesV1
-  : anthropicProxyRoutesV2;
+export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
+  ? anthropicProxyRoutesV2
+  : anthropicProxyRoutesV1;
 export { default as geminiProxyRoutes } from "./proxy/gemini";
-// OpenAI proxy routes - V2 (unified handler)
-export const openAiProxyRoutes = openAiProxyRoutesV2;
+// OpenAI proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
+export const openAiProxyRoutes = config.llm.openai.useV2Routes
+  ? openAiProxyRoutesV2
+  : openAiProxyRoutesV1;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

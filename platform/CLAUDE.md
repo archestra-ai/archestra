@@ -137,7 +137,8 @@ ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 # LLM Proxy Route Selection (optional)
-ARCHESTRA_ANTHROPIC_USE_V1_ROUTES=true  # Set to false to use unified V2 Anthropic routes instead of legacy V1 handler
+ARCHESTRA_OPENAI_USE_V2_ROUTES=false  # Set to true to use unified V2 OpenAI routes instead of legacy V1 handler
+ARCHESTRA_ANTHROPIC_USE_V2_ROUTES=false  # Set to true to use unified V2 Anthropic routes instead of legacy V1 handler
 
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics

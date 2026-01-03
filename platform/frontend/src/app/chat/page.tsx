@@ -4,11 +4,16 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
@@ -729,62 +734,68 @@ export default function ChatPage() {
             />
           </div>
 
-          <div className="sticky bottom-0 bg-background border-t p-4">
-            <div className="max-w-3xl mx-auto space-y-3">
-              {currentProfileId && (
-                <WithPermissions
-                  permissions={{ profile: ["read"] }}
-                  noPermissionHandle="tooltip"
-                >
-                  {({ hasPermission }) => {
-                    return hasPermission ===
-                      undefined ? null : hasPermission ? (
-                      <McpToolsDisplay
-                        agentId={currentProfileId}
-                        className="text-xs text-muted-foreground"
-                      />
-                    ) : (
-                      <Badge variant="outline" className="text-xs my-2">
-                        Unable to show the list of tools
-                      </Badge>
-                    );
-                  }}
-                </WithPermissions>
-              )}
-              {chatSession?.queuedMessages &&
-                chatSession.queuedMessages.length > 0 && (
-                  <div className="space-y-2">
-                    {chatSession.queuedMessages.map((queuedMsg, index) => {
-                      const textPart = queuedMsg.parts.find(
-                        (part) => part.type === "text" && "text" in part,
-                      );
-
-                      return (
-                        <QueuedMessage
-                          key={queuedMsg.id}
-                          message={
-                            textPart && "text" in textPart ? textPart.text : ""
-                          }
-                          position={index}
-                          onDelete={() => handleDeleteQueued(queuedMsg.id)}
-                          onSendNow={() => handleSendNow(queuedMsg.id)}
+          {conversation?.agent.id && conversation?.id && (
+            <div className="sticky bottom-0 bg-background border-t p-4">
+              <div className="max-w-3xl mx-auto space-y-3">
+                {currentProfileId && (
+                  <WithPermissions
+                    permissions={{ profile: ["read"] }}
+                    noPermissionHandle="tooltip"
+                  >
+                    {({ hasPermission }) => {
+                      return hasPermission ===
+                        undefined ? null : hasPermission ? (
+                        <McpToolsDisplay
+                          agentId={currentProfileId}
+                          className="text-xs text-muted-foreground"
                         />
+                      ) : (
+                        <Badge variant="outline" className="text-xs my-2">
+                          Unable to show the list of tools
+                        </Badge>
                       );
-                    })}
-                  </div>
+                    }}
+                  </WithPermissions>
                 )}
-              <ArchestraPromptInput
-                onSubmit={handleSubmit}
-                status={status}
-                selectedModel={conversation?.selectedModel ?? ""}
-                onModelChange={handleModelChange}
-                messageCount={messages.length}
-                agentId={conversation?.agent?.id ?? ""}
-                conversationId={conversation?.id ?? ""}
-               
-              />
+                {chatSession?.queuedMessages &&
+                  chatSession.queuedMessages.length > 0 && (
+                    <div className="space-y-2">
+                      {chatSession.queuedMessages.map((queuedMsg, index) => {
+                        const textPart = queuedMsg.parts.find(
+                          (part) => part.type === "text" && "text" in part,
+                        );
+
+                        return (
+                          <QueuedMessage
+                            key={queuedMsg.id}
+                            message={
+                              textPart && "text" in textPart ? textPart.text : ""
+                            }
+                            position={index}
+                            onDelete={() => handleDeleteQueued(queuedMsg.id)}
+                            onSendNow={() => handleSendNow(queuedMsg.id)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                <ArchestraPromptInput
+                  onSubmit={handleSubmit}
+                  status={status}
+                  selectedModel={conversation?.selectedModel ?? ""}
+                  onModelChange={handleModelChange}
+                  messageCount={messages.length}
+                  agentId={conversation?.agent.id}
+                  conversationId={conversation?.id}
+                  currentConversationChatApiKeyId={conversation?.chatApiKeyId}
+                  currentProvider={currentProvider}
+                />
+                <div className="text-center">
+                  <Version inline />
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -800,3 +811,4 @@ export default function ChatPage() {
     </div>
   );
 }
+

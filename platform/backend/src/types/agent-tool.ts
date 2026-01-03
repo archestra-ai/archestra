@@ -97,6 +97,7 @@ export const BulkUpdateAgentToolsRequestSchema = z.object({
     "toolResultTreatment",
   ]),
   value: z.union([z.boolean(), ToolResultTreatmentSchema]),
+  clearAutoConfigured: z.boolean().optional(),
 });
 
 export const BulkUpdateAgentToolsResponseSchema = z.object({

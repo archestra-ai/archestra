@@ -9,6 +9,8 @@ import type {
   TeamMember,
   UpdateTeam,
 } from "@/types";
+import { ApiError } from "@/types";
+import TeamTokenModel from "./team-token";
 
 class TeamModel {
   /**
@@ -36,6 +38,10 @@ class TeamModel {
         updatedAt: now,
       })
       .returning();
+
+    // Auto-create a team token
+    await TeamTokenModel.createTeamToken(teamId, input.name);
+    logger.debug({ teamId }, "TeamModel.create: created team token");
 
     logger.debug({ teamId }, "TeamModel.create: completed");
     return {
@@ -689,6 +695,31 @@ class TeamModel {
       "TeamModel.syncUserTeams: completed",
     );
     return { added, removed };
+  }
+
+  /**
+   * Check if a user has access to a team.
+   * - Team admins have full access to all teams
+   * - Non-admins must be a member of the team
+   */
+  static async checkTeamAccess({
+    userId,
+    teamId,
+    isTeamAdmin,
+  }: {
+    userId: string;
+    teamId: string;
+    isTeamAdmin: boolean;
+  }): Promise<void> {
+    // Admin has full access to all teams
+    if (isTeamAdmin) {
+      return;
+    }
+    // Non-admins must be a member of the team
+    const isMember = await TeamModel.isUserInTeam(teamId, userId);
+    if (!isMember) {
+      throw new ApiError(403, "Not authorized to access this team");
+    }
   }
 }
 

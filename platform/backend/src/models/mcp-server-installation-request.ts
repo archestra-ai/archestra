@@ -165,6 +165,7 @@ class McpServerInstallationRequestModel {
           await InternalMcpCatalogModel.create({
             name: externalServer.display_name || externalServer.name,
             version: undefined,
+            instructions: externalServer.instructions,
             serverType: externalServer.server.type,
             serverUrl:
               externalServer.server.type === "remote"

@@ -26,3 +26,8 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+
+    - name: Setup environment variables
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cp .env.example .env

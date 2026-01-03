@@ -47,10 +47,13 @@ local_resource(
 #   - member@example.com (archestra-users group) - for role mapping tests
 #
 # The defaults align with Archestra's default admin credentials, so no overrides needed.
+load('ext://helm_resource', 'helm_resource')
+
 local_resource(
   'e2e-test-dependencies',
   cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --wait',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
+  auto_init=False,
+  serve_cmd='kubectl port-forward svc/e2e-tests-wiremock 9092:8080',
 )

@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/messages",
+    "headers": {
+      "x-api-key": {
+        "contains": "anthropic-model-optimization-disabled"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-anthropic-baseline"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "msg-model-opt-disabled",
+      "type": "message",
+      "role": "assistant",
+      "model": "e2e-test-anthropic-baseline",
+      "content": [
+        {
+          "type": "text",
+          "text": "This is a response when optimization rule is disabled."
+        }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": {
+        "input_tokens": 1500,
+        "output_tokens": 15
+      }
+    }
+  }
+}

@@ -18,29 +18,21 @@ const {
   updateTrustedDataPolicy,
 } = archestraApiSdk;
 
-export function useToolInvocationPolicies() {
+import {
+  transformToolInvocationPolicies,
+  transformToolResultPolicies,
+} from "./policy.utils";
+
+export function useToolInvocationPolicies(
+  initialData?: ReturnType<typeof transformToolInvocationPolicies>,
+) {
   return useSuspenseQuery({
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byProfileToolId,
-      };
+      return transformToolInvocationPolicies(all);
     },
+    initialData,
   });
 }
 
@@ -58,6 +50,7 @@ export function useToolInvocationPolicyDeleteMutation() {
       await deleteToolInvocationPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -78,6 +71,7 @@ export function useToolInvocationPolicyCreateMutation() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -97,33 +91,21 @@ export function useToolInvocationPolicyUpdateMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
 
-export function useToolResultPolicies() {
+export function useToolResultPolicies(
+  initialData?: ReturnType<typeof transformToolResultPolicies>,
+) {
   return useSuspenseQuery({
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byProfileToolId,
-      };
+      return transformToolResultPolicies(all);
     },
+    initialData,
   });
 }
 
@@ -143,6 +125,7 @@ export function useToolResultPoliciesCreateMutation() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -162,6 +145,7 @@ export function useToolResultPoliciesUpdateMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -173,6 +157,7 @@ export function useToolResultPoliciesDeleteMutation() {
       await deleteTrustedDataPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }

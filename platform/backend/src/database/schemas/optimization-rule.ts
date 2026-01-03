@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import {
   boolean,
   index,
@@ -11,7 +12,6 @@ import {
 import type {
   OptimizationRuleConditions,
   OptimizationRuleEntityType,
-  SupportedProvider,
 } from "@/types";
 
 const optimizationRulesTable = pgTable(

@@ -3,6 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "archestra-platform.fullname" . }}-ingress
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
   {{- with .Values.archestra.ingress.annotations }}

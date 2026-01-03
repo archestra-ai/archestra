@@ -5,6 +5,8 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
+import ConversationEnabledToolModel from "./conversation-enabled-tool";
+import ToolModel from "./tool";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -13,11 +15,27 @@ class ConversationModel {
       .values(data)
       .returning();
 
-    const conversationWithAgent = (await ConversationModel.findById(
+    // Disable Archestra tools by default for new conversations
+    // Get all tools assigned to the agent
+    const agentTools = await ToolModel.getToolsByAgent(data.agentId);
+
+    // Filter out Archestra tools (those starting with "archestra__")
+    const nonArchestraToolIds = agentTools
+      .filter((tool) => !tool.name.startsWith("archestra__"))
+      .map((tool) => tool.id);
+
+    // Set enabled tools to only non-Archestra tools
+    // This creates a custom tool selection with Archestra tools disabled
+    await ConversationEnabledToolModel.setEnabledTools(
       conversation.id,
-      data.userId,
-      data.organizationId,
-    )) as Conversation;
+      nonArchestraToolIds,
+    );
+
+    const conversationWithAgent = (await ConversationModel.findById({
+      id: conversation.id,
+      userId: data.userId,
+      organizationId: data.organizationId,
+    })) as Conversation;
 
     return conversationWithAgent;
   }
@@ -50,7 +68,10 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(desc(schema.conversationsTable.createdAt));
+      .orderBy(
+        desc(schema.conversationsTable.createdAt),
+        schema.messagesTable.createdAt,
+      );
 
     // Group messages by conversation
     const conversationMap = new Map<string, Conversation>();
@@ -68,18 +89,26 @@ class ConversationModel {
 
       const conversation = conversationMap.get(conversationId);
       if (conversation && row?.message?.content) {
-        conversation.messages.push(row.message.content);
+        // Merge database UUID into message content (overrides AI SDK's temporary ID)
+        conversation.messages.push({
+          ...row.message.content,
+          id: row.message.id,
+        });
       }
     }
 
     return Array.from(conversationMap.values());
   }
 
-  static async findById(
-    id: string,
-    userId: string,
-    organizationId: string,
-  ): Promise<Conversation | null> {
+  static async findById({
+    id,
+    userId,
+    organizationId,
+  }: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<Conversation | null> {
     const rows = await db
       .select({
         conversation: getTableColumns(schema.conversationsTable),
@@ -104,7 +133,8 @@ class ConversationModel {
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
-      );
+      )
+      .orderBy(schema.messagesTable.createdAt);
 
     if (rows.length === 0) {
       return null;
@@ -115,7 +145,11 @@ class ConversationModel {
 
     for (const row of rows) {
       if (row.message?.content) {
-        messages.push(row.message.content);
+        // Merge database UUID into message content (overrides AI SDK's temporary ID)
+        messages.push({
+          ...row.message.content,
+          id: row.message.id,
+        });
       }
     }
 
@@ -148,11 +182,11 @@ class ConversationModel {
       return null;
     }
 
-    const updatedWithAgent = (await ConversationModel.findById(
-      updated.id,
-      userId,
-      organizationId,
-    )) as Conversation;
+    const updatedWithAgent = (await ConversationModel.findById({
+      id: updated.id,
+      userId: userId,
+      organizationId: organizationId,
+    })) as Conversation;
 
     return updatedWithAgent;
   }

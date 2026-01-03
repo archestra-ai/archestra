@@ -87,12 +87,6 @@ export interface ArchestraContext {
   };
 }
 
-export const isArchestraMcpServerTool = (toolName: string): boolean => {
-  return toolName.startsWith(
-    `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
-  );
-};
-
 /**
  * Execute an Archestra MCP tool
  */
@@ -132,11 +126,15 @@ export async function executeArchestraTool(
       let catalogItems: InternalMcpCatalog[];
 
       if (query && query.trim() !== "") {
-        // Search by name or description
-        catalogItems = await InternalMcpCatalogModel.searchByQuery(query);
+        // Search by name or description - don't expand secrets, we do not need them to execute the tool
+        catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
+          expandSecrets: false,
+        });
       } else {
-        // Return all catalog items
-        catalogItems = await InternalMcpCatalogModel.findAll();
+        // Return all catalog items - don't expand secrets, we do not need actual secrets for this
+        catalogItems = await InternalMcpCatalogModel.findAll({
+          expandSecrets: false,
+        });
       }
 
       if (catalogItems.length === 0) {
@@ -235,7 +233,9 @@ export async function executeArchestraTool(
             text: `Successfully created profile.\n\nProfile Name: ${
               newProfile.name
             }\nProfile ID: ${newProfile.id}\nTeams: ${
-              newProfile.teams.length > 0 ? newProfile.teams.join(", ") : "None"
+              newProfile.teams.length > 0
+                ? newProfile.teams.map((t) => t.name).join(", ")
+                : "None"
             }\nLabels: ${
               newProfile.labels.length > 0
                 ? newProfile.labels

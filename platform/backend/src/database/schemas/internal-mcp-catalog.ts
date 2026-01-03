@@ -14,6 +14,7 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   name: text("name").notNull(),
   version: text("version"),
   description: text("description"),
+  instructions: text("instructions"),
   repository: text("repository"),
   installationCommand: text("installation_command"),
   requiresAuth: boolean("requires_auth").notNull().default(false),
@@ -57,6 +58,7 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
       description?: string; // Description to show in installation dialog
     }>;
     dockerImage?: string;
+    serviceAccount?: string;
     transportType?: "stdio" | "streamable-http";
     httpPort?: number;
     httpPath?: string;

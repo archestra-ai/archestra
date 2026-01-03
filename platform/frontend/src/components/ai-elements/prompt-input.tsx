@@ -34,6 +34,7 @@ import {
   useRef,
   useState,
 } from "react";
+import React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -68,6 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -830,6 +832,7 @@ export const PromptInputTextarea = React.forwardRef<
     },
     ref,
   ) => {
+    const controller = useOptionalPromptInputController();
     const attachments = usePromptInputAttachments();
 
     const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
@@ -880,7 +883,6 @@ export const PromptInputTextarea = React.forwardRef<
     return (
       <Textarea
         ref={ref}
-        key={attachments.textareaKey}
         className={cn(
           "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
           "field-sizing-content bg-transparent dark:bg-transparent",
@@ -889,7 +891,9 @@ export const PromptInputTextarea = React.forwardRef<
           className,
         )}
         name="message"
+        value={controller?.textInput.value}
         onChange={(e) => {
+          controller?.textInput.setInput(e.target.value);
           onChange?.(e);
         }}
         onKeyDown={handleKeyDown}

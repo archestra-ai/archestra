@@ -33,6 +33,7 @@ import type {
   SupportedProviderDiscriminator,
 } from "@shared";
 
+import type { Agent } from "./agent";
 import type {
   CommonMcpToolDefinition,
   CommonMessage,
@@ -40,6 +41,20 @@ import type {
   CommonToolResult,
 } from "./common-llm-format";
 import type { ToonCompressionResult } from "./tool-result-compression";
+
+/**
+ * Options for creating an LLM provider client
+ */
+export interface CreateClientOptions {
+  /** Base URL override for the provider API */
+  baseUrl?: string;
+  /** Enable mock mode for testing */
+  mockMode?: boolean;
+  /** Agent for observability metrics (request duration, tokens) */
+  agent?: Agent;
+  /** External agent ID from X-Archestra-Agent-Id header */
+  externalAgentId?: string;
+}
 
 /**
  * Adapter interface for LLM requests
@@ -350,10 +365,13 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Get span name for tracing (e.g., "openai.chat.completions", "anthropic.messages") */
   getSpanName(streaming: boolean): string;
 
-  /** Create provider client */
+  /**
+   * Create provider client with observability.
+   * Each provider is responsible for setting up its own metrics tracking:
+   */
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
+    options?: CreateClientOptions,
   ): unknown;
 
   // ---------------------------------------------------------------------------

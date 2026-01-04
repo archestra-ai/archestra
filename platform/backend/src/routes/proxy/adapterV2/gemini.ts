@@ -6,6 +6,7 @@ import type {
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
+import { getObservableGenAI } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -15,6 +16,7 @@ import type {
   CommonMessage,
   CommonToolCall,
   CommonToolResult,
+  CreateClientOptions,
   Gemini,
   LLMProvider,
   LLMRequestAdapter,
@@ -727,12 +729,18 @@ export const geminiAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
+    options?: CreateClientOptions,
   ): GoogleGenAI {
     if (options?.mockMode) {
       return new MockGeminiClient() as unknown as GoogleGenAI;
     }
-    return createGoogleGenAIClient(apiKey, "[GeminiProxyV2]");
+    const client = createGoogleGenAIClient(apiKey, "[GeminiProxyV2]");
+
+    // Wrap with observability for request duration metrics
+    if (options?.agent) {
+      return getObservableGenAI(client, options.agent, options.externalAgentId);
+    }
+    return client;
   },
 
   async execute(

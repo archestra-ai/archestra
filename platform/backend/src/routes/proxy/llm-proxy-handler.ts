@@ -9,7 +9,6 @@ import type { FastifyReply } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
-  getObservableFetch,
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
@@ -293,11 +292,12 @@ export async function handleLLMProxy<
       `${providerName} proxy: tool results compression completed`,
     );
 
-    // Create client
+    // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
-      fetch: getObservableFetch(providerName, resolvedAgent, externalAgentId),
       mockMode: config.benchmark.mockMode,
+      agent: resolvedAgent,
+      externalAgentId,
     });
 
     // Build final request

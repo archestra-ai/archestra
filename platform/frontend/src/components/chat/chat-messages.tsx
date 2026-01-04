@@ -86,12 +86,12 @@ export function ChatMessages({
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
-  const [useInstantResize, setUseInstantResize] = useState(false);
+  const [instantResize, setInstantResize] = useState(false);
   useLayoutEffect(() => {
     if (isEditing) {
-      setUseInstantResize(true);
+      setInstantResize(true);
     } else {
-      const timeout = setTimeout(() => setUseInstantResize(false), 100);
+      const timeout = setTimeout(() => setInstantResize(false), 100);
       return () => clearTimeout(timeout);
     }
   }, [isEditing]);
@@ -196,7 +196,10 @@ export function ChatMessages({
   const isResponseInProgress = status === "streaming" || status === "submitted";
 
   return (
-    <Conversation className="h-full" resize={useInstantResize ? "instant" : "smooth"}>
+    <Conversation
+      className="h-full"
+      resize={instantResize ? "instant" : "smooth"}
+    >
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {

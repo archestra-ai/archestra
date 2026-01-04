@@ -2,6 +2,7 @@ import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import config from "@/config";
+import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -11,6 +12,7 @@ import type {
   CommonMessage,
   CommonToolCall,
   CommonToolResult,
+  CreateClientOptions,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -820,15 +822,21 @@ export const openaiAdapterFactory: LLMProvider<
 
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
+    options?: CreateClientOptions,
   ): OpenAIProvider {
     if (options?.mockMode) {
       return new MockOpenAIClient() as unknown as OpenAIProvider;
     }
+
+    // Use observable fetch for request duration metrics if agent is provided
+    const customFetch = options?.agent
+      ? getObservableFetch("openai", options.agent, options.externalAgentId)
+      : undefined;
+
     return new OpenAIProvider({
       apiKey,
       baseURL: options?.baseUrl,
-      fetch: options?.fetch,
+      fetch: customFetch,
     });
   },
 

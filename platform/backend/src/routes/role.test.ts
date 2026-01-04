@@ -94,8 +94,9 @@ describe("Role Operations", () => {
         permissions: ["read", "write"],
       });
 
-      expect(updated.name).toBe("Updated Name");
-      expect(updated.permissions).toEqual(["read", "write"]);
+      expect(updated).not.toBeNull();
+      expect(updated?.name).toBe("Updated Name");
+      expect(updated?.permissions).toEqual(["read", "write"]);
     });
 
     test("should delete a role", async ({ makeOrganization }) => {

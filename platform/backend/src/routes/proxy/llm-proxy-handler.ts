@@ -23,8 +23,8 @@ import {
   TokenPriceModel,
 } from "@/models";
 import {
-  ApiError,
   type Agent,
+  ApiError,
   type InteractionRequest,
   type InteractionResponse,
   type LLMProvider,

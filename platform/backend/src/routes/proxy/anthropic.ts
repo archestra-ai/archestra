@@ -29,6 +29,7 @@ import {
   constructResponseSchema,
   UuidIdSchema,
 } from "@/types";
+import { convertToolResultsToToon } from "./adapterV2/anthropic";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";
@@ -422,10 +423,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
-          await utils.adapters.anthropic.convertToolResultsToToon(
-            filteredMessages,
-            model,
-          );
+          await convertToolResultsToToon(filteredMessages, model);
         filteredMessages = convertedMessages;
         toonTokensBefore = stats.toonTokensBefore;
         toonTokensAfter = stats.toonTokensAfter;

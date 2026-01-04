@@ -18,13 +18,13 @@ export type { PolicyDeniedPart as PolicyDeniedResult };
 type PolicyDeniedToolProps = {
   policyDenied: PolicyDeniedPart;
 } & (
-  | { editable: true; agentId: string }
-  | { editable?: false; agentId?: never }
+  | { editable: true; profileId: string }
+  | { editable?: false; profileId?: never }
 );
 
 export function PolicyDeniedTool({
   policyDenied,
-  agentId,
+  profileId,
   editable,
 }: PolicyDeniedToolProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,7 +75,7 @@ export function PolicyDeniedTool({
           open={isModalOpen}
           onOpenChange={setIsModalOpen}
           toolName={toolName}
-          agentId={agentId}
+          profileId={profileId}
         />
       )}
     </>

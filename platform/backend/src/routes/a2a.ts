@@ -1,15 +1,12 @@
-import { stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
-import logger from "@/logging";
 import { AgentModel, PromptModel, UserModel } from "@/models";
 import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
-import { createLLMModelForAgent } from "@/services/llm-client";
+import { executeA2AMessage } from "@/services/a2a-executor";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**
@@ -277,96 +274,24 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       try {
-        // Use default model from config
-        const selectedModel = config.chat.defaultModel;
-
-        // Build system prompt from prompt's systemPrompt and userPrompt fields
-        let systemPrompt: string | undefined;
-        const systemPromptParts: string[] = [];
-        const userPromptParts: string[] = [];
-
-        if (prompt.systemPrompt) {
-          systemPromptParts.push(prompt.systemPrompt);
-        }
-        if (prompt.userPrompt) {
-          userPromptParts.push(prompt.userPrompt);
-        }
-
-        if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
-          const allParts = [...systemPromptParts, ...userPromptParts];
-          systemPrompt = allParts.join("\n\n");
-        }
-
-        // Fetch MCP tools for the agent
-        const mcpTools = await getChatMcpTools({
-          agentName: agent.name,
-          agentId: agent.id,
-          userId,
-          userIsProfileAdmin: true, // A2A agents have full access
-        });
-
-        logger.info(
-          {
-            promptId,
-            agentId: agent.id,
-            userId,
-            orgId: organizationId,
-            toolCount: Object.keys(mcpTools).length,
-            model: selectedModel,
-            hasSystemPrompt: !!systemPrompt,
-          },
-          "Starting A2A execution",
-        );
-
-        // Create LLM model using shared service
-        const { model, provider } = await createLLMModelForAgent({
+        // Execute using shared A2A service
+        const result = await executeA2AMessage({
+          promptId,
+          message: userMessage,
           organizationId,
           userId,
-          agentId: agent.id,
-          model: selectedModel,
         });
-
-        // Execute with AI SDK using streamText (required for long-running requests)
-        // We stream internally but collect the full result for JSON-RPC response
-        const stream = streamText({
-          model,
-          system: systemPrompt,
-          prompt: userMessage,
-          tools: mcpTools,
-          stopWhen: stepCountIs(20),
-        });
-
-        // Wait for the stream to complete and get the final text
-        const finalText = await stream.text;
-        const usage = await stream.usage;
-        const finishReason = await stream.finishReason;
-
-        // Generate message ID
-        const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-        logger.info(
-          {
-            promptId,
-            agentId: agent.id,
-            provider,
-            finishReason,
-            usage,
-            messageId,
-          },
-          "A2A execution finished",
-        );
 
         return reply.send({
           jsonrpc: "2.0" as const,
           id,
           result: {
-            messageId,
+            messageId: result.messageId,
             role: "agent" as const,
-            parts: [{ kind: "text" as const, text: finalText }],
+            parts: [{ kind: "text" as const, text: result.text }],
           },
         });
       } catch (error) {
-        logger.error({ error, promptId }, "A2A LLM execution failed");
         return reply.send({
           jsonrpc: "2.0" as const,
           id,

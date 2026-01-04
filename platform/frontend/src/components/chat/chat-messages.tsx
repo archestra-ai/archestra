@@ -23,6 +23,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { cn } from "@/lib/utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -180,22 +181,20 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
 
+  const isResponseInProgress = status === "streaming" || status === "submitted";
+
   return (
     <Conversation className="h-full">
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {
-            // Hide messages below the one being edited (for user messages only)
-            if (
-              editingMessageIndex !== -1 &&
-              idx > editingMessageIndex &&
-              editingPartKey?.startsWith(messages[editingMessageIndex].id)
-            ) {
-              return null;
-            }
-
+            const isDimmed =
+              editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
-              <div key={message.id || idx}>
+              <div
+                key={message.id || idx}
+                className={cn(isDimmed && "opacity-40 transition-opacity")}
+              >
                 {message.parts?.map((part, i) => {
                   // Skip tool result parts that immediately follow a tool invocation with same toolCallId
                   if (
@@ -235,7 +234,7 @@ export function ChatMessages({
                             key={partKey}
                             policyDenied={policyDenied}
                             {...(agentId
-                              ? { editable: true, agentId }
+                              ? { editable: true, profileId: agentId }
                               : { editable: false })}
                           />
                         );
@@ -272,6 +271,7 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
+                              editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveAssistantMessage}
@@ -290,6 +290,7 @@ export function ChatMessages({
                               partKey={partKey}
                               text={part.text}
                               isEditing={editingPartKey === partKey}
+                              editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}
@@ -477,7 +478,9 @@ function MessageTool({
       return (
         <PolicyDeniedTool
           policyDenied={policyDenied}
-          {...(agentId ? { editable: true, agentId } : { editable: false })}
+          {...(agentId
+            ? { editable: true, profileId: agentId }
+            : { editable: false })}
         />
       );
     }

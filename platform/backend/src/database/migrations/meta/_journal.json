@@ -708,6 +708,20 @@
       "when": 1767097600473,
       "tag": "0100_public_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1767112914926,
+      "tag": "0101_same_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1767361181477,
+      "tag": "0102_true_red_skull",
+      "breakpoints": true
     }
   ]
 }

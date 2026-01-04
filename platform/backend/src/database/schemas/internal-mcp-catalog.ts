@@ -58,6 +58,7 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
       description?: string; // Description to show in installation dialog
     }>;
     dockerImage?: string;
+    serviceAccount?: string;
     transportType?: "stdio" | "streamable-http";
     httpPort?: number;
     httpPath?: string;

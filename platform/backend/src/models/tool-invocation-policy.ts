@@ -1,4 +1,4 @@
-import { isArchestraMcpServerTool } from "@shared";
+import { isAgentTool, isArchestraMcpServerTool } from "@shared";
 import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
@@ -114,16 +114,18 @@ class ToolInvocationPolicyModel {
     }>,
     isContextTrusted: boolean,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
-    // Filter out Archestra tools (always allowed)
-    const nonArchestraToolCalls = toolCalls.filter(
-      (tc) => !isArchestraMcpServerTool(tc.toolCallName),
+    // Filter out Archestra tools and agent delegation tools (always allowed)
+    const externalToolCalls = toolCalls.filter(
+      (tc) =>
+        !isArchestraMcpServerTool(tc.toolCallName) &&
+        !isAgentTool(tc.toolCallName),
     );
 
-    if (nonArchestraToolCalls.length === 0) {
+    if (externalToolCalls.length === 0) {
       return { isAllowed: true, reason: "" };
     }
 
-    const toolNames = nonArchestraToolCalls.map((tc) => tc.toolCallName);
+    const toolNames = externalToolCalls.map((tc) => tc.toolCallName);
 
     // Fetch all policies for all tools.
     const allPolicies = await db
@@ -191,7 +193,7 @@ class ToolInvocationPolicyModel {
     }
 
     // Evaluate each tool call using the pre-fetched data
-    for (const { toolCallName, toolInput } of nonArchestraToolCalls) {
+    for (const { toolCallName, toolInput } of externalToolCalls) {
       const policies = policiesByTool.get(toolCallName) || [];
       const allowUsageWhenUntrustedDataIsPresent =
         securityConfigByTool.get(toolCallName) ?? null;

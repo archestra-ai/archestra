@@ -161,7 +161,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: conversation.agentId,
         userId: user.id,
         userIsProfileAdmin,
+
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
+        promptId: conversation.promptId ?? undefined,
+        organizationId,
       });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields

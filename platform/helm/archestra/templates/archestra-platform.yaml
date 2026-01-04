@@ -1,3 +1,10 @@
+{{/*
+Validation: Ensure postgresql.enabled=false when using external database
+*/}}
+{{- if and .Values.postgresql.external_database_url .Values.postgresql.enabled }}
+{{- fail "Configuration error: When postgresql.external_database_url is set, you must also set postgresql.enabled=false to prevent deploying an unused PostgreSQL instance." }}
+{{- end }}
+---
 apiVersion: v1
 kind: Service
 metadata:

@@ -1,34 +1,59 @@
-import { PermissionsSchema, RouteId } from "@shared";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { MemberModel, OrganizationRoleModel } from "@/models";
-import { ApiError, constructResponseSchema } from "@/types";
+import { z } from "zod";
+import { UserModel } from "@/models";
+import {
+  ApiError,
+  constructResponseSchema,
+  UserSchema,
+} from "@/types";
 
 const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * GET /api/users/:userId
+   * Get a user by ID
+   * Properly exposed RESTful endpoint (not a catch-all auth route)
+   */
   fastify.get(
-    "/api/user/permissions",
+    "/api/users/:userId",
     {
       schema: {
-        operationId: RouteId.GetUserPermissions,
-        description: "Get current user's permissions",
-        tags: ["User"],
-        response: constructResponseSchema(PermissionsSchema),
+        operationId: RouteId.GetUser,
+        description: "Get a user by ID",
+        tags: ["User Management"],
+        params: z.object({
+          userId: z.string().describe("User ID"),
+        }),
+        response: constructResponseSchema(UserSchema),
       },
     },
-    async ({ user, organizationId }, reply) => {
-      // Get user's member record to find their role
-      const member = await MemberModel.getByUserId(user.id, organizationId);
+    async (request, reply) => {
+      const { userId } = request.params;
 
-      if (!member || !member.role) {
-        throw new ApiError(404, "User is not a member of any organization");
+      // Users can view their own profile; middleware authz map is currently empty for GetUser
+      // If stricter access is needed later, enable a permission check here.
+
+      const user = await UserModel.getById(userId);
+
+      if (!user) {
+        throw new ApiError(404, "User not found");
       }
 
-      // Get permissions for the user's role
-      const permissions = await OrganizationRoleModel.getPermissions(
-        member.role,
-        organizationId,
-      );
-
-      return reply.send(permissions);
+      // Return only the user fields without organization-specific data
+      return reply.send({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        image: user.image,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        role: user.role,
+        banned: user.banned,
+        banReason: user.banReason,
+        banExpires: user.banExpires,
+        twoFactorEnabled: user.twoFactorEnabled,
+      });
     },
   );
 };

@@ -9,7 +9,6 @@ import type { FastifyReply } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
-  getObservableFetch,
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
@@ -23,13 +22,14 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
-import type {
-  Agent,
-  InteractionRequest,
-  InteractionResponse,
-  LLMProvider,
-  LLMStreamAdapter,
-  ToonCompressionResult,
+import {
+  type Agent,
+  ApiError,
+  type InteractionRequest,
+  type InteractionResponse,
+  type LLMProvider,
+  type LLMStreamAdapter,
+  type ToonCompressionResult,
 } from "@/types";
 import * as utils from "./utils";
 
@@ -293,11 +293,12 @@ export async function handleLLMProxy<
       `${providerName} proxy: tool results compression completed`,
     );
 
-    // Create client
+    // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
-      fetch: getObservableFetch(providerName, resolvedAgent, externalAgentId),
       mockMode: config.benchmark.mockMode,
+      agent: resolvedAgent,
+      externalAgentId,
     });
 
     // Build final request
@@ -321,6 +322,7 @@ export async function handleLLMProxy<
         toonStats,
         enabledToolNames,
         externalAgentId,
+        context.userId,
       );
     } else {
       return handleNonStreaming(
@@ -336,6 +338,7 @@ export async function handleLLMProxy<
         toonStats,
         enabledToolNames,
         externalAgentId,
+        context.userId,
       );
     }
   } catch (error) {
@@ -372,10 +375,12 @@ async function handleStreaming<
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
   externalAgentId?: string,
+  userId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
+  let streamCompleted = false;
 
   logger.debug(
     { model: actualModel },
@@ -385,7 +390,7 @@ async function handleStreaming<
   try {
     // Execute streaming request with tracing
     const stream = await utils.tracing.startActiveLlmSpan(
-      `${providerName}.messages`,
+      provider.getSpanName(true),
       providerName,
       actualModel,
       true,
@@ -501,7 +506,18 @@ async function handleStreaming<
     reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
-    // Record interaction and report metrics
+    streamCompleted = true;
+    return reply;
+  } catch (error) {
+    return handleError(error, reply, provider.extractErrorMessage, true);
+  } finally {
+    // Always record interaction (whether stream completed or was aborted)
+    if (!streamCompleted) {
+      logger.info(
+        "Stream was aborted before completion, recording partial interaction",
+      );
+    }
+
     const usage = streamAdapter.state.usage;
     if (usage) {
       reportLLMTokens(
@@ -546,6 +562,7 @@ async function handleStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        userId,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -562,10 +579,6 @@ async function handleStreaming<
         toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
       });
     }
-
-    return reply;
-  } catch (error) {
-    return handleError(error, reply, provider.extractErrorMessage, true);
   }
 }
 
@@ -592,17 +605,18 @@ async function handleNonStreaming<
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
   externalAgentId?: string,
+  userId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
   logger.debug(
     { model: actualModel },
-    `[${providerName}Proxy] Starting non-streaming request`,
+    `[${providerName}ProxyV2] Starting non-streaming request`,
   );
 
   // Execute request with tracing
   const response = await utils.tracing.startActiveLlmSpan(
-    `${providerName}.messages`,
+    provider.getSpanName(false),
     providerName,
     actualModel,
     false,
@@ -682,6 +696,7 @@ async function handleNonStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        userId,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -728,6 +743,7 @@ async function handleNonStreaming<
   await InteractionModel.create({
     profileId: agent.id,
     externalAgentId,
+    userId,
     type: provider.interactionType,
     // Cast generic types to interaction types - valid at runtime
     request: originalRequest as unknown as InteractionRequest,
@@ -756,17 +772,20 @@ function handleError(
   reply: FastifyReply,
   extractErrorMessage: (error: unknown) => string,
   isStreaming: boolean,
-): FastifyReply {
+): FastifyReply | never {
   logger.error(error);
 
   const statusCode =
     error instanceof Error && "status" in error
-      ? (error.status as 200 | 400 | 404 | 403 | 500)
+      ? (error.status as 400 | 403 | 404 | 429 | 500)
       : 500;
 
   const errorMessage = extractErrorMessage(error);
 
-  if (isStreaming) {
+  // If headers already sent (mid-stream error), write error to stream.
+  // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
+  // the status after headers are committed - so SSE error event is our only option.
+  if (isStreaming && reply.sent) {
     const errorEvent = {
       type: "error",
       error: {
@@ -774,24 +793,12 @@ function handleError(
         message: errorMessage,
       },
     };
-
-    if (reply.sent) {
-      // Headers already sent, write to stream
-      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
-      reply.raw.end();
-    } else {
-      // Headers not sent, send as SSE format
-      const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
-      return reply.status(200).send(sseError);
-    }
+    reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+    reply.raw.end();
     return reply;
   }
 
-  // Non-streaming error
-  return reply.status(statusCode).send({
-    error: {
-      message: errorMessage,
-      type: "api_error",
-    },
-  });
+  // Headers not sent yet - throw ApiError to let central handler return proper status code
+  // This matches V1 handler behavior and ensures clients receive correct HTTP status
+  throw new ApiError(statusCode, errorMessage);
 }

@@ -2,6 +2,7 @@ import AnthropicProvider from "@anthropic-ai/sdk";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
+import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -12,6 +13,7 @@ import type {
   CommonMessage,
   CommonToolCall,
   CommonToolResult,
+  CreateClientOptions,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -959,17 +961,27 @@ export const anthropicAdapterFactory: LLMProvider<
     return config.llm.anthropic.baseUrl;
   },
 
+  getSpanName(): string {
+    return "anthropic.messages";
+  },
+
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
+    options?: CreateClientOptions,
   ): AnthropicProvider {
     if (options?.mockMode) {
       return new MockAnthropicClient() as unknown as AnthropicProvider;
     }
+
+    // Use observable fetch for request duration metrics if agent is provided
+    const customFetch = options?.agent
+      ? getObservableFetch("anthropic", options.agent, options.externalAgentId)
+      : undefined;
+
     return new AnthropicProvider({
       apiKey,
       baseURL: options?.baseUrl,
-      fetch: options?.fetch,
+      fetch: customFetch,
     });
   },
 

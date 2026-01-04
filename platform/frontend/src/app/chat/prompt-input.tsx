@@ -39,6 +39,8 @@ interface ArchestraPromptInputProps {
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
+  // Ref for autofocus
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 // Inner component that has access to the controller context
@@ -53,10 +55,12 @@ const PromptInputContent = ({
   promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  textareaRef: externalTextareaRef,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
 
   // Handle speech transcription by updating controller state
@@ -133,6 +137,7 @@ const ArchestraPromptInput = ({
   promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  textareaRef,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -148,6 +153,7 @@ const ArchestraPromptInput = ({
           promptId={promptId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
+          textareaRef={textareaRef}
         />
       </PromptInputProvider>
     </div>

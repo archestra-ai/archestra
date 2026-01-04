@@ -1,7 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -83,6 +83,18 @@ export function ChatMessages({
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
+
+  // Debounce resize mode change when exiting edit mode to let DOM settle
+  const isEditing = editingPartKey !== null;
+  const [useInstantResize, setUseInstantResize] = useState(false);
+  useLayoutEffect(() => {
+    if (isEditing) {
+      setUseInstantResize(true);
+    } else {
+      const timeout = setTimeout(() => setUseInstantResize(false), 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [isEditing]);
 
   const handleStartEdit = (partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
@@ -184,7 +196,7 @@ export function ChatMessages({
   const isResponseInProgress = status === "streaming" || status === "submitted";
 
   return (
-    <Conversation className="h-full">
+    <Conversation className="h-full" resize={useInstantResize ? "instant" : "smooth"}>
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {

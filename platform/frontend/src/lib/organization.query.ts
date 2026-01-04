@@ -12,6 +12,7 @@ import {
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 /**
@@ -281,6 +282,7 @@ export function useUpdateOrganization(
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+      queryClient.invalidateQueries({ queryKey: appearanceKeys.public() });
       toast.success(onSuccessMessage);
     },
     onError: (_error) => {

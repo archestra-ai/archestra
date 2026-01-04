@@ -196,6 +196,9 @@ export const RouteId = {
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
 
+  // Appearance Routes (public/unauthenticated)
+  GetPublicAppearance: "getPublicAppearance",
+
   // SSO Provider Routes
   GetPublicSsoProviders: "getPublicSsoProviders",
   GetSsoProviders: "getSsoProviders",

@@ -6,6 +6,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";
+import { usePublicAppearance } from "./appearance.query";
 import { useOrganization, useUpdateOrganization } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
@@ -16,15 +17,17 @@ const DEFAULT_FONT: OrganizationCustomFont = "lato";
 export function useOrgTheme() {
   const pathname = usePathname();
 
-  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
-  const isAuthPage = pathname?.startsWith("/auth/");
+  // Always use public appearance endpoint - it returns the same data for all pages
+  // and works without authentication
+  const { data: appearance, isLoading: isLoadingAppearance } =
+    usePublicAppearance();
 
-  const { data, isLoading: isLoadingAppearance } = useOrganization(!isAuthPage);
   const {
     theme: themeFromBackend,
     customFont: fontFromBackend,
     logo,
-  } = data ?? {};
+  } = appearance ?? {};
+
   const updateThemeMutation = useUpdateOrganization(
     "Appearance settings updated",
     "Failed to update appearance settings",
@@ -88,9 +91,23 @@ export function useOrgTheme() {
     }
   }, [fontFromBackend, fontFromLocalStorage]);
 
-  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  // For auth pages, return limited data (read-only appearance, no update functions)
   if (isAuthPage) {
-    return null;
+    return {
+      currentUITheme: currentUITheme || DEFAULT_THEME,
+      currentUIFont: currentUIFont || DEFAULT_FONT,
+      themeFromBackend,
+      fontFromBackend,
+      setPreviewTheme: undefined,
+      setPreviewFont: undefined,
+      saveAppearance: undefined,
+      logo,
+      DEFAULT_THEME,
+      DEFAULT_FONT,
+      isLoadingAppearance,
+      applyThemeOnUI,
+      applyFontOnUI,
+    };
   }
 
   return {

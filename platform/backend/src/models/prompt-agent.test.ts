@@ -602,10 +602,12 @@ describe("PromptAgentModel", () => {
       const updatedParent = await PromptModel.update(parentPrompt.id, {
         name: "Renamed Parent",
       });
-      expect(updatedParent).toBeDefined();
+      if (!updatedParent) {
+        throw new Error("Expected updatedParent to be defined");
+      }
 
       // Verify delegation moved to new version
-      agents = await PromptAgentModel.findByPromptId(updatedParent!.id);
+      agents = await PromptAgentModel.findByPromptId(updatedParent.id);
       expect(agents).toHaveLength(1);
       expect(agents[0].agentPromptId).toBeDefined();
 

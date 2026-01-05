@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.53",
-    "@ai-sdk/google": "^2.0.51",
+    "@ai-sdk/google": "^3.0.1",
     "@ai-sdk/openai": "^2.0.88",
     "@anthropic-ai/sdk": "^0.71.2",
     "@anthropic-ai/tokenizer": "^0.0.4",

@@ -52,13 +52,8 @@ export function ChatToolsDisplay({
   // Debug: Log tools when they're loaded
   useEffect(() => {
     if (!isLoading) {
-      console.log("[ChatToolsDisplay] Tools loaded:", {
-        profileTools,
-        promptTools,
-        allTools: [...profileTools, ...promptTools],
-      });
     }
-  }, [isLoading, profileTools, promptTools]);
+  }, [isLoading]);
 
   // State for tooltip open state per server
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
@@ -277,20 +272,20 @@ export function ChatToolsDisplay({
               <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
                 <TooltipTrigger asChild>
                   <PromptInputButton
-                data-tool-button
-                className="w-[fit-content]"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setOpenTooltip(isOpen ? null : serverName);
-                }}
-              >
-                <span className="font-medium text-xs text-foreground">
-                  {serverName}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  ({enabledTools.length}/{totalToolsCount})
-                </span>
+                    data-tool-button
+                    className="w-[fit-content]"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setOpenTooltip(isOpen ? null : serverName);
+                    }}
+                  >
+                    <span className="font-medium text-xs text-foreground">
+                      {serverName}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      ({enabledTools.length}/{totalToolsCount})
+                    </span>
                   </PromptInputButton>
                 </TooltipTrigger>
                 <TooltipContent
@@ -306,63 +301,63 @@ export function ChatToolsDisplay({
                   }}
                 >
                   <ScrollArea className="max-h-96">
-                {/* Enabled section */}
-                {enabledTools.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        Enabled ({enabledTools.length})
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={(e) =>
-                          handleDisableAll(
-                            enabledTools.map((t) => t.id),
-                            e,
-                          )
-                        }
-                      >
-                        Disable All
-                      </Button>
-                    </div>
-                    <div className="space-y-1 px-2 pb-2">
-                      {enabledTools.map((tool) =>
-                        renderToolRow(tool, false, serverName),
-                      )}
-                    </div>
-                  </div>
-                )}
+                    {/* Enabled section */}
+                    {enabledTools.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Enabled ({enabledTools.length})
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={(e) =>
+                              handleDisableAll(
+                                enabledTools.map((t) => t.id),
+                                e,
+                              )
+                            }
+                          >
+                            Disable All
+                          </Button>
+                        </div>
+                        <div className="space-y-1 px-2 pb-2">
+                          {enabledTools.map((tool) =>
+                            renderToolRow(tool, false, serverName),
+                          )}
+                        </div>
+                      </div>
+                    )}
 
-                {/* Disabled section */}
-                {disabledTools.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        Disabled ({disabledTools.length})
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={(e) =>
-                          handleEnableAll(
-                            disabledTools.map((t) => t.id),
-                            e,
-                          )
-                        }
-                      >
-                        Enable All
-                      </Button>
-                    </div>
-                    <div className="space-y-1 px-2 pb-2">
-                      {disabledTools.map((tool) =>
-                        renderToolRow(tool, true, serverName),
-                      )}
-                    </div>
-                  </div>
-                )}
+                    {/* Disabled section */}
+                    {disabledTools.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Disabled ({disabledTools.length})
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={(e) =>
+                              handleEnableAll(
+                                disabledTools.map((t) => t.id),
+                                e,
+                              )
+                            }
+                          >
+                            Enable All
+                          </Button>
+                        </div>
+                        <div className="space-y-1 px-2 pb-2">
+                          {disabledTools.map((tool) =>
+                            renderToolRow(tool, true, serverName),
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </ScrollArea>
                 </TooltipContent>
               </Tooltip>

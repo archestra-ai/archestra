@@ -318,7 +318,7 @@ export default function ChatPage() {
       setIsArtifactOpen(true);
       localStorage.setItem("archestra-chat-artifact-open", "true");
     }
-    
+
     // Update the ref for next comparison
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen]);

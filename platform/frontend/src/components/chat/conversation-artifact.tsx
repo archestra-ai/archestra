@@ -42,14 +42,17 @@ export function ConversationArtifactPanel({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
-      
+
       const newWidth = window.innerWidth - e.clientX;
       const minWidth = 300;
       const maxWidth = window.innerWidth * 0.7;
-      
+
       const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
       setWidth(clampedWidth);
-      localStorage.setItem("archestra-artifact-panel-width", clampedWidth.toString());
+      localStorage.setItem(
+        "archestra-artifact-panel-width",
+        clampedWidth.toString(),
+      );
     };
 
     const handleMouseUp = () => {
@@ -110,8 +113,8 @@ export function ConversationArtifactPanel({
 
   const handleDownload = () => {
     // Use browser's print functionality to save as PDF
-    const printWindow = window.open('', '_blank');
-    
+    const printWindow = window.open("", "_blank");
+
     if (!printWindow || !contentRef.current) {
       toast.error("Unable to generate PDF. Please check popup settings.");
       return;
@@ -119,7 +122,7 @@ export function ConversationArtifactPanel({
 
     // Get the content HTML
     const content = contentRef.current.innerHTML;
-    
+
     // Create a complete HTML document with print-optimized styles
     const printDocument = `
       <!DOCTYPE html>
@@ -266,18 +269,18 @@ export function ConversationArtifactPanel({
         </body>
       </html>
     `;
-    
+
     // Write the content to the new window
     printWindow.document.write(printDocument);
     printWindow.document.close();
-    
+
     // Wait for content to load then trigger print
     printWindow.onload = () => {
       setTimeout(() => {
         printWindow.print();
         // The user can save as PDF from the print dialog
         toast.success("Print dialog opened - select 'Save as PDF' to download");
-        
+
         // Close the window after print dialog is closed
         printWindow.onafterprint = () => {
           printWindow.close();
@@ -300,9 +303,17 @@ export function ConversationArtifactPanel({
       )}
     >
       {/* Resize handle */}
+      {/* biome-ignore lint/a11y/useSemanticElements: This is a draggable resize handle, not a semantic separator */}
       <div
         className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize bg-transparent hover:bg-primary/10 transition-all"
         onMouseDown={handleMouseDown}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize artifact panel"
+        aria-valuenow={width}
+        aria-valuemin={300}
+        aria-valuemax={window.innerWidth * 0.7}
+        tabIndex={0}
       >
         <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">
           <GripVertical className="h-4 w-4 text-muted-foreground" />

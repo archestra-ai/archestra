@@ -6595,7 +6595,7 @@ export type GetChatConversationsResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        artefact: string | null;
+        artifact: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6697,7 +6697,7 @@ export type CreateChatConversationResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        artefact: string | null;
+        artifact: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6874,7 +6874,7 @@ export type GetChatConversationResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        artefact: string | null;
+        artifact: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -6893,7 +6893,7 @@ export type UpdateChatConversationData = {
         selectedModel?: string;
         chatApiKeyId?: string | null;
         agentId?: string;
-        artefact?: string | null;
+        artifact?: string | null;
     };
     path: {
         id: string;
@@ -6978,7 +6978,7 @@ export type UpdateChatConversationResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        artefact: string | null;
+        artifact: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -7164,7 +7164,7 @@ export type GenerateChatConversationTitleResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        artefact: string | null;
+        artifact: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -7266,7 +7266,7 @@ export type UpdateChatMessageResponses = {
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
-        artefact: string | null;
+        artifact: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {

@@ -622,16 +622,30 @@ export default function ChatPage() {
               </span>
             </div>
             <div className="flex gap-2 items-center">
-              {conversation?.artifact && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleArtifactPanel}
-                  className="text-xs"
-                >
-                  <FileText className="h-3 w-3 mr-1" />
-                  {isArtifactOpen ? "Hide" : "Show"} Artifact
-                </Button>
+              {!isArtifactOpen && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={conversation?.artifact ? toggleArtifactPanel : undefined}
+                          disabled={!conversation?.artifact}
+                          className="text-xs"
+                        >
+                          <FileText className="h-3 w-3 mr-1" />
+                          Show Artifact
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {!conversation?.artifact && (
+                      <TooltipContent>
+                        <p>Agent didn't create an artifact yet</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               )}
               <Button
                 variant="ghost"

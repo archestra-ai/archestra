@@ -39860,6 +39860,9 @@
                   },
                   "isByosVault": {
                     "type": "boolean"
+                  },
+                  "serviceAccount": {
+                    "type": "string"
                   }
                 },
                 "required": [

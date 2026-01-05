@@ -223,6 +223,7 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+      useV2Routes: process.env.ARCHESTRA_GEMINI_USE_V2_ROUTES === "true",
       vertexAi: {
         enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",

@@ -9,7 +9,6 @@ import type { FastifyReply } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
-  getObservableFetch,
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
@@ -23,13 +22,14 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
-import type {
-  Agent,
-  InteractionRequest,
-  InteractionResponse,
-  LLMProvider,
-  LLMStreamAdapter,
-  ToonCompressionResult,
+import {
+  type Agent,
+  ApiError,
+  type InteractionRequest,
+  type InteractionResponse,
+  type LLMProvider,
+  type LLMStreamAdapter,
+  type ToonCompressionResult,
 } from "@/types";
 import * as utils from "./utils";
 
@@ -293,11 +293,12 @@ export async function handleLLMProxy<
       `${providerName} proxy: tool results compression completed`,
     );
 
-    // Create client
+    // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
-      fetch: getObservableFetch(providerName, resolvedAgent, externalAgentId),
       mockMode: config.benchmark.mockMode,
+      agent: resolvedAgent,
+      externalAgentId,
     });
 
     // Build final request
@@ -771,17 +772,20 @@ function handleError(
   reply: FastifyReply,
   extractErrorMessage: (error: unknown) => string,
   isStreaming: boolean,
-): FastifyReply {
+): FastifyReply | never {
   logger.error(error);
 
   const statusCode =
     error instanceof Error && "status" in error
-      ? (error.status as 200 | 400 | 404 | 403 | 500)
+      ? (error.status as 400 | 403 | 404 | 429 | 500)
       : 500;
 
   const errorMessage = extractErrorMessage(error);
 
-  if (isStreaming) {
+  // If headers already sent (mid-stream error), write error to stream.
+  // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
+  // the status after headers are committed - so SSE error event is our only option.
+  if (isStreaming && reply.sent) {
     const errorEvent = {
       type: "error",
       error: {
@@ -789,24 +793,12 @@ function handleError(
         message: errorMessage,
       },
     };
-
-    if (reply.sent) {
-      // Headers already sent, write to stream
-      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
-      reply.raw.end();
-    } else {
-      // Headers not sent, send as SSE format
-      const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
-      return reply.status(200).send(sseError);
-    }
+    reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+    reply.raw.end();
     return reply;
   }
 
-  // Non-streaming error
-  return reply.status(statusCode).send({
-    error: {
-      message: errorMessage,
-      type: "api_error",
-    },
-  });
+  // Headers not sent yet - throw ApiError to let central handler return proper status code
+  // This matches V1 handler behavior and ensures clients receive correct HTTP status
+  throw new ApiError(statusCode, errorMessage);
 }

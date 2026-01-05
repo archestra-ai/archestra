@@ -252,7 +252,7 @@ export const ToolOutput = ({
     const codeString =
       typeof formattedOutput === "object"
         ? JSON.stringify(formattedOutput, null, 2)
-        : (formattedOutput as string);
+        : String(formattedOutput);
     const lines = codeString.split("\n");
     const MAX_LINES = 50;
     const isLarge = lines.length > MAX_LINES;

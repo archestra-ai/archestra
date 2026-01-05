@@ -122,7 +122,20 @@ export const ToolHeader = ({
         {getStatusBadge(state)}
       </div>
       {errorText && (
-        <div className="text-destructive text-xs mt-2 text-left">
+        // biome-ignore lint/a11y/useSemanticElements: We need text selection within the button trigger
+        <div
+          className="text-destructive text-xs mt-2 text-left select-text"
+          style={{
+            userSelect: "text",
+            WebkitUserSelect: "text",
+            pointerEvents: "auto",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="button"
+          tabIndex={-1}
+        >
           {errorText}
         </div>
       )}

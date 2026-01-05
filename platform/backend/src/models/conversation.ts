@@ -1,3 +1,7 @@
+import {
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@shared";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
@@ -38,8 +42,8 @@ class ConversationModel {
       .filter(
         (tool) =>
           !tool.name.startsWith("archestra__") ||
-          tool.name === "archestra__todo_write" ||
-          tool.name === "archestra__artifact_write",
+          tool.name === TOOL_TODO_WRITE_FULL_NAME ||
+          tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
       )
       .map((tool) => tool.id);
 

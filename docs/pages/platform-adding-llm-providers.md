@@ -9,16 +9,18 @@ lastUpdated: 2026-01-02
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 
-This is an internal development guide for adding new LLM providers to Archestra.
+This is a development guide for adding new LLM providers to Archestra.
 -->
 
 ## Overview
 
-This guide covers all features that need to be implemented in order to add anew LLM provider to Archestra Platform.
+This guide covers how to add a new LLM provider to Archestra Platform. Each provider requires:
 
-## LLM Proxy Support
+1. **[LLM Proxy](/docs/platform-llm-proxy)** - The proxy that sits between clients and LLM providers. Handles security policies, tool invocation controls, metrics, and observability. Clients send requests to the proxy, which forwards them to the provider.
 
-Implement the following to add a new provider to the [LLM Proxy](/docs/platform-llm-proxy).
+2. **[Chat](/docs/platform-chat)** - The built-in chat interface. 
+
+## LLM Proxy
 
 ### Provider Registration
 
@@ -43,7 +45,7 @@ Each provider needs Zod schemas defining its API contract. TypeScript types are 
 
 ### Adapter Implementation
 
-The adapter pattern provides a **provider-agnostic API** for business logic. LLMProxy logic operates entirely through adapters, never touching provider-specific types directly.
+The adapter pattern provides a **provider-agnostic API** for business logic. LLMProxy operates entirely through adapters, never touching provider-specific types directly.
 
 | File | Description |
 |------|-------------|
@@ -136,6 +138,18 @@ Interaction handlers parse stored request/response data for display in the LLM P
 |------|-------------|
 | `frontend/src/lib/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
 | `frontend/src/lib/interaction.utils.ts` | Add case to `getInteractionClass()` switch to route discriminator to handler |
+
+### E2E Tests
+
+Each provider must be added to the LLM Proxy e2e tests to ensure all features work correctly.
+
+| File | Description |
+|------|-------------|
+| `e2e-tests/tests/api/llm-proxy/tool-invocation.spec.ts` | Tool invocation policy tests |
+| `e2e-tests/tests/api/llm-proxy/tool-persistence.spec.ts` | Tool call persistence tests |
+| `e2e-tests/tests/api/llm-proxy/tool-result-compression.spec.ts` | TOON compression tests |
+| `e2e-tests/tests/api/llm-proxy/model-optimization.spec.ts` | Model optimization tests |
+| `e2e-tests/tests/api/llm-proxy/token-cost-limits.spec.ts` | Token cost limits tests |
 
 ## Chat Support
 

@@ -12,18 +12,14 @@ vi.mock("playwright", () => ({
 
 describe("BrowserService", () => {
   let browserService: BrowserService;
-  let mockBrowser: any;
-  let mockContext: any;
-  let mockPage: any;
+  // Use unknown for mocks to avoid 'any' lint errors, casting when necessary for specific mock properties
+  let mockBrowser: Record<string, unknown>;
+  let mockContext: Record<string, unknown>;
+  let mockPage: Record<string, unknown>;
 
   beforeEach(() => {
-    // Reset singleton instance (this is a bit hacky for a singleton, but necessary)
-    // We can't easily reset private static instance without exposing it or reloading module
-    // For this test, we assume we call getInstance() and it reuses the same instance, but we reset the browser state if possible
-    // OR we just test the flow assuming clean state if we mock implementation
-
-    // Access private static instance to reset it for testing
-    // @ts-expect-error
+    // Reset singleton instance (accessing private static property via casting)
+    // @ts-expect-error accessing private property for test isolation
     BrowserService.instance = null;
     browserService = BrowserService.getInstance();
 
@@ -47,6 +43,7 @@ describe("BrowserService", () => {
       close: vi.fn(),
     };
 
+    // biome-ignore lint/suspicious/noExplicitAny: Mocking playwright launch requires casting
     (chromium.launch as any).mockResolvedValue(mockBrowser);
   });
 
@@ -67,9 +64,12 @@ describe("BrowserService", () => {
     const result = await browserService.navigate(conversationId, url);
 
     expect(chromium.launch).toHaveBeenCalled();
-    expect(mockBrowser.newContext).toHaveBeenCalled();
-    expect(mockContext.newPage).toHaveBeenCalled();
-    expect(mockPage.goto).toHaveBeenCalledWith(url, expect.anything());
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockBrowser as any).newContext).toHaveBeenCalled();
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockContext as any).newPage).toHaveBeenCalled();
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockPage as any).goto).toHaveBeenCalledWith(url, expect.anything());
     expect(result).toContain("Successfully navigated");
   });
 
@@ -80,8 +80,10 @@ describe("BrowserService", () => {
     await browserService.click(conversationId, "#btn");
 
     expect(chromium.launch).toHaveBeenCalledTimes(1);
-    expect(mockBrowser.newContext).toHaveBeenCalledTimes(1);
-    expect(mockContext.newPage).toHaveBeenCalledTimes(1); // One page per context in our implementation
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockBrowser as any).newContext).toHaveBeenCalledTimes(1);
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockContext as any).newPage).toHaveBeenCalledTimes(1);
   });
 
   it("should isolate conversations", async () => {
@@ -91,7 +93,8 @@ describe("BrowserService", () => {
     await browserService.navigate(conv1, "https://example.com");
     await browserService.navigate(conv2, "https://other.com");
 
-    expect(mockBrowser.newContext).toHaveBeenCalledTimes(2);
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockBrowser as any).newContext).toHaveBeenCalledTimes(2);
   });
 
   it("should check screenshots", async () => {
@@ -99,7 +102,8 @@ describe("BrowserService", () => {
     await browserService.navigate(conversationId, "https://example.com");
     const screenshot = await browserService.screenshot(conversationId);
 
-    expect(mockPage.screenshot).toHaveBeenCalled();
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockPage as any).screenshot).toHaveBeenCalled();
     expect(screenshot).toBe(Buffer.from("fake-screenshot").toString("base64"));
   });
 
@@ -108,10 +112,15 @@ describe("BrowserService", () => {
     await browserService.navigate(conversationId, "https://example.com");
 
     await browserService.click(conversationId, "#btn");
-    expect(mockPage.click).toHaveBeenCalledWith("#btn", expect.anything());
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockPage as any).click).toHaveBeenCalledWith(
+      "#btn",
+      expect.anything(),
+    );
 
     await browserService.type(conversationId, "#input", "hello");
-    expect(mockPage.fill).toHaveBeenCalledWith(
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockPage as any).fill).toHaveBeenCalledWith(
       "#input",
       "hello",
       expect.anything(),
@@ -123,6 +132,7 @@ describe("BrowserService", () => {
     await browserService.navigate(conversationId, "https://example.com");
 
     await browserService.closeSession(conversationId);
-    expect(mockContext.close).toHaveBeenCalled();
+    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
+    expect((mockContext as any).close).toHaveBeenCalled();
   });
 });

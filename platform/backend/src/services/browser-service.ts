@@ -57,7 +57,13 @@ export class BrowserService {
       this.contexts.set(conversationId, context);
     }
 
-    return this.contexts.get(conversationId)!;
+    const context = this.contexts.get(conversationId);
+    if (!context) {
+      throw new Error(
+        `Failed to retrieve browser context for conversation ${conversationId}`,
+      );
+    }
+    return context;
   }
 
   /**
@@ -76,7 +82,13 @@ export class BrowserService {
       return page;
     }
 
-    return this.activePages.get(conversationId)!;
+    const page = this.activePages.get(conversationId);
+    if (!page) {
+      throw new Error(
+        `Failed to retrieve active page for conversation ${conversationId}`,
+      );
+    }
+    return page;
   }
 
   /**

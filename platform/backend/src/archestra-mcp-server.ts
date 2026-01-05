@@ -455,6 +455,162 @@ export async function executeArchestraTool(
     }
   }
 
+  // Browser Tools Implementation
+
+  if (toolName === TOOL_BROWSER_NAVIGATE_FULL_NAME) {
+    const url = args?.url as string;
+    if (!url) throw new Error("URL is required");
+
+    try {
+      const result = await BrowserService.getInstance().navigate(
+        context.conversationId || "default",
+        url,
+      );
+      return {
+        content: [{ type: "text", text: result }],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_BROWSER_SCREENSHOT_FULL_NAME) {
+    try {
+      const base64 = await BrowserService.getInstance().screenshot(
+        context.conversationId || "default",
+      );
+      return {
+        content: [
+          { type: "text", text: `[SCREENSHOT_BASE64]${base64}` },
+          { type: "text", text: "Screenshot taken successfully." },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_BROWSER_CLICK_FULL_NAME) {
+    const selector = args?.selector as string;
+    if (!selector) throw new Error("Selector is required");
+
+    try {
+      const result = await BrowserService.getInstance().click(
+        context.conversationId || "default",
+        selector,
+      );
+      return {
+        content: [{ type: "text", text: result }],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_BROWSER_TYPE_FULL_NAME) {
+    const selector = args?.selector as string;
+    const text = args?.text as string;
+    if (!selector || text === undefined)
+      throw new Error("Selector and text are required");
+
+    try {
+      const result = await BrowserService.getInstance().type(
+        context.conversationId || "default",
+        selector,
+        text,
+      );
+      return {
+        content: [{ type: "text", text: result }],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_BROWSER_SCROLL_FULL_NAME) {
+    const direction = args?.direction as "up" | "down";
+    if (!direction) throw new Error("Direction is required");
+
+    try {
+      const result = await BrowserService.getInstance().scroll(
+        context.conversationId || "default",
+        direction,
+      );
+      return {
+        content: [{ type: "text", text: result }],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_BROWSER_GET_CONTENT_FULL_NAME) {
+    try {
+      const content = await BrowserService.getInstance().getContent(
+        context.conversationId || "default",
+      );
+      return {
+        content: [{ type: "text", text: content }],
+        isError: false,
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   if (toolName === TOOL_CREATE_LIMIT_FULL_NAME) {
     logger.info(
       { profileId: profile.id, createLimitArgs: args },

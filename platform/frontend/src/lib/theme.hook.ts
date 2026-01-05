@@ -49,11 +49,11 @@ export function useOrgTheme() {
       : null;
 
   const [currentUITheme, setCurrentUITheme] = useState<OrganizationTheme>(
-    themeFromLocalStorage || themeFromBackend || DEFAULT_THEME,
+    themeFromBackend || themeFromLocalStorage || DEFAULT_THEME,
   );
 
   const [currentUIFont, setCurrentUIFont] = useState<OrganizationCustomFont>(
-    fontFromLocalStorage || fontFromBackend || DEFAULT_FONT,
+    fontFromBackend || fontFromLocalStorage || DEFAULT_FONT,
   );
 
   const saveAppearance = useCallback(

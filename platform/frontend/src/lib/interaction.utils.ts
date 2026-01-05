@@ -9,6 +9,78 @@ import type {
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 
+export interface CostSavingsInput {
+  cost: string | null | undefined;
+  baselineCost: string | null | undefined;
+  toonCostSavings: string | null | undefined;
+  toonTokensBefore: number | null | undefined;
+  toonTokensAfter: number | null | undefined;
+}
+
+export interface CostSavingsResult {
+  /** Savings from model optimization (baselineCost - cost) */
+  costOptimizationSavings: number;
+  /** Savings from TOON compression */
+  toonSavings: number;
+  /** Number of tokens saved by TOON compression */
+  toonTokensSaved: number | null;
+  /** Total savings (costOptimization + toon) */
+  totalSavings: number;
+  /** Baseline cost before any optimization */
+  baselineCost: number;
+  /** Actual cost after optimization */
+  actualCost: number;
+  /** Total savings as percentage of baseline */
+  savingsPercent: number;
+  /** Whether there are any savings at all */
+  hasSavings: boolean;
+}
+
+/**
+ * Calculate all cost savings from an interaction.
+ * Used by both the logs table and detail view for consistent display.
+ */
+export function calculateCostSavings(
+  input: CostSavingsInput,
+): CostSavingsResult {
+  const costNum = input.cost ? Number.parseFloat(input.cost) : 0;
+  const baselineCostNum = input.baselineCost
+    ? Number.parseFloat(input.baselineCost)
+    : 0;
+  const toonCostSavingsNum = input.toonCostSavings
+    ? Number.parseFloat(input.toonCostSavings)
+    : 0;
+
+  // Calculate tokens saved from TOON compression
+  const toonTokensSaved =
+    input.toonTokensBefore &&
+    input.toonTokensAfter &&
+    input.toonTokensBefore > input.toonTokensAfter
+      ? input.toonTokensBefore - input.toonTokensAfter
+      : null;
+
+  // Calculate cost optimization savings (from model selection)
+  const costOptimizationSavings = baselineCostNum - costNum;
+
+  // Calculate total savings
+  const totalSavings = costOptimizationSavings + toonCostSavingsNum;
+
+  // Calculate savings percentage
+  const savingsPercent =
+    baselineCostNum > 0 ? (totalSavings / baselineCostNum) * 100 : 0;
+
+  return {
+    costOptimizationSavings,
+    toonSavings: toonCostSavingsNum,
+    toonTokensSaved,
+    totalSavings,
+    baselineCost: baselineCostNum,
+    actualCost: baselineCostNum - totalSavings,
+    savingsPercent,
+    hasSavings: totalSavings !== 0,
+  };
+}
+
 export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
   private interaction: Interaction;

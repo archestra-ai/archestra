@@ -452,11 +452,12 @@ export default function ChatPage() {
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  // or when conversation loads (e.g., new chat created, hard refresh)
   useLayoutEffect(() => {
-    if (status === "ready" && textareaRef.current) {
+    if (status === "ready" && conversation?.id && textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [status]);
+  }, [status, conversation?.id]);
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();

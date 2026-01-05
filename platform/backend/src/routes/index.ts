@@ -9,7 +9,6 @@ import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
-export { default as appearanceRoutes } from "./appearance";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatRoutes } from "./chat/routes";

@@ -1271,7 +1271,7 @@ export const getPublicSsoProviders = <ThrowOnError extends boolean = false>(opti
 /**
  * Get public appearance settings (theme, logo, font) for unauthenticated pages
  */
-export const getPublicAppearance = <ThrowOnError extends boolean = false>(options?: Options<GetPublicAppearanceData, ThrowOnError>) => (options?.client ?? client).get<GetPublicAppearanceResponses, GetPublicAppearanceErrors, ThrowOnError>({ url: '/api/appearance/public', ...options });
+export const getPublicAppearance = <ThrowOnError extends boolean = false>(options?: Options<GetPublicAppearanceData, ThrowOnError>) => (options?.client ?? client).get<GetPublicAppearanceResponses, GetPublicAppearanceErrors, ThrowOnError>({ url: '/api/organization/appearance', ...options });
 
 /**
  * Get all SSO providers with full configuration (admin only)

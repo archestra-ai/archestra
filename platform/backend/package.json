@@ -62,7 +62,7 @@
     "@shared": "workspace:*",
     "@smithy/signature-v4": "^5.3.7",
     "@toon-format/toon": "^2.1.0",
-    "ai": "^5.0.116",
+    "ai": "^6.0.3",
     "better-auth": "1.4.6-beta.3",
     "cache-manager": "^7.2.7",
     "dotenv": "^17.2.2",

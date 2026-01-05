@@ -10,12 +10,32 @@ vi.mock("playwright", () => ({
   },
 }));
 
+// Define strict types for mocks
+interface MockPage {
+  goto: ReturnType<typeof vi.fn>;
+  screenshot: ReturnType<typeof vi.fn>;
+  click: ReturnType<typeof vi.fn>;
+  fill: ReturnType<typeof vi.fn>;
+  evaluate: ReturnType<typeof vi.fn>;
+  isClosed: ReturnType<typeof vi.fn>;
+}
+
+interface MockContext {
+  newPage: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+}
+
+interface MockBrowser {
+  newContext: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+}
+
 describe("BrowserService", () => {
   let browserService: BrowserService;
-  // Use unknown for mocks to avoid 'any' lint errors, casting when necessary for specific mock properties
-  let mockBrowser: Record<string, unknown>;
-  let mockContext: Record<string, unknown>;
-  let mockPage: Record<string, unknown>;
+  let mockBrowser: MockBrowser;
+  let mockContext: MockContext;
+  let mockPage: MockPage;
 
   beforeEach(() => {
     // Reset singleton instance (accessing private static property via casting)
@@ -57,20 +77,37 @@ describe("BrowserService", () => {
     expect(instance1).toBe(instance2);
   });
 
-  it("should navigate to a url", async () => {
+  it("should navigate to a valid url", async () => {
     const conversationId = "conv-123";
     const url = "https://example.com";
 
     const result = await browserService.navigate(conversationId, url);
 
-    expect(chromium.launch).toHaveBeenCalled();
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockBrowser as any).newContext).toHaveBeenCalled();
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockContext as any).newPage).toHaveBeenCalled();
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockPage as any).goto).toHaveBeenCalledWith(url, expect.anything());
+    expect(chromium.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ headless: true }),
+    );
+    expect(mockBrowser.newContext).toHaveBeenCalled();
+    expect(mockContext.newPage).toHaveBeenCalled();
+    expect(mockPage.goto).toHaveBeenCalledWith(url, expect.anything());
     expect(result).toContain("Successfully navigated");
+  });
+
+  it("should throw error for invalid url", async () => {
+    const conversationId = "conv-123";
+    const url = "ftp://example.com"; // Invalid protocol
+
+    await expect(browserService.navigate(conversationId, url)).rejects.toThrow(
+      "Invalid or disallowed URL",
+    );
+  });
+
+  it("should throw error for invalid conversation id", async () => {
+    const conversationId = "conv/123"; // Invalid char
+    const url = "https://example.com";
+
+    await expect(browserService.navigate(conversationId, url)).rejects.toThrow(
+      "Invalid conversation ID",
+    );
   });
 
   it("should reuse context for the same conversation", async () => {
@@ -80,21 +117,18 @@ describe("BrowserService", () => {
     await browserService.click(conversationId, "#btn");
 
     expect(chromium.launch).toHaveBeenCalledTimes(1);
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockBrowser as any).newContext).toHaveBeenCalledTimes(1);
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockContext as any).newPage).toHaveBeenCalledTimes(1);
+    expect(mockBrowser.newContext).toHaveBeenCalledTimes(1);
+    expect(mockContext.newPage).toHaveBeenCalledTimes(1);
   });
 
   it("should isolate conversations", async () => {
-    const conv1 = "conv-1";
-    const conv2 = "conv-2";
+    const conv1 = "conv_1";
+    const conv2 = "conv_2";
 
     await browserService.navigate(conv1, "https://example.com");
     await browserService.navigate(conv2, "https://other.com");
 
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockBrowser as any).newContext).toHaveBeenCalledTimes(2);
+    expect(mockBrowser.newContext).toHaveBeenCalledTimes(2);
   });
 
   it("should check screenshots", async () => {
@@ -102,8 +136,7 @@ describe("BrowserService", () => {
     await browserService.navigate(conversationId, "https://example.com");
     const screenshot = await browserService.screenshot(conversationId);
 
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockPage as any).screenshot).toHaveBeenCalled();
+    expect(mockPage.screenshot).toHaveBeenCalled();
     expect(screenshot).toBe(Buffer.from("fake-screenshot").toString("base64"));
   });
 
@@ -112,19 +145,45 @@ describe("BrowserService", () => {
     await browserService.navigate(conversationId, "https://example.com");
 
     await browserService.click(conversationId, "#btn");
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockPage as any).click).toHaveBeenCalledWith(
-      "#btn",
-      expect.anything(),
-    );
+    expect(mockPage.click).toHaveBeenCalledWith("#btn", expect.anything());
 
     await browserService.type(conversationId, "#input", "hello");
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockPage as any).fill).toHaveBeenCalledWith(
+    expect(mockPage.fill).toHaveBeenCalledWith(
       "#input",
       "hello",
       expect.anything(),
     );
+  });
+
+  it("should throw error for invalid selector", async () => {
+    const conversationId = "conv-123";
+    await browserService.navigate(conversationId, "https://example.com");
+
+    // @ts-expect-error testing runtime check
+    await expect(browserService.click(conversationId, null)).rejects.toThrow(
+      "Invalid selector",
+    );
+  });
+
+  it("should scroll the page", async () => {
+    const conversationId = "conv-123";
+    await browserService.navigate(conversationId, "https://example.com");
+
+    await browserService.scroll(conversationId, "down");
+    expect(mockPage.evaluate).toHaveBeenCalled();
+
+    await browserService.scroll(conversationId, "up");
+    expect(mockPage.evaluate).toHaveBeenCalledTimes(2); // 2 scrolls
+  });
+
+  it("should get page content", async () => {
+    const conversationId = "conv-123";
+    mockPage.evaluate.mockResolvedValueOnce("Page Content");
+
+    await browserService.navigate(conversationId, "https://example.com");
+    const content = await browserService.getContent(conversationId);
+
+    expect(content).toBe("Page Content");
   });
 
   it("should cleanup session", async () => {
@@ -132,7 +191,6 @@ describe("BrowserService", () => {
     await browserService.navigate(conversationId, "https://example.com");
 
     await browserService.closeSession(conversationId);
-    // biome-ignore lint/suspicious/noExplicitAny: checking mock function call
-    expect((mockContext as any).close).toHaveBeenCalled();
+    expect(mockContext.close).toHaveBeenCalled();
   });
 });

@@ -4628,7 +4628,11 @@ export type AnthropicMessagesWithDefaultAgentData = {
          */
         'user-agent'?: string;
         'anthropic-version': string;
-        'x-api-key': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
     };
     path?: never;
     query?: never;
@@ -4711,7 +4715,11 @@ export type AnthropicMessagesWithAgentData = {
          */
         'user-agent'?: string;
         'anthropic-version': string;
-        'x-api-key': string;
+        /**
+         * Beta features to enable (comma-separated)
+         */
+        'anthropic-beta'?: string;
+        'x-api-key'?: string;
     };
     path: {
         agentId: string;

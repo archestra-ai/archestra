@@ -14127,8 +14127,17 @@
               "type": "string"
             },
             "in": "header",
+            "name": "anthropic-beta",
+            "required": false,
+            "description": "Beta features to enable (comma-separated)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "x-api-key",
-            "required": true
+            "required": false
           }
         ],
         "responses": {
@@ -14404,8 +14413,17 @@
               "type": "string"
             },
             "in": "header",
+            "name": "anthropic-beta",
+            "required": false,
+            "description": "Beta features to enable (comma-separated)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "x-api-key",
-            "required": true
+            "required": false
           }
         ],
         "responses": {

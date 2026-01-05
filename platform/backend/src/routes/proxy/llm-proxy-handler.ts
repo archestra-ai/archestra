@@ -730,13 +730,17 @@ async function handleNonStreaming<
   // Tool calls allowed (or no tool calls) - return response
   const usage = responseAdapter.getUsage();
 
-  reportLLMTokens(
-    providerName,
-    agent,
-    { input: usage.inputTokens, output: usage.outputTokens },
-    actualModel,
-    externalAgentId,
-  );
+  // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
+  // for non-streaming requests. We only report cost here to avoid double counting.
+  // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
+  // mocked API clients can't use an observable fetch.
+  // reportLLMTokens(
+  //   providerName,
+  //   agent,
+  //   { input: usage.inputTokens, output: usage.outputTokens },
+  //   actualModel,
+  //   externalAgentId,
+  // );
 
   const baselineCost = await utils.costOptimization.calculateCost(
     baselineModel,

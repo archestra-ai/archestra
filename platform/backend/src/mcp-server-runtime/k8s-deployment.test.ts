@@ -2062,7 +2062,6 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       "archestra-platform-mcp-k8s-operator",
     );
   });
-
 });
 
 describe("K8sDeployment.deleteK8sSecret", () => {

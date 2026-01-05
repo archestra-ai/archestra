@@ -20,6 +20,7 @@ interface EditableUserMessageProps {
   partKey: string;
   text: string;
   isEditing: boolean;
+  editDisabled?: boolean;
   onStartEdit: (partKey: string, messageId: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -35,6 +36,7 @@ export function EditableUserMessage({
   partKey,
   text,
   isEditing,
+  editDisabled = false,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -168,6 +170,7 @@ export function EditableUserMessage({
       <MessageActions
         textToCopy={text}
         onEditClick={handleStartEdit}
+        editDisabled={editDisabled}
         className="opacity-0 group-hover/message:opacity-100 transition-opacity"
       />
     </Message>

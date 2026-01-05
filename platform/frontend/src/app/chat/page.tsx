@@ -4,7 +4,14 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
@@ -80,6 +87,7 @@ export default function ChatPage() {
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -443,6 +451,13 @@ export default function ChatPage() {
     status,
   ]);
 
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  useLayoutEffect(() => {
+    if (status === "ready" && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [status]);
+
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
     if (status === "submitted" || status === "streaming") {
@@ -650,6 +665,7 @@ export default function ChatPage() {
                   promptId={conversation?.promptId}
                   currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
+                  textareaRef={textareaRef}
                 />
                 <div className="text-center">
                   <Version inline />

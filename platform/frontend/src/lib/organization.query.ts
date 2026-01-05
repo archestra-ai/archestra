@@ -280,9 +280,18 @@ export function useUpdateOrganization(
 
       return updatedOrganization;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
-      queryClient.invalidateQueries({ queryKey: appearanceKeys.public() });
+    onSuccess: (updatedOrganization) => {
+      // Update organization details cache
+      queryClient.setQueryData(
+        organizationKeys.details(),
+        updatedOrganization,
+      );
+      // Update appearance cache immediately with the new values
+      queryClient.setQueryData(appearanceKeys.public(), {
+        theme: updatedOrganization.theme,
+        customFont: updatedOrganization.customFont,
+        logo: updatedOrganization.logo,
+      });
       toast.success(onSuccessMessage);
     },
     onError: (_error) => {

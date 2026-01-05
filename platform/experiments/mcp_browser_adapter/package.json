@@ -1,0 +1,17 @@
+{
+    "name": "mcp-browser-adapter",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "start": "node build/server.js"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.24.3",
+        "playwright": "^1.57.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.2",
+        "@types/node": "^25.0.3"
+    }
+}

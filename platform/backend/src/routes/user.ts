@@ -18,7 +18,7 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/users/:userId",
     {
       schema: {
-        operationId: RouteId.GetUser,
+        operationId: "getUser",
         description: "Get a user by ID",
         tags: ["User Management"],
         params: z.object({

@@ -79,6 +79,8 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 
 ### Tokenizer
 
+> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
+
 Tokenizers estimate token counts for provider messages. Used by Model Optimization and Tool Results Compression.
 
 | File | Description |
@@ -89,6 +91,8 @@ Tokenizers estimate token counts for provider messages. Used by Model Optimizati
 
 ### Model Optimization
 
+> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
+
 Model optimization evaluates token counts to switch to cheaper models when possible.
 
 | File | Description |
@@ -96,6 +100,8 @@ Model optimization evaluates token counts to switch to cheaper models when possi
 | `backend/src/routes/proxy/utils/cost-optimization.ts` | Add provider to `ProviderMessages` type mapping (e.g., `gemini: Gemini.Types.GenerateContentRequest["contents"]`) |
 
 ### Tool Results Compression
+
+> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
 
 TOON (Token-Oriented Object Notation) compression converts JSON tool results to a more token-efficient format. Each provider needs its own implementation because message structures differ.
 
@@ -112,6 +118,8 @@ The function must:
 
 ### Dual LLM
 
+> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
+
 Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
 
 | File | Description |
@@ -120,6 +128,8 @@ Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. 
 | `backend/src/routes/proxy/utils/dual-llm-client.ts` | Add case to `createDualLlmClient()` factory switch |
 
 ### Metrics
+
+> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
 
 Prometheus metrics for request duration, token usage, and costs. Requires instrumenting provider SDK clients.
 

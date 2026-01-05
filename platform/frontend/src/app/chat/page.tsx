@@ -113,6 +113,7 @@ export default function ChatPage() {
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
+  const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
 
   // Prompt dialog state for PromptLibraryGrid
   type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
@@ -143,6 +144,17 @@ export default function ChatPage() {
       }
     }
   }, [modelsByProvider, initialModel]);
+
+  // Derive provider from initial model for API key filtering
+  const initialProvider = useMemo((): SupportedChatProvider | undefined => {
+    if (!initialModel) return undefined;
+    for (const [provider, models] of Object.entries(modelsByProvider)) {
+      if (models?.some((m) => m.id === initialModel)) {
+        return provider as SupportedChatProvider;
+      }
+    }
+    return undefined;
+  }, [initialModel, modelsByProvider]);
 
   const chatSession = useChatSession(conversationId);
 
@@ -583,6 +595,9 @@ export default function ChatPage() {
           <div className="flex flex-col h-full">
             <div className="flex-1 overflow-y-auto p-4">
               <div className="max-w-5xl mx-auto">
+                <h2 className="text-2xl font-medium text-muted-foreground mb-4">
+                  Select an agent or start typing below
+                </h2>
                 <PromptLibraryGrid
                   prompts={prompts}
                   onSelectPrompt={handleSelectPrompt}
@@ -606,6 +621,9 @@ export default function ChatPage() {
                     onModelChange={setInitialModel}
                     agentId={initialAgentId}
                     onProfileChange={setInitialAgentId}
+                    currentProvider={initialProvider}
+                    initialApiKeyId={initialApiKeyId}
+                    onApiKeyChange={setInitialApiKeyId}
                   />
                 )}
                 <div className="text-center">

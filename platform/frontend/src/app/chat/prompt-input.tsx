@@ -40,6 +40,10 @@ interface ArchestraPromptInputProps {
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
+  /** Selected API key ID for initial chat mode */
+  initialApiKeyId?: string | null;
+  /** Callback for API key change in initial chat mode (no conversation) */
+  onApiKeyChange?: (apiKeyId: string) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Callback for profile change in initial chat mode (no conversation) */
@@ -58,6 +62,8 @@ const PromptInputContent = ({
   promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  initialApiKeyId,
+  onApiKeyChange,
   textareaRef: externalTextareaRef,
   onProfileChange,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -108,14 +114,17 @@ const PromptInputContent = ({
             onModelChange={onModelChange}
             messageCount={messageCount}
           />
-          {conversationId && (
+          {(conversationId || onApiKeyChange) && (
             <ChatApiKeySelector
               conversationId={conversationId}
               currentProvider={currentProvider}
               currentConversationChatApiKeyId={
-                currentConversationChatApiKeyId ?? null
+                conversationId
+                  ? (currentConversationChatApiKeyId ?? null)
+                  : (initialApiKeyId ?? null)
               }
               messageCount={messageCount}
+              onApiKeyChange={onApiKeyChange}
             />
           )}
         </PromptInputTools>
@@ -142,6 +151,8 @@ const ArchestraPromptInput = ({
   promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  initialApiKeyId,
+  onApiKeyChange,
   textareaRef,
   onProfileChange,
 }: ArchestraPromptInputProps) => {
@@ -159,6 +170,8 @@ const ArchestraPromptInput = ({
           promptId={promptId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
+          initialApiKeyId={initialApiKeyId}
+          onApiKeyChange={onApiKeyChange}
           textareaRef={textareaRef}
           onProfileChange={onProfileChange}
         />

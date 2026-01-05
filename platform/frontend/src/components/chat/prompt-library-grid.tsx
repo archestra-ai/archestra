@@ -327,7 +327,7 @@ function PromptTile({
                 <TruncatedText
                   message={prompt.name}
                   className="text-base truncate pr-0"
-                  maxLength={25}
+                  maxLength={18}
                 />
               </CardTitle>
               <span className="text-xs text-muted-foreground flex-shrink-0">

@@ -28,6 +28,7 @@ import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { TodoWriteTool } from "./todo-write-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -499,6 +500,17 @@ function MessageTool({
         />
       );
     }
+  }
+
+  // Check if this is the todo_write tool from Archestra
+  if (toolName === "archestra__todo_write") {
+    return (
+      <TodoWriteTool
+        part={part}
+        toolResultPart={toolResultPart}
+        errorText={errorText}
+      />
+    );
   }
 
   const hasInput = part.input && Object.keys(part.input).length > 0;

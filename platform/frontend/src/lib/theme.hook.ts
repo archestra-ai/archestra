@@ -80,17 +80,19 @@ export function useOrgTheme() {
     applyFontOnUI(currentUIFont);
   }, [currentUIFont]);
 
-  // whenever themeFromBackend is loaded and is different from themeFromLocalStorage, update local storage
+  // whenever themeFromBackend is loaded and is different from themeFromLocalStorage, update local storage and UI
   useEffect(() => {
     if (themeFromBackend && themeFromBackend !== themeFromLocalStorage) {
       applyThemeInLocalStorage(themeFromBackend);
+      setCurrentUITheme(themeFromBackend);
     }
   }, [themeFromBackend, themeFromLocalStorage]);
 
-  // whenever fontFromBackend is loaded and is different from fontFromLocalStorage, update local storage
+  // whenever fontFromBackend is loaded and is different from fontFromLocalStorage, update local storage and UI
   useEffect(() => {
     if (fontFromBackend && fontFromBackend !== fontFromLocalStorage) {
       applyFontInLocalStorage(fontFromBackend);
+      setCurrentUIFont(fontFromBackend);
     }
   }, [fontFromBackend, fontFromLocalStorage]);
 

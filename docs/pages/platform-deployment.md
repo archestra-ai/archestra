@@ -43,7 +43,7 @@ This will start the platform with:
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
 
- If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
+If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
 ```diff
 docker run -p 9000:9000 -p 3000:3000 \
@@ -54,7 +54,7 @@ docker run -p 9000:9000 -p 3000:3000 \
    archestra/platform;
 ```
 
- Running the platform without Kubernetes (or its alternatives) is also possible. This just makes MCP orchestrator unavailable in the app.
+Running the platform without Kubernetes (or its alternatives) is also possible. This just makes MCP orchestrator unavailable in the app.
 
 ### Using External PostgreSQL
 
@@ -108,7 +108,11 @@ The Helm chart provides extensive configuration options through values. For the 
 **Archestra Platform Settings**:
 
 - `archestra.image` - Docker image for the Archestra Platform (contains both backend API and frontend). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
-- `archestra.env` - Environment variables to pass to the container (see Environment Variables section above for available options)
+- `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
+- `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
+- `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options)
+- `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
+- `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables
 
 **Example**:
 
@@ -150,17 +154,24 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
+- `archestra.orchestrator.kubernetes.mcpServerRbac.create` - Create MCP server RBAC resources (ServiceAccount, Role, RoleBinding) for Kubernetes MCP server (default: true)
+- `archestra.orchestrator.kubernetes.mcpServerRbac.additionalClusterRoleBindings` - Additional ClusterRoleBindings to attach to the MCP K8s operator service account for cluster-wide permissions
+- `archestra.orchestrator.kubernetes.mcpServerRbac.additionalRoleBindings` - Additional RoleBindings to attach to the MCP K8s operator service account for namespace-scoped permissions
 
 #### Service, Deployment, & Ingress Configuration
 
 **Deployment Settings**:
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
+- `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types)
+- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
 
+- `archestra.service.type` - Service type: ClusterIP, NodePort, or LoadBalancer (default: ClusterIP)
 - `archestra.service.annotations` - Annotations to add to the Kubernetes Service for cloud provider integrations
+- `archestra.service.nodePorts` - Node ports for NodePort service type (backend, metrics, frontend)
 
 **Ingress Settings**:
 

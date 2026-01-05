@@ -4,7 +4,14 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Eye, EyeOff, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
@@ -88,6 +95,7 @@ export default function ChatPage() {
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -479,6 +487,14 @@ export default function ChatPage() {
     status,
   ]);
 
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  // or when conversation loads (e.g., new chat created, hard refresh)
+  useLayoutEffect(() => {
+    if (status === "ready" && conversation?.id && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [status, conversation?.id]);
+
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
     if (status === "submitted" || status === "streaming") {
@@ -693,8 +709,10 @@ export default function ChatPage() {
                   messageCount={messages.length}
                   agentId={conversation?.agent.id}
                   conversationId={conversation?.id}
+                  promptId={conversation?.promptId}
                   currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                   currentProvider={currentProvider}
+                  textareaRef={textareaRef}
                 />
                 <div className="text-center">
                   <Version inline />

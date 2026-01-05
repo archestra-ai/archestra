@@ -9,11 +9,15 @@ import { cn } from "@/lib/utils";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
-export const Conversation = ({ className, ...props }: ConversationProps) => (
+export const Conversation = ({
+  className,
+  resize = "smooth",
+  ...props
+}: ConversationProps) => (
   <StickToBottom
     className={cn("relative flex-1 overflow-y-auto", className)}
     initial="smooth"
-    resize="smooth"
+    resize={resize}
     role="log"
     {...props}
   />

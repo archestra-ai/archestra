@@ -17,6 +17,7 @@ import {
 import {
   useConversationEnabledTools,
   useProfileToolsWithIds,
+  usePromptTools,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
 import { Button } from "../ui/button";
@@ -24,6 +25,7 @@ import { Button } from "../ui/button";
 interface ChatToolsDisplayProps {
   agentId: string;
   conversationId: string;
+  promptId?: string | null;
   className?: string;
 }
 
@@ -35,10 +37,28 @@ interface ChatToolsDisplayProps {
 export function ChatToolsDisplay({
   agentId,
   conversationId,
+  promptId,
   className,
 }: ChatToolsDisplayProps) {
-  const { data: profileTools = [], isLoading } =
+  const { data: profileTools = [], isLoading: isLoadingProfileTools } =
     useProfileToolsWithIds(agentId);
+
+  // Fetch agent delegation tools from database (real UUIDs, not virtual IDs)
+  const { data: promptTools = [], isLoading: isLoadingPromptTools } =
+    usePromptTools(promptId ?? undefined);
+
+  const isLoading = isLoadingProfileTools || isLoadingPromptTools;
+
+  // Debug: Log tools when they're loaded
+  useEffect(() => {
+    if (!isLoading) {
+      console.log("[ChatToolsDisplay] Tools loaded:", {
+        profileTools,
+        promptTools,
+        allTools: [...profileTools, ...promptTools],
+      });
+    }
+  }, [isLoading, profileTools, promptTools]);
 
   // State for tooltip open state per server
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
@@ -82,24 +102,27 @@ export function ChatToolsDisplay({
   const updateEnabledTools = useUpdateConversationEnabledTools();
 
   // Get the current list of enabled tools
-  // If no custom selection, all profile tools are enabled by default
+  // If no custom selection, all tools (profile + prompt) are enabled by default
+  const allToolIds = [...profileTools, ...promptTools].map((t) => t.id);
   const currentEnabledToolIds = hasCustomSelection
     ? enabledToolIds
-    : profileTools.map((t) => t.id);
-
-  // Create a map of tool name -> tool ID for quick lookup
-  const toolNameToId: Record<string, string> = {};
-  for (const tool of profileTools) {
-    toolNameToId[tool.name] = tool.id;
-  }
+    : allToolIds;
 
   // Create enabled tool IDs set for quick lookup
   // Use currentEnabledToolIds to handle both custom and default states
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
+  // Combine profile tools with prompt tools (agent delegation tools)
+  type ToolItem = {
+    id: string;
+    name: string;
+    description: string | null;
+  };
+  const allTools: ToolItem[] = [...profileTools, ...promptTools];
+
   // Group ALL tools by MCP server name (don't filter by enabled status)
-  const groupedTools: Record<string, typeof profileTools> = {};
-  for (const tool of profileTools) {
+  const groupedTools: Record<string, ToolItem[]> = {};
+  for (const tool of allTools) {
     const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     const serverName =
       parts.length > 1
@@ -155,7 +178,6 @@ export function ChatToolsDisplay({
   // Handle enabling all disabled tools for a server
   const handleEnableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
-    // Filter out duplicates by creating a Set
     const newEnabledToolIds = [
       ...new Set([...currentEnabledToolIds, ...toolIds]),
     ];
@@ -167,7 +189,7 @@ export function ChatToolsDisplay({
 
   // Render a single tool row
   const renderToolRow = (
-    tool: { id: string; name: string; description: string | null },
+    tool: ToolItem,
     isDisabled: boolean,
     _currentServerName: string,
   ) => {
@@ -222,37 +244,39 @@ export function ChatToolsDisplay({
   }
 
   return (
-    <TooltipProvider>
-      {sortedServerEntries.map(([serverName]) => {
-        // Get all tools for this server from profileTools
-        const allServerTools = profileTools.filter((tool) => {
-          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-          const toolServerName =
-            parts.length > 1
-              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-              : "default";
-          return toolServerName === serverName;
-        });
+    <div className={className} ref={componentRef}>
+      <TooltipProvider>
+        <div className="flex flex-wrap gap-2">
+          {sortedServerEntries.map(([serverName]) => {
+            // Get all tools for this server from allTools (profile tools + agent tools)
+            const allServerTools = allTools.filter((tool) => {
+              const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+              const toolServerName =
+                parts.length > 1
+                  ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+                  : "default";
+              return toolServerName === serverName;
+            });
 
-        // Split into enabled and disabled using the consistent enabledToolIdsSet
-        const enabledTools: typeof allServerTools = [];
-        const disabledTools: typeof allServerTools = [];
+            // Split into enabled and disabled using the consistent enabledToolIdsSet
+            const enabledTools: ToolItem[] = [];
+            const disabledTools: ToolItem[] = [];
 
-        for (const tool of allServerTools) {
-          if (enabledToolIdsSet.has(tool.id)) {
-            enabledTools.push(tool);
-          } else {
-            disabledTools.push(tool);
-          }
-        }
+            for (const tool of allServerTools) {
+              if (enabledToolIdsSet.has(tool.id)) {
+                enabledTools.push(tool);
+              } else {
+                disabledTools.push(tool);
+              }
+            }
 
-        const totalToolsCount = allServerTools.length;
-        const isOpen = openTooltip === serverName;
+            const totalToolsCount = allServerTools.length;
+            const isOpen = openTooltip === serverName;
 
-        return (
-          <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
-            <TooltipTrigger asChild>
-              <PromptInputButton
+            return (
+              <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
+                <TooltipTrigger asChild>
+                  <PromptInputButton
                 data-tool-button
                 className="w-[fit-content]"
                 size="sm"
@@ -267,21 +291,21 @@ export function ChatToolsDisplay({
                 <span className="text-muted-foreground text-xs">
                   ({enabledTools.length}/{totalToolsCount})
                 </span>
-              </PromptInputButton>
-            </TooltipTrigger>
-            <TooltipContent
-              ref={tooltipContentRef}
-              side="top"
-              align="center"
-              className="min-w-80 max-h-96 p-0 overflow-y-auto"
-              sideOffset={10}
-              onWheel={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
-              onPointerDownOutside={(e) => {
-                e.preventDefault();
-              }}
-            >
-              <ScrollArea className="max-h-96">
+                  </PromptInputButton>
+                </TooltipTrigger>
+                <TooltipContent
+                  ref={tooltipContentRef}
+                  side="top"
+                  align="center"
+                  className="min-w-80 max-h-96 p-0 overflow-y-auto"
+                  sideOffset={10}
+                  onWheel={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onPointerDownOutside={(e) => {
+                    e.preventDefault();
+                  }}
+                >
+                  <ScrollArea className="max-h-96">
                 {/* Enabled section */}
                 {enabledTools.length > 0 && (
                   <div>
@@ -339,11 +363,13 @@ export function ChatToolsDisplay({
                     </div>
                   </div>
                 )}
-              </ScrollArea>
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
-    </TooltipProvider>
+                  </ScrollArea>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
+    </div>
   );
 }

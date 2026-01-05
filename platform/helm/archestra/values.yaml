@@ -175,6 +175,18 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalClusterRoleBindings: []
 
+        # Additional RoleBindings to attach to the mcp-k8s-operator service account
+        # Use this to grant namespace-scoped permissions (e.g., full access to specific namespaces)
+        # The Roles must be created externally (e.g., via Terraform or kubectl) in the specified namespaces
+        # Example:
+        #   additionalRoleBindings:
+        #     - roleName: my-namespace-admin
+        #       namespace: my-app-namespace
+        #     - roleName: another-role
+        #       namespace: another-namespace
+        #       name: custom-binding-name  # Optional: override the auto-generated binding name
+        additionalRoleBindings: []
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer

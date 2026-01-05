@@ -93,7 +93,7 @@ export default function AgentsPage() {
         }
       >
         <div>
-          {/* PromptLibraryGrid has built-in search, delete dialog, and A2A dialog */}
+          {/* PromptLibraryGrid with editOnClick - clicking card opens edit dialog */}
           <PromptLibraryGrid
             prompts={prompts}
             onSelectPrompt={() => {
@@ -102,6 +102,7 @@ export default function AgentsPage() {
             onEdit={handleEditPrompt}
             onDelete={handleDeletePrompt}
             onViewVersionHistory={setVersionHistoryPrompt}
+            editOnClick
           />
 
           {/* Create/Edit Prompt Dialog */}

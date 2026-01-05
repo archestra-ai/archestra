@@ -61,6 +61,8 @@ interface PromptLibraryGridProps {
   onEdit: (prompt: Prompt) => void;
   onDelete: (promptId: string) => void;
   onViewVersionHistory: (prompt: Prompt) => void;
+  /** If true, clicking card opens edit dialog instead of starting chat */
+  editOnClick?: boolean;
 }
 
 export function PromptLibraryGrid({
@@ -69,6 +71,7 @@ export function PromptLibraryGrid({
   onEdit,
   onDelete,
   onViewVersionHistory,
+  editOnClick = false,
 }: PromptLibraryGridProps) {
   const { data: allProfiles = [] } = useProfiles();
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
@@ -93,7 +96,11 @@ export function PromptLibraryGrid({
   }, [prompts, searchQuery, allProfiles]);
 
   const handlePromptClick = (prompt: Prompt) => {
-    onSelectPrompt(prompt.agentId, prompt.id);
+    if (editOnClick) {
+      onEdit(prompt);
+    } else {
+      onSelectPrompt(prompt.agentId, prompt.id);
+    }
   };
 
   return (
@@ -145,6 +152,7 @@ export function PromptLibraryGrid({
                     onViewVersionHistory={onViewVersionHistory}
                     onConnect={setPromptToConnect}
                     disabled={hasPermission === false}
+                    editOnClick={editOnClick}
                   />
                 );
               }}
@@ -217,6 +225,7 @@ interface PromptTileProps {
   onViewVersionHistory: (prompt: Prompt) => void;
   onConnect: (prompt: Prompt) => void;
   disabled?: boolean;
+  editOnClick?: boolean;
 }
 
 interface PromptMcpToolsDisplayProps {
@@ -299,6 +308,7 @@ function PromptTile({
   onViewVersionHistory,
   onConnect,
   disabled = false,
+  editOnClick = false,
 }: PromptTileProps) {
   const handlePromptClick = () => onPromptClick(prompt);
 
@@ -358,15 +368,18 @@ function PromptTile({
               align="end"
               onClick={(e) => e.stopPropagation()}
             >
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(prompt);
-                }}
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
+              {/* Hide Edit when editOnClick is true - clicking card does that */}
+              {!editOnClick && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(prompt);
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
@@ -376,15 +389,18 @@ function PromptTile({
                 <HistoryIcon className="mr-2 h-4 w-4" />
                 Version History
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConnect(prompt);
-                }}
-              >
-                <Link2 className="mr-2 h-4 w-4" />
-                A2A Connect
-              </DropdownMenuItem>
+              {/* Hide A2A Connect when editOnClick is true - it's in edit dialog */}
+              {!editOnClick && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConnect(prompt);
+                  }}
+                >
+                  <Link2 className="mr-2 h-4 w-4" />
+                  A2A Connect
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();

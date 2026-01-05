@@ -1,12 +1,18 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +72,7 @@ export function PromptDialog({
   const [selectedAgentPromptIds, setSelectedAgentPromptIds] = useState<
     string[]
   >([]);
+  const [isA2AOpen, setIsA2AOpen] = useState(false);
 
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
@@ -301,6 +308,30 @@ export function PromptDialog({
               </p>
             )}
           </div>
+
+          {/* A2A Connection Section - only show for existing prompts */}
+          {prompt && (
+            <Collapsible open={isA2AOpen} onOpenChange={setIsA2AOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between p-0 h-auto hover:bg-transparent"
+                >
+                  <Label className="cursor-pointer">A2A Connection</Label>
+                  {isA2AOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3">
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <A2AConnectionInstructions prompt={prompt} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

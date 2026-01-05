@@ -24,7 +24,10 @@ import {
   useUniqueUserIds,
 } from "@/lib/interaction.query";
 
-import { DynamicInteraction } from "@/lib/interaction.utils";
+import {
+  calculateCostSavings,
+  DynamicInteraction,
+} from "@/lib/interaction.utils";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -431,50 +434,25 @@ function LogsTable({
       id: "costSavings",
       header: "Cost Savings",
       cell: ({ row }) => {
-        const {
-          cost,
-          baselineCost,
-          toonCostSavings,
-          toonTokensBefore,
-          toonTokensAfter,
-        } = row.original;
-
-        // Calculate tokens saved for display
-        const toonTokensSaved =
-          toonTokensBefore &&
-          toonTokensAfter &&
-          toonTokensBefore > toonTokensAfter
-            ? toonTokensBefore - toonTokensAfter
-            : null;
-
-        // Calculate actual savings amounts
-        const costNum = cost ? Number.parseFloat(cost) : 0;
-        const baselineCostNum = baselineCost
-          ? Number.parseFloat(baselineCost)
-          : 0;
-        const toonCostSavingsNum = toonCostSavings
-          ? Number.parseFloat(toonCostSavings)
-          : 0;
-
-        const costOptimizationSavings = baselineCostNum - costNum;
-        const totalSavings = costOptimizationSavings + toonCostSavingsNum;
+        const savings = calculateCostSavings(row.original);
 
         // Show dash if there are no actual savings
-        if (totalSavings === 0) {
+        if (!savings.hasSavings) {
           return <span className="text-xs text-muted-foreground">–</span>;
         }
 
         // If no cost optimization but has TOON compression, use cost as baseline
-        const effectiveCost = cost || "0";
-        const effectiveBaselineCost = baselineCost || cost || "0";
+        const effectiveCost = row.original.cost || "0";
+        const effectiveBaselineCost =
+          row.original.baselineCost || row.original.cost || "0";
 
         return (
           <div className="text-xs">
             <Savings
               cost={effectiveCost}
               baselineCost={effectiveBaselineCost}
-              toonCostSavings={toonCostSavings}
-              toonTokensSaved={toonTokensSaved}
+              toonCostSavings={row.original.toonCostSavings}
+              toonTokensSaved={savings.toonTokensSaved}
               format="percent"
               tooltip="hover"
               showUnifiedTooltip={true}

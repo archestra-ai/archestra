@@ -20,7 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDualLlmResultsByInteraction } from "@/lib/dual-llm-result.query";
 import { useInteraction } from "@/lib/interaction.query";
-import { DynamicInteraction } from "@/lib/interaction.utils";
+import {
+  calculateCostSavings,
+  DynamicInteraction,
+} from "@/lib/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
 export function ChatPage({
@@ -164,45 +167,31 @@ function LogDetail({
                   <div className="text-muted-foreground">None</div>
                 )}
               </div>
-              {dynamicInteraction.cost && dynamicInteraction.baselineCost && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Cost savings
-                  </div>
-                  <div className="flex gap-3">
-                    <Savings
-                      cost={dynamicInteraction.cost}
-                      baselineCost={dynamicInteraction.baselineCost}
-                      format="percent"
-                      tooltip="always"
-                    />
-                  </div>
-                </div>
-              )}
               {(() => {
-                const toonSavings = interaction.getToonSavings();
-                if (!toonSavings) return null;
+                const savings = calculateCostSavings(dynamicInteraction);
+                if (!savings.hasSavings) return null;
 
-                const percentage =
-                  toonSavings.percentageSaved % 1 === 0
-                    ? toonSavings.percentageSaved.toFixed(0)
-                    : toonSavings.percentageSaved.toFixed(1);
+                const effectiveCost = dynamicInteraction.cost || "0";
+                const effectiveBaselineCost =
+                  dynamicInteraction.baselineCost ||
+                  dynamicInteraction.cost ||
+                  "0";
 
                 return (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">
-                      TOON Compression Savings
+                      Cost savings
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-green-600 dark:text-green-400 font-medium">
-                        -{percentage}%
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {toonSavings.savedCharacters.toLocaleString()}{" "}
-                        {toonSavings.savedCharacters === 1 ? "token" : "tokens"}{" "}
-                        saved ({toonSavings.compressedSize.toLocaleString()} /{" "}
-                        {toonSavings.originalSize.toLocaleString()})
-                      </div>
+                    <div className="flex gap-3">
+                      <Savings
+                        cost={effectiveCost}
+                        baselineCost={effectiveBaselineCost}
+                        toonCostSavings={dynamicInteraction.toonCostSavings}
+                        toonTokensSaved={savings.toonTokensSaved}
+                        format="percent"
+                        tooltip="always"
+                        showUnifiedTooltip={true}
+                      />
                     </div>
                   </div>
                 );

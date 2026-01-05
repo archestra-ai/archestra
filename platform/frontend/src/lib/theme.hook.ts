@@ -17,6 +17,9 @@ const DEFAULT_FONT: OrganizationCustomFont = "lato";
 export function useOrgTheme() {
   const pathname = usePathname();
 
+  // Check if we're on an auth page (login, signup, etc.)
+  const isAuthPage = pathname?.startsWith("/auth/");
+
   // Always use public appearance endpoint - it returns the same data for all pages
   // and works without authentication
   const { data: appearance, isLoading: isLoadingAppearance } =

@@ -1,4 +1,9 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import {
+  type Browser,
+  type BrowserContext,
+  chromium,
+  type Page,
+} from "playwright";
 import logger from "@/logging";
 
 export class BrowserService {
@@ -34,14 +39,15 @@ export class BrowserService {
    */
   private async getContext(conversationId: string): Promise<BrowserContext> {
     const browser = await this.getBrowser();
-    
+
     if (!this.contexts.has(conversationId)) {
       logger.info({ conversationId }, "Creating new browser context");
       const context = await browser.newContext({
         viewport: { width: 1280, height: 720 },
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       });
-      
+
       // Setup cleanup
       context.on("close", () => {
         this.contexts.delete(conversationId);
@@ -50,7 +56,7 @@ export class BrowserService {
 
       this.contexts.set(conversationId, context);
     }
-    
+
     return this.contexts.get(conversationId)!;
   }
 
@@ -60,13 +66,16 @@ export class BrowserService {
    */
   private async getPage(conversationId: string): Promise<Page> {
     const context = await this.getContext(conversationId);
-    
-    if (!this.activePages.has(conversationId) || this.activePages.get(conversationId)?.isClosed()) {
+
+    if (
+      !this.activePages.has(conversationId) ||
+      this.activePages.get(conversationId)?.isClosed()
+    ) {
       const page = await context.newPage();
       this.activePages.set(conversationId, page);
       return page;
     }
-    
+
     return this.activePages.get(conversationId)!;
   }
 
@@ -80,7 +89,9 @@ export class BrowserService {
       return `Successfully navigated to ${url}`;
     } catch (error) {
       logger.error({ conversationId, url, err: error }, "Failed to navigate");
-      throw new Error(`Failed to navigate to ${url}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Failed to navigate to ${url}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -101,35 +112,49 @@ export class BrowserService {
   /**
    * Click an element
    */
-  public async click(conversationId: string, selector: string): Promise<string> {
+  public async click(
+    conversationId: string,
+    selector: string,
+  ): Promise<string> {
     try {
       const page = await this.getPage(conversationId);
       await page.click(selector, { timeout: 5000 });
       return `Clicked element: ${selector}`;
     } catch (error) {
       logger.error({ conversationId, selector, err: error }, "Failed to click");
-      throw new Error(`Failed to click ${selector}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Failed to click ${selector}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   /**
    * Type into an element
    */
-  public async type(conversationId: string, selector: string, text: string): Promise<string> {
+  public async type(
+    conversationId: string,
+    selector: string,
+    text: string,
+  ): Promise<string> {
     try {
       const page = await this.getPage(conversationId);
       await page.fill(selector, text, { timeout: 5000 });
       return `Typed into ${selector}`;
     } catch (error) {
       logger.error({ conversationId, selector, err: error }, "Failed to type");
-       throw new Error(`Failed to type into ${selector}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Failed to type into ${selector}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   /**
    * Scroll down
    */
-  public async scroll(conversationId: string, direction: "up" | "down"): Promise<string> {
+  public async scroll(
+    conversationId: string,
+    direction: "up" | "down",
+  ): Promise<string> {
     try {
       const page = await this.getPage(conversationId);
       if (direction === "down") {
@@ -153,7 +178,7 @@ export class BrowserService {
       return await page.evaluate(() => document.body.innerText);
     } catch (error) {
       logger.error({ conversationId, err: error }, "Failed to get content");
-       throw new Error("Failed to get content");
+      throw new Error("Failed to get content");
     }
   }
 

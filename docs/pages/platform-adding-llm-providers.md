@@ -14,84 +14,92 @@ This is an internal development guide for adding new LLM providers to Archestra.
 
 ## Overview
 
-This guide documents all files that need to be created or modified when adding a new LLM provider to Archestra Platform.
+This guide covers all features that need to be implemented in order to add anew LLM provider to Archestra Platform.
 
-## LLM Proxy Support (Required)
+## LLM Proxy Support
 
-These files are required for any new provider to work with the LLM Proxy (external clients calling through Archestra).
+Implement the following to add a new provider to the [LLM Proxy](/docs/platform-llm-proxy).
 
 ### Provider Registration
 
 Defines the provider identity used throughout the codebase for type safety and runtime checks.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `shared/model-constants.ts` | Modify | Add to `SupportedProvidersSchema` enum (e.g., `"openai"`, `"anthropic"`) |
-| `shared/model-constants.ts` | Modify | Add to `SupportedProvidersDiscriminatorSchema` - format is `provider:endpoint` (e.g., `"openai:chatCompletions"`, `"anthropic:messages"`) used for database storage and frontend routing |
-| `shared/model-constants.ts` | Modify | Add display name to `providerDisplayNames` for UI labels |
+| File | Description |
+|------|-------------|
+| `shared/model-constants.ts` | Add provider to `SupportedProvidersSchema` enum |
+| `shared/model-constants.ts` | Add to `SupportedProvidersDiscriminatorSchema` - format is `provider:endpoint`|
+| `shared/model-constants.ts` | Add display name to `providerDisplayNames` |
 
 ### Type Definitions
 
-Zod schemas that define the provider's API contract. Used for request validation, TypeScript type generation, and documentation.
+Each provider needs Zod schemas defining its API contract. TypeScript types are inferred from these schemas.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/types/llm-providers/{provider}/api.ts` | Create | Request body schema (e.g., `ChatCompletionsRequestSchema`), response schema, and headers schema (for extracting API keys) |
-| `backend/src/types/llm-providers/{provider}/messages.ts` | Create | Message array schemas - defines the structure of conversation history (user/assistant/tool messages) |
-| `backend/src/types/llm-providers/{provider}/tools.ts` | Create | Tool definition schemas - how tools are declared in requests (function calling format) |
-| `backend/src/types/llm-providers/{provider}/index.ts` | Create | Namespace export that groups all types under `{Provider}.Types` |
+| File | Description |
+|------|-------------|
+| `backend/src/types/llm-providers/{provider}/api.ts` | Request body schema, response schema, and headers schema (for extracting API keys) |
+| `backend/src/types/llm-providers/{provider}/messages.ts` | Message array schemas - defines the structure of conversation history (user/assistant/tool messages) |
+| `backend/src/types/llm-providers/{provider}/tools.ts` | Tool definition schemas - how tools are declared in requests (function calling format) |
+| `backend/src/types/llm-providers/{provider}/index.ts` | Namespace export that groups all types under `{Provider}.Types` |
 
 ### Adapter Implementation
 
-The adapter pattern provides a **provider-agnostic API** for business logic. The `handleLLMProxy()` function operates entirely through adapters, never touching provider-specific types directly.
+The adapter pattern provides a **provider-agnostic API** for business logic. LLMProxy logic operates entirely through adapters, never touching provider-specific types directly.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Create | Implement all adapter classes (see [Adapter Interfaces](#adapter-interfaces) below) |
-| `backend/src/routes/proxy/adapterV2/index.ts` | Modify | Export the `{provider}AdapterFactory` function |
+| File | Description |
+|------|-------------|
+| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Implement all adapter classes |
+| `backend/src/routes/proxy/adapterV2/index.ts` | Export the `{provider}AdapterFactory` function |
 
-**What each adapter enables:**
+**Adapters to Implement:**
 
-- **RequestAdapter**: Read request data (model, messages, tools) in common format; modify model for cost optimization; update tool results for trusted data policies and TOON compression
-- **ResponseAdapter**: Read response data (id, model, text, tool calls, usage) in common format; generate refusal responses when tools are blocked
-- **StreamAdapter**: Process chunks incrementally; accumulate state for metrics; hold tool call chunks for policy evaluation; format SSE events for client streaming
-- **AdapterFactory**: Create adapters, extract API keys from headers, create provider SDK clients, execute requests
+- **RequestAdapter**: Provides Read/write access for the request data (model, messages, tools);
+- **ResponseAdapter**: Provides Read/write access to thee response data (id, model, text, tool calls, usage); 
+- **StreamAdapter**: Process streaming chunks incrementally, accumulatin data required fro the LLMProxy logic;
+- **LLMProvider**: Create adapters, extract API keys from headers, create provider SDK clients, execute requests;
 
 ### Route Handler
 
 HTTP endpoint that receives client requests and delegates to `handleLLMProxy()`.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/routes/proxy/{provider}.ts` | Create | Fastify route that validates request, extracts context (agent ID, org ID), and calls `handleLLMProxy(body, headers, reply, adapterFactory, context)` |
-| `backend/src/routes/index.ts` | Modify | Export the new route module |
-| `backend/src/server.ts` | Modify | Register the route with the Fastify instance |
+| File | Description |
+|------|-------------|
+| `backend/src/routes/proxy/{provider}.ts` | Fastify route that validates request, extracts context (agent ID, org ID), and calls `handleLLMProxy(body, headers, reply, adapterFactory, context)` |
+| `backend/src/routes/index.ts` | Export the new route module |
+| `backend/src/server.ts` | Register the route with the Fastify instance |
 
 ### Configuration
 
 Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, local proxies, testing mocks).
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/config.ts` | Modify | Add `llm.{provider}.baseUrl` with environment variable (e.g., `ARCHESTRA_OPENAI_BASE_URL`) and sensible default |
+| File | Description |
+|------|-------------|
+| `backend/src/config.ts` | Add `llm.{provider}.baseUrl` with environment variable (e.g., `ARCHESTRA_OPENAI_BASE_URL`) and sensible default |
 
-### Abstraction Leaks: Cost Optimization
+### Tokenizer
 
-Cost optimization evaluates token counts to switch to cheaper models when possible. Requires provider-specific message types for accurate token counting.
+Tokenizers estimate token counts for provider messages. Used by Model Optimization and Tool Results Compression.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/routes/proxy/utils/cost-optimization.ts` | Modify | Add provider to `ProviderMessages` type mapping (e.g., `gemini: Gemini.Types.GenerateContentRequest["contents"]`) |
-| `backend/src/tokenizers/base.ts` | Modify | Add provider message type to `ProviderMessage` union for the base tokenizer |
-| `backend/src/tokenizers/index.ts` | Modify | Add case to `getTokenizer()` switch - return appropriate tokenizer (or fallback to `TiktokenTokenizer`) |
+| File | Description |
+|------|-------------|
+| `backend/src/tokenizers/base.ts` | Add provider message type to `ProviderMessage` union |
+| `backend/src/tokenizers/base.ts` | Update `BaseTokenizer.getMessageText()` if provider has a different message format |
+| `backend/src/tokenizers/index.ts` | Add case to `getTokenizer()` switch - return appropriate tokenizer (or fallback to `TiktokenTokenizer`) |
 
-### Abstraction Leaks: TOON Compression
+### Model Optimization
+
+Model optimization evaluates token counts to switch to cheaper models when possible.
+
+| File | Description |
+|------|-------------|
+| `backend/src/routes/proxy/utils/cost-optimization.ts` | Add provider to `ProviderMessages` type mapping (e.g., `gemini: Gemini.Types.GenerateContentRequest["contents"]`) |
+
+### Tool Results Compression
 
 TOON (Token-Oriented Object Notation) compression converts JSON tool results to a more token-efficient format. Each provider needs its own implementation because message structures differ.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Create | Implement `convertToolResultsToToon()` function that traverses provider-specific message array and compresses tool result content |
+| File | Description |
+|------|-------------|
+| `backend/src/routes/proxy/adapterV2/{provider}.ts` | Implement `convertToolResultsToToon()` function that traverses provider-specific message array and compresses tool result content |
 
 The function must:
 1. Iterate through provider-specific message array structure
@@ -100,64 +108,82 @@ The function must:
 4. Calculate token savings using the appropriate tokenizer
 5. Return compressed messages and compression statistics
 
-### Abstraction Leaks: Dual LLM
+### Dual LLM
 
 Dual LLM pattern uses a secondary LLM for Q&A verification of tool invocations. Each provider needs its own client implementation.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/routes/proxy/utils/dual-llm-client.ts` | Modify | Create `{Provider}DualLlmClient` class implementing `DualLlmClient` interface with `chat()` and `chatWithSchema()` methods |
-| `backend/src/routes/proxy/utils/dual-llm-client.ts` | Modify | Add case to `createDualLlmClient()` factory switch |
+| File | Description |
+|------|-------------|
+| `backend/src/routes/proxy/utils/dual-llm-client.ts` | Create `{Provider}DualLlmClient` class implementing `DualLlmClient` interface with `chat()` and `chatWithSchema()` methods |
+| `backend/src/routes/proxy/utils/dual-llm-client.ts` | Add case to `createDualLlmClient()` factory switch |
 
-### Abstraction Leaks: Metrics
+### Metrics
 
-Prometheus metrics for request duration, token usage, costs, and streaming performance. Requires wrapping provider SDK clients.
+Prometheus metrics for request duration, token usage, and costs. Requires instrumenting provider SDK clients.
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/src/llm-metrics.ts` | Modify | For fetch-based SDKs (OpenAI, Anthropic): add usage extraction logic to `getObservableFetch()` |
-| `backend/src/llm-metrics.ts` | Modify | For non-fetch SDKs (Gemini): create wrapper function like `getObservableGenAI()` that instruments the client |
+For example: OpenAI and Anthropic SDKs accept a custom `fetch` function, so we inject an instrumented fetch via `getObservableFetch()`. Gemini SDK doesn't expose fetch, so we wrap the SDK instance directly via `getObservableGenAI()`.
+
+| File | Description |
+|------|-------------|
+| `backend/src/llm-metrics.ts` | Implement instrumented API calls for the SDK |
 
 
 ### Frontend: Logs UI
 
 Interaction handlers parse stored request/response data for display in the LLM Proxy Logs UI (`/logs/llm-proxy`).
 
-| File | Action | Description |
-|------|--------|-------------|
-| `frontend/src/lib/llmProviders/{provider}.ts` | Create | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
-| `frontend/src/lib/interaction.utils.ts` | Modify | Add case to `getInteractionClass()` switch to route discriminator to handler |
+| File | Description |
+|------|-------------|
+| `frontend/src/lib/llmProviders/{provider}.ts` | Implement `InteractionUtils` interface for parsing provider-specific request/response JSON |
+| `frontend/src/lib/interaction.utils.ts` | Add case to `getInteractionClass()` switch to route discriminator to handler |
 
-## Chat Support (Optional)
+## Chat Support
 
-These files are only needed if you want the provider available in the built-in Archestra Chat (`/chat`). Skip these for LLM Proxy-only providers.
+Below is the list of modification requrest to support new Provider in the built-in Archestra Chat.
 
-| Category | File | Action | Description |
-|----------|------|--------|-------------|
-| **Configuration** | `backend/src/config.ts` | Modify | Add `chat.{provider}.apiKey` and `baseUrl` |
-| **Chat Models** | `backend/src/routes/chat-models.ts` | Modify | Add `fetch{Provider}Models()` function |
-| | `backend/src/routes/chat-models.ts` | Modify | Add to `modelFetchers` record |
-| | `backend/src/routes/chat-models.ts` | Modify | Add case to `getProviderApiKey()` switch |
-| **LLM Client** | `backend/src/services/llm-client.ts` | Modify | Add to `detectProviderFromModel()` pattern matching |
-| | `backend/src/services/llm-client.ts` | Modify | Add case to `resolveProviderApiKey()` switch |
-| | `backend/src/services/llm-client.ts` | Modify | Add case to `createLLMModel()` switch |
-| **Error Handling** | `shared/chat-error.ts` | Modify | Add `{Provider}ErrorTypes` constants |
-| | `backend/src/routes/chat/errors.ts` | Modify | Add `parse{Provider}Error()` function |
-| | `backend/src/routes/chat/errors.ts` | Modify | Add `map{Provider}ErrorToCode()` function |
-| | `backend/src/routes/chat/errors.ts` | Modify | Add to `providerParsers` and `providerMappers` registries |
-| **Types** | `backend/src/types/chat-api-key.ts` | Modify | Add to `SupportedChatProviderSchema` |
+### Configuration
 
+Environment variables for API keys and base URLs.
 
-### Chat-Only Leaks (6 files)
+| File | Description |
+|------|-------------|
+| `backend/src/config.ts` | Add `chat.{provider}.apiKey` and `baseUrl` |
 
-| Module | Issue | Why It Exists |
-|--------|-------|---------------|
-| `chat-models.ts` | Individual `fetch{Provider}Models()` functions | Each provider has different model listing APIs |
-| `llm-client.ts` | `detectProviderFromModel()` hardcoded patterns | Model naming conventions differ (e.g., `gpt-*`, `claude-*`, `gemini-*`) |
-| `llm-client.ts` | `createLLMModel()` switch | AI SDK requires provider-specific model creation |
-| `shared/chat-error.ts` | Provider-specific error constants | Error codes and structures differ across providers |
-| `chat/errors.ts` | Individual `parse{Provider}Error()` functions | SDK error wrapping structures differ |
-| `chat-api-key.ts` | `SupportedChatProviderSchema` | Chat supports subset of LLM Proxy providers |
+### Chat Provider Registration
+
+Allows users to select this provider's models in the Chat UI.
+
+| File | Description |
+|------|-------------|
+| `backend/src/types/chat-api-key.ts` | Add to `SupportedChatProviderSchema` |
+
+### Model Listing
+
+Each provider has a different API for listing available models.
+
+| File | Description |
+|------|-------------|
+| `backend/src/routes/chat-models.ts` | Add `fetch{Provider}Models()` function and register in `modelFetchers` |
+| `backend/src/routes/chat-models.ts` | Add case to `getProviderApiKey()` switch |
+
+### LLM Client
+
+Chat uses Vercel AI SDK which requires provider-specific model creation.
+
+| File | Description |
+|------|-------------|
+| `backend/src/services/llm-client.ts` | Add to `detectProviderFromModel()` - model naming conventions differ (e.g., `gpt-*`, `claude-*`) |
+| `backend/src/services/llm-client.ts` | Add case to `resolveProviderApiKey()` switch |
+| `backend/src/services/llm-client.ts` | Add case to `createLLMModel()` - AI SDK requires provider-specific initialization |
+
+### Error Handling
+
+Each provider SDK wraps errors differently, requiring provider-specific parsing.
+
+| File | Description |
+|------|-------------|
+| `shared/chat-error.ts` | Add `{Provider}ErrorTypes` constants |
+| `backend/src/routes/chat/errors.ts` | Add `parse{Provider}Error()` and `map{Provider}ErrorToCode()` functions |
 
 
 ## Reference Implementations

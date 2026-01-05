@@ -293,6 +293,15 @@ export async function getChatMcpClient(
         },
         "Cached MCP client ping failed, creating fresh client",
       );
+      // Close the dead client before removing from cache to prevent resource leaks
+      try {
+        cachedClient.close();
+      } catch (closeError) {
+        logger.warn(
+          { agentId, userId, closeError },
+          "Error closing dead MCP client (non-fatal)",
+        );
+      }
       clientCache.delete(cacheKey);
       // Fall through to create new client
     }

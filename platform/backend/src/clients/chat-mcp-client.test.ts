@@ -48,6 +48,8 @@ describe("chat-mcp-client health check", () => {
 
     // Ping should have been called on the dead client
     expect(deadClient.ping).toHaveBeenCalledTimes(1);
+    // close() should have been called to clean up resources before cache removal
+    expect(deadClient.close).toHaveBeenCalledTimes(1);
     // listTools should NOT have been called on the dead client
     expect(deadClient.listTools).not.toHaveBeenCalled();
     // Tools will be empty since we can't create a real client in tests

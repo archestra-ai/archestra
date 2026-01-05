@@ -1,1 +1,0 @@
-ALTER TABLE "conversations" ADD COLUMN "todo_list" jsonb;

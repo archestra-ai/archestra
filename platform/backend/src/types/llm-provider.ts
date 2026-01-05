@@ -54,6 +54,8 @@ export interface CreateClientOptions {
   agent?: Agent;
   /** External agent ID from X-Archestra-Agent-Id header */
   externalAgentId?: string;
+  /** Default headers to include with every request */
+  defaultHeaders?: Record<string, string>;
 }
 
 /**

@@ -18178,6 +18178,21 @@ export type GetPublicSsoProvidersErrors = {
     };
 };
 
+export type GetPublicSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providers: Array<{
+            id: string;
+            providerId: string;
+            name: string;
+        }>;
+    };
+};
+
+export type GetPublicSsoProvidersResponse = GetPublicSsoProvidersResponses[keyof GetPublicSsoProvidersResponses];
+
 export type GetPublicAppearanceData = {
     body?: never;
     path?: never;
@@ -18257,7 +18272,7 @@ export type GetPublicAppearanceResponses = {
 
 export type GetPublicAppearanceResponse = GetPublicAppearanceResponses[keyof GetPublicAppearanceResponses];
 
-export type GetPublicSsoProvidersData = {
+export type GetSsoProvidersData = {
     body?: never;
     path?: never;
     query?: never;

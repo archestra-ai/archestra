@@ -74,7 +74,6 @@ export function ConversationArtifactPanel({
     };
   }, [isResizing]);
 
-
   // Custom components for ReactMarkdown to handle Mermaid diagrams
   const markdownComponents: Components = {
     code({ node, className, children, ...props }) {
@@ -117,7 +116,7 @@ export function ConversationArtifactPanel({
       toast.error("No artifact to download");
       return;
     }
-    
+
     // Use browser's print functionality to save as PDF
     const printWindow = window.open("", "_blank");
 
@@ -379,7 +378,9 @@ export function ConversationArtifactPanel({
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <FileText className="h-12 w-12 mb-4" />
               <p className="text-lg font-medium">No artifact yet</p>
-              <p className="text-sm mt-2">The agent hasn't created an artifact in this conversation</p>
+              <p className="text-sm mt-2">
+                The agent hasn't created an artifact in this conversation
+              </p>
             </div>
           )}
         </div>

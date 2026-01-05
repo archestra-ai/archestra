@@ -1,19 +1,18 @@
 /**
- * This file contains access control stubs for the non-enterprise version of the app.
+ * Enterprise RBAC and access control configuration for the app.
  *
- * Since there is no RBAC in non-enterprise version,
- * all exports are empty/permissive to allow all operations:
+ * This file defines the concrete role-based access control (RBAC) model used
+ * at runtime, including:
  *
- * - actions: Empty array (no actions defined)
- * - resources: Empty array (no resources defined)
- * - allAvailableActions: Empty object (no permissions)
- * - editorPermissions: Empty object (no permissions)
- * - memberPermissions: Empty object (no permissions)
- * - requiredEndpointPermissionsMap: Proxy that allows all endpoints (returns {} for any route)
- * - requiredPagePermissionsMap: Proxy that allows all pages (returns {} for any page)
+ * - allAvailableActions: Mapping of each access-control resource to its
+ *   allowed actions.
+ * - editorPermissions: Permissions granted to the predefined editor role.
+ * - memberPermissions: Permissions granted to the predefined member role.
+ * - other permission and endpoint/page mappings that determine which roles
+ *   may perform which actions on which resources.
  *
- * For the actual RBAC implementation with real permissions and access control,
- * see the enterprise edition: access-control.ee.ts
+ * These definitions are used by the enterprise edition to enforce fine-grained
+ * access control across API routes and UI pages.
  */
 
 import { defaultStatements } from "better-auth/plugins/organization/access";

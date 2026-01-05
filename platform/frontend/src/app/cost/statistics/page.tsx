@@ -851,7 +851,7 @@ export default function StatisticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Cost Savings</CardTitle>
+            <CardTitle>Costs</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-80">
@@ -866,7 +866,7 @@ export default function StatisticsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Savings Breakdown</CardTitle>
+            <CardTitle>Cost Savings</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-80">

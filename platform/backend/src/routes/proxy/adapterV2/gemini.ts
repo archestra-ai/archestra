@@ -507,34 +507,6 @@ class GeminiStreamAdapter
       responseId: this.state.responseId || `gemini-${Date.now()}`,
     };
   }
-
-  toProviderRefusalResponse(
-    _refusalMessage: string,
-    contentMessage: string,
-  ): GeminiResponse {
-    return {
-      candidates: [
-        {
-          content: {
-            parts: [{ text: contentMessage }],
-            role: "model",
-          },
-          finishReason: "STOP",
-          index: 0,
-        },
-      ],
-      usageMetadata: this.state.usage
-        ? {
-            promptTokenCount: this.state.usage.inputTokens,
-            candidatesTokenCount: this.state.usage.outputTokens,
-            totalTokenCount:
-              this.state.usage.inputTokens + this.state.usage.outputTokens,
-          }
-        : undefined,
-      modelVersion: this.state.model,
-      responseId: this.state.responseId || `gemini-${Date.now()}`,
-    };
-  }
 }
 
 // =============================================================================

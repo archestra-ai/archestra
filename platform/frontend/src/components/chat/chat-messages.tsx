@@ -29,6 +29,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import { TodoWriteTool } from "./todo-write-tool";
+import { BrowserTool } from "./browser-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -413,16 +414,16 @@ export function ChatMessages({
           {error && <InlineChatError error={error} />}
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
-            <Message from="assistant">
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
-              />
-            </Message>
-          )}
+              <Message from="assistant">
+                <Image
+                  src={"/logo.png"}
+                  alt="Loading logo"
+                  width={40}
+                  height={40}
+                  className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                />
+              </Message>
+            )}
         </div>
       </ConversationContent>
       <ConversationScrollButton />
@@ -513,11 +514,21 @@ function MessageTool({
     );
   }
 
+  if (toolName.startsWith("archestra__browser_")) {
+    return (
+      <BrowserTool
+        part={part}
+        toolResultPart={toolResultPart}
+        toolName={toolName}
+      />
+    );
+  }
+
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const hasContent = Boolean(
     hasInput ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
+    (toolResultPart && Boolean(toolResultPart.output)) ||
+    (!toolResultPart && Boolean(part.output)),
   );
 
   return (

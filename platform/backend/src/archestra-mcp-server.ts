@@ -6,6 +6,7 @@ import {
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
 } from "@shared";
 import logger from "@/logging";
+import { BrowserService } from "@/services/browser-service";
 import {
   AgentModel,
   AgentTeamModel,
@@ -59,6 +60,12 @@ const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
 const TOOL_GET_PROFILE_NAME = "get_profile";
 const TOOL_TODO_WRITE_NAME = "todo_write";
 const TOOL_ARTIFACT_WRITE_NAME = "artifact_write";
+const TOOL_BROWSER_NAVIGATE_NAME = "browser_navigate";
+const TOOL_BROWSER_SCREENSHOT_NAME = "browser_screenshot";
+const TOOL_BROWSER_CLICK_NAME = "browser_click";
+const TOOL_BROWSER_TYPE_NAME = "browser_type";
+const TOOL_BROWSER_SCROLL_NAME = "browser_scroll";
+const TOOL_BROWSER_GET_CONTENT_NAME = "browser_get_content";
 
 /**
  * Convert a name to a URL-safe slug for tool naming
@@ -96,6 +103,12 @@ const TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_S
 const TOOL_GET_PROFILE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_PROFILE_NAME}`;
 const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_TODO_WRITE_NAME}`;
 const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_ARTIFACT_WRITE_NAME}`;
+const TOOL_BROWSER_NAVIGATE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BROWSER_NAVIGATE_NAME}`;
+const TOOL_BROWSER_SCREENSHOT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BROWSER_SCREENSHOT_NAME}`;
+const TOOL_BROWSER_CLICK_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BROWSER_CLICK_NAME}`;
+const TOOL_BROWSER_TYPE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BROWSER_TYPE_NAME}`;
+const TOOL_BROWSER_SCROLL_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BROWSER_SCROLL_NAME}`;
+const TOOL_BROWSER_GET_CONTENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BROWSER_GET_CONTENT_NAME}`;
 
 /**
  * Context for the Archestra MCP server
@@ -317,9 +330,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error searching private MCP registry: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error searching private MCP registry: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -338,9 +350,9 @@ export async function executeArchestraTool(
       const teams = (args?.teams as string[]) ?? [];
       const labels = args?.labels as
         | Array<{
-            key: string;
-            value: string;
-          }>
+          key: string;
+          value: string;
+        }>
         | undefined;
 
       // Validate required fields
@@ -367,19 +379,16 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Successfully created profile.\n\nProfile Name: ${
-              newProfile.name
-            }\nProfile ID: ${newProfile.id}\nTeams: ${
-              newProfile.teams.length > 0
+            text: `Successfully created profile.\n\nProfile Name: ${newProfile.name
+              }\nProfile ID: ${newProfile.id}\nTeams: ${newProfile.teams.length > 0
                 ? newProfile.teams.map((t) => t.name).join(", ")
                 : "None"
-            }\nLabels: ${
-              newProfile.labels.length > 0
+              }\nLabels: ${newProfile.labels.length > 0
                 ? newProfile.labels
-                    .map((l) => `${l.key}: ${l.value}`)
-                    .join(", ")
+                  .map((l) => `${l.key}: ${l.value}`)
+                  .join(", ")
                 : "None"
-            }`,
+              }`,
           },
         ],
         isError: false,
@@ -390,9 +399,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating profile: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error creating profile: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -432,9 +440,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error handling installation request: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error handling installation request: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -533,15 +540,11 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Successfully created limit.\n\nLimit ID: ${
-              limit.id
-            }\nEntity Type: ${limit.entityType}\nEntity ID: ${
-              limit.entityId
-            }\nLimit Type: ${limit.limitType}\nLimit Value: ${
-              limit.limitValue
-            }${limit.model ? `\nModel: ${limit.model}` : ""}${
-              limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
-            }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
+            text: `Successfully created limit.\n\nLimit ID: ${limit.id
+              }\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId
+              }\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue
+              }${limit.model ? `\nModel: ${limit.model}` : ""}${limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
+              }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
           },
         ],
         isError: false,
@@ -552,9 +555,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating limit: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error creating limit: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -588,9 +590,8 @@ export async function executeArchestraTool(
               type: "text",
               text:
                 entityType || entityId
-                  ? `No limits found${
-                      entityType ? ` for entity type: ${entityType}` : ""
-                    }${entityId ? ` and entity ID: ${entityId}` : ""}.`
+                  ? `No limits found${entityType ? ` for entity type: ${entityType}` : ""
+                  }${entityId ? ` and entity ID: ${entityId}` : ""}.`
                   : "No limits found.",
             },
           ],
@@ -630,9 +631,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting limits: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting limits: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -708,9 +708,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error updating limit: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error updating limit: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -768,9 +767,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error deleting limit: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error deleting limit: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -803,9 +801,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting profile token usage: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting profile token usage: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -847,9 +844,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting autonomy policy operators: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting autonomy policy operators: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -880,9 +876,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting tool invocation policies: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting tool invocation policies: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -915,9 +910,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error creating tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -973,9 +967,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1033,9 +1026,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error updating tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error updating tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1091,9 +1083,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error deleting tool invocation policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error deleting tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1124,9 +1115,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting trusted data policies: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting trusted data policies: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1159,9 +1149,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error creating trusted data policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1217,9 +1206,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting trusted data policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1277,9 +1265,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error updating trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error updating trusted data policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1335,9 +1322,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error deleting trusted data policy: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error deleting trusted data policy: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1425,9 +1411,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error bulk assigning tools to profiles: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error bulk assigning tools to profiles: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1461,9 +1446,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting MCP servers: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting MCP servers: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1528,9 +1512,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting MCP server tools: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting MCP server tools: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1587,9 +1570,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting profile: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error getting profile: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1606,10 +1588,10 @@ export async function executeArchestraTool(
     try {
       const todos = args?.todos as
         | Array<{
-            id: number;
-            content: string;
-            status: string;
-          }>
+          id: number;
+          content: string;
+          status: string;
+        }>
         | undefined;
 
       if (!todos || !Array.isArray(todos)) {
@@ -1641,9 +1623,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error writing todos: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error writing todos: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -1724,9 +1705,8 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error writing artifact: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            text: `Error writing artifact: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
           },
         ],
         isError: true,
@@ -2396,6 +2376,87 @@ export function getArchestraMcpTools(): Tool[] {
           },
         },
         required: ["content"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_BROWSER_NAVIGATE_FULL_NAME,
+      title: "Browser Navigate",
+      description: "Navigate to a URL using the embedded browser",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The URL to navigate to" },
+        },
+        required: ["url"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_BROWSER_SCREENSHOT_FULL_NAME,
+      title: "Browser Screenshot",
+      description: "Take a screenshot of the current page",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_BROWSER_CLICK_FULL_NAME,
+      title: "Browser Click",
+      description: "Click an element on the current page",
+      inputSchema: {
+        type: "object",
+        properties: {
+          selector: { type: "string", description: "CSS selector of the element to click" },
+        },
+        required: ["selector"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_BROWSER_TYPE_FULL_NAME,
+      title: "Browser Type",
+      description: "Type text into an input element",
+      inputSchema: {
+        type: "object",
+        properties: {
+          selector: { type: "string", description: "CSS selector of the input element" },
+          text: { type: "string", description: "Text to type" },
+        },
+        required: ["selector", "text"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_BROWSER_SCROLL_FULL_NAME,
+      title: "Browser Scroll",
+      description: "Scroll the page up or down",
+      inputSchema: {
+        type: "object",
+        properties: {
+          direction: { type: "string", enum: ["up", "down"], description: "Direction to scroll" },
+        },
+        required: ["direction"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_BROWSER_GET_CONTENT_FULL_NAME,
+      title: "Browser Get Content",
+      description: "Get the text content of the current page",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
       },
       annotations: {},
       _meta: {},

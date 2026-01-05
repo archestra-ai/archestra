@@ -34,13 +34,16 @@ interface ArchestraPromptInputProps {
   messageCount?: number;
   // Tools integration props
   agentId: string;
-  conversationId: string;
+  /** Optional - if not provided, it's initial chat mode (no conversation yet) */
+  conversationId?: string;
   promptId?: string | null;
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  /** Callback for profile change in initial chat mode (no conversation) */
+  onProfileChange?: (agentId: string) => void;
 }
 
 // Inner component that has access to the controller context
@@ -56,6 +59,7 @@ const PromptInputContent = ({
   currentConversationChatApiKeyId,
   currentProvider,
   textareaRef: externalTextareaRef,
+  onProfileChange,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -74,15 +78,16 @@ const PromptInputContent = ({
   return (
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
       <PromptInputHeader className="pt-3">
-        {agentId && conversationId && (
+        {agentId && (
           <div className="flex flex-wrap items-center gap-2">
             <ProfileSelector
               currentAgentId={agentId}
               conversationId={conversationId}
+              onProfileChange={onProfileChange}
             />
             <ChatToolsDisplay
               agentId={agentId}
-              conversationId={conversationId}
+              conversationId={conversationId ?? ""}
               promptId={promptId}
             />
           </div>
@@ -138,6 +143,7 @@ const ArchestraPromptInput = ({
   currentConversationChatApiKeyId,
   currentProvider,
   textareaRef,
+  onProfileChange,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -154,6 +160,7 @@ const ArchestraPromptInput = ({
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
           textareaRef={textareaRef}
+          onProfileChange={onProfileChange}
         />
       </PromptInputProvider>
     </div>

@@ -16,6 +16,7 @@ import {
   Settings,
   Slack,
   Star,
+  Users,
   Wrench,
 } from "lucide-react";
 import Image from "next/image";
@@ -68,9 +69,14 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
         pathname === "/chat" && !searchParams.get("conversation"),
     },
     {
+      title: "Agents",
+      url: "/agents",
+      icon: Bot,
+    },
+    {
       title: "Profiles",
       url: "/profiles",
-      icon: Bot,
+      icon: Users,
     },
     {
       title: "Logs",

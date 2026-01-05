@@ -7,7 +7,6 @@ import {
 import {
   History as HistoryIcon,
   Link2,
-  MessageSquarePlus,
   MoreVertical,
   Pencil,
   Search,
@@ -72,7 +71,6 @@ export function PromptLibraryGrid({
   onViewVersionHistory,
 }: PromptLibraryGridProps) {
   const { data: allProfiles = [] } = useProfiles();
-  const agents = allProfiles;
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [promptToConnect, setPromptToConnect] = useState<Prompt | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,13 +91,6 @@ export function PromptLibraryGrid({
       );
     });
   }, [prompts, searchQuery, allProfiles]);
-
-  const handleFreeChatStart = () => {
-    // Use the first available profile
-    if (agents.length > 0) {
-      onSelectPrompt(agents[0].id);
-    }
-  };
 
   const handlePromptClick = (prompt: Prompt) => {
     onSelectPrompt(prompt.agentId, prompt.id);
@@ -130,27 +121,6 @@ export function PromptLibraryGrid({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        {/* Free Chat Tile */}
-        <WithPermissions
-          key="free-chat"
-          permissions={{ conversation: ["create"] }}
-          noPermissionHandle="tooltip"
-        >
-          {({ hasPermission }) => {
-            return (
-              <Card
-                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${hasPermission === false ? "opacity-50 pointer-events-none" : ""}`}
-                onClick={handleFreeChatStart}
-              >
-                <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
-                  <MessageSquarePlus className="h-4 w-4" />
-                  Free Chat
-                </CardTitle>
-              </Card>
-            );
-          }}
-        </WithPermissions>
-
         {/* Prompt Tiles */}
         {filteredPrompts.map((prompt) => {
           const profileName = prompt.agentId

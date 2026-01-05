@@ -1,7 +1,8 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Plus } from "lucide-react";
+import type { archestraApiTypes } from "@shared";
+import { Eye, EyeOff, FileText } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -22,8 +23,6 @@ import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { PageLayout } from "@/components/page-layout";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,12 +31,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
@@ -47,7 +40,10 @@ import {
   useCreateConversation,
   useUpdateConversation,
 } from "@/lib/chat.query";
-import { useChatModelsQuery } from "@/lib/chat-models.query";
+import {
+  useChatModelsQuery,
+  useModelsByProvider,
+} from "@/lib/chat-models.query";
 import {
   type SupportedChatProvider,
   useChatApiKeys,
@@ -107,18 +103,46 @@ export default function ChatPage() {
     internalMcpCatalog: ["create"],
   });
 
-  // State for prompt management
+  // Fetch prompts for conversation prompt name lookup
+  const { data: prompts = [] } = usePrompts();
+
+  // Fetch profiles and models for initial chat (no conversation)
+  const { data: allProfiles = [] } = useProfiles();
+  const { modelsByProvider } = useModelsByProvider();
+
+  // State for initial chat (when no conversation exists yet)
+  const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
+  const [initialModel, setInitialModel] = useState<string>("");
+
+  // Prompt dialog state for PromptLibraryGrid
+  type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<
-    (typeof prompts)[number] | null
-  >(null);
-
-  // Fetch prompts and current editing prompt
-  const { data: prompts = [] } = usePrompts();
+  const [versionHistoryPrompt, setVersionHistoryPrompt] =
+    useState<Prompt | null>(null);
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
   const deletePromptMutation = useDeletePrompt();
-  const { data: allProfiles = [] } = useProfiles();
+
+  // Set default initial agent and model when data loads
+  useEffect(() => {
+    if (!initialAgentId && allProfiles.length > 0) {
+      setInitialAgentId(allProfiles[0].id);
+    }
+  }, [allProfiles, initialAgentId]);
+
+  useEffect(() => {
+    if (!initialModel) {
+      const providers = Object.keys(modelsByProvider);
+      if (providers.length > 0) {
+        const firstProvider = providers[0];
+        const models =
+          modelsByProvider[firstProvider as keyof typeof modelsByProvider];
+        if (models && models.length > 0) {
+          setInitialModel(models[0].id);
+        }
+      }
+    }
+  }, [modelsByProvider, initialModel]);
 
   const chatSession = useChatSession(conversationId);
 
@@ -231,21 +255,16 @@ export default function ChatPage() {
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
-  // Handle prompt selection from library
-  const handleSelectPrompt = useCallback(
-    async (agentId: string, promptId?: string) => {
-      // If promptId is provided, fetch the prompt and use its userPrompt
-      if (promptId) {
-        const selectedPrompt = prompts.find((p) => p.id === promptId);
-        if (selectedPrompt?.userPrompt) {
-          pendingPromptRef.current = selectedPrompt.userPrompt;
-        }
-      }
+  // Handle initial chat submission (when no conversation exists)
+  const handleInitialChatSubmit = useCallback(
+    async (params: { agentId: string; model: string; message: string }) => {
+      // Store the message to send after conversation is created
+      pendingPromptRef.current = params.message;
 
-      // Create conversation for the selected agent with optional promptId
+      // Create conversation with the selected agent and model
       const newConversation = await createConversationMutation.mutateAsync({
-        agentId,
-        promptId,
+        agentId: params.agentId,
+        selectedModel: params.model,
       });
       if (newConversation) {
         // Mark this as a newly created conversation
@@ -253,39 +272,7 @@ export default function ChatPage() {
         selectConversation(newConversation.id);
       }
     },
-    [createConversationMutation, selectConversation, prompts],
-  );
-
-  const handleEditPrompt = useCallback((prompt: (typeof prompts)[number]) => {
-    setEditingPromptId(prompt.id);
-    setIsPromptDialogOpen(true);
-  }, []);
-
-  const handleCreatePrompt = useCallback(() => {
-    setEditingPromptId(null);
-    setIsPromptDialogOpen(true);
-  }, []);
-
-  // Listen for custom event from layout to open dialog
-  useEffect(() => {
-    const handleOpenDialog = () => {
-      handleCreatePrompt();
-    };
-    window.addEventListener("open-prompt-dialog", handleOpenDialog);
-    return () => {
-      window.removeEventListener("open-prompt-dialog", handleOpenDialog);
-    };
-  }, [handleCreatePrompt]);
-
-  const handleDeletePrompt = useCallback(
-    async (promptId: string) => {
-      try {
-        await deletePromptMutation.mutateAsync(promptId);
-      } catch (error) {
-        console.error("Failed to delete prompt:", error);
-      }
-    },
-    [deletePromptMutation],
+    [createConversationMutation, selectConversation],
   );
 
   // Persist hide tool calls preference
@@ -543,48 +530,93 @@ export default function ChatPage() {
   }
 
   if (!conversationId) {
-    const hasNoProfiles = allProfiles.length === 0;
+    const handleInitialSubmit: PromptInputProps["onSubmit"] = (message, e) => {
+      e.preventDefault();
+      if (
+        !message.text?.trim() ||
+        !initialAgentId ||
+        !initialModel ||
+        createConversationMutation.isPending
+      ) {
+        return;
+      }
+      handleInitialChatSubmit({
+        agentId: initialAgentId,
+        model: initialModel,
+        message: message.text,
+      });
+    };
+
+    const handleSelectPrompt = (agentId: string, promptId?: string) => {
+      // Set the selected agent and create conversation immediately
+      setInitialAgentId(agentId);
+      // Create conversation with the selected agent
+      createConversationMutation.mutate(
+        {
+          agentId,
+          selectedModel: initialModel,
+          promptId,
+        },
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              newlyCreatedConversationRef.current = newConversation.id;
+              selectConversation(newConversation.id);
+            }
+          },
+        },
+      );
+    };
+
+    const handleEditPrompt = (prompt: Prompt) => {
+      setEditingPromptId(prompt.id);
+      setIsPromptDialogOpen(true);
+    };
+
+    const handleDeletePrompt = (promptId: string) => {
+      deletePromptMutation.mutate(promptId);
+    };
 
     return (
-      <PageLayout
-        title="Chats"
-        description="Start a free chat or select a prompt from your library to start a guided chat"
-        actionButton={
-          <WithPermissions
-            permissions={{ prompt: ["create"] }}
-            noPermissionHandle="hide"
-          >
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      onClick={handleCreatePrompt}
-                      size="sm"
-                      disabled={hasNoProfiles}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Prompt
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {hasNoProfiles && (
-                  <TooltipContent>
-                    <p>No profiles available</p>
-                  </TooltipContent>
+      <div className="flex h-screen w-full">
+        <div className="flex-1 flex flex-col w-full">
+          <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="max-w-5xl mx-auto">
+                <PromptLibraryGrid
+                  prompts={prompts}
+                  onSelectPrompt={handleSelectPrompt}
+                  onEdit={handleEditPrompt}
+                  onDelete={handleDeletePrompt}
+                  onViewVersionHistory={setVersionHistoryPrompt}
+                />
+              </div>
+            </div>
+            <div className="sticky bottom-0 bg-background border-t p-4">
+              <div className="max-w-4xl mx-auto space-y-3">
+                {initialAgentId && (
+                  <ArchestraPromptInput
+                    onSubmit={handleInitialSubmit}
+                    status={
+                      createConversationMutation.isPending
+                        ? "submitted"
+                        : "ready"
+                    }
+                    selectedModel={initialModel}
+                    onModelChange={setInitialModel}
+                    agentId={initialAgentId}
+                    onProfileChange={setInitialAgentId}
+                  />
                 )}
-              </Tooltip>
-            </TooltipProvider>
-          </WithPermissions>
-        }
-      >
-        <PromptLibraryGrid
-          prompts={prompts}
-          onSelectPrompt={handleSelectPrompt}
-          onEdit={handleEditPrompt}
-          onDelete={handleDeletePrompt}
-          onViewVersionHistory={setVersionHistoryPrompt}
-        />
+                <div className="text-center">
+                  <Version inline />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Prompt Edit Dialog */}
         <PromptDialog
           open={isPromptDialogOpen}
           onOpenChange={(open) => {
@@ -596,6 +628,8 @@ export default function ChatPage() {
           prompt={editingPrompt}
           onViewVersionHistory={setVersionHistoryPrompt}
         />
+
+        {/* Version History Dialog */}
         <PromptVersionHistoryDialog
           open={!!versionHistoryPrompt}
           onOpenChange={(open) => {
@@ -605,7 +639,7 @@ export default function ChatPage() {
           }}
           prompt={versionHistoryPrompt}
         />
-      </PageLayout>
+      </div>
     );
   }
 

@@ -14,12 +14,16 @@ import { useUpdateConversation } from "@/lib/chat.query";
 
 interface ProfileSelectorProps {
   currentAgentId: string;
-  conversationId: string;
+  /** If provided, changing profile will update the conversation */
+  conversationId?: string;
+  /** If provided (and no conversationId), this callback will be called on profile change */
+  onProfileChange?: (agentId: string) => void;
 }
 
 export function ProfileSelector({
   currentAgentId,
   conversationId,
+  onProfileChange,
 }: ProfileSelectorProps) {
   const { data: profiles = [] } = useProfiles();
   const updateConversationMutation = useUpdateConversation();
@@ -32,10 +36,16 @@ export function ProfileSelector({
   const handleProfileChange = (newAgentId: string) => {
     if (newAgentId === currentAgentId) return;
 
-    updateConversationMutation.mutate({
-      id: conversationId,
-      agentId: newAgentId,
-    });
+    if (conversationId) {
+      // Update existing conversation
+      updateConversationMutation.mutate({
+        id: conversationId,
+        agentId: newAgentId,
+      });
+    } else if (onProfileChange) {
+      // Call callback for initial chat (no conversation yet)
+      onProfileChange(newAgentId);
+    }
   };
 
   if (profiles.length === 0) {

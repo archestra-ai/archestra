@@ -87,7 +87,7 @@ export function ConversationArtifactPanel({
       if (language === "mermaid") {
         const code = String(children).replace(/\n$/, "");
         return (
-          <div className="my-4">
+          <div className="my-4 max-h-[600px] [&_svg]:!max-h-[600px] [&_svg]:!w-auto">
             <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
           </div>
         );

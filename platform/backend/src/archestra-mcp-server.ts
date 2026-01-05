@@ -2383,7 +2383,9 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_ARTIFACT_WRITE_FULL_NAME,
       title: "Write Artifact",
       description:
-        "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content.",
+        "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
+        "Mermaid diagrams: Use ```mermaid blocks. " +
+        "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
       inputSchema: {
         type: "object",
         properties: {

@@ -239,7 +239,7 @@ export function ChatToolsDisplay({
   }
 
   return (
-    <div className={className} ref={componentRef}>
+    <div className={className}>
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {sortedServerEntries.map(([serverName]) => {

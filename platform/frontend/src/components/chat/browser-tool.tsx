@@ -1,12 +1,5 @@
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import {
-  Camera,
-  ChevronDown,
-  ChevronUp,
-  Globe,
-  MousePointer,
-  Type,
-} from "lucide-react";
+import { Camera, ChevronDown, Globe, MousePointer, Type } from "lucide-react";
 import { useState } from "react";
 
 interface BrowserToolArgs {
@@ -17,7 +10,7 @@ interface BrowserToolArgs {
 }
 
 interface BrowserToolResultContent {
-  type: "text" | "image"; // expanding for future proofing
+  type: "text" | "image";
   text?: string;
   data?: string;
   mimeType?: string;
@@ -33,6 +26,16 @@ interface BrowserToolProps {
   toolName: string;
 }
 
+// Type guard for BrowserToolArgs
+function isBrowserToolArgs(args: unknown): args is BrowserToolArgs {
+  return typeof args === "object" && args !== null;
+}
+
+// Type guard for BrowserToolResultPart
+function isBrowserToolResultPart(part: unknown): part is BrowserToolResultPart {
+  return typeof part === "object" && part !== null && "content" in part;
+}
+
 export function BrowserTool({
   part,
   toolResultPart,
@@ -40,9 +43,11 @@ export function BrowserTool({
 }: BrowserToolProps) {
   const [isOpen, setIsOpen] = useState(true);
 
-  // Parse args safely
-  // biome-ignore lint/suspicious/noExplicitAny: Generic tool part input is loosely typed
-  const args = (part as any).args as BrowserToolArgs;
+  // Parse args safe
+  let args: BrowserToolArgs = {};
+  if ("args" in part && isBrowserToolArgs(part.args)) {
+    args = part.args;
+  }
 
   // Determine action type and icon
   let Icon = Globe;
@@ -52,31 +57,30 @@ export function BrowserTool({
   if (toolName.includes("navigate")) {
     Icon = Globe;
     title = "Navigating";
-    details = (args?.url as string) || "Unknown URL";
+    details = args.url || "Unknown URL";
   } else if (toolName.includes("click")) {
     Icon = MousePointer;
     title = "Clicking";
-    details = (args?.selector as string) || "Unknown element";
+    details = args.selector || "Unknown element";
   } else if (toolName.includes("type")) {
     Icon = Type;
     title = "Typing";
-    details = `${args?.text} into ${args?.selector}`;
+    details = `${args.text || ""} into ${args.selector || ""}`;
   } else if (toolName.includes("screenshot")) {
     Icon = Camera;
     title = "Taking Screenshot";
   } else if (toolName.includes("scroll")) {
     Icon = ChevronDown;
     title = "Scrolling";
-    details = (args?.direction as string) || "down";
+    details = args.direction || "down";
   }
 
   // Parse result
   let resultText = "";
   let screenshotBase64 = "";
 
-  if (toolResultPart) {
-    // biome-ignore lint/suspicious/noExplicitAny: Accessing dynamic tool result structure
-    const resultPart = toolResultPart as any as BrowserToolResultPart;
+  if (toolResultPart && isBrowserToolResultPart(toolResultPart)) {
+    const resultPart = toolResultPart;
 
     if (resultPart.content && Array.isArray(resultPart.content)) {
       resultPart.content.forEach((c) => {
@@ -106,33 +110,42 @@ export function BrowserTool({
           <div className="flex flex-col items-start">
             <span className="text-sm font-medium">{title}</span>
             {details && (
-              <span className="text-xs text-muted-foreground truncate max-w-[300px]">
+              <span className="text-xs text-muted-foreground opacity-80 font-mono truncate max-w-[300px]">
                 {details}
               </span>
             )}
           </div>
         </div>
-        <div className="text-muted-foreground hover:text-foreground">
-          {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <div className="text-muted-foreground">
+          {isOpen ? (
+            <ChevronDown size={14} />
+          ) : (
+            <ChevronDown size={14} className="-rotate-90" />
+          )}
         </div>
       </button>
 
       {isOpen && (
-        <div className="border-t border-border p-3 bg-card">
-          {screenshotBase64 ? (
-            <div className="relative aspect-video w-full overflow-hidden rounded-md border border-border">
+        <div className="p-3 pt-0 border-t border-border/50 bg-background/30">
+          {screenshotBase64 && (
+            <div className="mt-3 overflow-hidden rounded-lg border border-border shadow-sm">
               <img
                 src={`data:image/jpeg;base64,${screenshotBase64}`}
                 alt="Browser Screenshot"
-                className="object-cover w-full h-full"
+                className="w-full h-auto max-h-[400px] object-contain bg-white"
               />
             </div>
-          ) : resultText ? (
-            <div className="text-xs font-mono bg-muted p-2 rounded-md overflow-x-auto whitespace-pre-wrap">
+          )}
+
+          {resultText && (
+            <div className="mt-2 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-muted/30 p-2 rounded">
               {resultText}
             </div>
-          ) : (
-            <div className="text-xs text-muted-foreground italic">
+          )}
+
+          {!screenshotBase64 && !resultText && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground/70 italic">
+              <div className="h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
               Executing...
             </div>
           )}

@@ -37,7 +37,6 @@ export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
-export { default as usersTable } from "./user";
 export { default as userRoleAssignmentTable } from "./user-role-assignment";
-export { default as userTokensTable } from "./user-token";
+export { default as usersTable } from "./user";
 export { default as verificationsTable } from "./verification";

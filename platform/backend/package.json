@@ -29,7 +29,7 @@
     "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.53",
+    "@ai-sdk/anthropic": "^3.0.1",
     "@ai-sdk/google": "^2.0.51",
     "@ai-sdk/openai": "^2.0.88",
     "@anthropic-ai/sdk": "^0.71.2",

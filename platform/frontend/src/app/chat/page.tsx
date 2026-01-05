@@ -1,8 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import type { archestraApiTypes } from "@shared";
-import { Eye, EyeOff, FileText } from "lucide-react";
+import { Eye, EyeOff, FileText, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -19,9 +18,6 @@ import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-serve
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
-import { PromptDialog } from "@/components/chat/prompt-dialog";
-import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
-import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
@@ -50,7 +47,7 @@ import {
 } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
-import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import { usePrompts } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -114,15 +111,7 @@ export default function ChatPage() {
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-
-  // Prompt dialog state for PromptLibraryGrid
-  type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [versionHistoryPrompt, setVersionHistoryPrompt] =
-    useState<Prompt | null>(null);
-  const { data: editingPrompt } = usePrompt(editingPromptId || "");
-  const deletePromptMutation = useDeletePrompt();
+  const [agentFilter, setAgentFilter] = useState("");
 
   // Set default initial agent and model when data loads
   useEffect(() => {
@@ -155,6 +144,13 @@ export default function ChatPage() {
     }
     return undefined;
   }, [initialModel, modelsByProvider]);
+
+  // Filter agents for pill display (must be before early returns)
+  const filteredAgents = useMemo(() => {
+    if (!agentFilter.trim()) return prompts;
+    const query = agentFilter.toLowerCase();
+    return prompts.filter((p) => p.name.toLowerCase().includes(query));
+  }, [prompts, agentFilter]);
 
   const chatSession = useChatSession(conversationId);
 
@@ -559,7 +555,7 @@ export default function ChatPage() {
       });
     };
 
-    const handleSelectPrompt = (agentId: string, promptId?: string) => {
+    const handleSelectAgent = (agentId: string, promptId?: string) => {
       // Set the selected agent and create conversation immediately
       setInitialAgentId(agentId);
       // Create conversation with the selected agent
@@ -580,31 +576,58 @@ export default function ChatPage() {
       );
     };
 
-    const handleEditPrompt = (prompt: Prompt) => {
-      setEditingPromptId(prompt.id);
-      setIsPromptDialogOpen(true);
-    };
-
-    const handleDeletePrompt = (promptId: string) => {
-      deletePromptMutation.mutate(promptId);
-    };
-
     return (
       <div className="flex h-screen w-full">
         <div className="flex-1 flex flex-col w-full">
           <div className="flex flex-col h-full">
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="max-w-5xl mx-auto">
-                <h2 className="text-2xl font-medium text-muted-foreground mb-4">
+              <div className="max-w-4xl mx-auto space-y-4">
+                <h2 className="text-2xl font-medium text-muted-foreground">
                   Select an agent or start typing below
                 </h2>
-                <PromptLibraryGrid
-                  prompts={prompts}
-                  onSelectPrompt={handleSelectPrompt}
-                  onEdit={handleEditPrompt}
-                  onDelete={handleDeletePrompt}
-                  onViewVersionHistory={setVersionHistoryPrompt}
-                />
+
+                {/* Filter input */}
+                <div className="relative max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Filter agents..."
+                    value={agentFilter}
+                    onChange={(e) => setAgentFilter(e.target.value)}
+                    className="pl-9 pr-9"
+                  />
+                  {agentFilter && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setAgentFilter("")}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent"
+                    >
+                      <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Horizontal pill buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {filteredAgents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => handleSelectAgent(agent.agentId, agent.id)}
+                      className="rounded-full px-4 py-2 text-sm font-medium bg-muted hover:bg-primary/10 border border-transparent hover:border-primary transition-colors"
+                    >
+                      {agent.name}
+                    </button>
+                  ))}
+                  {filteredAgents.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {agentFilter
+                        ? "No agents found matching your search"
+                        : "No agents available"}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
             <div className="sticky bottom-0 bg-background border-t p-4">
@@ -633,30 +656,6 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-
-        {/* Prompt Edit Dialog */}
-        <PromptDialog
-          open={isPromptDialogOpen}
-          onOpenChange={(open) => {
-            setIsPromptDialogOpen(open);
-            if (!open) {
-              setEditingPromptId(null);
-            }
-          }}
-          prompt={editingPrompt}
-          onViewVersionHistory={setVersionHistoryPrompt}
-        />
-
-        {/* Version History Dialog */}
-        <PromptVersionHistoryDialog
-          open={!!versionHistoryPrompt}
-          onOpenChange={(open) => {
-            if (!open) {
-              setVersionHistoryPrompt(null);
-            }
-          }}
-          prompt={versionHistoryPrompt}
-        />
       </div>
     );
   }

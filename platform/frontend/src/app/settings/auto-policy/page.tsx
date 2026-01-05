@@ -61,10 +61,10 @@ export default function AutoPolicySettingsPage() {
               <p className="text-sm text-muted-foreground">
                 Configure in{" "}
                 <Link
-                  href="/settings/chat"
+                  href="/settings/llm-api-keys"
                   className="text-primary hover:underline"
                 >
-                  Chat settings
+                  LLM API Keys settings
                 </Link>
               </p>
             </div>

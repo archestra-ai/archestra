@@ -982,6 +982,7 @@ export const anthropicAdapterFactory: LLMProvider<
       apiKey,
       baseURL: options?.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options?.defaultHeaders,
     });
   },
 

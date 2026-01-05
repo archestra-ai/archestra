@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, Plus } from "lucide-react";
+import { Eye, EyeOff, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dia
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
@@ -80,6 +81,13 @@ export default function ChatPage() {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
       return localStorage.getItem("archestra-chat-hide-tool-calls") === "true";
+    }
+    return false;
+  });
+  const [isArtifactOpen, setIsArtifactOpen] = useState(() => {
+    // Initialize artifact panel state from localStorage
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("archestra-chat-artifact-open") === "true";
     }
     return false;
   });
@@ -287,6 +295,34 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
+  // Persist artifact panel state
+  const toggleArtifactPanel = useCallback(() => {
+    const newValue = !isArtifactOpen;
+    setIsArtifactOpen(newValue);
+    localStorage.setItem("archestra-chat-artifact-open", String(newValue));
+  }, [isArtifactOpen]);
+
+  // Auto-open artifact panel when artifact is updated
+  const previousArtifactRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    // Only auto-open if:
+    // 1. We have a conversation with an artifact
+    // 2. The artifact has changed (not just initial load)
+    // 3. The panel is currently closed
+    if (
+      conversation?.artifact &&
+      previousArtifactRef.current !== undefined && // Not the initial render
+      previousArtifactRef.current !== conversation.artifact &&
+      !isArtifactOpen
+    ) {
+      setIsArtifactOpen(true);
+      localStorage.setItem("archestra-chat-artifact-open", "true");
+    }
+
+    // Update the ref for next comparison
+    previousArtifactRef.current = conversation?.artifact;
+  }, [conversation?.artifact, isArtifactOpen]);
+
   // Extract chat session properties (or use defaults if session not ready)
   const messages = chatSession?.messages ?? [];
   const sendMessage = chatSession?.sendMessage;
@@ -452,11 +488,12 @@ export default function ChatPage() {
   ]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  // or when conversation loads (e.g., new chat created, hard refresh)
   useLayoutEffect(() => {
-    if (status === "ready" && textareaRef.current) {
+    if (status === "ready" && conversation?.id && textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [status]);
+  }, [status, conversation?.id]);
 
   const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
     e.preventDefault();
@@ -579,13 +616,23 @@ export default function ChatPage() {
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex-1" />
-            <div className="flex-1 text-center">
+            <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground">
                 {conversationPrompt ? conversationPrompt.name : "Free chat"}
               </span>
             </div>
-            <div className="flex-1 flex justify-end gap-2 items-center">
+            <div className="flex gap-2 items-center">
+              {!isArtifactOpen && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleArtifactPanel}
+                  className="text-xs"
+                >
+                  <FileText className="h-3 w-3 mr-1" />
+                  Show Artifact
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -684,6 +731,13 @@ export default function ChatPage() {
         isOpen={isDialogOpened("create-catalog")}
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
+      />
+
+      {/* Right-side artifact panel */}
+      <ConversationArtifactPanel
+        artifact={conversation?.artifact}
+        isOpen={isArtifactOpen}
+        onToggle={toggleArtifactPanel}
       />
     </div>
   );

@@ -3,7 +3,7 @@ import ConversationModel from "./conversation";
 import ConversationEnabledToolModel from "./conversation-enabled-tool";
 
 describe("ConversationEnabledToolModel", () => {
-  test("returns empty array for conversation with no custom selection", async ({
+  test("returns todo_write and artifact_write tools enabled by default", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -24,7 +24,8 @@ describe("ConversationEnabledToolModel", () => {
       conversation.id,
     );
 
-    expect(enabledTools).toEqual([]);
+    // Should have todo_write and artifact_write enabled by default
+    expect(enabledTools).toHaveLength(2);
   });
 
   test("hasCustomSelection returns true for new conversation (Archestra tools disabled by default)", async ({
@@ -283,7 +284,7 @@ describe("ConversationEnabledToolModel", () => {
     expect(toolsMap.get(conversation2.id)).not.toContain(tool1.id);
   });
 
-  test("findByConversations returns empty arrays for conversations without custom selection", async ({
+  test("findByConversations returns todo_write and artifact_write for conversations by default", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -313,8 +314,9 @@ describe("ConversationEnabledToolModel", () => {
       conversation2.id,
     ]);
 
-    expect(toolsMap.get(conversation1.id)).toEqual([]);
-    expect(toolsMap.get(conversation2.id)).toEqual([]);
+    // Should have todo_write and artifact_write enabled by default
+    expect(toolsMap.get(conversation1.id)).toHaveLength(2);
+    expect(toolsMap.get(conversation2.id)).toHaveLength(2);
   });
 
   test("findByConversations returns empty map for empty input", async () => {
@@ -363,11 +365,11 @@ describe("ConversationEnabledToolModel", () => {
     );
     expect(tools1).toHaveLength(2);
 
-    // Conversation 2 has custom selection (Archestra tools disabled by default) but no additional tools set
+    // Conversation 2 has custom selection with todo_write and artifact_write by default
     const tools2 = await ConversationEnabledToolModel.findByConversation(
       conversation2.id,
     );
-    expect(tools2).toEqual([]);
+    expect(tools2).toHaveLength(2); // todo_write and artifact_write
 
     const hasCustom1 = await ConversationEnabledToolModel.hasCustomSelection(
       conversation1.id,

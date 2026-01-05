@@ -57,3 +57,15 @@ local_resource(
   auto_init=False,
   serve_cmd='kubectl port-forward svc/e2e-tests-wiremock 9092:8080',
 )
+
+# WireMock only (for chat/LLM debugging without full e2e setup)
+# Watches mappings directory - trigger to reload changes
+local_resource(
+  'wiremock',
+  cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --set keycloak.enabled=false --set vault.enabled=false --wait && kubectl delete pod -l app=e2e-tests-wiremock',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  serve_cmd='kubectl port-forward svc/e2e-tests-wiremock 9092:8080',
+  deps=['../helm/e2e-tests/mappings'],
+)

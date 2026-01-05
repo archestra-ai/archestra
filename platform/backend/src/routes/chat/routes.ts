@@ -163,6 +163,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userIsProfileAdmin,
 
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
+        conversationId: conversation.id,
         promptId: conversation.promptId ?? undefined,
         organizationId,
       });
@@ -443,6 +444,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         userId: user.id,
         userIsProfileAdmin: isAgentAdmin,
+        // No conversation context here as this is just fetching available tools
       });
 
       // Convert AI SDK Tool format to simple array for frontend

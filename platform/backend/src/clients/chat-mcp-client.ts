@@ -275,11 +275,36 @@ export async function getChatMcpClient(
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);
   if (cachedClient) {
-    logger.info(
-      { agentId, userId },
-      "✅ Returning cached MCP client for agent/user (existing session will be reused)",
-    );
-    return cachedClient;
+    // Health check: ping the client to verify connection is still alive
+    try {
+      await cachedClient.ping();
+      logger.info(
+        { agentId, userId },
+        "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
+      );
+      return cachedClient;
+    } catch (error) {
+      // Connection is dead, invalidate cache and create fresh client
+      logger.warn(
+        {
+          agentId,
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Cached MCP client ping failed, creating fresh client",
+      );
+      // Close the dead client before removing from cache to prevent resource leaks
+      try {
+        cachedClient.close();
+      } catch (closeError) {
+        logger.warn(
+          { agentId, userId, closeError },
+          "Error closing dead MCP client (non-fatal)",
+        );
+      }
+      clientCache.delete(cacheKey);
+      // Fall through to create new client
+    }
   }
 
   logger.info(
@@ -408,6 +433,7 @@ export async function getChatMcpTools({
   userId,
   userIsProfileAdmin,
   enabledToolIds,
+  conversationId,
   promptId,
   organizationId,
 }: {
@@ -416,6 +442,7 @@ export async function getChatMcpTools({
   userId: string;
   userIsProfileAdmin: boolean;
   enabledToolIds?: string[];
+  conversationId?: string;
   promptId?: string;
   organizationId?: string;
 }): Promise<Record<string, Tool>> {
@@ -520,7 +547,13 @@ export async function getChatMcpTools({
                 const archestraResponse = await executeArchestraTool(
                   mcpTool.name,
                   args,
-                  { profile: { id: agentId, name: agentName } },
+                  {
+                    profile: { id: agentId, name: agentName },
+                    conversationId,
+                    userId,
+                    promptId,
+                    organizationId,
+                  },
                 );
 
                 // Check for errors

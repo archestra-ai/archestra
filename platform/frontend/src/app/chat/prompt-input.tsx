@@ -75,7 +75,7 @@ const PromptInputContent = ({
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
       <PromptInputHeader className="pt-3">
         {agentId && conversationId && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ProfileSelector
               currentAgentId={agentId}
               conversationId={conversationId}

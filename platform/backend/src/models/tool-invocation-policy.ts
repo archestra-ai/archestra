@@ -19,6 +19,15 @@ class ToolInvocationPolicyModel {
       .values(policy)
       .returning();
 
+    // Clear auto-configured timestamp for all agent-tools using this tool
+    await db
+      .update(schema.agentToolsTable)
+      .set({
+        policiesAutoConfiguredAt: null,
+        policiesAutoConfiguredReasoning: null,
+      })
+      .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+
     return createdPolicy;
   }
 
@@ -59,15 +68,45 @@ class ToolInvocationPolicyModel {
       .where(eq(schema.toolInvocationPoliciesTable.id, id))
       .returning();
 
+    if (updatedPolicy) {
+      // Clear auto-configured timestamp for all agent-tools using this tool
+      await db
+        .update(schema.agentToolsTable)
+        .set({
+          policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
+        })
+        .where(eq(schema.agentToolsTable.toolId, updatedPolicy.toolId));
+    }
+
     return updatedPolicy || null;
   }
 
   static async delete(id: string): Promise<boolean> {
+    // Get the policy first to access toolId
+    const policy = await ToolInvocationPolicyModel.findById(id);
+    if (!policy) {
+      return false;
+    }
+
     const result = await db
       .delete(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.id, id));
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+
+    if (deleted) {
+      // Clear auto-configured timestamp for all agent-tools using this tool
+      await db
+        .update(schema.agentToolsTable)
+        .set({
+          policiesAutoConfiguredAt: null,
+          policiesAutoConfiguredReasoning: null,
+        })
+        .where(eq(schema.agentToolsTable.toolId, policy.toolId));
+    }
+
+    return deleted;
   }
 
   /**

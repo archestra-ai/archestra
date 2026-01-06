@@ -192,8 +192,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
           // Update local reference for deployment
           if (catalogItem.localConfig) {
-            catalogItem.localConfig.serviceAccount =
-              normalizedServiceAccount;
+            catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
           }
         }
       }

@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -31,7 +31,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.10",
     "tsx": "^4.21.0",
-    "turbo": "^2.7.1",
+    "turbo": "^2.7.2",
     "typescript": "^5.9.2"
   },
   "pnpm": {
@@ -43,8 +43,9 @@
       "node-forge": "1.3.2",
       "mdast-util-to-hast": "13.2.1",
       "express": "5.2.0",
-      "jws": "4.0.1"
+      "jws": "4.0.1",
+      "qs": "6.14.1"
     }
   },
-  "packageManager": "pnpm@10.24.0"
+  "packageManager": "pnpm@10.27.0"
 }

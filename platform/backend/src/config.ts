@@ -131,11 +131,36 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
 };
 
 /**
+ * Parse additional trusted origins from environment variable.
+ * Used to add extra trusted origins beyond the frontend URL (e.g., external IdPs for SSO).
+ *
+ * Format: Comma-separated list of origins (e.g., "http://idp.example.com:8080,https://auth.example.com")
+ * Whitespace around each origin is trimmed.
+ *
+ * @returns Array of additional trusted origins
+ */
+export const getAdditionalTrustedOrigins = (): string[] => {
+  const envValue =
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  return envValue
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+};
+
+/**
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
+ * Also includes any additional trusted origins from ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.
  */
 export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
+  const additionalOrigins = getAdditionalTrustedOrigins();
 
   // Default: allow localhost wildcards for development
   if (origins.length === 0) {
@@ -144,11 +169,12 @@ export const getTrustedOrigins = (): string[] => {
       "https://localhost:*",
       "http://127.0.0.1:*",
       "https://127.0.0.1:*",
+      ...additionalOrigins,
     ];
   }
 
-  // Production: use configured origins
-  return origins;
+  // Production: use configured origins plus additional origins
+  return [...origins, ...additionalOrigins];
 };
 
 /**

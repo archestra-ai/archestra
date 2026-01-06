@@ -11,7 +11,7 @@ runs:
     - name: Setup pnpm
       uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
       with:
-        version: 10.24.0
+        version: 10.27.0
         # https://github.com/pnpm/action-setup?tab=readme-ov-file#run_install
         run_install: false #  Crucial to prevent premature install before Node.js setup, improves pnpm caching
 

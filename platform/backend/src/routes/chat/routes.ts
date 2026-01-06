@@ -222,9 +222,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Stream with AI SDK
       // Build streamText config conditionally
+      const modelMessages = await convertToModelMessages(messages);
       const streamTextConfig: Parameters<typeof streamText>[0] = {
         model,
-        messages: convertToModelMessages(messages),
+        messages: modelMessages,
         tools: mcpTools,
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {

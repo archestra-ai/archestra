@@ -390,7 +390,7 @@ See the Kubernetes documentation for more details:
 **PostgreSQL Settings**:
 
 - `postgresql.external_database_url` - External PostgreSQL connection string (recommended for production)
-- `postgresql.enabled` - Enable managed PostgreSQL instance (default: true, disabled if external_database_url is set)
+- `postgresql.enabled` - Whether to deploy a self-hosted PostgreSQL instance in your Kubernetes cluster (default: true)
 
 For external PostgreSQL (recommended for production):
 
@@ -494,7 +494,7 @@ The following environment variables can be used to configure Archestra Platform:
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
 
   - Example: `https://frontend.example.com`
-  - Optional for local development
+  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
 
@@ -528,6 +528,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+
+  - Default: None
+  - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
+  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
+  - Required when configuring SSO with external identity providers hosted on different domains
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 

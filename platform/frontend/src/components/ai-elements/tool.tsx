@@ -70,6 +70,8 @@ const getStatusBadge = (
   const labels = {
     "input-streaming": "Pending",
     "input-available": "Running",
+    "approval-requested": "Approval Requested",
+    "approval-responded": "Approval Responded",
     "output-available": "Completed",
     "output-available-dual-llm": "Completed with dual LLM",
     "output-error": "Error",
@@ -79,6 +81,8 @@ const getStatusBadge = (
   const icons = {
     "input-streaming": <CircleIcon className="size-4" />,
     "input-available": <ClockIcon className="size-4 animate-pulse" />,
+    "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
+    "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
     "output-available-dual-llm": (
       <CheckCircleIcon className="size-4 text-green-600" />

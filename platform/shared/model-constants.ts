@@ -29,3 +29,23 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   gemini: "Gemini",
   minimax: "MiniMax",
 };
+
+/** Supported MiniMax model prefixes for filtering from API response */
+export const MINIMAX_MODEL_PREFIXES = [
+  "MiniMax-M2.1",
+  "MiniMax-M2.1-lightning",
+  "MiniMax-M2",
+  "abab6-chat",
+  "abab6.5-chat",
+  "abab6.5s-chat",
+] as const;
+
+export type MiniMaxModelPrefix = (typeof MINIMAX_MODEL_PREFIXES)[number];
+
+/** Check if a model ID is a supported MiniMax model */
+export function isMiniMaxModel(modelId: string): boolean {
+  const normalizedId = modelId.toLowerCase();
+  return MINIMAX_MODEL_PREFIXES.some((prefix) =>
+    normalizedId.startsWith(prefix.toLowerCase()),
+  );
+}

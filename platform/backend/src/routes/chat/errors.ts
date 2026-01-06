@@ -674,17 +674,14 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  minimax: parseOpenAIError,
 };
 
-/**
- * Registry of provider-specific error mappers.
- * Using Record<SupportedProvider, ...> ensures TypeScript will error
- * if a new provider is added to SupportedProvider without updating this map.
- */
 const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  minimax: mapOpenAIErrorWrapper,
 };
 
 // =============================================================================

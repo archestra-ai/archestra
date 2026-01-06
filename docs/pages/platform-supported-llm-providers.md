@@ -133,15 +133,35 @@ MiniMax is a Chinese LLM provider that offers OpenAI-compatible APIs, making it 
 ### Supported MiniMax APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Text Generation API** - ✅ Supports MiniMax-M2.1, MiniMax-M2.1-lightning, MiniMax-M2
+- **Function Calling** - ✅ Fully supported with tool invocation policies and trusted data policies
 
 ### MiniMax Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/minimax/{agent-id}`
 - **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
 
+### Supported MiniMax Models
+
+#### Text Generation Models
+
+| Model | Description | Context Length | Features |
+|-------|-------------|----------------|----------|
+| `MiniMax-M2.1` | Latest flagship model | 200k tokens | Polyglot code mastery, precision code refactoring, enhanced reasoning |
+| `MiniMax-M2.1-lightning` | Fast inference version | 200k tokens | Same performance as M2.1, significantly faster inference |
+| `MiniMax-M2` | Stable version | 200k tokens | Agentic capabilities, function calling, advanced reasoning, real-time streaming |
+
+#### Legacy Chat Models (OpenAI-compatible)
+
+| Model | Description |
+|-------|-------------|
+| `abab6-chat` | Legacy chat model |
+| `abab6.5-chat` | Enhanced legacy chat model |
+| `abab6.5s-chat` | Speed-optimized legacy chat model |
+
 ### Important Notes
 
 - **OpenAI Compatibility**: MiniMax offers OpenAI-compatible APIs, so it uses the same request/response format as OpenAI
-- **Model Support**: Supports MiniMax's chat models including `abab6-chat`, `abab6.5-chat`, and `abab6.5s-chat`
 - **Tool Support**: Function calling (tool use) is fully supported, including tool invocation policies and trusted data policies
+- **Anthropic SDK**: MiniMax models can also be used with the Anthropic SDK using `MiniMax-M2` model name
 

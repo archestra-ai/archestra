@@ -73,9 +73,12 @@ class MiniMaxRequestAdapter
 
     for (const message of this.request.messages) {
       if (message.role === "tool") {
+        const toolCallId = message.tool_call_id;
+        if (!toolCallId) continue;
+
         const toolName = this.findToolNameInMessages(
           this.request.messages,
-          message.tool_call_id,
+          toolCallId,
         );
 
         let content: unknown;
@@ -90,7 +93,7 @@ class MiniMaxRequestAdapter
         }
 
         results.push({
-          id: message.tool_call_id,
+          id: toolCallId,
           name: toolName ?? "unknown",
           content,
           isError: false,
@@ -191,9 +194,9 @@ class MiniMaxRequestAdapter
       if (message.role === "assistant" && message.tool_calls) {
         for (const toolCall of message.tool_calls) {
           if (toolCall.id === toolCallId) {
-            if (toolCall.type === "function") {
+            if (toolCall.type === "function" && toolCall.function) {
               return toolCall.function.name;
-            } else {
+            } else if (toolCall.custom) {
               return toolCall.custom.name;
             }
           }
@@ -218,14 +221,17 @@ class MiniMaxRequestAdapter
 
       // Handle tool messages (tool results)
       if (message.role === "tool") {
+        const toolCallId = message.tool_call_id;
+        if (!toolCallId) continue;
+
         const toolName = this.findToolNameInMessages(
           messages,
-          message.tool_call_id,
+          toolCallId,
         );
 
         if (toolName) {
           logger.debug(
-            { toolCallId: message.tool_call_id, toolName },
+            { toolCallId, toolName },
             "[MiniMaxAdapter] toCommonFormat: found tool message",
           );
           let toolResult: unknown;
@@ -241,7 +247,7 @@ class MiniMaxRequestAdapter
 
           commonMessage.toolCalls = [
             {
-              id: message.tool_call_id,
+              id: toolCallId,
               name: toolName,
               content: toolResult,
               isError: false,
@@ -277,16 +283,19 @@ class MiniMaxRequestAdapter
 
     let appliedCount = 0;
     const result = messages.map((message) => {
-      if (message.role === "tool" && updates[message.tool_call_id]) {
-        appliedCount++;
-        logger.debug(
-          { toolCallId: message.tool_call_id },
-          "[MiniMaxAdapter] applyUpdates: applying update to tool message",
-        );
-        return {
-          ...message,
-          content: updates[message.tool_call_id],
-        };
+      if (message.role === "tool" && message.tool_call_id) {
+        const update = updates[message.tool_call_id];
+        if (update) {
+          appliedCount++;
+          logger.debug(
+            { toolCallId: message.tool_call_id },
+            "[MiniMaxAdapter] applyUpdates: applying update to tool message",
+          );
+          return {
+            ...message,
+            content: update,
+          };
+        }
       }
       return message;
     });
@@ -814,10 +823,9 @@ export const minimaxAdapterFactory: LLMProvider<
     request: MiniMaxRequest,
   ): Promise<MiniMaxResponse> {
     const openaiClient = client as OpenAIProvider;
-    return openaiClient.chat.completions.create({
-      ...request,
-      stream: false,
-    }) as Promise<MiniMaxResponse>;
+    return openaiClient.chat.completions.create(
+      request as unknown as Parameters<typeof openaiClient.chat.completions.create>[0],
+    ) as Promise<MiniMaxResponse>;
   },
 
   async executeStream(
@@ -825,11 +833,11 @@ export const minimaxAdapterFactory: LLMProvider<
     request: MiniMaxRequest,
   ): Promise<AsyncIterable<MiniMaxStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
-    const stream = await openaiClient.chat.completions.create({
-      ...request,
-      stream: true,
-      stream_options: { include_usage: true },
-    });
+    const response = await openaiClient.chat.completions.create(
+      { ...request, stream: true, stream_options: { include_usage: true } } as unknown as Parameters<typeof openaiClient.chat.completions.create>[0],
+    );
+
+    const stream = response as unknown as AsyncIterable<OpenAIProvider.Chat.ChatCompletionChunk>;
 
     return {
       [Symbol.asyncIterator]: async function* () {
@@ -841,7 +849,6 @@ export const minimaxAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
-    // OpenAI SDK error structure (MiniMax uses OpenAI SDK)
     const openaiMessage = get(error, "error.message");
     if (typeof openaiMessage === "string") {
       return openaiMessage;

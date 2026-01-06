@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+export const FunctionDefinitionParametersSchema = z
+  .record(z.string(), z.unknown())
+  .optional()
+  .describe(`
+    The parameters the functions accepts, described as a JSON Schema object.
+
+    Omitting parameters defines a function with an empty parameter list.
+  `);
+
 export const ToolChoiceOptionSchema = z
   .object({
     type: z.enum(["auto", "none", "required"]),
@@ -17,7 +26,7 @@ export const ToolSchema = z
     function: z.object({
       name: z.string(),
       description: z.string().optional(),
-      parameters: z.record(z.unknown()),
+      parameters: FunctionDefinitionParametersSchema,
     }),
   })
   .describe(`MiniMax tool schema`);

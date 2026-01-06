@@ -1,4 +1,5 @@
 import {
+  isMiniMaxModel,
   RouteId,
   type SupportedProvider,
   SupportedProviders,
@@ -202,14 +203,8 @@ async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
-  // Filter to only chat-compatible models
-  const chatModelPrefixes = ["abab6-chat", "abab6.5-chat", "abab6.5s-chat"];
-  
   return data.data
-    .filter((model) => {
-      const id = model.id.toLowerCase();
-      return chatModelPrefixes.some((prefix) => id.startsWith(prefix));
-    })
+    .filter((model) => isMiniMaxModel(model.id))
     .map((model) => ({
       id: model.id,
       displayName: model.id,

@@ -294,7 +294,10 @@ describe("getAdditionalTrustedOrigins", () => {
 
     const result = getAdditionalTrustedOrigins();
 
-    expect(result).toEqual(["http://keycloak:8080", "https://auth.example.com"]);
+    expect(result).toEqual([
+      "http://keycloak:8080",
+      "https://auth.example.com",
+    ]);
   });
 
   test("should filter out empty entries", () => {
@@ -303,7 +306,10 @@ describe("getAdditionalTrustedOrigins", () => {
 
     const result = getAdditionalTrustedOrigins();
 
-    expect(result).toEqual(["http://keycloak:8080", "https://auth.example.com"]);
+    expect(result).toEqual([
+      "http://keycloak:8080",
+      "https://auth.example.com",
+    ]);
   });
 });
 

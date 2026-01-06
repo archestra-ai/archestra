@@ -204,11 +204,10 @@ export function ToolCallPolicies({
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({
             toolId: agentTool.tool.id,
+            argumentName: argumentNames[0],
           })
         }
-        disabled={
-          Object.keys(agentTool.tool.parameters?.properties || {}).length === 0
-        }
+        disabled={argumentNames.length === 0}
         disabledText="This tool has no parameters"
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters

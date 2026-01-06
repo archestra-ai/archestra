@@ -58,11 +58,17 @@ export function useToolInvocationPolicyDeleteMutation() {
 export function useToolInvocationPolicyCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ toolId }: { toolId: string }) =>
+    mutationFn: async ({
+      toolId,
+      argumentName,
+    }: {
+      toolId: string;
+      argumentName: string;
+    }) =>
       await createToolInvocationPolicy({
         body: {
           toolId,
-          conditions: [{ key: "", operator: "equal", value: "" }],
+          conditions: [{ key: argumentName, operator: "equal", value: "" }],
           action: "allow_when_context_is_untrusted",
           reason: null,
         },
@@ -140,11 +146,17 @@ export function useToolResultPolicies(
 export function useToolResultPoliciesCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ toolId }: { toolId: string }) =>
+    mutationFn: async ({
+      toolId,
+      attributePath,
+    }: {
+      toolId: string;
+      attributePath: string;
+    }) =>
       await createTrustedDataPolicy({
         body: {
           toolId,
-          conditions: [{ key: "", operator: "equal", value: "" }],
+          conditions: [{ key: attributePath, operator: "equal", value: "" }],
           action: "mark_as_trusted",
         },
       }),

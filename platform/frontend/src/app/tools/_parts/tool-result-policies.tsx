@@ -161,7 +161,11 @@ export function ToolResultPolicies({
     data: resultPolicies,
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
-  const policies = byProfileToolId[agentTool.tool.id] || [];
+  const allPolicies = byProfileToolId[agentTool.tool.id] || [];
+  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
+  const policies = allPolicies.filter(
+    (policy) => policy.attributePath && policy.attributePath !== "",
+  );
   const toolResultPoliciesUpdateMutation =
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
@@ -327,7 +331,10 @@ export function ToolResultPolicies({
         variant="outline"
         className="w-full"
         onClick={() =>
-          toolResultPoliciesCreateMutation.mutate({ toolId: agentTool.tool.id })
+          toolResultPoliciesCreateMutation.mutate({
+            toolId: agentTool.tool.id,
+            attributePath: "result",
+          })
         }
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Tool Result Policy

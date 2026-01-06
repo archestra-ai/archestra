@@ -674,6 +674,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  xai: parseOpenAIError, // xAI uses OpenAI-compatible error format
 };
 
 /**
@@ -685,6 +686,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  xai: mapOpenAIErrorWrapper, // xAI uses OpenAI-compatible error format
 };
 
 // =============================================================================

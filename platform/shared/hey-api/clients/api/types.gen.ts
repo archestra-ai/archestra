@@ -13331,7 +13331,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13351,7 +13351,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -13434,7 +13434,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13533,7 +13533,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'xai';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -13618,7 +13618,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -16738,7 +16738,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16751,7 +16751,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16826,7 +16826,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16990,7 +16990,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17003,7 +17003,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'xai';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -17080,7 +17080,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'xai';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

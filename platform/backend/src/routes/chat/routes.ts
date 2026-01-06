@@ -81,6 +81,8 @@ async function getSmartDefaultModel(
             return "gemini-2.5-pro";
           case "openai":
             return "gpt-4o";
+          case "xai":
+            return "grok-3";
         }
       }
     }
@@ -95,6 +97,9 @@ async function getSmartDefaultModel(
   }
   if (config.chat.gemini.apiKey) {
     return "gemini-2.5-pro";
+  }
+  if (config.chat.xai.apiKey) {
+    return "grok-3";
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key

@@ -270,6 +270,7 @@ class OptimizationRuleModel {
         },
       ],
       gemini: [],
+      xai: [],
     };
 
     // Define rules per provider
@@ -297,6 +298,7 @@ class OptimizationRuleModel {
           },
         ],
         gemini: [],
+        xai: [],
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

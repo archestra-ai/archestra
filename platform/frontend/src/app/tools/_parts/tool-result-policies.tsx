@@ -19,12 +19,16 @@ import {
 } from "@/components/ui/select";
 import {
   useOperators,
+  useResultPolicyMutation,
   useToolResultPolicies,
   useToolResultPoliciesCreateMutation,
   useToolResultPoliciesDeleteMutation,
   useToolResultPoliciesUpdateMutation,
 } from "@/lib/policy.query";
-import { getResultTreatmentFromPolicies } from "@/lib/policy.utils";
+import {
+  getResultTreatmentFromPolicies,
+  type ToolResultTreatment,
+} from "@/lib/policy.utils";
 import { PolicyCard } from "./policy-card";
 
 function AttributePathExamples() {
@@ -162,6 +166,7 @@ export function ToolResultPolicies({
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
     useToolResultPoliciesDeleteMutation();
+  const resultPolicyMutation = useResultPolicyMutation();
 
   // Derive treatment from policies (default policy with empty conditions)
   const toolResultTreatment = getResultTreatmentFromPolicies(
@@ -195,11 +200,18 @@ export function ToolResultPolicies({
           <div className="text-xs font-medium text-muted-foreground">
             DEFAULT
           </div>
-          <Select value={toolResultTreatment} disabled>
-            <SelectTrigger
-              className="w-[220px]"
-              title="Configure via policies below"
-            >
+          <Select
+            value={toolResultTreatment}
+            disabled={resultPolicyMutation.isPending}
+            onValueChange={(value) => {
+              if (value === toolResultTreatment) return;
+              resultPolicyMutation.mutate({
+                toolId: agentTool.tool.id,
+                treatment: value as ToolResultTreatment,
+              });
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Select treatment" />
             </SelectTrigger>
             <SelectContent>

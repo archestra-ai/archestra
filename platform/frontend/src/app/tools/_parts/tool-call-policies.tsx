@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+  useCallPolicyMutation,
   useOperators,
   useToolInvocationPolicies,
   useToolInvocationPolicyCreateMutation,
@@ -36,9 +37,14 @@ export function ToolCallPolicies({
     useToolInvocationPolicyDeleteMutation();
   const toolInvocationPolicyUpdateMutation =
     useToolInvocationPolicyUpdateMutation();
+  const callPolicyMutation = useCallPolicyMutation();
   const { data: operators } = useOperators();
 
-  const policies = byProfileToolId[agentTool.tool.id] || [];
+  const allPolicies = byProfileToolId[agentTool.tool.id] || [];
+  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
+  const policies = allPolicies.filter(
+    (policy) => policy.argumentName && policy.argumentName !== "",
+  );
 
   const argumentNames = Object.keys(
     agentTool.tool.parameters?.properties || [],
@@ -69,8 +75,13 @@ export function ToolCallPolicies({
         </div>
         <Switch
           checked={allowUsageWhenUntrustedDataIsPresent}
-          disabled
-          title="Configure via policies below"
+          onCheckedChange={(checked) => {
+            if (checked === allowUsageWhenUntrustedDataIsPresent) return;
+            callPolicyMutation.mutate({
+              toolId: agentTool.tool.id,
+              allowUsage: checked,
+            });
+          }}
         />
       </div>
       {policies.map((policy) => (

@@ -196,7 +196,10 @@ export function ToolResultPolicies({
             DEFAULT
           </div>
           <Select value={toolResultTreatment} disabled>
-            <SelectTrigger className="w-[220px]" title="Configure via policies below">
+            <SelectTrigger
+              className="w-[220px]"
+              title="Configure via policies below"
+            >
               <SelectValue placeholder="Select treatment" />
             </SelectTrigger>
             <SelectContent>

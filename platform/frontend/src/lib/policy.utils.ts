@@ -10,7 +10,10 @@ export type ToolResultTreatment =
 export function getAllowUsageFromPolicies(
   toolId: string,
   invocationPolicies: {
-    byProfileToolId: Record<string, { conditions?: unknown; action?: string }[]>;
+    byProfileToolId: Record<
+      string,
+      { conditions?: unknown; action?: string }[]
+    >;
   },
 ): boolean {
   const policies = invocationPolicies.byProfileToolId[toolId] || [];
@@ -39,7 +42,10 @@ export function getAllowUsageFromPolicies(
 export function getResultTreatmentFromPolicies(
   toolId: string,
   resultPolicies: {
-    byProfileToolId: Record<string, { conditions?: unknown; action?: string }[]>;
+    byProfileToolId: Record<
+      string,
+      { conditions?: unknown; action?: string }[]
+    >;
   },
 ): ToolResultTreatment {
   const policies = resultPolicies.byProfileToolId[toolId] || [];

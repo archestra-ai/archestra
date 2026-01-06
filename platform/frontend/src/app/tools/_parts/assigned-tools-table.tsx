@@ -57,6 +57,8 @@ import {
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import {
+  useCallPolicyMutation,
+  useResultPolicyMutation,
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
@@ -112,6 +114,8 @@ export function AssignedToolsTable({
   initialData,
 }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
+  const callPolicyMutation = useCallPolicyMutation();
+  const resultPolicyMutation = useResultPolicyMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
   const autoConfigureMutation = useAutoConfigurePolicies();
   const unassignToolMutation = useUnassignTool();
@@ -448,26 +452,31 @@ export function AssignedToolsTable({
   );
 
   const handleSingleRowUpdate = useCallback(
-    async (id: string, field: string, updates: Partial<ProfileToolData>) => {
-      setUpdatingRows((prev) => new Set(prev).add({ id, field }));
+    async (
+      toolId: string,
+      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
+      value: boolean | ToolResultTreatment,
+    ) => {
+      setUpdatingRows((prev) => new Set(prev).add({ id: toolId, field }));
       try {
-        // Clear auto-configured timestamp when manually updating policies
-        const shouldClearAutoConfig =
-          field === "allowUsageWhenUntrustedDataIsPresent" ||
-          field === "toolResultTreatment";
-
-        await agentToolPatchMutation.mutateAsync({
-          id,
-          ...updates,
-          ...(shouldClearAutoConfig && { policiesAutoConfiguredAt: null }),
-        });
+        if (field === "allowUsageWhenUntrustedDataIsPresent") {
+          await callPolicyMutation.mutateAsync({
+            toolId,
+            allowUsage: value as boolean,
+          });
+        } else {
+          await resultPolicyMutation.mutateAsync({
+            toolId,
+            treatment: value as ToolResultTreatment,
+          });
+        }
       } catch (error) {
         console.error("Update failed:", error);
       } finally {
         setUpdatingRows((prev) => {
           const next = new Set(prev);
           for (const item of next) {
-            if (item.id === id && item.field === field) {
+            if (item.id === toolId && item.field === field) {
               next.delete(item);
               break;
             }
@@ -476,7 +485,7 @@ export function AssignedToolsTable({
         });
       }
     },
-    [agentToolPatchMutation],
+    [callPolicyMutation, resultPolicyMutation],
   );
 
   const columns: ColumnDef<ProfileToolData>[] = useMemo(
@@ -707,8 +716,18 @@ export function AssignedToolsTable({
           </Button>
         ),
         cell: ({ row }) => {
-          const hasCustomPolicy =
-            invocationPolicies?.byProfileToolId[row.original.tool.id]?.length > 0;
+          const policies =
+            invocationPolicies?.byProfileToolId[row.original.tool.id] || [];
+          // A custom policy has non-empty conditions (not just [{key: "", ...}])
+          const hasCustomPolicy = policies.some((policy) => {
+            const conditions = policy.conditions;
+            if (!Array.isArray(conditions) || conditions.length === 0)
+              return false;
+            // Check if any condition has a non-empty key
+            return (conditions as Array<{ key?: string }>).some(
+              (c) => c.key && c.key !== "",
+            );
+          });
 
           if (hasCustomPolicy) {
             return (
@@ -736,6 +755,15 @@ export function AssignedToolsTable({
                 checked={allowUsage}
                 disabled={isUpdating}
                 onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(checked) => {
+                  // Only update if value actually changed
+                  if (checked === allowUsage) return;
+                  handleSingleRowUpdate(
+                    row.original.tool.id,
+                    "allowUsageWhenUntrustedDataIsPresent",
+                    checked,
+                  );
+                }}
                 aria-label={`Allow ${row.original.tool.name} in untrusted context`}
               />
               <span className="text-xs text-muted-foreground">
@@ -783,8 +811,18 @@ export function AssignedToolsTable({
         id: "toolResultTreatment",
         header: "Results are",
         cell: ({ row }) => {
-          const hasCustomPolicy =
-            resultPolicies?.byProfileToolId[row.original.tool.id]?.length > 0;
+          const policies =
+            resultPolicies?.byProfileToolId[row.original.tool.id] || [];
+          // A custom policy has non-empty conditions (not just [{key: "", ...}])
+          const hasCustomPolicy = policies.some((policy) => {
+            const conditions = policy.conditions;
+            if (!Array.isArray(conditions) || conditions.length === 0)
+              return false;
+            // Check if any condition has a non-empty key
+            return (conditions as Array<{ key?: string }>).some(
+              (c) => c.key && c.key !== "",
+            );
+          });
 
           if (hasCustomPolicy) {
             return (
@@ -814,12 +852,23 @@ export function AssignedToolsTable({
 
           return (
             <div className="flex items-center gap-2">
-              <Select value={treatment} disabled>
+              <Select
+                value={treatment}
+                disabled={isUpdating}
+                onValueChange={(value) => {
+                  // Only update if value actually changed
+                  if (value === treatment) return;
+                  handleSingleRowUpdate(
+                    row.original.tool.id,
+                    "toolResultTreatment",
+                    value as ToolResultTreatment,
+                  );
+                }}
+              >
                 <SelectTrigger
                   className="h-8 w-[180px] text-xs"
                   onClick={(e) => e.stopPropagation()}
                   size="sm"
-                  title="Configure via tool policies"
                 >
                   <SelectValue>{treatmentLabels[treatment]}</SelectValue>
                 </SelectTrigger>

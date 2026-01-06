@@ -214,6 +214,127 @@ export function useToolResultPoliciesDeleteMutation() {
   });
 }
 
+// Upsert a default call policy (tool invocation policy with empty conditions)
+export function useCallPolicyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      toolId,
+      allowUsage,
+    }: {
+      toolId: string;
+      allowUsage: boolean;
+    }) => {
+      // Get current policies from cache
+      const cachedPolicies = queryClient.getQueryData<
+        ReturnType<
+          typeof import("./policy.utils").transformToolInvocationPolicies
+        >
+      >(["tool-invocation-policies"]);
+
+      const existingPolicies = cachedPolicies?.byProfileToolId[toolId] || [];
+
+      // Find default policy (empty conditions)
+      const defaultPolicy = existingPolicies.find((p) => {
+        if (!p.conditions) return true;
+        if (Array.isArray(p.conditions) && p.conditions.length === 0)
+          return true;
+        if (Array.isArray(p.conditions) && p.conditions.length === 1) {
+          const first = p.conditions[0] as { key?: string };
+          if (!first.key || first.key === "") return true;
+        }
+        return false;
+      });
+
+      const action = allowUsage
+        ? "allow_when_context_is_untrusted"
+        : "block_always";
+
+      if (defaultPolicy) {
+        // Update existing default policy
+        return await updateToolInvocationPolicy({
+          path: { id: defaultPolicy.id },
+          body: { action },
+        });
+      }
+      // Create new default policy
+      return await createToolInvocationPolicy({
+        body: {
+          toolId,
+          conditions: [{ key: "", operator: "equal", value: "" }],
+          action,
+          reason: null,
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+    },
+  });
+}
+
+// Upsert a default result policy (trusted data policy with empty conditions)
+export function useResultPolicyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      toolId,
+      treatment,
+    }: {
+      toolId: string;
+      treatment: "trusted" | "untrusted" | "sanitize_with_dual_llm";
+    }) => {
+      // Get current policies from cache
+      const cachedPolicies = queryClient.getQueryData<
+        ReturnType<typeof import("./policy.utils").transformToolResultPolicies>
+      >(["tool-result-policies"]);
+
+      const existingPolicies = cachedPolicies?.byProfileToolId[toolId] || [];
+
+      // Find default policy (empty conditions)
+      const defaultPolicy = existingPolicies.find((p) => {
+        if (!p.conditions) return true;
+        if (Array.isArray(p.conditions) && p.conditions.length === 0)
+          return true;
+        if (Array.isArray(p.conditions) && p.conditions.length === 1) {
+          const first = p.conditions[0] as { key?: string };
+          if (!first.key || first.key === "") return true;
+        }
+        return false;
+      });
+
+      // Map treatment to action
+      const actionMap = {
+        trusted: "mark_as_trusted",
+        untrusted: "block_always",
+        sanitize_with_dual_llm: "sanitize_with_dual_llm",
+      } as const;
+      const action = actionMap[treatment];
+
+      if (defaultPolicy) {
+        // Update existing default policy
+        return await updateTrustedDataPolicy({
+          path: { id: defaultPolicy.id },
+          body: { action },
+        });
+      }
+      // Create new default policy
+      return await createTrustedDataPolicy({
+        body: {
+          toolId,
+          conditions: [{ key: "", operator: "equal", value: "" }],
+          action,
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+    },
+  });
+}
+
 // Prefetch functions
 export function prefetchOperators(queryClient: QueryClient) {
   return queryClient.prefetchQuery({

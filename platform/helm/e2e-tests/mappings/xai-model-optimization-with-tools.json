@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "xai-model-optimization-with-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "e2e-test-xai-optimized"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-xai-opt-tools",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-xai-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Response with tools from optimized model.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1200,
+        "completion_tokens": 10,
+        "total_tokens": 1210
+      }
+    }
+  }
+}

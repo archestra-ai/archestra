@@ -58,13 +58,11 @@ export function useToolInvocationPolicyDeleteMutation() {
 export function useToolInvocationPolicyCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
+    mutationFn: async ({ toolId }: { toolId: string }) =>
       await createToolInvocationPolicy({
         body: {
-          agentToolId,
-          argumentName: "",
-          operator: "equal",
-          value: "",
+          toolId,
+          conditions: [{ key: "", operator: "equal", value: "" }],
           action: "allow_when_context_is_untrusted",
           reason: null,
         },
@@ -175,22 +173,19 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
+      const byToolId = all.reduce(
         (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
+          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
           return acc;
         },
         {} as Record<
           string,
-          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
+          archestraApiTypes.GetToolInvocationPoliciesResponses["200"]
         >,
       );
       return {
         all,
-        byProfileToolId,
+        byToolId,
       };
     },
   });

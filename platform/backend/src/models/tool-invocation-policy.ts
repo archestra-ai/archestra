@@ -1,5 +1,5 @@
 import { isAgentTool, isArchestraMcpServerTool } from "@shared";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { CallPolicyCondition } from "@/database/schemas/tool-invocation-policy";
@@ -132,7 +132,7 @@ class ToolInvocationPolicyModel {
       return true; // No conditions = applies to all
     }
     return conditions.every((condition) =>
-      this.evaluateCondition(condition, toolInput),
+      ToolInvocationPolicyModel.evaluateCondition(condition, toolInput),
     );
   }
 
@@ -143,7 +143,7 @@ class ToolInvocationPolicyModel {
    * Returns the first blocked tool call (refusal message) or null if all are allowed.
    */
   static async evaluateBatch(
-    agentId: string,
+    _agentId: string,
     toolCalls: Array<{
       toolCallName: string;
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
@@ -218,7 +218,7 @@ class ToolInvocationPolicyModel {
       let specificAllowsUntrusted = false;
 
       for (const policy of specificPolicies) {
-        const conditionsMatch = this.allConditionsMatch(
+        const conditionsMatch = ToolInvocationPolicyModel.allConditionsMatch(
           policy.conditions,
           toolInput,
         );

@@ -589,7 +589,6 @@ export function McpServerCard({
           selectedToolForAssignment
             ? {
                 id: selectedToolForAssignment.id,
-                allowUsageWhenUntrustedDataIsPresent: false,
                 toolResultTreatment: "untrusted" as const,
                 responseModifierTemplate: null,
                 credentialSourceMcpServerId: null,

@@ -44,7 +44,7 @@ export default async function ToolsPage() {
     agents: [],
     mcpServers: [],
     internalMcpCatalog: [],
-    toolInvocationPolicies: { all: [], byProfileToolId: {} },
+    toolInvocationPolicies: { all: [], byToolId: {} },
     toolResultPolicies: { all: [], byProfileToolId: {} },
   };
   try {

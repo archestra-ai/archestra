@@ -3,9 +3,9 @@ import type { archestraApiTypes } from "@shared";
 export function transformToolInvocationPolicies(
   all: archestraApiTypes.GetToolInvocationPoliciesResponses["200"],
 ) {
-  const byProfileToolId = all.reduce(
+  const byToolId = all.reduce(
     (acc, policy) => {
-      acc[policy.agentToolId] = [...(acc[policy.agentToolId] || []), policy];
+      acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
       return acc;
     },
     {} as Record<
@@ -15,7 +15,7 @@ export function transformToolInvocationPolicies(
   );
   return {
     all,
-    byProfileToolId,
+    byToolId,
   };
 }
 

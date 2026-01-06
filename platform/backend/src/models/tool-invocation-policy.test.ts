@@ -43,12 +43,16 @@ describe("ToolInvocationPolicyModel", () => {
 
       // Block both tools with specific conditions
       await makeToolPolicy(tool1.id, {
-        conditions: [{ key: "email", operator: "endsWith", value: "@evil.com" }],
+        conditions: [
+          { key: "email", operator: "endsWith", value: "@evil.com" },
+        ],
         action: "block_always",
         reason: "Tool 1 blocked",
       });
       await makeToolPolicy(tool2.id, {
-        conditions: [{ key: "email", operator: "endsWith", value: "@evil.com" }],
+        conditions: [
+          { key: "email", operator: "endsWith", value: "@evil.com" },
+        ],
         action: "block_always",
         reason: "Tool 2 blocked",
       });
@@ -705,7 +709,9 @@ describe("ToolInvocationPolicyModel", () => {
 
         // Specific policy: allow safe paths
         await makeToolPolicy(tool.id, {
-          conditions: [{ key: "path", operator: "startsWith", value: "/safe/" }],
+          conditions: [
+            { key: "path", operator: "startsWith", value: "/safe/" },
+          ],
           action: "allow_when_context_is_untrusted",
           reason: "Safe path allowed",
         });
@@ -713,7 +719,12 @@ describe("ToolInvocationPolicyModel", () => {
         // Specific policy matches - should be allowed even though default blocks
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
-          [{ toolCallName: "test-tool", toolInput: { path: "/safe/file.txt" } }],
+          [
+            {
+              toolCallName: "test-tool",
+              toolInput: { path: "/safe/file.txt" },
+            },
+          ],
           false, // untrusted context
         );
 
@@ -739,7 +750,9 @@ describe("ToolInvocationPolicyModel", () => {
 
         // Specific policy: block dangerous paths
         await makeToolPolicy(tool.id, {
-          conditions: [{ key: "path", operator: "startsWith", value: "/danger/" }],
+          conditions: [
+            { key: "path", operator: "startsWith", value: "/danger/" },
+          ],
           action: "block_always",
           reason: "Dangerous path blocked",
         });
@@ -747,7 +760,12 @@ describe("ToolInvocationPolicyModel", () => {
         // Specific policy doesn't match, fall back to default allow
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
-          [{ toolCallName: "test-tool", toolInput: { path: "/normal/file.txt" } }],
+          [
+            {
+              toolCallName: "test-tool",
+              toolInput: { path: "/normal/file.txt" },
+            },
+          ],
           false, // untrusted context
         );
 

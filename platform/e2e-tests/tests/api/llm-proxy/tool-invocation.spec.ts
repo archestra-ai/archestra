@@ -320,10 +320,87 @@ const geminiConfig: ToolInvocationTestConfig = {
 // Test Suite
 // =============================================================================
 
+const minimaxConfig: ToolInvocationTestConfig = {
+  providerName: "MiniMax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "abab6-chat",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.choices).toBeDefined();
+    expect(response.choices[0]).toBeDefined();
+    expect(response.choices[0].message).toBeDefined();
+
+    const message = response.choices[0].message;
+    const refusalOrContent = message.refusal || message.content;
+
+    expect(refusalOrContent).toBeTruthy();
+    expect(refusalOrContent).toContain("read_file");
+    expect(refusalOrContent).toContain("denied");
+
+    if (message.tool_calls) {
+      expect(refusalOrContent).toContain("tool invocation policy");
+    }
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.choices).toBeDefined();
+    expect(response.choices[0]).toBeDefined();
+    expect(response.choices[0].message).toBeDefined();
+    expect(response.choices[0].message.tool_calls).toBeDefined();
+
+    const toolCalls = response.choices[0].message.tool_calls;
+    expect(toolCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolCalls.find(
+        (tc: { function: { name: string } }) => tc.function.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const toolCalls = response.choices[0].message.tool_calls;
+    const toolCall = toolCalls.find(
+      (tc: { function: { name: string } }) => tc.function.name === toolName,
+    );
+    const args = JSON.parse(toolCall.function.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: string }) =>
+        m.content?.includes(content),
+      ),
+    ),
+};
+
 const testConfigs: ToolInvocationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  minimaxConfig,
 ];
 
 for (const config of testConfigs) {

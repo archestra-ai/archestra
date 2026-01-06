@@ -332,6 +332,83 @@ export class GeminiDualLlmClient implements DualLlmClient {
 }
 
 /**
+ * MiniMax implementation of DualLlmClient
+ * Uses OpenAI-compatible API
+ */
+export class MiniMaxDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "abab6-chat") {
+    logger.debug({ model }, "[dualLlmClient] MiniMax: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.minimax.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] MiniMax: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] MiniMax: starting chat with schema",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: schema,
+      },
+      temperature,
+    });
+
+    const content = response.choices[0].message.content || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] MiniMax: chat with schema complete, parsing response",
+    );
+    return JSON.parse(content) as T;
+  }
+}
+
+/**
  * Factory function to create the appropriate LLM client
  *
  * @param provider - The LLM provider
@@ -359,6 +436,11 @@ export function createDualLlmClient(
     case "gemini":
       // Gemini supports Vertex AI mode where apiKey may be undefined
       return new GeminiDualLlmClient(apiKey);
+    case "minimax":
+      if (!apiKey) {
+        throw new Error("API key required for MiniMax dual LLM");
+      }
+      return new MiniMaxDualLlmClient(apiKey);
     default:
       logger.debug(
         { provider },

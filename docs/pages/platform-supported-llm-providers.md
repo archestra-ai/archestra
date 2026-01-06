@@ -126,3 +126,22 @@ With this configuration, Application Default Credentials (ADC) will automaticall
 
 For non-GKE environments or when Workload Identity isn't available, set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file.
 
+## MiniMax
+
+MiniMax is a Chinese LLM provider that offers OpenAI-compatible APIs, making it easy to integrate with Archestra Platform.
+
+### Supported MiniMax APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### MiniMax Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/minimax/{agent-id}`
+- **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- **OpenAI Compatibility**: MiniMax offers OpenAI-compatible APIs, so it uses the same request/response format as OpenAI
+- **Model Support**: Supports MiniMax's chat models including `abab6-chat`, `abab6.5-chat`, and `abab6.5s-chat`
+- **Tool Support**: Function calling (tool use) is fully supported, including tool invocation policies and trusted data policies
+

@@ -140,6 +140,11 @@ export const RouteId = {
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
+  // Proxy Routes - MiniMax
+  MiniMaxChatCompletionsWithDefaultAgent:
+    "miniMaxChatCompletionsWithDefaultAgent",
+  MiniMaxChatCompletionsWithAgent: "miniMaxChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

@@ -164,6 +164,45 @@ const geminiConfig: CompressionTestConfig = {
   }),
 };
 
+const minimaxConfig: CompressionTestConfig = {
+  providerName: "MiniMax",
+
+  endpoint: (profileId) => `/v1/minimax/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequestWithToolResult: () => ({
+    model: "abab6-chat",
+    messages: [
+      {
+        role: "user",
+        content: "Please list the files in the current directory",
+      },
+      {
+        role: "assistant",
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: JSON.stringify({ directory: "." }),
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_1",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -172,6 +211,7 @@ const testConfigs: CompressionTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  minimaxConfig,
 ];
 
 for (const config of testConfigs) {

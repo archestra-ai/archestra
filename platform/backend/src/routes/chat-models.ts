@@ -174,6 +174,51 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from MiniMax API
+ */
+async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.minimax.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch MiniMax models",
+    );
+    throw new Error(`Failed to fetch MiniMax models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+    }>;
+  };
+
+  // Filter to only chat-compatible models
+  const chatModelPrefixes = ["abab6-chat", "abab6.5-chat", "abab6.5s-chat"];
+  
+  return data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      return chatModelPrefixes.some((prefix) => id.startsWith(prefix));
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "minimax" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+}
+
+/**
  * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
 async function getProviderApiKey({
@@ -212,6 +257,8 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "minimax":
+      return config.chat.minimax.apiKey || null;
     default:
       return null;
   }
@@ -225,6 +272,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  minimax: fetchMiniMaxModels,
 };
 
 /**
@@ -275,7 +323,7 @@ async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "minimax"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

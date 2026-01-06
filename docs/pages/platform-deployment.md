@@ -494,7 +494,7 @@ The following environment variables can be used to configure Archestra Platform:
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
 
   - Example: `https://frontend.example.com`
-  - Optional for local development
+  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
 

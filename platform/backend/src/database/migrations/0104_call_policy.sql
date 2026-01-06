@@ -42,6 +42,7 @@ ALTER TABLE "tool_invocation_policies"
 
 -- STEP 3: Migrate allow_usage_when_untrusted_data_is_present from agent_tools
 -- Creates policies with empty conditions (applies to all calls for that tool)
+-- Skip rows where allow_usage_when_untrusted_data_is_present is NULL (no explicit setting)
 INSERT INTO "tool_invocation_policies" ("tool_id", "conditions", "action", "reason")
 SELECT DISTINCT ON (at."tool_id")
   at."tool_id",
@@ -52,11 +53,12 @@ SELECT DISTINCT ON (at."tool_id")
   END,
   'Fallback policy'
 FROM "agent_tools" at
-WHERE NOT EXISTS (
-  -- Don't create if tool already has a policy with empty conditions
-  SELECT 1 FROM "tool_invocation_policies" tip2
-  WHERE tip2."tool_id" = at."tool_id" AND tip2."conditions" = '[]'::jsonb
-)
+WHERE at."allow_usage_when_untrusted_data_is_present" IS NOT NULL
+  AND NOT EXISTS (
+    -- Don't create if tool already has a policy with empty conditions
+    SELECT 1 FROM "tool_invocation_policies" tip2
+    WHERE tip2."tool_id" = at."tool_id" AND tip2."conditions" = '[]'::jsonb
+  )
 ORDER BY at."tool_id", at."created_at";
 
 -- STEP 4: Add FK constraint and make tool_id NOT NULL

@@ -98,6 +98,7 @@ ALTER TABLE "trusted_data_policies" ALTER COLUMN "description" DROP NOT NULL;
 
 -- STEP 4: Migrate tool_result_treatment from agent_tools to default policies
 -- Creates policies with empty conditions (applies to all results for that tool)
+-- Skip rows where tool_result_treatment is NULL (no explicit setting)
 DO $$
 BEGIN
   IF EXISTS (
@@ -116,6 +117,7 @@ BEGIN
       'Default policy'
     FROM "agent_tools" at
     WHERE at."tool_id" IS NOT NULL
+      AND at."tool_result_treatment" IS NOT NULL
       AND NOT EXISTS (
         -- Don't create if tool already has a policy with empty conditions
         SELECT 1 FROM "trusted_data_policies" tdp2

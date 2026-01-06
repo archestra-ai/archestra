@@ -1605,17 +1605,6 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
   });
 
   test("combines nodeSelector with serviceAccountName when both are configured", () => {
-    // Mock config with service account name
-    const mockConfig = config as {
-      orchestrator: {
-        kubernetes: { mcpK8sServiceAccountName: string };
-      };
-    };
-    const originalValue =
-      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
-      "archestra-platform-mcp-k8s-operator";
-
     const mcpServer: McpServer = {
       id: "combined-config-id",
       name: "combined-config-server",
@@ -1629,7 +1618,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "node",
       arguments: ["server.js"],
-      serviceAccount: "operator",
+      serviceAccount: "archestra-platform-mcp-k8s-operator",
     };
     const nodeSelector = {
       "karpenter.sh/nodepool": "k8s-operator-pool",
@@ -1647,12 +1636,10 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(deploymentSpec.spec?.template.spec?.nodeSelector).toEqual({
       "karpenter.sh/nodepool": "k8s-operator-pool",
     });
+    // serviceAccount from localConfig is used directly
     expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
     );
-
-    // Restore original config value
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 });
 
@@ -2029,18 +2016,7 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
     ).toBeUndefined();
   });
 
-  test("uses configured service account name", () => {
-    // Mock config with service account name
-    const mockConfig = config as {
-      orchestrator: {
-        kubernetes: { mcpK8sServiceAccountName: string };
-      };
-    };
-    const originalValue =
-      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
-      "archestra-platform-mcp-k8s-operator";
-
+  test("uses service account name from localConfig", () => {
     const mockMcpServer = {
       id: "k8s-server",
       name: "Kubernetes MCP",
@@ -2071,7 +2047,7 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "docker",
       arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
-      serviceAccount: "operator",
+      serviceAccount: "archestra-platform-mcp-k8s-operator",
     };
 
     const deploymentSpec = k8sDeployment.generateDeploymentSpec(
@@ -2081,74 +2057,10 @@ describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
       8080,
     );
 
-    // Should use the configured service account name directly
+    // Should use the service account name from localConfig directly
     expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
       "archestra-platform-mcp-k8s-operator",
     );
-
-    // Restore original config value
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
-  });
-
-  test("uses custom service account name when configured", () => {
-    // Mock config with custom service account name
-    const mockConfig = config as {
-      orchestrator: {
-        kubernetes: { mcpK8sServiceAccountName: string };
-      };
-    };
-    const originalValue =
-      mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName;
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName =
-      "custom-mcp-service-account";
-
-    const mockMcpServer = {
-      id: "k8s-server",
-      name: "Kubernetes MCP",
-      catalogId: "k8s-catalog",
-      secretId: null,
-      ownerId: null,
-      teamId: null,
-      serverType: "local",
-      reinstallRequired: false,
-      localInstallationStatus: "idle",
-      localInstallationError: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as McpServer;
-
-    const k8sDeployment = new K8sDeployment(
-      mockMcpServer,
-      {} as k8s.CoreV1Api,
-      {} as k8s.AppsV1Api,
-      {} as k8s.Attach,
-      {} as k8s.Log,
-      "default",
-      null,
-      undefined,
-      undefined,
-    );
-
-    const localConfig: z.infer<typeof LocalConfigSchema> = {
-      command: "docker",
-      arguments: ["run", "-i", "--rm", "kubernetes-mcp:latest"],
-      serviceAccount: "operator",
-    };
-
-    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
-      "kubernetes-mcp:latest",
-      localConfig,
-      false,
-      8080,
-    );
-
-    // Should use the custom configured name
-    expect(deploymentSpec.spec?.template.spec?.serviceAccountName).toBe(
-      "custom-mcp-service-account",
-    );
-
-    // Restore original config value
-    mockConfig.orchestrator.kubernetes.mcpK8sServiceAccountName = originalValue;
   });
 });
 

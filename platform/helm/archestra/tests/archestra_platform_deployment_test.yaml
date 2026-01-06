@@ -191,6 +191,7 @@ tests:
   - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
     documentIndex: 1
     set:
+      postgresql.enabled: false
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
       - equal:
@@ -225,6 +226,7 @@ tests:
   - it: should configure init container to wait for external postgres
     documentIndex: 1
     set:
+      postgresql.enabled: false
       postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
     asserts:
       - matchRegex:

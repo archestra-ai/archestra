@@ -37,6 +37,24 @@ local_resource(
   auto_init=False
 )
 
+# LightRAG storage backends (Neo4j + Qdrant) in Docker (manual trigger)
+# Start with: tilt trigger lightrag-storage
+# Neo4j: http://localhost:7474 (browser), bolt://localhost:7687, user: neo4j, password: password123
+# Qdrant: http://localhost:6333 (API), grpc://localhost:6334
+# LightRAG MCP server env vars:
+#   LIGHTRAG_NEO4J_URI=bolt://localhost:7687
+#   LIGHTRAG_NEO4J_USERNAME=neo4j
+#   LIGHTRAG_NEO4J_PASSWORD=password123
+#   LIGHTRAG_QDRANT_URL=http://localhost:6333
+local_resource(
+  'lightrag-storage',
+  serve_cmd='docker compose -f docker-compose.lightrag-storage.yml up',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
 # HashiCorp Vault in Docker (manual trigger)
 # Start with: tilt trigger vault-docker
 # Uses dev mode: auto-unsealed, in-memory storage, root token: dev-root-token

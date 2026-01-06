@@ -2,7 +2,6 @@ import { isAgentTool, isArchestraMcpServerTool } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
-import type { CallPolicyCondition } from "@/database/schemas/tool-invocation-policy";
 import type { ToolInvocation } from "@/types";
 
 type EvaluationResult = {
@@ -122,7 +121,9 @@ class ToolInvocationPolicyModel {
       (p) => p.conditions.length === 0,
     );
 
-    const toolIdsWithDefaultPolicy = new Set(defaultPolicies.map((p) => p.toolId));
+    const toolIdsWithDefaultPolicy = new Set(
+      defaultPolicies.map((p) => p.toolId),
+    );
     const toolIdsToCreate = toolIds.filter(
       (id) => !toolIdsWithDefaultPolicy.has(id),
     );

@@ -224,8 +224,7 @@ async function makeAgentTool(
   overrides: Partial<
     Pick<
       AgentTool,
-      | "credentialSourceMcpServerId"
-      | "executionSourceMcpServerId"
+      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
     >
   > = {},
 ) {
@@ -260,10 +259,7 @@ async function makeToolPolicy(
 async function makeTrustedDataPolicy(
   toolId: string,
   overrides: Partial<
-    Pick<
-      TrustedData.TrustedDataPolicy,
-      "description" | "conditions" | "action"
-    >
+    Pick<TrustedData.TrustedDataPolicy, "description" | "conditions" | "action">
   > = {},
 ): Promise<TrustedData.TrustedDataPolicy> {
   return await TrustedDataPolicyModel.create({

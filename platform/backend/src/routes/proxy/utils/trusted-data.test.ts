@@ -98,7 +98,11 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       await TrustedDataPolicyModel.create({
         toolId,
         conditions: [
-          { key: "emails[*].from", operator: "endsWith", value: "@trusted.com" },
+          {
+            key: "emails[*].from",
+            operator: "endsWith",
+            value: "@trusted.com",
+          },
         ],
         action: "mark_as_trusted",
         description: "Allow trusted emails",
@@ -140,7 +144,11 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       await TrustedDataPolicyModel.create({
         toolId,
         conditions: [
-          { key: "emails[*].from", operator: "endsWith", value: "@trusted.com" },
+          {
+            key: "emails[*].from",
+            operator: "endsWith",
+            value: "@trusted.com",
+          },
         ],
         action: "mark_as_trusted",
         description: "Allow trusted emails",

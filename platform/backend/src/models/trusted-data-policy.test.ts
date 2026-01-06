@@ -567,7 +567,11 @@ describe("TrustedDataPolicyModel", () => {
       }) => {
         await makeTrustedDataPolicy(toolId, {
           conditions: [
-            { key: "emails[*].from", operator: "endsWith", value: "@trusted.com" },
+            {
+              key: "emails[*].from",
+              operator: "endsWith",
+              value: "@trusted.com",
+            },
           ],
           action: "mark_as_trusted",
           description: "Emails from trusted domain",
@@ -1085,9 +1089,7 @@ describe("TrustedDataPolicyModel", () => {
     }) => {
       // Create a blocking policy that would normally block this data
       await makeTrustedDataPolicy(toolId, {
-        conditions: [
-          { key: "source", operator: "equal", value: "malicious" },
-        ],
+        conditions: [{ key: "source", operator: "equal", value: "malicious" }],
         action: "block_always",
         description: "Block malicious sources",
       });

@@ -390,7 +390,10 @@ export function AssignedToolsTable({
       } else {
         bulkResultPolicyMutation.mutate({
           toolIds,
-          treatment: value as "trusted" | "untrusted" | "sanitize_with_dual_llm",
+          treatment: value as
+            | "trusted"
+            | "untrusted"
+            | "sanitize_with_dual_llm",
         });
       }
       setIsBulkUpdating(false);

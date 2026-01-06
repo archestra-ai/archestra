@@ -120,9 +120,13 @@ class TrustedDataPolicyModel {
       .where(inArray(schema.trustedDataPoliciesTable.toolId, toolIds));
 
     // Filter to only default policies (empty conditions array)
-    const defaultPolicies = existingPolicies.filter((p) => p.conditions.length === 0,);
+    const defaultPolicies = existingPolicies.filter(
+      (p) => p.conditions.length === 0,
+    );
 
-    const toolIdsWithDefaultPolicy = new Set(defaultPolicies.map((p) => p.toolId));
+    const toolIdsWithDefaultPolicy = new Set(
+      defaultPolicies.map((p) => p.toolId),
+    );
     const toolIdsToCreate = toolIds.filter(
       (id) => !toolIdsWithDefaultPolicy.has(id),
     );
@@ -437,11 +441,17 @@ class TrustedDataPolicyModel {
       let blockReason = "";
 
       for (const policy of specificPolicies) {
-        if (policy.action === "block_always" && TrustedDataPolicyModel.evaluateConditions(policy.conditions, toolOutput)) {
-            isBlocked = true;
-            blockReason = `Data blocked by policy: ${policy.policyDescription || "Unnamed policy"}`;
-            break;
-          }
+        if (
+          policy.action === "block_always" &&
+          TrustedDataPolicyModel.evaluateConditions(
+            policy.conditions,
+            toolOutput,
+          )
+        ) {
+          isBlocked = true;
+          blockReason = `Data blocked by policy: ${policy.policyDescription || "Unnamed policy"}`;
+          break;
+        }
       }
 
       if (isBlocked) {
@@ -457,7 +467,12 @@ class TrustedDataPolicyModel {
       // Check specific policies for trust/sanitize
       let matchedSpecific = false;
       for (const policy of specificPolicies) {
-        if (TrustedDataPolicyModel.evaluateConditions(policy.conditions, toolOutput)) {
+        if (
+          TrustedDataPolicyModel.evaluateConditions(
+            policy.conditions,
+            toolOutput,
+          )
+        ) {
           matchedSpecific = true;
           if (policy.action === "mark_as_trusted") {
             results.set(i.toString(), {

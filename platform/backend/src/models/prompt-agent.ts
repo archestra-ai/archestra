@@ -304,6 +304,34 @@ class PromptAgentModel {
     };
   }
 
+/**
+   * Get all prompt-agent connections for an organization
+   * Used for canvas visualization of agent relationships
+   */
+  static async findAllByOrganizationId(
+    organizationId: string,
+  ): Promise<Array<{ id: string; promptId: string; agentPromptId: string }>> {
+    logger.debug(
+      { organizationId },
+      "PromptAgentModel.findAllByOrganizationId: fetching all connections for organization",
+    );
+
+    const results = await db
+      .select({
+        id: schema.promptAgentsTable.id,
+        promptId: schema.promptAgentsTable.promptId,
+        agentPromptId: schema.promptAgentsTable.agentPromptId,
+      })
+      .from(schema.promptAgentsTable)
+      .innerJoin(
+        schema.promptsTable,
+        eq(schema.promptAgentsTable.promptId, schema.promptsTable.id),
+      )
+      .where(eq(schema.promptsTable.organizationId, organizationId));
+
+    return results;
+  }
+
   /**
    * Check if a prompt has a specific agent assigned
    */

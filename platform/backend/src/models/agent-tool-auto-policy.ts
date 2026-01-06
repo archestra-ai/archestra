@@ -210,10 +210,9 @@ export class AgentToolAutoPolicyService {
         organizationId,
       );
 
-      // Update agent-tool with new configuration including reasoning
-      // Note: allowUsageWhenUntrustedDataIsPresent now managed via tool_invocation_policies
+      // Update agent-tool with timestamps and reasoning
+      // TODO: toolResultTreatment should create a result policy on the tool instead
       await AgentToolModel.update(agentToolId, {
-        toolResultTreatment: policyConfig.toolResultTreatment,
         policiesAutoConfiguredAt: new Date(),
         policiesAutoConfiguredReasoning: policyConfig.reasoning,
       });

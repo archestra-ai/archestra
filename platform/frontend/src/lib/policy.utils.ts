@@ -22,9 +22,9 @@ export function transformToolInvocationPolicies(
 export function transformToolResultPolicies(
   all: archestraApiTypes.GetTrustedDataPoliciesResponses["200"],
 ) {
-  const byProfileToolId = all.reduce(
+  const byToolId = all.reduce(
     (acc, policy) => {
-      acc[policy.agentToolId] = [...(acc[policy.agentToolId] || []), policy];
+      acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
       return acc;
     },
     {} as Record<
@@ -34,6 +34,6 @@ export function transformToolResultPolicies(
   );
   return {
     all,
-    byProfileToolId,
+    byToolId,
   };
 }

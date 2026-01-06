@@ -11,7 +11,6 @@ import {
   ChevronUp,
   Loader2,
   Search,
-  Sparkles,
   Unplug,
   Wand2,
 } from "lucide-react";
@@ -27,7 +26,6 @@ import {
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -49,13 +47,11 @@ import { useProfiles } from "@/lib/agent.query";
 import {
   useAllProfileTools,
   useAutoConfigurePolicies,
-  useBulkUpdateProfileTools,
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
-import { useToolResultPolicies } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
 import {
   DEFAULT_FILTER_ALL,
@@ -76,7 +72,6 @@ type ProfileToolsSortDirectionValues = NonNullable<
 
 type ProfileToolData =
   archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
-type ToolResultTreatment = ProfileToolData["toolResultTreatment"];
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ProfileToolData) => void;
@@ -102,12 +97,8 @@ export function AssignedToolsTable({
   initialData,
 }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
-  const bulkUpdateMutation = useBulkUpdateProfileTools();
   const autoConfigureMutation = useAutoConfigurePolicies();
   const unassignToolMutation = useUnassignTool();
-  const { data: resultPolicies } = useToolResultPolicies(
-    initialData?.toolResultPolicies,
-  );
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
     initialData: initialData?.internalMcpCatalog,
   });
@@ -159,7 +150,6 @@ export function AssignedToolsTable({
   const [updatingRows, setUpdatingRows] = useState<
     Set<{ id: string; field: string }>
   >(new Set());
-  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
@@ -336,48 +326,6 @@ export function AssignedToolsTable({
     [updateUrlParams],
   );
 
-  const handleBulkAction = useCallback(
-    async (
-      field: "toolResultTreatment",
-      value: "trusted" | "sanitize_with_dual_llm" | "untrusted",
-    ) => {
-      setIsBulkUpdating(true);
-
-      // Filter out tools with custom policies
-      const toolIds = selectedTools
-        .filter((tool) => {
-          if (field === "toolResultTreatment") {
-            const hasCustomResultPolicy =
-              resultPolicies?.byProfileToolId[tool.id]?.length > 0;
-            return !hasCustomResultPolicy;
-          }
-
-          return true;
-        })
-        .map((tool) => tool.id);
-
-      if (toolIds.length === 0) {
-        setIsBulkUpdating(false);
-        return;
-      }
-
-      try {
-        await bulkUpdateMutation.mutateAsync({
-          ids: toolIds,
-          field,
-          value,
-          // Clear auto-configured timestamp when manually bulk updating policies
-          clearAutoConfigured: true,
-        });
-      } catch (error) {
-        console.error("Bulk update failed:", error);
-      } finally {
-        setIsBulkUpdating(false);
-      }
-    },
-    [selectedTools, bulkUpdateMutation, resultPolicies],
-  );
-
   const handleAutoConfigurePolicies = useCallback(async () => {
     const agentToolIds = selectedTools.map((tool) => tool.id);
 
@@ -415,45 +363,6 @@ export function AssignedToolsTable({
     setRowSelection({});
     setSelectedTools([]);
   }, []);
-
-  const isRowFieldUpdating = useCallback(
-    (id: string, field: "toolResultTreatment") => {
-      return Array.from(updatingRows).some(
-        (row) => row.id === id && row.field === field,
-      );
-    },
-    [updatingRows],
-  );
-
-  const handleSingleRowUpdate = useCallback(
-    async (id: string, field: string, updates: Partial<ProfileToolData>) => {
-      setUpdatingRows((prev) => new Set(prev).add({ id, field }));
-      try {
-        // Clear auto-configured timestamp when manually updating policies
-        const shouldClearAutoConfig = field === "toolResultTreatment";
-
-        await agentToolPatchMutation.mutateAsync({
-          id,
-          ...updates,
-          ...(shouldClearAutoConfig && { policiesAutoConfiguredAt: null }),
-        });
-      } catch (error) {
-        console.error("Update failed:", error);
-      } finally {
-        setUpdatingRows((prev) => {
-          const next = new Set(prev);
-          for (const item of next) {
-            if (item.id === id && item.field === field) {
-              next.delete(item);
-              break;
-            }
-          }
-          return next;
-        });
-      }
-    },
-    [agentToolPatchMutation],
-  );
 
   const columns: ColumnDef<ProfileToolData>[] = useMemo(
     () => [
@@ -670,113 +579,8 @@ export function AssignedToolsTable({
         },
         size: 120,
       },
-      {
-        id: "toolResultTreatment",
-        header: "Results are",
-        cell: ({ row }) => {
-          const hasCustomPolicy =
-            resultPolicies?.byProfileToolId[row.original.id]?.length > 0;
-
-          if (hasCustomPolicy) {
-            return (
-              <span className="text-xs font-medium text-primary">Custom</span>
-            );
-          }
-
-          const treatmentLabels: Record<ToolResultTreatment, string> = {
-            trusted: "Trusted",
-            untrusted: "Untrusted",
-            sanitize_with_dual_llm: "Sanitize with Dual LLM",
-          };
-
-          const isUpdating = isRowFieldUpdating(
-            row.original.id,
-            "toolResultTreatment",
-          );
-
-          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
-          const isAutoConfiguring =
-            !!row.original.policiesAutoConfiguringStartedAt;
-
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={row.original.toolResultTreatment}
-                disabled={isUpdating}
-                onValueChange={(value: ToolResultTreatment) => {
-                  handleSingleRowUpdate(
-                    row.original.id,
-                    "toolResultTreatment",
-                    {
-                      toolResultTreatment: value,
-                    },
-                  );
-                }}
-              >
-                <SelectTrigger
-                  className="h-8 w-[180px] text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                  size="sm"
-                >
-                  <SelectValue>
-                    {treatmentLabels[row.original.toolResultTreatment]}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(treatmentLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isAutoConfiguring ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Policy Configuration Subagent is analyzing...</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : isAutoConfigured ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Sparkles className="h-3 w-3 text-purple-500" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">
-                        Configured by Policy Configuration Subagent
-                      </p>
-                      {row.original.policiesAutoConfiguredReasoning && (
-                        <p className="text-xs text-muted-foreground">
-                          {row.original.policiesAutoConfiguredReasoning}
-                        </p>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : null}
-              {isUpdating && (
-                <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
-              )}
-            </div>
-          );
-        },
-        size: 190,
-      },
     ],
-    [
-      resultPolicies,
-      agentToolPatchMutation,
-      unassignToolMutation,
-      internalMcpCatalogItems,
-      isRowFieldUpdating,
-      handleSingleRowUpdate,
-    ],
+    [agentToolPatchMutation, unassignToolMutation, internalMcpCatalogItems],
   );
 
   const hasSelection = selectedTools.length > 0;
@@ -878,9 +682,6 @@ export function AssignedToolsTable({
                   ? "tool selected"
                   : "tools selected"}
               </span>
-              {isBulkUpdating && (
-                <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
-              )}
             </>
           ) : (
             <span className="text-sm text-muted-foreground">
@@ -889,55 +690,6 @@ export function AssignedToolsTable({
           )}
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Results are:</span>
-            <ButtonGroup>
-              <PermissionButton
-                permissions={{ tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "trusted")
-                }
-                disabled={!hasSelection || isBulkUpdating}
-              >
-                Trusted
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ tool: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "untrusted")
-                }
-                disabled={!hasSelection || isBulkUpdating}
-              >
-                Untrusted
-              </PermissionButton>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PermissionButton
-                    size="sm"
-                    variant="outline"
-                    permissions={{ tool: ["update"] }}
-                    onClick={() =>
-                      handleBulkAction(
-                        "toolResultTreatment",
-                        "sanitize_with_dual_llm",
-                      )
-                    }
-                    disabled={!hasSelection || isBulkUpdating}
-                  >
-                    Dual LLM
-                  </PermissionButton>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Sanitize with Dual LLM</p>
-                </TooltipContent>
-              </Tooltip>
-            </ButtonGroup>
-          </div>
-          <div className="ml-2 h-4 w-px bg-border" />
           <Tooltip>
             <TooltipTrigger asChild>
               <PermissionButton
@@ -945,11 +697,7 @@ export function AssignedToolsTable({
                 size="sm"
                 variant="outline"
                 onClick={handleAutoConfigurePolicies}
-                disabled={
-                  !hasSelection ||
-                  isBulkUpdating ||
-                  autoConfigureMutation.isPending
-                }
+                disabled={!hasSelection || autoConfigureMutation.isPending}
               >
                 {autoConfigureMutation.isPending ? (
                   <>
@@ -972,7 +720,7 @@ export function AssignedToolsTable({
             size="sm"
             variant="ghost"
             onClick={clearSelection}
-            disabled={!hasSelection || isBulkUpdating}
+            disabled={!hasSelection}
           >
             Clear selection
           </Button>

@@ -110,14 +110,11 @@ export function useToolResultPolicies(
 export function useToolResultPoliciesCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
+    mutationFn: async ({ toolId }: { toolId: string }) =>
       await createTrustedDataPolicy({
         body: {
-          agentToolId,
-          description: "",
-          attributePath: "",
-          operator: "equal",
-          value: "",
+          toolId,
+          conditions: [{ key: "", operator: "equal", value: "" }],
           action: "mark_as_trusted",
         },
       }),
@@ -196,12 +193,9 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
+      const byToolId = all.reduce(
         (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
+          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
           return acc;
         },
         {} as Record<
@@ -211,7 +205,7 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
       );
       return {
         all,
-        byProfileToolId,
+        byToolId,
       };
     },
   });

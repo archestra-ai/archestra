@@ -3931,7 +3931,6 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
@@ -4246,88 +4245,6 @@ export type BulkAssignToolsResponses = {
 
 export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
 
-export type BulkUpdateAgentToolsData = {
-    body: {
-        ids: Array<string>;
-        field: 'toolResultTreatment';
-        value: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        clearAutoConfigured?: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agent-tools/bulk-update';
-};
-
-export type BulkUpdateAgentToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
-
-export type BulkUpdateAgentToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        updatedCount: number;
-    };
-};
-
-export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
-
 export type AutoConfigureAgentToolPoliciesData = {
     body: {
         agentToolIds: Array<string>;
@@ -4520,7 +4437,6 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body?: {
-        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
@@ -4601,7 +4517,6 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
@@ -5454,11 +5369,13 @@ export type GetTrustedDataPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
         action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
@@ -5469,11 +5386,13 @@ export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[key
 
 export type CreateTrustedDataPolicyData = {
     body: {
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
+        toolId: string;
+        description?: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
         action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path?: never;
@@ -5546,11 +5465,13 @@ export type CreateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
         action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
@@ -5712,11 +5633,13 @@ export type GetTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
         action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
@@ -5727,11 +5650,13 @@ export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof G
 
 export type UpdateTrustedDataPolicyData = {
     body?: {
-        agentToolId?: string;
-        description?: string;
-        attributePath?: string;
-        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value?: string;
+        toolId?: string;
+        description?: string | null;
+        conditions?: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
         action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path: {
@@ -5806,11 +5731,13 @@ export type UpdateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
         action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;

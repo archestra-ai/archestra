@@ -20,8 +20,6 @@ import {
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
   ApiError,
-  BulkUpdateAgentToolsRequestSchema,
-  BulkUpdateAgentToolsResponseSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
@@ -275,31 +273,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/agent-tools/bulk-update",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateAgentTools,
-        description: "Update multiple agent tools with the same value in bulk",
-        tags: ["Agent Tools"],
-        body: BulkUpdateAgentToolsRequestSchema,
-        response: constructResponseSchema(BulkUpdateAgentToolsResponseSchema),
-      },
-    },
-    async (request, reply) => {
-      const { ids, field, value, clearAutoConfigured } = request.body;
-
-      const updatedCount = await AgentToolModel.bulkUpdateSameValue(
-        ids,
-        field,
-        value,
-        clearAutoConfigured,
-      );
-
-      return reply.send({ updatedCount });
-    },
-  );
-
-  fastify.post(
     "/api/agent-tools/auto-configure-policies",
     {
       schema: {
@@ -442,7 +415,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          toolResultTreatment: true,
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,

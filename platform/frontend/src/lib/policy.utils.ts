@@ -17,8 +17,6 @@ export function getAllowUsageFromPolicies(
   },
 ): boolean {
   const policies = invocationPolicies.byProfileToolId[toolId] || [];
-  // If no policies, default to allowing
-  if (policies.length === 0) return true;
   // Check for a "default" policy (empty conditions array)
   const defaultPolicy = policies.find((p) => {
     const conditions = p.conditions as unknown[];
@@ -27,8 +25,8 @@ export function getAllowUsageFromPolicies(
   if (defaultPolicy) {
     return defaultPolicy.action === "allow_when_context_is_untrusted";
   }
-  // No default policy found, allow by default
-  return true;
+  // No default policy found, blocked by default
+  return false;
 }
 
 // Helper to derive toolResultTreatment from result policies

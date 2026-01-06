@@ -246,17 +246,10 @@ export function useCallPolicyMutation() {
 
       const existingPolicies = cachedPolicies?.byProfileToolId[toolId] || [];
 
-      // Find default policy (empty conditions)
-      const defaultPolicy = existingPolicies.find((p) => {
-        if (!p.conditions) return true;
-        if (Array.isArray(p.conditions) && p.conditions.length === 0)
-          return true;
-        if (Array.isArray(p.conditions) && p.conditions.length === 1) {
-          const first = p.conditions[0] as { key?: string };
-          if (!first.key || first.key === "") return true;
-        }
-        return false;
-      });
+      // Find default policy (empty conditions array)
+      const defaultPolicy = existingPolicies.find(
+        (p) => p.conditions.length === 0,
+      );
 
       const action = allowUsage
         ? "allow_when_context_is_untrusted"
@@ -269,11 +262,11 @@ export function useCallPolicyMutation() {
           body: { action },
         });
       }
-      // Create new default policy
+      // Create new default policy with empty conditions
       return await createToolInvocationPolicy({
         body: {
           toolId,
-          conditions: [{ key: "", operator: "equal", value: "" }],
+          conditions: [],
           action,
           reason: null,
         },
@@ -304,17 +297,10 @@ export function useResultPolicyMutation() {
 
       const existingPolicies = cachedPolicies?.byProfileToolId[toolId] || [];
 
-      // Find default policy (empty conditions)
-      const defaultPolicy = existingPolicies.find((p) => {
-        if (!p.conditions) return true;
-        if (Array.isArray(p.conditions) && p.conditions.length === 0)
-          return true;
-        if (Array.isArray(p.conditions) && p.conditions.length === 1) {
-          const first = p.conditions[0] as { key?: string };
-          if (!first.key || first.key === "") return true;
-        }
-        return false;
-      });
+      // Find default policy (empty conditions array)
+      const defaultPolicy = existingPolicies.find(
+        (p) => p.conditions.length === 0,
+      );
 
       // Map treatment to action
       const actionMap = {
@@ -331,11 +317,11 @@ export function useResultPolicyMutation() {
           body: { action },
         });
       }
-      // Create new default policy
+      // Create new default policy with empty conditions
       return await createTrustedDataPolicy({
         body: {
           toolId,
-          conditions: [{ key: "", operator: "equal", value: "" }],
+          conditions: [],
           action,
         },
       });

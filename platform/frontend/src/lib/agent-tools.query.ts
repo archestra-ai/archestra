@@ -8,6 +8,8 @@ const {
   unassignToolFromAgent,
   updateAgentTool,
   autoConfigureAgentToolPolicies,
+  bulkUpsertDefaultCallPolicy,
+  bulkUpsertDefaultResultPolicy,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -279,26 +281,41 @@ export function useAutoConfigurePolicies() {
   });
 }
 
-// Bulk update profile tools - now operates on policies instead of agent_tools fields
-// This stub provides compatibility with the dev branch UI
+// Bulk update profile tools - operates on policies via bulk API endpoints
 export function useBulkUpdateProfileTools() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (_params: {
-      ids: string[];
-      field: string;
-      value: unknown;
-      clearAutoConfigured?: boolean;
+    mutationFn: async (params: {
+      toolIds: string[];
+      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment";
+      value: boolean | "trusted" | "untrusted" | "sanitize_with_dual_llm";
     }) => {
-      // In the new schema, allowUsageWhenUntrustedDataIsPresent and toolResultTreatment
-      // are controlled via policies, not agent_tools columns.
-      // This functionality requires policy bulk operations which are not yet implemented.
-      // For now, individual policy updates via the policy CRUD UI should be used.
-      console.warn(
-        "Bulk update of policy-related fields not yet implemented in new schema",
-      );
-      return { success: false };
+      const { toolIds, field, value } = params;
+
+      if (field === "allowUsageWhenUntrustedDataIsPresent") {
+        const action =
+          value === true ? "allow_when_context_is_untrusted" : "block_always";
+        const result = await bulkUpsertDefaultCallPolicy({
+          body: { toolIds, action },
+        });
+        return result.data ?? { updated: 0, created: 0 };
+      }
+
+      if (field === "toolResultTreatment") {
+        const actionMap = {
+          trusted: "mark_as_trusted",
+          untrusted: "block_always",
+          sanitize_with_dual_llm: "sanitize_with_dual_llm",
+        } as const;
+        const action = actionMap[value as keyof typeof actionMap];
+        const result = await bulkUpsertDefaultResultPolicy({
+          body: { toolIds, action },
+        });
+        return result.data ?? { updated: 0, created: 0 };
+      }
+
+      return { updated: 0, created: 0 };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });

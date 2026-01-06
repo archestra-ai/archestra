@@ -225,6 +225,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteToolInvocationPolicy]: {
     policy: ["delete"],
   },
+  [RouteId.BulkUpsertDefaultCallPolicy]: {
+    policy: ["update"],
+  },
   [RouteId.GetTrustedDataPolicies]: {
     policy: ["read"],
   },
@@ -239,6 +242,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteTrustedDataPolicy]: {
     policy: ["delete"],
+  },
+  [RouteId.BulkUpsertDefaultResultPolicy]: {
+    policy: ["update"],
   },
   [RouteId.GetPolicyConfigSubagentPrompt]: {
     organization: ["read"],

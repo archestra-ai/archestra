@@ -5746,6 +5746,168 @@ export type UpdateTrustedDataPolicyResponses = {
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
 
+export type BulkUpsertDefaultCallPolicyData = {
+    body: {
+        toolIds: Array<string>;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/tool-invocation/bulk-default';
+};
+
+export type BulkUpsertDefaultCallPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpsertDefaultCallPolicyError = BulkUpsertDefaultCallPolicyErrors[keyof BulkUpsertDefaultCallPolicyErrors];
+
+export type BulkUpsertDefaultCallPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: number;
+        created: number;
+    };
+};
+
+export type BulkUpsertDefaultCallPolicyResponse = BulkUpsertDefaultCallPolicyResponses[keyof BulkUpsertDefaultCallPolicyResponses];
+
+export type BulkUpsertDefaultResultPolicyData = {
+    body: {
+        toolIds: Array<string>;
+        action: 'mark_as_trusted' | 'block_always' | 'sanitize_with_dual_llm';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/trusted-data-policies/bulk-default';
+};
+
+export type BulkUpsertDefaultResultPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpsertDefaultResultPolicyError = BulkUpsertDefaultResultPolicyErrors[keyof BulkUpsertDefaultResultPolicyErrors];
+
+export type BulkUpsertDefaultResultPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: number;
+        created: number;
+    };
+};
+
+export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
+
 export type GetChatApiKeysData = {
     body?: never;
     path?: never;

@@ -360,24 +360,22 @@ export function AssignedToolsTable({
     ) => {
       setIsBulkUpdating(true);
 
-      // Filter out tools with custom policies
+      // Filter out tools with custom policies (non-empty conditions)
       const toolIds = selectedTools
         .filter((tool) => {
-          if (field === "allowUsageWhenUntrustedDataIsPresent") {
-            const hasCustomInvocationPolicy =
-              invocationPolicies?.byProfileToolId[tool.tool.id]?.length > 0;
-            return !hasCustomInvocationPolicy;
-          }
+          const policies =
+            field === "allowUsageWhenUntrustedDataIsPresent"
+              ? invocationPolicies?.byProfileToolId[tool.tool.id] || []
+              : resultPolicies?.byProfileToolId[tool.tool.id] || [];
 
-          if (field === "toolResultTreatment") {
-            const hasCustomResultPolicy =
-              resultPolicies?.byProfileToolId[tool.tool.id]?.length > 0;
-            return !hasCustomResultPolicy;
-          }
+          // Check if tool has custom policies (non-empty conditions array)
+          const hasCustomPolicy = policies.some(
+            (policy) => policy.conditions.length > 0,
+          );
 
-          return true;
+          return !hasCustomPolicy;
         })
-        .map((tool) => tool.id);
+        .map((tool) => tool.tool.id);
 
       if (toolIds.length === 0) {
         setIsBulkUpdating(false);
@@ -386,11 +384,9 @@ export function AssignedToolsTable({
 
       try {
         await bulkUpdateMutation.mutateAsync({
-          ids: toolIds,
+          toolIds,
           field,
           value,
-          // Clear auto-configured timestamp when manually bulk updating policies
-          clearAutoConfigured: true,
         });
       } catch (error) {
         console.error("Bulk update failed:", error);
@@ -718,16 +714,10 @@ export function AssignedToolsTable({
         cell: ({ row }) => {
           const policies =
             invocationPolicies?.byProfileToolId[row.original.tool.id] || [];
-          // A custom policy has non-empty conditions (not just [{key: "", ...}])
-          const hasCustomPolicy = policies.some((policy) => {
-            const conditions = policy.conditions;
-            if (!Array.isArray(conditions) || conditions.length === 0)
-              return false;
-            // Check if any condition has a non-empty key
-            return (conditions as Array<{ key?: string }>).some(
-              (c) => c.key && c.key !== "",
-            );
-          });
+          // A custom policy has non-empty conditions array
+          const hasCustomPolicy = policies.some(
+            (policy) => policy.conditions.length > 0,
+          );
 
           if (hasCustomPolicy) {
             return (
@@ -813,16 +803,10 @@ export function AssignedToolsTable({
         cell: ({ row }) => {
           const policies =
             resultPolicies?.byProfileToolId[row.original.tool.id] || [];
-          // A custom policy has non-empty conditions (not just [{key: "", ...}])
-          const hasCustomPolicy = policies.some((policy) => {
-            const conditions = policy.conditions;
-            if (!Array.isArray(conditions) || conditions.length === 0)
-              return false;
-            // Check if any condition has a non-empty key
-            return (conditions as Array<{ key?: string }>).some(
-              (c) => c.key && c.key !== "",
-            );
-          });
+          // A custom policy has non-empty conditions array
+          const hasCustomPolicy = policies.some(
+            (policy) => policy.conditions.length > 0,
+          );
 
           if (hasCustomPolicy) {
             return (

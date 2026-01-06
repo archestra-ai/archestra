@@ -117,6 +117,8 @@ export const RouteId = {
   GetTrustedDataPolicy: "getTrustedDataPolicy",
   UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
   DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
+  BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
+  BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
   GetPolicyConfigSubagentPrompt: "getPolicyConfigSubagentPrompt",
 
   // Dual LLM Config Routes

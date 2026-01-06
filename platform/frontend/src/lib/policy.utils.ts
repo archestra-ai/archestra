@@ -19,17 +19,10 @@ export function getAllowUsageFromPolicies(
   const policies = invocationPolicies.byProfileToolId[toolId] || [];
   // If no policies, default to allowing
   if (policies.length === 0) return true;
-  // Check for a "default" policy (empty or no conditions) that blocks
+  // Check for a "default" policy (empty conditions array)
   const defaultPolicy = policies.find((p) => {
-    const conditions = p.conditions;
-    if (!conditions) return true;
-    if (Array.isArray(conditions) && conditions.length === 0) return true;
-    // Check if first condition has empty key (effectively default)
-    if (Array.isArray(conditions) && conditions.length === 1) {
-      const first = conditions[0] as { key?: string };
-      if (!first.key || first.key === "") return true;
-    }
-    return false;
+    const conditions = p.conditions as unknown[];
+    return conditions.length === 0;
   });
   if (defaultPolicy) {
     return defaultPolicy.action === "allow_when_context_is_untrusted";
@@ -51,17 +44,10 @@ export function getResultTreatmentFromPolicies(
   const policies = resultPolicies.byProfileToolId[toolId] || [];
   // If no policies, default to untrusted
   if (policies.length === 0) return "untrusted";
-  // Check for a "default" policy (empty or no conditions)
+  // Check for a "default" policy (empty conditions array)
   const defaultPolicy = policies.find((p) => {
-    const conditions = p.conditions;
-    if (!conditions) return true;
-    if (Array.isArray(conditions) && conditions.length === 0) return true;
-    // Check if first condition has empty key (effectively default)
-    if (Array.isArray(conditions) && conditions.length === 1) {
-      const first = conditions[0] as { key?: string };
-      if (!first.key || first.key === "") return true;
-    }
-    return false;
+    const conditions = p.conditions as unknown[];
+    return conditions.length === 0;
   });
   if (defaultPolicy) {
     const action = defaultPolicy.action;

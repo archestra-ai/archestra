@@ -71,6 +71,64 @@ class ToolInvocationPolicyModel {
   }
 
   /**
+   * Bulk upsert default policies (empty conditions) for multiple tools.
+   * Updates existing default policies or creates new ones in a single transaction.
+   */
+  static async bulkUpsertDefaultPolicy(
+    toolIds: string[],
+    action: "allow_when_context_is_untrusted" | "block_always",
+  ): Promise<{ updated: number; created: number }> {
+    if (toolIds.length === 0) {
+      return { updated: 0, created: 0 };
+    }
+
+    // Find existing default policies (empty conditions) for these tools
+    const existingPolicies = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+
+    // Filter to only default policies (empty conditions array)
+    const defaultPolicies = existingPolicies.filter(
+      (p) => p.conditions.length === 0,
+    );
+
+    const toolIdsWithDefaultPolicy = new Set(defaultPolicies.map((p) => p.toolId));
+    const toolIdsToCreate = toolIds.filter(
+      (id) => !toolIdsWithDefaultPolicy.has(id),
+    );
+    const policiesToUpdate = defaultPolicies.filter((p) => p.action !== action);
+
+    let updated = 0;
+    let created = 0;
+
+    // Update existing default policies that have different action
+    if (policiesToUpdate.length > 0) {
+      const policyIds = policiesToUpdate.map((p) => p.id);
+      await db
+        .update(schema.toolInvocationPoliciesTable)
+        .set({ action })
+        .where(inArray(schema.toolInvocationPoliciesTable.id, policyIds));
+      updated = policiesToUpdate.length;
+    }
+
+    // Create new default policies for tools that don't have one
+    if (toolIdsToCreate.length > 0) {
+      await db.insert(schema.toolInvocationPoliciesTable).values(
+        toolIdsToCreate.map((toolId) => ({
+          toolId,
+          conditions: [],
+          action,
+          reason: null,
+        })),
+      );
+      created = toolIdsToCreate.length;
+    }
+
+    return { updated, created };
+  }
+
+  /**
    * Evaluate a single condition against tool input
    */
   private static evaluateCondition(
@@ -206,12 +264,8 @@ class ToolInvocationPolicyModel {
       const policies = policiesByToolId.get(toolId) || [];
 
       // Separate policies into specific (has conditions) and default (empty conditions)
-      const specificPolicies = policies.filter(
-        (p) => p.conditions && p.conditions.length > 0,
-      );
-      const defaultPolicies = policies.filter(
-        (p) => !p.conditions || p.conditions.length === 0,
-      );
+      const specificPolicies = policies.filter((p) => p.conditions.length > 0);
+      const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
 
       // First, check specific policies (more specific rules take precedence)
       let hasMatchingSpecificPolicy = false;

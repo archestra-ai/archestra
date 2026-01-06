@@ -9,7 +9,7 @@ import type { AutonomyPolicyOperator, TrustedData } from "@/types";
  * Check if a policy is a default policy (applies to all results)
  */
 function isDefaultPolicy(conditions: ResultPolicyCondition[]): boolean {
-  return !Array.isArray(conditions) || conditions.length === 0;
+  return conditions.length === 0;
 }
 
 class TrustedDataPolicyModel {
@@ -70,6 +70,61 @@ class TrustedDataPolicyModel {
       .where(eq(schema.trustedDataPoliciesTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  /**
+   * Bulk upsert default policies (empty conditions) for multiple tools.
+   * Updates existing default policies or creates new ones in a single transaction.
+   */
+  static async bulkUpsertDefaultPolicy(
+    toolIds: string[],
+    action: "mark_as_trusted" | "block_always" | "sanitize_with_dual_llm",
+  ): Promise<{ updated: number; created: number }> {
+    if (toolIds.length === 0) {
+      return { updated: 0, created: 0 };
+    }
+
+    // Find existing default policies (empty conditions) for these tools
+    const existingPolicies = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(inArray(schema.trustedDataPoliciesTable.toolId, toolIds));
+
+    // Filter to only default policies (empty conditions array)
+    const defaultPolicies = existingPolicies.filter((p) => p.conditions.length === 0,);
+
+    const toolIdsWithDefaultPolicy = new Set(defaultPolicies.map((p) => p.toolId));
+    const toolIdsToCreate = toolIds.filter(
+      (id) => !toolIdsWithDefaultPolicy.has(id),
+    );
+    const policiesToUpdate = defaultPolicies.filter((p) => p.action !== action);
+
+    let updated = 0;
+    let created = 0;
+
+    // Update existing default policies that have different action
+    if (policiesToUpdate.length > 0) {
+      const policyIds = policiesToUpdate.map((p) => p.id);
+      await db
+        .update(schema.trustedDataPoliciesTable)
+        .set({ action })
+        .where(inArray(schema.trustedDataPoliciesTable.id, policyIds));
+      updated = policiesToUpdate.length;
+    }
+
+    // Create new default policies for tools that don't have one
+    if (toolIdsToCreate.length > 0) {
+      await db.insert(schema.trustedDataPoliciesTable).values(
+        toolIdsToCreate.map((toolId) => ({
+          toolId,
+          conditions: [],
+          action,
+        })),
+      );
+      created = toolIdsToCreate.length;
+    }
+
+    return { updated, created };
   }
 
   /**
@@ -135,7 +190,7 @@ class TrustedDataPolicyModel {
     toolOutput: any,
   ): boolean {
     // Empty conditions = default policy, always matches
-    if (!conditions || conditions.length === 0) {
+    if (conditions.length === 0) {
       return true;
     }
 

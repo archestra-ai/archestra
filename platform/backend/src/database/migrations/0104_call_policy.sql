@@ -50,7 +50,7 @@ SELECT DISTINCT ON (at."tool_id")
     WHEN at."allow_usage_when_untrusted_data_is_present" THEN 'allow_when_context_is_untrusted'
     ELSE 'block_always'
   END,
-  'Migrated from agent_tools default'
+  'Fallback policy'
 FROM "agent_tools" at
 WHERE NOT EXISTS (
   -- Don't create if tool already has a policy with empty conditions

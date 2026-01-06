@@ -278,3 +278,32 @@ export function useAutoConfigurePolicies() {
     },
   });
 }
+
+// Bulk update profile tools - now operates on policies instead of agent_tools fields
+// This stub provides compatibility with the dev branch UI
+export function useBulkUpdateProfileTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (_params: {
+      ids: string[];
+      field: string;
+      value: unknown;
+      clearAutoConfigured?: boolean;
+    }) => {
+      // In the new schema, allowUsageWhenUntrustedDataIsPresent and toolResultTreatment
+      // are controlled via policies, not agent_tools columns.
+      // This functionality requires policy bulk operations which are not yet implemented.
+      // For now, individual policy updates via the policy CRUD UI should be used.
+      console.warn(
+        "Bulk update of policy-related fields not yet implemented in new schema",
+      );
+      return { success: false };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+    },
+  });
+}

@@ -77,14 +77,44 @@ export function useToolInvocationPolicyCreateMutation() {
 export function useToolInvocationPolicyUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Accept flat fields (argumentName, operator, value) and convert to conditions[]
     mutationFn: async (
-      updatedPolicy: archestraApiTypes.UpdateToolInvocationPolicyData["body"] & {
+      updatedPolicy: {
         id: string;
-      },
+        argumentName?: string;
+        operator?: string;
+        value?: string;
+        action?: "allow_when_context_is_untrusted" | "block_always";
+        reason?: string | null;
+      } & Record<string, unknown>,
     ) => {
+      const { id, argumentName, operator, value, action, reason, ...rest } =
+        updatedPolicy;
+
+      // Build conditions array from flat fields if any are provided
+      const hasConditionFields =
+        argumentName !== undefined ||
+        operator !== undefined ||
+        value !== undefined;
+
+      const body: archestraApiTypes.UpdateToolInvocationPolicyData["body"] = {
+        ...rest,
+        ...(action !== undefined && { action }),
+        ...(reason !== undefined && { reason }),
+        ...(hasConditionFields && {
+          conditions: [
+            {
+              key: argumentName ?? "",
+              operator: (operator as "equal") ?? "equal",
+              value: value ?? "",
+            },
+          ],
+        }),
+      };
+
       return await updateToolInvocationPolicy({
-        body: updatedPolicy,
-        path: { id: updatedPolicy.id },
+        body,
+        path: { id },
       });
     },
     onSuccess: () => {
@@ -128,14 +158,41 @@ export function useToolResultPoliciesCreateMutation() {
 export function useToolResultPoliciesUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Accept flat fields (attributePath, operator, value) and convert to conditions[]
     mutationFn: async (
-      updatedPolicy: archestraApiTypes.UpdateTrustedDataPolicyData["body"] & {
+      updatedPolicy: {
         id: string;
-      },
+        attributePath?: string;
+        operator?: string;
+        value?: string;
+        action?: "mark_as_trusted" | "block_always" | "sanitize_with_dual_llm";
+      } & Record<string, unknown>,
     ) => {
+      const { id, attributePath, operator, value, action, ...rest } =
+        updatedPolicy;
+
+      const hasConditionFields =
+        attributePath !== undefined ||
+        operator !== undefined ||
+        value !== undefined;
+
+      const body: archestraApiTypes.UpdateTrustedDataPolicyData["body"] = {
+        ...rest,
+        ...(action !== undefined && { action }),
+        ...(hasConditionFields && {
+          conditions: [
+            {
+              key: attributePath ?? "",
+              operator: (operator as "equal") ?? "equal",
+              value: value ?? "",
+            },
+          ],
+        }),
+      };
+
       return await updateTrustedDataPolicy({
-        body: updatedPolicy,
-        path: { id: updatedPolicy.id },
+        body,
+        path: { id },
       });
     },
     onSuccess: () => {
@@ -170,7 +227,7 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byToolId = all.reduce(
+      const byProfileToolId = all.reduce(
         (acc, policy) => {
           acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
           return acc;
@@ -182,7 +239,7 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
       );
       return {
         all,
-        byToolId,
+        byProfileToolId,
       };
     },
   });
@@ -193,7 +250,7 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byToolId = all.reduce(
+      const byProfileToolId = all.reduce(
         (acc, policy) => {
           acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
           return acc;
@@ -205,7 +262,7 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
       );
       return {
         all,
-        byToolId,
+        byProfileToolId,
       };
     },
   });

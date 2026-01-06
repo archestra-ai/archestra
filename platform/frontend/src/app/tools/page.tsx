@@ -44,8 +44,8 @@ export default async function ToolsPage() {
     agents: [],
     mcpServers: [],
     internalMcpCatalog: [],
-    toolInvocationPolicies: { all: [], byToolId: {} },
-    toolResultPolicies: { all: [], byToolId: {} },
+    toolInvocationPolicies: { all: [], byProfileToolId: {} },
+    toolResultPolicies: { all: [], byProfileToolId: {} },
   };
   try {
     const headers = await getServerApiHeaders();

@@ -16,7 +16,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@ai-sdk/react": "^2.0.118",
+    "@ai-sdk/react": "^3.0.3",
     "@better-auth/sso": "1.4.6-beta.3",
     "@daveyplate/better-auth-ui": "github:archestra-ai/better-auth-ui#d2ca7c6",
     "@hookform/resolvers": "^5.2.2",
@@ -46,7 +46,7 @@
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-table": "^8.21.3",
     "@uidotdev/usehooks": "^2.4.1",
-    "ai": "^5.0.116",
+    "ai": "^6.0.3",
     "better-auth": "1.4.6-beta.3",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",

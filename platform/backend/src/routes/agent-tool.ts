@@ -291,7 +291,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updatedCount = await AgentToolModel.bulkUpdateSameValue(
         ids,
         field,
-        value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+        value,
         clearAutoConfigured,
       );
 
@@ -319,7 +319,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 success: z.boolean(),
                 config: z
                   .object({
-                    allowUsageWhenUntrustedDataIsPresent: z.boolean(),
                     toolResultTreatment: z.enum([
                       "trusted",
                       "sanitize_with_dual_llm",
@@ -443,7 +442,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          allowUsageWhenUntrustedDataIsPresent: true,
           toolResultTreatment: true,
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,

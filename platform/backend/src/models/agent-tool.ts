@@ -34,7 +34,6 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
         | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
@@ -155,7 +154,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
           | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
@@ -221,7 +219,6 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
         | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
@@ -235,7 +232,6 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
-      allowUsageWhenUntrustedDataIsPresent?: boolean;
       toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
       responseModifierTemplate?: string | null;
       credentialSourceMcpServerId?: string | null;
@@ -311,7 +307,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
           | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
@@ -378,7 +373,6 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
         | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
@@ -403,8 +397,8 @@ class AgentToolModel {
 
   static async bulkUpdateSameValue(
     ids: string[],
-    field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-    value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+    field: "toolResultTreatment",
+    value: "trusted" | "sanitize_with_dual_llm" | "untrusted",
     clearAutoConfigured = false,
   ): Promise<number> {
     if (ids.length === 0) {
@@ -597,11 +591,6 @@ class AgentToolModel {
           sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
         );
         break;
-      case "allowUsageWhenUntrustedDataIsPresent":
-        orderByClause = direction(
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        );
-        break;
       default:
         orderByClause = direction(schema.agentToolsTable.createdAt);
         break;
@@ -671,13 +660,10 @@ class AgentToolModel {
     agentId: string,
     toolName: string,
   ): Promise<{
-    allowUsageWhenUntrustedDataIsPresent: boolean;
     toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
   } | null> {
     const [agentTool] = await db
       .select({
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
       })
       .from(schema.agentToolsTable)
@@ -706,7 +692,6 @@ class AgentToolModel {
     Map<
       string,
       {
-        allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
       }
     >
@@ -718,8 +703,6 @@ class AgentToolModel {
     const agentTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
       })
       .from(schema.agentToolsTable)
@@ -737,15 +720,12 @@ class AgentToolModel {
     const result = new Map<
       string,
       {
-        allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
       }
     >();
 
     for (const tool of agentTools) {
       result.set(tool.toolName, {
-        allowUsageWhenUntrustedDataIsPresent:
-          tool.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: tool.toolResultTreatment,
       });
     }

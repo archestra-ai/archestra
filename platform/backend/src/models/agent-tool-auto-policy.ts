@@ -6,9 +6,9 @@ import ChatApiKeyModel from "./chat-api-key";
 import McpServerModel from "./mcp-server";
 
 type PolicyConfig = {
-  allowUsageWhenUntrustedDataIsPresent: boolean;
   toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
   reasoning: string;
+  // Note: allowUsageWhenUntrustedDataIsPresent moved to tool_invocation_policies table
 };
 
 interface AutoPolicyResult {
@@ -211,9 +211,8 @@ export class AgentToolAutoPolicyService {
       );
 
       // Update agent-tool with new configuration including reasoning
+      // Note: allowUsageWhenUntrustedDataIsPresent now managed via tool_invocation_policies
       await AgentToolModel.update(agentToolId, {
-        allowUsageWhenUntrustedDataIsPresent:
-          policyConfig.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: policyConfig.toolResultTreatment,
         policiesAutoConfiguredAt: new Date(),
         policiesAutoConfiguredReasoning: policyConfig.reasoning,

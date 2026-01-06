@@ -224,7 +224,6 @@ async function makeAgentTool(
   overrides: Partial<
     Pick<
       AgentTool,
-      | "allowUsageWhenUntrustedDataIsPresent"
       | "toolResultTreatment"
       | "credentialSourceMcpServerId"
       | "executionSourceMcpServerId"
@@ -232,7 +231,6 @@ async function makeAgentTool(
   > = {},
 ) {
   return await AgentToolModel.create(agentId, toolId, {
-    allowUsageWhenUntrustedDataIsPresent: false,
     toolResultTreatment: "untrusted" as const,
     ...overrides,
   });
@@ -242,19 +240,17 @@ async function makeAgentTool(
  * Creates a test tool invocation policy using the ToolInvocationPolicy model
  */
 async function makeToolPolicy(
-  agentToolId: string,
+  toolId: string,
   overrides: Partial<
     Pick<
       ToolInvocation.ToolInvocationPolicy,
-      "argumentName" | "operator" | "value" | "action" | "reason"
+      "conditions" | "action" | "reason"
     >
   > = {},
 ): Promise<ToolInvocation.ToolInvocationPolicy> {
   return await ToolInvocationPolicyModel.create({
-    agentToolId,
-    argumentName: "test-arg",
-    operator: "equal",
-    value: "test-value",
+    toolId,
+    conditions: [{ key: "test-arg", operator: "equal", value: "test-value" }],
     action: "block_always",
     reason: "Test policy reason",
     ...overrides,

@@ -26,7 +26,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
     // Create agent-tool relationship with security settings
     const agentTool = await AgentToolModel.create(agentId, toolId, {
-      allowUsageWhenUntrustedDataIsPresent: false,
       toolResultTreatment: "untrusted",
     });
     agentToolId = agentTool.id;
@@ -328,7 +327,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
       // Create agent-tool relationship with trusted treatment
       await AgentToolModel.create(agentId, trustedToolId, {
-        allowUsageWhenUntrustedDataIsPresent: false,
         toolResultTreatment: "trusted",
       });
 
@@ -375,7 +373,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         trustedToolId,
         {
-          allowUsageWhenUntrustedDataIsPresent: false,
           toolResultTreatment: "trusted",
         },
       );

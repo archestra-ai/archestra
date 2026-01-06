@@ -200,7 +200,6 @@ describe("TrustedDataPolicyModel", () => {
 
     // Create agent-tool relationship with default untrusted configuration
     const agentTool = await AgentToolModel.create(agentId, toolId, {
-      allowUsageWhenUntrustedDataIsPresent: false,
       toolResultTreatment: "untrusted",
     });
     agentToolId = agentTool.id;
@@ -289,7 +288,6 @@ describe("TrustedDataPolicyModel", () => {
         );
         if (!trustedTool) throw new Error("Tool not found");
         await AgentToolModel.create(agentId, trustedTool.id, {
-          allowUsageWhenUntrustedDataIsPresent: false,
           toolResultTreatment: "trusted",
         });
 
@@ -324,7 +322,6 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           trustedTool.id,
           {
-            allowUsageWhenUntrustedDataIsPresent: false,
             toolResultTreatment: "trusted",
           },
         );
@@ -369,7 +366,6 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           trustedTool.id,
           {
-            allowUsageWhenUntrustedDataIsPresent: false,
             toolResultTreatment: "trusted",
           },
         );
@@ -907,7 +903,6 @@ describe("TrustedDataPolicyModel", () => {
           agentId,
           trustedTool.id,
           {
-            allowUsageWhenUntrustedDataIsPresent: false,
             toolResultTreatment: "trusted",
           },
         );

@@ -1,9 +1,9 @@
 import { isAgentTool, isArchestraMcpServerTool } from "@shared";
-import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
+import type { CallPolicyCondition } from "@/database/schemas/tool-invocation-policy";
 import type { ToolInvocation } from "@/types";
-import AgentToolModel from "./agent-tool";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -18,15 +18,6 @@ class ToolInvocationPolicyModel {
       .insert(schema.toolInvocationPoliciesTable)
       .values(policy)
       .returning();
-
-    // Clear auto-configured timestamp and reasoning when adding a policy
-    await db
-      .update(schema.agentToolsTable)
-      .set({
-        policiesAutoConfiguredAt: null,
-        policiesAutoConfiguredReasoning: null,
-      })
-      .where(eq(schema.agentToolsTable.id, policy.agentToolId));
 
     return createdPolicy;
   }
@@ -48,6 +39,16 @@ class ToolInvocationPolicyModel {
     return policy || null;
   }
 
+  static async findByToolId(
+    toolId: string,
+  ): Promise<ToolInvocation.ToolInvocationPolicy[]> {
+    return db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId))
+      .orderBy(desc(schema.toolInvocationPoliciesTable.createdAt));
+  }
+
   static async update(
     id: string,
     policy: Partial<ToolInvocation.InsertToolInvocationPolicy>,
@@ -58,50 +59,86 @@ class ToolInvocationPolicyModel {
       .where(eq(schema.toolInvocationPoliciesTable.id, id))
       .returning();
 
-    // Clear auto-configured timestamp and reasoning when updating a policy
-    if (updatedPolicy) {
-      await db
-        .update(schema.agentToolsTable)
-        .set({
-          policiesAutoConfiguredAt: null,
-          policiesAutoConfiguredReasoning: null,
-        })
-        .where(eq(schema.agentToolsTable.id, updatedPolicy.agentToolId));
-    }
-
     return updatedPolicy || null;
   }
 
   static async delete(id: string): Promise<boolean> {
-    // Get the policy first to access agentToolId
-    const policy = await ToolInvocationPolicyModel.findById(id);
-    if (!policy) {
-      return false;
-    }
-
     const result = await db
       .delete(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.id, id));
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+    return result.rowCount !== null && result.rowCount > 0;
+  }
 
-    // Clear auto-configured timestamp and reasoning when deleting a policy
-    if (deleted) {
-      await db
-        .update(schema.agentToolsTable)
-        .set({
-          policiesAutoConfiguredAt: null,
-          policiesAutoConfiguredReasoning: null,
-        })
-        .where(eq(schema.agentToolsTable.id, policy.agentToolId));
+  /**
+   * Evaluate a single condition against tool input
+   */
+  private static evaluateCondition(
+    condition: CallPolicyCondition,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    toolInput: Record<string, any>,
+  ): boolean {
+    const argumentValue = get(toolInput, condition.key);
+
+    if (argumentValue === undefined) {
+      return false;
     }
 
-    return deleted;
+    switch (condition.operator) {
+      case "endsWith":
+        return (
+          typeof argumentValue === "string" &&
+          argumentValue.endsWith(condition.value)
+        );
+      case "startsWith":
+        return (
+          typeof argumentValue === "string" &&
+          argumentValue.startsWith(condition.value)
+        );
+      case "contains":
+        return (
+          typeof argumentValue === "string" &&
+          argumentValue.includes(condition.value)
+        );
+      case "notContains":
+        return (
+          typeof argumentValue === "string" &&
+          !argumentValue.includes(condition.value)
+        );
+      case "equal":
+        return argumentValue === condition.value;
+      case "notEqual":
+        return argumentValue !== condition.value;
+      case "regex":
+        return (
+          typeof argumentValue === "string" &&
+          new RegExp(condition.value).test(argumentValue)
+        );
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Check if all conditions in a policy match (AND logic)
+   * Empty conditions array means the policy applies to all calls
+   */
+  private static allConditionsMatch(
+    conditions: CallPolicyCondition[],
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    toolInput: Record<string, any>,
+  ): boolean {
+    if (conditions.length === 0) {
+      return true; // No conditions = applies to all
+    }
+    return conditions.every((condition) =>
+      this.evaluateCondition(condition, toolInput),
+    );
   }
 
   /**
    * Batch evaluate tool invocation policies for multiple tool calls at once.
-   * This avoids N+1 queries by fetching all policies and security configs,
+   * This avoids N+1 queries by fetching all policies upfront.
    *
    * Returns the first blocked tool call (refusal message) or null if all are allowed.
    */
@@ -127,161 +164,113 @@ class ToolInvocationPolicyModel {
 
     const toolNames = externalToolCalls.map((tc) => tc.toolCallName);
 
-    // Fetch all policies for all tools.
-    const allPolicies = await db
+    // Fetch tool IDs for the tool names
+    const tools = await db
       .select({
-        ...getTableColumns(schema.toolInvocationPoliciesTable),
-        toolName: schema.toolsTable.name,
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
       })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolInvocationPoliciesTable,
-        eq(
-          schema.agentToolsTable.id,
-          schema.toolInvocationPoliciesTable.agentToolId,
-        ),
-      )
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agentId),
-          inArray(schema.toolsTable.name, toolNames),
-        ),
-      );
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.name, toolNames));
 
-    // Group policies by tool name
-    const policiesByTool = new Map<
+    const toolIdsByName = new Map(tools.map((t) => [t.name, t.id]));
+    const toolIds = tools.map((t) => t.id);
+
+    if (toolIds.length === 0) {
+      // No tools found, allow all
+      return { isAllowed: true, reason: "" };
+    }
+
+    // Fetch all policies for all tools
+    const allPolicies = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+
+    // Group policies by tool ID
+    const policiesByToolId = new Map<
       string,
       Array<(typeof allPolicies)[number]>
     >();
-    const securityConfigByTool = new Map<string, boolean | null>();
-
     for (const policy of allPolicies) {
-      const existing = policiesByTool.get(policy.toolName) || [];
+      const existing = policiesByToolId.get(policy.toolId) || [];
       existing.push(policy);
-      policiesByTool.set(policy.toolName, existing);
-      // Also track security config (same for all policies of a tool)
-      if (!securityConfigByTool.has(policy.toolName)) {
-        securityConfigByTool.set(
-          policy.toolName,
-          policy.allowUsageWhenUntrustedDataIsPresent,
-        );
-      }
+      policiesByToolId.set(policy.toolId, existing);
     }
 
-    // For tools without policies, we need to fetch their security config
-    const toolsNeedingSecurityConfig = toolNames.filter(
-      (name) => !securityConfigByTool.has(name),
-    );
-
-    if (toolsNeedingSecurityConfig.length > 0) {
-      const securityConfigs = await AgentToolModel.getSecurityConfigBatch(
-        agentId,
-        toolsNeedingSecurityConfig,
-      );
-      for (const [toolName, config] of securityConfigs) {
-        securityConfigByTool.set(
-          toolName,
-          config.allowUsageWhenUntrustedDataIsPresent,
-        );
-      }
-    }
-
-    // Evaluate each tool call using the pre-fetched data
+    // Evaluate each tool call
     for (const { toolCallName, toolInput } of externalToolCalls) {
-      const policies = policiesByTool.get(toolCallName) || [];
-      const allowUsageWhenUntrustedDataIsPresent =
-        securityConfigByTool.get(toolCallName) ?? null;
+      const toolId = toolIdsByName.get(toolCallName);
+      if (!toolId) continue;
 
-      let hasExplicitAllowRule = false;
+      const policies = policiesByToolId.get(toolId) || [];
 
-      // Evaluate each policy for this tool
-      for (const policy of policies) {
-        const {
-          argumentName,
-          operator,
-          value: policyValue,
-          action,
-          reason,
-        } = policy;
-        const argumentValue = get(toolInput, argumentName);
+      // Separate policies into specific (has conditions) and default (empty conditions)
+      const specificPolicies = policies.filter(
+        (p) => p.conditions && p.conditions.length > 0,
+      );
+      const defaultPolicies = policies.filter(
+        (p) => !p.conditions || p.conditions.length === 0,
+      );
 
-        if (argumentValue === undefined) {
-          if (action === "block_always") {
-            continue;
-          }
-          if (allowUsageWhenUntrustedDataIsPresent) {
-            continue;
-          }
+      // First, check specific policies (more specific rules take precedence)
+      let hasMatchingSpecificPolicy = false;
+      let specificAllowsUntrusted = false;
+
+      for (const policy of specificPolicies) {
+        const conditionsMatch = this.allConditionsMatch(
+          policy.conditions,
+          toolInput,
+        );
+
+        if (!conditionsMatch) continue;
+
+        hasMatchingSpecificPolicy = true;
+
+        if (policy.action === "block_always") {
           return {
             isAllowed: false,
-            reason: `Missing required argument: ${argumentName}`,
+            reason: policy.reason || "Policy violation",
             toolCallName,
           };
         }
 
-        // Evaluate the condition
-        let conditionMet = false;
-
-        switch (operator) {
-          case "endsWith":
-            conditionMet =
-              typeof argumentValue === "string" &&
-              argumentValue.endsWith(policyValue);
-            break;
-          case "startsWith":
-            conditionMet =
-              typeof argumentValue === "string" &&
-              argumentValue.startsWith(policyValue);
-            break;
-          case "contains":
-            conditionMet =
-              typeof argumentValue === "string" &&
-              argumentValue.includes(policyValue);
-            break;
-          case "notContains":
-            conditionMet =
-              typeof argumentValue === "string" &&
-              !argumentValue.includes(policyValue);
-            break;
-          case "equal":
-            conditionMet = argumentValue === policyValue;
-            break;
-          case "notEqual":
-            conditionMet = argumentValue !== policyValue;
-            break;
-          case "regex":
-            conditionMet =
-              typeof argumentValue === "string" &&
-              new RegExp(policyValue).test(argumentValue);
-            break;
-        }
-
-        if (action === "allow_when_context_is_untrusted") {
-          if (conditionMet) {
-            hasExplicitAllowRule = true;
-          }
-        } else if (action === "block_always") {
-          if (conditionMet) {
-            return {
-              isAllowed: false,
-              reason: reason || `Policy violation: ${reason}`,
-              toolCallName,
-            };
-          }
+        if (policy.action === "allow_when_context_is_untrusted") {
+          specificAllowsUntrusted = true;
         }
       }
 
-      if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
-        continue; // Tool is allowed
+      // If a specific policy matched, use its result (ignore default policies)
+      if (hasMatchingSpecificPolicy) {
+        if (!isContextTrusted && !specificAllowsUntrusted) {
+          return {
+            isAllowed: false,
+            reason: "Tool invocation blocked: context contains untrusted data",
+            toolCallName,
+          };
+        }
+        continue; // Tool is allowed, move to next tool
       }
 
-      if (!isContextTrusted && !hasExplicitAllowRule) {
+      // No specific policy matched - fall back to default policy (empty conditions)
+      let defaultAllowsUntrusted = false;
+
+      for (const policy of defaultPolicies) {
+        if (policy.action === "block_always") {
+          return {
+            isAllowed: false,
+            reason: policy.reason || "Policy violation",
+            toolCallName,
+          };
+        }
+
+        if (policy.action === "allow_when_context_is_untrusted") {
+          defaultAllowsUntrusted = true;
+        }
+      }
+
+      // Check if tool is allowed when context is untrusted
+      if (!isContextTrusted && !defaultAllowsUntrusted) {
         return {
           isAllowed: false,
           reason: "Tool invocation blocked: context contains untrusted data",

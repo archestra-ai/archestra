@@ -74,7 +74,6 @@ export const AgentToolSortBySchema = z.enum([
   "agent",
   "origin",
   "createdAt",
-  "allowUsageWhenUntrustedDataIsPresent",
 ]);
 export const AgentToolSortDirectionSchema = z.enum(["asc", "desc"]);
 
@@ -92,11 +91,8 @@ export type AgentToolSortDirection = z.infer<
 
 export const BulkUpdateAgentToolsRequestSchema = z.object({
   ids: z.array(UuidIdSchema).min(1, "At least one ID is required"),
-  field: z.enum([
-    "allowUsageWhenUntrustedDataIsPresent",
-    "toolResultTreatment",
-  ]),
-  value: z.union([z.boolean(), ToolResultTreatmentSchema]),
+  field: z.enum(["toolResultTreatment"]),
+  value: ToolResultTreatmentSchema,
   clearAutoConfigured: z.boolean().optional(),
 });
 

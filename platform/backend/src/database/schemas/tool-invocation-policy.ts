@@ -7,7 +7,11 @@ import toolsTable from "./tool";
  * All conditions must match (AND logic) for the policy action to apply.
  */
 export type CallPolicyCondition = {
-  /** The argument name to check (e.g., "query", "to", "database") */
+  /**
+   * The argument name to check (e.g., "query", "to", "database").
+   * Could be context entity reference, e.g. context.profile.
+   * In the case of context entity, value is typically entity id.
+   */
   key: string;
   /** Comparison operator */
   operator: AutonomyPolicyOperator.SupportedOperator;

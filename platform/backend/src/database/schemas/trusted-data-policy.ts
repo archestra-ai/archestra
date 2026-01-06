@@ -1,18 +1,30 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
-import agentToolsTable from "./agent-tool";
+import toolsTable from "./tool";
+
+/**
+ * A single condition in a result policy rule.
+ * All conditions must match (AND logic) for the policy action to apply.
+ */
+export type ResultPolicyCondition = {
+  /** The attribute key or the path to check in the tool result (e.g., "emails[*].from", "source") */
+  key: string;
+  /** Comparison operator */
+  operator: AutonomyPolicyOperator.SupportedOperator;
+  /** Value to compare against */
+  value: string;
+};
 
 const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
   id: uuid("id").primaryKey().defaultRandom(),
-  agentToolId: uuid("agent_tool_id")
+  toolId: uuid("tool_id")
     .notNull()
-    .references(() => agentToolsTable.id, { onDelete: "cascade" }),
-  description: text("description").notNull(),
-  attributePath: text("attribute_path").notNull(),
-  operator: text("operator")
-    .$type<AutonomyPolicyOperator.SupportedOperator>()
-    .notNull(),
-  value: text("value").notNull(),
+    .references(() => toolsTable.id, { onDelete: "cascade" }),
+  description: text("description"),
+  conditions: jsonb("conditions")
+    .$type<ResultPolicyCondition[]>()
+    .notNull()
+    .default([]),
   action: text("action")
     .$type<TrustedData.TrustedDataPolicyAction>()
     .notNull()

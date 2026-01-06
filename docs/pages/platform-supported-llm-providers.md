@@ -279,8 +279,7 @@ Groq provides ultra-fast inference for popular open-source models like Llama, Mi
 
 ### Supported Groq APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
-
+- **Chat Completions API** (`/chat/completions`)
 ### Groq Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`

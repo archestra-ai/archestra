@@ -180,6 +180,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const normalizedServiceAccount =
           serviceAccount === "" ? undefined : serviceAccount;
         if (
+          catalogItem?.serverType === "local" &&
           normalizedServiceAccount !== undefined &&
           catalogItem.localConfig?.serviceAccount !== normalizedServiceAccount
         ) {

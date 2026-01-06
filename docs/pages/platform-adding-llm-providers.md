@@ -16,7 +16,7 @@ This is a development guide for adding new LLM providers to Archestra.
 
 This guide covers how to add a new LLM provider to Archestra Platform. Each provider requires:
 
-1. **[LLM Proxy](/docs/platform-llm-proxy)** - The proxy that sits between clients and LLM providers. Handles security policies, tool invocation controls, metrics, and observability. Clients send requests to the proxy, which forwards them to the provider.
+1. **[LLM Proxy](/docs/platform-llm-proxy)** - The proxy that sits between clients and LLM providers. Handles security policies, tool invocation controls, metrics, and observability. Clients send requests to the proxy, which forwards them to the provider. It must handle both streaming and non-streaming provider responses.
 
 2. **[Chat](/docs/platform-chat)** - The built-in chat interface. 
 
@@ -216,3 +216,9 @@ Existing provider implementations for reference:
 - OpenAI: `backend/src/routes/proxy/openai.ts`, `backend/src/routes/proxy/adapterV2/openai.ts`
 - Anthropic: `backend/src/routes/proxy/anthropic.ts`, `backend/src/routes/proxy/adapterV2/anthropic.ts`
 - Gemini: `backend/src/routes/proxy/gemini.ts`, `backend/src/routes/proxy/adapterV2/gemini.ts`
+
+## Smoke Testing
+
+Use [PROVIDER_SMOKE_TEST.md](https://github.com/archestra-ai/archestra/blob/main/platform/PROVIDER_SMOKE_TEST.md) during development to verify basic functionality. This is a quick, non-exhaustive list.
+
+Note, that Archestra Chat uses streaming for all LLM interactions. To test non-streaming responses, use an external client like n8n Chat node.

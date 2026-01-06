@@ -43,15 +43,14 @@ ALTER TABLE "tool_invocation_policies"
 -- STEP 3: Migrate allow_usage_when_untrusted_data_is_present from agent_tools
 -- Creates policies with empty conditions (applies to all calls for that tool)
 -- Skip rows where allow_usage_when_untrusted_data_is_present is NULL (no explicit setting)
-INSERT INTO "tool_invocation_policies" ("tool_id", "conditions", "action", "reason")
+INSERT INTO "tool_invocation_policies" ("tool_id", "conditions", "action")
 SELECT DISTINCT ON (at."tool_id")
   at."tool_id",
   '[]'::jsonb,
   CASE
     WHEN at."allow_usage_when_untrusted_data_is_present" THEN 'allow_when_context_is_untrusted'
     ELSE 'block_always'
-  END,
-  'Fallback policy'
+  END
 FROM "agent_tools" at
 WHERE at."allow_usage_when_untrusted_data_is_present" IS NOT NULL
   AND NOT EXISTS (

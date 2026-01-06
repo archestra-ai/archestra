@@ -105,7 +105,7 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'agent_tools' AND column_name = 'tool_result_treatment'
   ) THEN
-    INSERT INTO "trusted_data_policies" ("tool_id", "conditions", "action", "description")
+    INSERT INTO "trusted_data_policies" ("tool_id", "conditions", "action")
     SELECT DISTINCT ON (at."tool_id")
       at."tool_id",
       '[]'::jsonb,
@@ -113,8 +113,7 @@ BEGIN
         WHEN 'trusted' THEN 'mark_as_trusted'
         WHEN 'sanitize_with_dual_llm' THEN 'sanitize_with_dual_llm'
         ELSE 'block_always'
-      END,
-      'Default policy'
+      END
     FROM "agent_tools" at
     WHERE at."tool_id" IS NOT NULL
       AND at."tool_result_treatment" IS NOT NULL

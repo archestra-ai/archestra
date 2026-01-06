@@ -29,6 +29,7 @@ import {
   constructResponseSchema,
   UuidIdSchema,
 } from "@/types";
+import { convertToolResultsToToon } from "./adapterV2/anthropic";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";
@@ -185,7 +186,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "[AnthropicProxy] Agent resolved",
     );
 
-    const { "x-api-key": anthropicApiKey } = headers;
+    const { "x-api-key": anthropicApiKey, "anthropic-beta": anthropicBeta } =
+      headers;
 
     const anthropicClient = config.benchmark.mockMode
       ? (new MockAnthropicClient() as unknown as AnthropicProvider)
@@ -197,6 +199,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgent,
             externalAgentId,
           ),
+          defaultHeaders: anthropicBeta
+            ? { "anthropic-beta": anthropicBeta }
+            : undefined,
         });
 
     try {
@@ -422,10 +427,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
-          await utils.adapters.anthropic.convertToolResultsToToon(
-            filteredMessages,
-            model,
-          );
+          await convertToolResultsToToon(filteredMessages, model);
         filteredMessages = convertedMessages;
         toonTokensBefore = stats.toonTokensBefore;
         toonTokensAfter = stats.toonTokensAfter;

@@ -212,15 +212,18 @@ export default {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
+      useV2Routes: process.env.ARCHESTRA_OPENAI_USE_V2_ROUTES !== "false",
     },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      useV2Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V2_ROUTES !== "false",
     },
     gemini: {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+      useV2Routes: process.env.ARCHESTRA_GEMINI_USE_V2_ROUTES !== "false",
       vertexAi: {
         enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
@@ -286,10 +289,6 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
-      mcpK8sServiceAccountName:
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME ||
-        // Default value matches the mcp-k8s-operator service account name from the official helm chart
-        "archestra-platform-mcp-k8s-operator",
     },
   },
   vault: {

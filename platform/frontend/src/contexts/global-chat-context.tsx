@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -255,6 +256,16 @@ function ChatSessionHook({
         TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
       ) {
         setPendingCustomServerToolCall(toolCall);
+      }
+
+      // Detect artifact_write tool and invalidate conversation to fetch updated artifact
+      if (toolCall.toolName === TOOL_ARTIFACT_WRITE_FULL_NAME) {
+        // Small delay to ensure backend has saved the artifact
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: ["conversation", conversationId],
+          });
+        }, 500);
       }
     },
   } as Parameters<typeof useChat>[0]);

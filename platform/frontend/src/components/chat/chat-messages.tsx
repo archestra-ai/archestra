@@ -1,7 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -23,10 +23,12 @@ import {
 } from "@/components/ai-elements/tool";
 import { useUpdateChatMessage } from "@/lib/chat-message.query";
 import { parsePolicyDenied } from "@/lib/llmProviders/common";
+import { cn } from "@/lib/utils";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { TodoWriteTool } from "./todo-write-tool";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -82,6 +84,18 @@ export function ChatMessages({
 
   // Initialize mutation hook with conversationId (use empty string as fallback for hook rules)
   const updateChatMessageMutation = useUpdateChatMessage(conversationId || "");
+
+  // Debounce resize mode change when exiting edit mode to let DOM settle
+  const isEditing = editingPartKey !== null;
+  const [instantResize, setInstantResize] = useState(false);
+  useLayoutEffect(() => {
+    if (isEditing) {
+      setInstantResize(true);
+    } else {
+      const timeout = setTimeout(() => setInstantResize(false), 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [isEditing]);
 
   const handleStartEdit = (partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
@@ -180,22 +194,23 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
 
+  const isResponseInProgress = status === "streaming" || status === "submitted";
+
   return (
-    <Conversation className="h-full">
+    <Conversation
+      className="h-full"
+      resize={instantResize ? "instant" : "smooth"}
+    >
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => {
-            // Hide messages below the one being edited (for user messages only)
-            if (
-              editingMessageIndex !== -1 &&
-              idx > editingMessageIndex &&
-              editingPartKey?.startsWith(messages[editingMessageIndex].id)
-            ) {
-              return null;
-            }
-
+            const isDimmed =
+              editingMessageIndex !== -1 && idx > editingMessageIndex;
             return (
-              <div key={message.id || idx}>
+              <div
+                key={message.id || idx}
+                className={cn(isDimmed && "opacity-40 transition-opacity")}
+              >
                 {message.parts?.map((part, i) => {
                   // Skip tool result parts that immediately follow a tool invocation with same toolCallId
                   if (
@@ -235,7 +250,7 @@ export function ChatMessages({
                             key={partKey}
                             policyDenied={policyDenied}
                             {...(agentId
-                              ? { editable: true, agentId }
+                              ? { editable: true, profileId: agentId }
                               : { editable: false })}
                           />
                         );
@@ -272,6 +287,7 @@ export function ChatMessages({
                               text={part.text}
                               isEditing={editingPartKey === partKey}
                               showActions={showActions}
+                              editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveAssistantMessage}
@@ -290,6 +306,7 @@ export function ChatMessages({
                               partKey={partKey}
                               text={part.text}
                               isEditing={editingPartKey === partKey}
+                              editDisabled={isResponseInProgress}
                               onStartEdit={handleStartEdit}
                               onCancelEdit={handleCancelEdit}
                               onSave={handleSaveUserMessage}
@@ -477,10 +494,23 @@ function MessageTool({
       return (
         <PolicyDeniedTool
           policyDenied={policyDenied}
-          {...(agentId ? { editable: true, agentId } : { editable: false })}
+          {...(agentId
+            ? { editable: true, profileId: agentId }
+            : { editable: false })}
         />
       );
     }
+  }
+
+  // Check if this is the todo_write tool from Archestra
+  if (toolName === "archestra__todo_write") {
+    return (
+      <TodoWriteTool
+        part={part}
+        toolResultPart={toolResultPart}
+        errorText={errorText}
+      />
+    );
   }
 
   const hasInput = part.input && Object.keys(part.input).length > 0;

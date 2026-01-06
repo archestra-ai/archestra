@@ -1,0 +1,44 @@
+name: Auto Assign Reviewers
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  assign-reviewers:
+    if: |
+      github.event.pull_request.draft == false &&
+      !contains(fromJson('["ashlkv", "iskhakov", "Konstantinov-Innokentii", "joeyorlando", "brojd"]'), github.event.pull_request.user.login)
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Randomly assign reviewer from core team
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const coreTeam = ['ashlkv', 'iskhakov', 'Konstantinov-Innokentii', 'joeyorlando', 'brojd'];
+            const prAuthor = context.payload.pull_request.user.login;
+            
+            // Filter out the PR author if they're somehow in the core team (extra safety)
+            const availableReviewers = coreTeam.filter(member => member !== prAuthor);
+            
+            // Randomly select one reviewer
+            const randomIndex = Math.floor(Math.random() * availableReviewers.length);
+            const selectedReviewer = availableReviewers[randomIndex];
+            
+            console.log(`Assigning reviewer: ${selectedReviewer} to PR #${context.payload.pull_request.number}`);
+            
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                reviewers: [selectedReviewer]
+              });
+              console.log(`Successfully assigned ${selectedReviewer} as reviewer`);
+            } catch (error) {
+              console.error(`Failed to assign reviewer: ${error.message}`);
+              // Don't fail the workflow if reviewer assignment fails
+              // (e.g., if the reviewer doesn't have access to the repo)
+            }

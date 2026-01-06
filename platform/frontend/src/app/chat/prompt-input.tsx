@@ -35,9 +35,12 @@ interface ArchestraPromptInputProps {
   // Tools integration props
   agentId: string;
   conversationId: string;
+  promptId?: string | null;
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
+  // Ref for autofocus
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 // Inner component that has access to the controller context
@@ -49,12 +52,15 @@ const PromptInputContent = ({
   messageCount,
   agentId,
   conversationId,
+  promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  textareaRef: externalTextareaRef,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
 
   // Handle speech transcription by updating controller state
@@ -69,7 +75,7 @@ const PromptInputContent = ({
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
       <PromptInputHeader className="pt-3">
         {agentId && conversationId && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ProfileSelector
               currentAgentId={agentId}
               conversationId={conversationId}
@@ -77,6 +83,7 @@ const PromptInputContent = ({
             <ChatToolsDisplay
               agentId={agentId}
               conversationId={conversationId}
+              promptId={promptId}
             />
           </div>
         )}
@@ -128,8 +135,10 @@ const ArchestraPromptInput = ({
   messageCount = 0,
   agentId,
   conversationId,
+  promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  textareaRef,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -142,8 +151,10 @@ const ArchestraPromptInput = ({
           messageCount={messageCount}
           agentId={agentId}
           conversationId={conversationId}
+          promptId={promptId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
+          textareaRef={textareaRef}
         />
       </PromptInputProvider>
     </div>

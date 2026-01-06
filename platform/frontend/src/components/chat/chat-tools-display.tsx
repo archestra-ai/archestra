@@ -17,6 +17,7 @@ import {
 import {
   useConversationEnabledTools,
   useProfileToolsWithIds,
+  usePromptTools,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
 import { Button } from "../ui/button";
@@ -24,6 +25,7 @@ import { Button } from "../ui/button";
 interface ChatToolsDisplayProps {
   agentId: string;
   conversationId: string;
+  promptId?: string | null;
   className?: string;
 }
 
@@ -35,14 +37,26 @@ interface ChatToolsDisplayProps {
 export function ChatToolsDisplay({
   agentId,
   conversationId,
+  promptId,
   className,
 }: ChatToolsDisplayProps) {
-  const { data: profileTools = [], isLoading } =
+  const { data: profileTools = [], isLoading: isLoadingProfileTools } =
     useProfileToolsWithIds(agentId);
+
+  // Fetch agent delegation tools from database (real UUIDs, not virtual IDs)
+  const { data: promptTools = [], isLoading: isLoadingPromptTools } =
+    usePromptTools(promptId ?? undefined);
+
+  const isLoading = isLoadingProfileTools || isLoadingPromptTools;
+
+  // Debug: Log tools when they're loaded
+  useEffect(() => {
+    if (!isLoading) {
+    }
+  }, [isLoading]);
 
   // State for tooltip open state per server
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
-  const componentRef = useRef<HTMLDivElement>(null);
   const tooltipContentRef = useRef<HTMLDivElement | null>(null);
 
   // Handle click outside to close tooltips
@@ -50,13 +64,16 @@ export function ChatToolsDisplay({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      // Check if click is within the component
-      if (componentRef.current?.contains(target)) {
+      // Check if click is within the main tooltip content
+      if (tooltipContentRef.current?.contains(target)) {
         return;
       }
 
-      // Check if click is within the main tooltip content
-      if (tooltipContentRef.current?.contains(target)) {
+      // Check if click is on any of the tool buttons
+      const clickedButton = (target as HTMLElement).closest(
+        "[data-tool-button]",
+      );
+      if (clickedButton) {
         return;
       }
 
@@ -80,24 +97,27 @@ export function ChatToolsDisplay({
   const updateEnabledTools = useUpdateConversationEnabledTools();
 
   // Get the current list of enabled tools
-  // If no custom selection, all profile tools are enabled by default
+  // If no custom selection, all tools (profile + prompt) are enabled by default
+  const allToolIds = [...profileTools, ...promptTools].map((t) => t.id);
   const currentEnabledToolIds = hasCustomSelection
     ? enabledToolIds
-    : profileTools.map((t) => t.id);
-
-  // Create a map of tool name -> tool ID for quick lookup
-  const toolNameToId: Record<string, string> = {};
-  for (const tool of profileTools) {
-    toolNameToId[tool.name] = tool.id;
-  }
+    : allToolIds;
 
   // Create enabled tool IDs set for quick lookup
   // Use currentEnabledToolIds to handle both custom and default states
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
+  // Combine profile tools with prompt tools (agent delegation tools)
+  type ToolItem = {
+    id: string;
+    name: string;
+    description: string | null;
+  };
+  const allTools: ToolItem[] = [...profileTools, ...promptTools];
+
   // Group ALL tools by MCP server name (don't filter by enabled status)
-  const groupedTools: Record<string, typeof profileTools> = {};
-  for (const tool of profileTools) {
+  const groupedTools: Record<string, ToolItem[]> = {};
+  for (const tool of allTools) {
     const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
     const serverName =
       parts.length > 1
@@ -153,7 +173,6 @@ export function ChatToolsDisplay({
   // Handle enabling all disabled tools for a server
   const handleEnableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
-    // Filter out duplicates by creating a Set
     const newEnabledToolIds = [
       ...new Set([...currentEnabledToolIds, ...toolIds]),
     ];
@@ -165,7 +184,7 @@ export function ChatToolsDisplay({
 
   // Render a single tool row
   const renderToolRow = (
-    tool: { id: string; name: string; description: string | null },
+    tool: ToolItem,
     isDisabled: boolean,
     _currentServerName: string,
   ) => {
@@ -216,20 +235,16 @@ export function ChatToolsDisplay({
   }
 
   if (Object.keys(groupedTools).length === 0) {
-    return (
-      <div className={className}>
-        <div className="flex flex-wrap gap-2" />
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className={className} ref={componentRef}>
+    <div className={className}>
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {sortedServerEntries.map(([serverName]) => {
-            // Get all tools for this server from profileTools
-            const allServerTools = profileTools.filter((tool) => {
+            // Get all tools for this server from allTools (profile tools + agent tools)
+            const allServerTools = allTools.filter((tool) => {
               const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
               const toolServerName =
                 parts.length > 1
@@ -239,8 +254,8 @@ export function ChatToolsDisplay({
             });
 
             // Split into enabled and disabled using the consistent enabledToolIdsSet
-            const enabledTools: typeof allServerTools = [];
-            const disabledTools: typeof allServerTools = [];
+            const enabledTools: ToolItem[] = [];
+            const disabledTools: ToolItem[] = [];
 
             for (const tool of allServerTools) {
               if (enabledToolIdsSet.has(tool.id)) {
@@ -257,6 +272,7 @@ export function ChatToolsDisplay({
               <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
                 <TooltipTrigger asChild>
                   <PromptInputButton
+                    data-tool-button
                     className="w-[fit-content]"
                     size="sm"
                     variant="outline"

@@ -1,20 +1,29 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
+  ConversationModel,
   InternalMcpCatalogModel,
   LimitModel,
   McpServerModel,
+  PromptAgentModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
+import type { TokenAuthResult } from "@/routes/mcp-gateway.utils";
+import { executeA2AMessage } from "@/services/a2a-executor";
 import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
@@ -52,6 +61,16 @@ const TOOL_GET_MCP_SERVERS_NAME = "get_mcp_servers";
 const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
 const TOOL_GET_PROFILE_NAME = "get_profile";
 
+/**
+ * Convert a name to a URL-safe slug for tool naming
+ */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
@@ -85,6 +104,14 @@ export interface ArchestraContext {
     id: string;
     name: string;
   };
+  conversationId?: string;
+  userId?: string;
+  /** The ID of the current prompt (for agent tool lookup) */
+  promptId?: string;
+  /** The organization ID */
+  organizationId?: string;
+  /** Token authentication result */
+  tokenAuth?: TokenAuthResult;
 }
 
 /**
@@ -95,7 +122,116 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { profile } = context;
+  const { profile, promptId, organizationId, tokenAuth } = context;
+
+  // Handle dynamic agent tools (e.g., agent__research_bot)
+  if (toolName.startsWith(AGENT_TOOL_PREFIX)) {
+    const message = args?.message as string;
+
+    if (!message) {
+      return {
+        content: [{ type: "text", text: "Error: message is required." }],
+        isError: true,
+      };
+    }
+
+    if (!promptId) {
+      return {
+        content: [
+          { type: "text", text: "Error: No prompt context available." },
+        ],
+        isError: true,
+      };
+    }
+
+    if (!organizationId) {
+      return {
+        content: [
+          { type: "text", text: "Error: Organization context not available." },
+        ],
+        isError: true,
+      };
+    }
+
+    // Extract agent slug from tool name
+    const agentSlug = toolName.replace(AGENT_TOOL_PREFIX, "");
+
+    // Get all agents configured for this prompt
+    const allAgents =
+      await PromptAgentModel.findByPromptIdWithDetails(promptId);
+
+    // Find matching agent by slug
+    const agent = allAgents.find((a) => slugify(a.name) === agentSlug);
+
+    if (!agent) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: Agent not found or not configured for this prompt.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Check user has access if user token is being used
+    const userId = tokenAuth?.userId;
+    if (userId) {
+      const userAccessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      if (!userAccessibleAgentIds.includes(agent.profileId)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: You don't have access to this agent.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    try {
+      logger.info(
+        {
+          promptId,
+          agentPromptId: agent.agentPromptId,
+          agentName: agent.name,
+          organizationId,
+          userId: userId || "system",
+        },
+        "Executing agent tool",
+      );
+
+      const result = await executeA2AMessage({
+        promptId: agent.agentPromptId,
+        message,
+        organizationId,
+        userId: userId || "system",
+      });
+
+      return {
+        content: [{ type: "text", text: result.text }],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error(
+        { error, promptId, agentPromptId: agent.agentPromptId },
+        "Agent tool execution failed",
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
 
   if (toolName === TOOL_WHOAMI_FULL_NAME) {
     logger.info(
@@ -1460,6 +1596,143 @@ export async function executeArchestraTool(
     }
   }
 
+  if (toolName === TOOL_TODO_WRITE_FULL_NAME) {
+    logger.info(
+      { profileId: profile.id, todoArgs: args },
+      "todo_write tool called",
+    );
+
+    try {
+      const todos = args?.todos as
+        | Array<{
+            id: number;
+            content: string;
+            status: string;
+          }>
+        | undefined;
+
+      if (!todos || !Array.isArray(todos)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: todos parameter is required and must be an array",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // For now, just return a success message
+      // In the future, this could persist todos to database
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully wrote ${todos.length} todo item(s) to the conversation`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error({ err: error }, "Error writing todos");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error writing todos: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_ARTIFACT_WRITE_FULL_NAME) {
+    logger.info(
+      { profileId: profile.id, artifactArgs: args, context },
+      "artifact_write tool called",
+    );
+
+    try {
+      const content = args?.content as string | undefined;
+
+      if (!content || typeof content !== "string") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: content parameter is required and must be a string",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Check if we have conversation context
+      if (
+        !context.conversationId ||
+        !context.userId ||
+        !context.organizationId
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: This tool requires conversation context. It can only be used within an active chat conversation.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Update the conversation's artifact
+      const updated = await ConversationModel.update(
+        context.conversationId,
+        context.userId,
+        context.organizationId,
+        { artifact: content },
+      );
+
+      if (!updated) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully updated conversation artifact (${content.length} characters)`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error({ err: error }, "Error writing artifact");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error writing artifact: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   // If the tool is not an Archestra tool, throw an error
   throw {
     code: -32601, // Method not found
@@ -2068,5 +2341,122 @@ export function getArchestraMcpTools(): Tool[] {
       annotations: {},
       _meta: {},
     },
+    {
+      name: TOOL_TODO_WRITE_FULL_NAME,
+      title: "Write Todos",
+      description:
+        "Write todos to the current conversation. You have access to this tool to help you manage and plan tasks. Use it VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress. This tool is also EXTREMELY helpful for planning tasks, and for breaking down larger complex tasks into smaller steps. If you do not use this tool when planning, you may forget to do important tasks - and that is unacceptable. It is critical that you mark todos as completed as soon as you are done with a task. Do not batch up multiple tasks before marking them as completed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          todos: {
+            type: "array",
+            description: "Array of todo items to write to the conversation",
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "integer",
+                  description: "Unique identifier for the todo item",
+                },
+                content: {
+                  type: "string",
+                  description: "The content/description of the todo item",
+                },
+                status: {
+                  type: "string",
+                  enum: ["pending", "in_progress", "completed"],
+                  description: "The current status of the todo item",
+                },
+              },
+              required: ["id", "content", "status"],
+            },
+          },
+        },
+        required: ["todos"],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_ARTIFACT_WRITE_FULL_NAME,
+      title: "Write Artifact",
+      description:
+        "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
+        "Mermaid diagrams: Use ```mermaid blocks. " +
+        "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          content: {
+            type: "string",
+            description:
+              "The markdown content to write to the conversation artifact. This will completely replace any existing artifact content.",
+          },
+        },
+        required: ["content"],
+      },
+      annotations: {},
+      _meta: {},
+    },
   ];
+}
+
+/**
+ * Get agent delegation tools for a prompt from the database
+ * Each configured agent becomes a separate tool (e.g., agent__research_bot)
+ * Note: Agent tools are separate from Archestra tools - they enable prompt-to-prompt delegation
+ */
+export async function getAgentTools(context: {
+  promptId: string;
+  organizationId: string;
+  userId?: string;
+}): Promise<Tool[]> {
+  const { promptId, organizationId, userId } = context;
+
+  // Get all agent delegation tools from the database with profile info
+  const allToolsWithDetails =
+    await ToolModel.getAgentDelegationToolsWithDetails(promptId);
+
+  // Filter by user access if user ID is provided
+  let accessibleTools = allToolsWithDetails;
+  if (userId) {
+    // Check if user has profile admin permission directly (don't trust caller)
+    const isAgentAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "profile",
+      "admin",
+    );
+
+    const userAccessibleAgentIds =
+      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
+    accessibleTools = allToolsWithDetails.filter((t) =>
+      userAccessibleAgentIds.includes(t.profileId),
+    );
+  }
+
+  logger.debug(
+    {
+      promptId,
+      organizationId,
+      userId,
+      allToolCount: allToolsWithDetails.length,
+      accessibleToolCount: accessibleTools.length,
+    },
+    "Fetched agent delegation tools from database",
+  );
+
+  // Convert DB tools to MCP Tool format
+  return accessibleTools.map((t) => ({
+    name: t.tool.name,
+    title: t.agentPromptName,
+    description:
+      t.tool.description ||
+      t.agentPromptSystemPrompt?.substring(0, 500) ||
+      `Call the "${t.agentPromptName}" agent to perform tasks.`,
+    inputSchema: t.tool.parameters as Tool["inputSchema"],
+    annotations: {},
+    _meta: { agentPromptId: t.agentPromptId },
+  }));
 }

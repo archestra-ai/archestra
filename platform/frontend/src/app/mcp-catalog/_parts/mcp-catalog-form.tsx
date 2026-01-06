@@ -35,6 +35,7 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+import { ServiceAccountField } from "./service-account-field";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -286,6 +287,19 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
+
+              {initialValues?.localConfig?.serviceAccount !== undefined && (
+                <FormField
+                  control={form.control}
+                  name="localConfig.serviceAccount"
+                  render={({ field }) => (
+                    <ServiceAccountField
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              )}
 
               <EnvironmentVariablesFormField
                 control={form.control}

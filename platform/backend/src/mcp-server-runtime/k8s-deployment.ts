@@ -492,11 +492,10 @@ export default class K8sDeployment {
     const podSpec: k8s.V1PodSpec = {
       // Fast shutdown for stateless MCP servers (default is 30s)
       terminationGracePeriodSeconds: 5,
-      // Use dedicated service account if requested
+      // Use dedicated service account if specified (value used directly from catalog)
       ...(localConfig.serviceAccount
         ? {
-            serviceAccountName:
-              config.orchestrator.kubernetes.mcpK8sServiceAccountName,
+            serviceAccountName: localConfig.serviceAccount,
           }
         : {}),
       // Apply nodeSelector if provided (e.g., inherited from archestra-platform pod)

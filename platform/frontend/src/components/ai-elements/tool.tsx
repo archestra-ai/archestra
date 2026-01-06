@@ -122,7 +122,20 @@ export const ToolHeader = ({
         {getStatusBadge(state)}
       </div>
       {errorText && (
-        <div className="text-destructive text-xs mt-2 text-left">
+        // biome-ignore lint/a11y/useSemanticElements: We need text selection within the button trigger
+        <div
+          className="text-destructive text-xs mt-2 text-left select-text"
+          style={{
+            userSelect: "text",
+            WebkitUserSelect: "text",
+            pointerEvents: "auto",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="button"
+          tabIndex={-1}
+        >
           {errorText}
         </div>
       )}
@@ -240,8 +253,19 @@ export const ToolOutput = ({
   let Output = <div>{output as ReactNode}</div>;
 
   if (typeof output === "object" || typeof output === "string") {
+    // If output is a string, try to parse it as JSON for proper formatting
+    let formattedOutput = output;
+    if (typeof output === "string") {
+      try {
+        formattedOutput = JSON.parse(output);
+      } catch {
+        // Not valid JSON, use as-is
+      }
+    }
     const codeString =
-      typeof output === "object" ? JSON.stringify(output, null, 2) : output;
+      typeof formattedOutput === "object"
+        ? JSON.stringify(formattedOutput, null, 2)
+        : String(formattedOutput);
     const lines = codeString.split("\n");
     const MAX_LINES = 50;
     const isLarge = lines.length > MAX_LINES;

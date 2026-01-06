@@ -489,6 +489,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPromptVersions]: {
     prompt: ["read"],
   },
+  [RouteId.GetPromptTools]: {
+    prompt: ["read"],
+  },
   [RouteId.RollbackPrompt]: {
     prompt: ["update"],
   },
@@ -497,6 +500,15 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeletePrompt]: {
     prompt: ["delete"],
+  },
+  [RouteId.GetPromptAgents]: {
+    prompt: ["read"],
+  },
+  [RouteId.SyncPromptAgents]: {
+    prompt: ["update"],
+  },
+  [RouteId.DeletePromptAgent]: {
+    prompt: ["update"],
   },
   [RouteId.GetAgentPrompts]: {
     profile: ["read"],
@@ -684,7 +696,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/appearance": {
     organization: ["update"],
   },
-  "/settings/chat": {
+  "/settings/llm-api-keys": {
     chatSettings: ["read"],
   },
   "/settings/sso-providers": {

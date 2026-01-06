@@ -126,3 +126,19 @@ With this configuration, Application Default Credentials (ADC) will automaticall
 
 For non-GKE environments or when Workload Identity isn't available, set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file.
 
+## xAI (Grok)
+
+### Supported xAI APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### xAI Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/xai/{agent-id}`
+- **Authentication**: Pass your xAI API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- **OpenAI Compatible**: xAI uses the same API format as OpenAI, making it a drop-in replacement for OpenAI-compatible applications.
+- **Models**: Supported models include `grok-4`, `grok-3`, `grok-3-mini`, and `grok-code-fast-1`.
+- **Get API Key**: Create an API key at [console.x.ai](https://console.x.ai)

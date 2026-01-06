@@ -21,6 +21,7 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
     case "vllm":
     case "ollama":
     case "zhipuai":
+    case "groq":
       // These providers use tiktoken-compatible tokenization
       return new TiktokenTokenizer();
     default:

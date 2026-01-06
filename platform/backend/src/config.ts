@@ -464,6 +464,12 @@ export default {
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
     },
+    groq: {
+      baseUrl:
+        process.env.ARCHESTRA_GROQ_BASE_URL ||
+        "https://api.groq.com/openai/v1",
+      useV2Routes: process.env.ARCHESTRA_GROQ_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -503,6 +509,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_ZHIPUAI_BASE_URL ||
         "https://api.z.ai/api/paas/v4",
+    },
+    groq: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_GROQ_BASE_URL ||
+        "https://api.groq.com/openai/v1",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

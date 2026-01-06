@@ -63,6 +63,28 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "zhipuai";
   }
 
+  // Groq models: various open-source models hosted on Groq
+  // Check for Groq-specific prefixes first (models like "groq/compound", "meta-llama/", etc.)
+  if (
+    lowerModel.startsWith("groq/") ||
+    lowerModel.startsWith("meta-llama/") ||
+    lowerModel.startsWith("qwen/") ||
+    lowerModel.startsWith("moonshotai/") ||
+    lowerModel.startsWith("canopylabs/") ||
+    lowerModel.startsWith("openai/gpt-oss") || // Groq-hosted OpenAI OSS models
+    lowerModel.includes("mixtral") ||
+    lowerModel.includes("gemma") ||
+    lowerModel.includes("whisper") ||
+    lowerModel.includes("distil") ||
+    lowerModel.includes("deepseek") ||
+    lowerModel.includes("pixtral") ||
+    lowerModel.includes("kimi") ||
+    lowerModel.includes("orpheus") ||
+    lowerModel.includes("allam")
+  ) {
+    return "groq";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -85,6 +107,7 @@ const envApiKeyGetters: Record<
   openai: () => config.chat.openai.apiKey,
   vllm: () => config.chat.vllm.apiKey,
   zhipuai: () => config.chat.zhipuai.apiKey,
+  groq: () => config.chat.groq.apiKey,
 };
 
 /**
@@ -120,7 +143,8 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.geminiApiKey ??
       secret?.secret?.openaiApiKey ??
       secret?.secret?.zhipuaiApiKey ??
-      secret?.secret?.cohereApiKey;
+      secret?.secret?.cohereApiKey ??
+      secret?.secret?.groqApiKey;
     if (secretValue) {
       return { apiKey: secretValue as string, source: resolvedApiKey.scope };
     }
@@ -164,7 +188,9 @@ export const FAST_MODELS: Record<SupportedChatProvider, string> = {
   ollama: "llama3.2", // Common fast model for Ollama
   zhipuai: "glm-4-flash", // Zhipu's fast model
   mistral: "mistral-small-latest", // Mistral's fast model
+  groq: "llama-3.3-70b-versatile", // Groq's fast model
 };
+
 
 /**
  * Parameters for creating a direct LLM model (calls provider API directly)
@@ -308,6 +334,21 @@ const directModelCreators: Record<SupportedChatProvider, DirectModelCreator> = {
     });
     return client(modelName);
   },
+
+  groq: ({ apiKey, modelName }) => {
+    if (!apiKey) {
+      throw new ApiError(
+        400,
+        "Groq API key is required. Please configure GROQ_API_KEY.",
+      );
+    }
+    // Groq uses OpenAI-compatible API
+    const client = createOpenAI({
+      apiKey,
+      baseURL: config.chat.groq.baseUrl,
+    });
+    return client(modelName);
+  },
 };
 
 /**
@@ -359,106 +400,117 @@ function buildProxyBaseUrl(provider: string, agentId: string): string {
  * until the corresponding creator is added.
  */
 const proxiedModelCreators: Record<SupportedChatProvider, ProxiedModelCreator> =
-  {
-    anthropic: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/anthropic/:agentId/v1/messages
-      const client = createAnthropic({
-        apiKey,
-        baseURL: `${buildProxyBaseUrl("anthropic", agentId)}/v1`,
-        headers,
-      });
-      return client(modelName);
-    },
+{
+  anthropic: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/anthropic/:agentId/v1/messages
+    const client = createAnthropic({
+      apiKey,
+      baseURL: `${buildProxyBaseUrl("anthropic", agentId)}/v1`,
+      headers,
+    });
+    return client(modelName);
+  },
 
-    gemini: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/gemini/:agentId/v1beta/models
-      // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
-      const client = createGoogleGenerativeAI({
-        apiKey: apiKey || "vertex-ai-mode",
-        baseURL: `${buildProxyBaseUrl("gemini", agentId)}/v1beta`,
-        headers,
-      });
-      return client(modelName);
-    },
+  gemini: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/gemini/:agentId/v1beta/models
+    // For Vertex AI mode, pass a placeholder - the LLM Proxy uses ADC for auth
+    const client = createGoogleGenerativeAI({
+      apiKey: apiKey || "vertex-ai-mode",
+      baseURL: `${buildProxyBaseUrl("gemini", agentId)}/v1beta`,
+      headers,
+    });
+    return client(modelName);
+  },
 
-    openai: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("openai", agentId),
-        headers,
-      });
-      // Use .chat() to force Chat Completions API (not Responses API)
-      // so our proxy's tool policy evaluation is applied
-      return client.chat(modelName);
-    },
+  openai: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/openai/:agentId (SDK appends /chat/completions)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: buildProxyBaseUrl("openai", agentId),
+      headers,
+    });
+    // Use .chat() to force Chat Completions API (not Responses API)
+    // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  },
 
-    cohere: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/cohere/:agentId (SDK appends /chat)
-      // We use the native Cohere provider which uses the V2 API
-      const client = createCohere({
-        apiKey,
-        baseURL: buildProxyBaseUrl("cohere", agentId),
-        headers,
-      });
-      return client(modelName);
-    },
+  cohere: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/cohere/:agentId (SDK appends /chat)
+    // We use the native Cohere provider which uses the V2 API
+    const client = createCohere({
+      apiKey,
+      baseURL: buildProxyBaseUrl("cohere", agentId),
+      headers,
+    });
+    return client(modelName);
+  },
 
-    cerebras: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/cerebras/:agentId (SDK appends /chat/completions)
-      const client = createCerebras({
-        apiKey,
-        baseURL: buildProxyBaseUrl("cerebras", agentId),
-        headers,
-      });
-      return client(modelName);
-    },
+  cerebras: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/cerebras/:agentId (SDK appends /chat/completions)
+    const client = createCerebras({
+      apiKey,
+      baseURL: buildProxyBaseUrl("cerebras", agentId),
+      headers,
+    });
+    return client(modelName);
+  },
 
-    mistral: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/mistral/:agentId (SDK appends /chat/completions)
-      const client = createMistral({
-        apiKey,
-        baseURL: buildProxyBaseUrl("mistral", agentId),
-        headers,
-      });
-      return client(modelName);
-    },
+  mistral: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/mistral/:agentId (SDK appends /chat/completions)
+    const client = createMistral({
+      apiKey,
+      baseURL: buildProxyBaseUrl("mistral", agentId),
+      headers,
+    });
+    return client(modelName);
+  },
 
-    vllm: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
-      // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK
-      const client = createOpenAI({
-        apiKey: apiKey || "EMPTY", // vLLM typically doesn't require API keys
-        baseURL: buildProxyBaseUrl("vllm", agentId),
-        headers,
-      });
-      // Use .chat() to force Chat Completions API
-      return client.chat(modelName);
-    },
+  vllm: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
+    // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY", // vLLM typically doesn't require API keys
+      baseURL: buildProxyBaseUrl("vllm", agentId),
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  },
 
-    ollama: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/ollama/:agentId (SDK appends /chat/completions)
-      // Ollama uses OpenAI-compatible API, so we use the OpenAI SDK
-      const client = createOpenAI({
-        apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
-        baseURL: buildProxyBaseUrl("ollama", agentId),
-        headers,
-      });
-      // Use .chat() to force Chat Completions API
-      return client.chat(modelName);
-    },
+  ollama: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/ollama/:agentId (SDK appends /chat/completions)
+    // Ollama uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
+      baseURL: buildProxyBaseUrl("ollama", agentId),
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  },
 
-    zhipuai: ({ apiKey, agentId, modelName, headers }) => {
-      // URL format: /v1/zhipuai/:agentId (SDK appends /chat/completions)
-      // Zhipuai is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
-      const client = createOpenAI({
-        apiKey,
-        baseURL: buildProxyBaseUrl("zhipuai", agentId),
-        headers,
-      });
-      return client.chat(modelName);
-    },
-  };
+  zhipuai: ({ apiKey, agentId, modelName, headers }) => {
+    // URL format: /v1/zhipuai/:agentId (SDK appends /chat/completions)
+    // Zhipuai is OpenAI-compatible, so we use the OpenAI SDK with custom baseURL
+    const client = createOpenAI({
+      apiKey,
+      baseURL: buildProxyBaseUrl("zhipuai", agentId),
+      headers,
+    });
+    return client.chat(modelName);
+  },
+
+  groq: ({ apiKey, agentId, modelName, headers }) => {
+    // Groq is OpenAI-compatible, use the OpenAI SDK with Groq's proxy URL
+    // URL format: /v1/groq/:agentId (SDK appends /chat/completions)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: buildProxyBaseUrl("groq", agentId),
+      headers,
+    });
+    return client.chat(modelName);
+  },
+};
 
 /**
  * Create an LLM model for the specified provider, pointing to the LLM Proxy

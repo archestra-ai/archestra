@@ -125,6 +125,9 @@ export class DynamicInteraction implements InteractionUtils {
       return new AnthropicMessagesInteraction(interaction);
     } else if (type === "zhipuai:chatCompletions") {
       return new ZhipuaiChatCompletionInteraction(interaction);
+    } else if (type === "groq:chatCompletions") {
+      // Groq is OpenAI-compatible, reuse OpenAI interaction handler
+      return new OpenAiChatCompletionInteraction(interaction);
     } else if (type === "cerebras:chatCompletions") {
       return new CerebrasChatCompletionInteraction(interaction);
     } else if (type === "mistral:chatCompletions") {

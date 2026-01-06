@@ -272,3 +272,39 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 - **API Key format**: Obtain your API key from the [Zhipu AI Platform](https://z.ai/)
 - **Free tier available**: The GLM-4.5-Flash model is available on the free tier for testing and development
 - **Chinese language support**: GLM models excel at Chinese language understanding and generation, while maintaining strong English capabilities
+
+## Groq
+
+Groq provides ultra-fast inference for popular open-source models like Llama, Mixtral, and Gemma. Groq's API is OpenAI-compatible, making integration straightforward.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- **OpenAI-Compatible**: Groq uses the OpenAI API format, so existing OpenAI-compatible clients work with minimal changes.
+- **Fast Inference**: Groq's LPU architecture provides extremely fast inference times.
+- **Available Models**: Includes Llama 3.3 70B, Llama 3.1 70B/8B, Mixtral 8x7B, Gemma 2 9B, and more.
+
+### Getting an API Key
+
+1. Visit [https://console.groq.com/keys](https://console.groq.com/keys)
+2. Sign up or log in to your Groq account
+3. Click **Create API Key**
+4. Give your key a name and copy the generated key
+5. Start using it in your applications
+
+> **Note**: Only team owners or users with the developer role can create or manage API keys in Groq Console.
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ARCHESTRA_GROQ_BASE_URL` | No | Custom Groq API base URL (default: `https://api.groq.com/openai/v1`) |
+| `ARCHESTRA_CHAT_GROQ_API_KEY` | No | API key for Chat feature (if using Groq in built-in Chat) |

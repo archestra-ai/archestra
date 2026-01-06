@@ -530,11 +530,11 @@ export default function ChatPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure an LLM provider API key in Chat Settings to start
-              using the chat feature.
+              Please configure an LLM provider API key to start using the chat
+              feature.
             </p>
             <Button asChild>
-              <Link href="/settings/chat">Go to Chat Settings</Link>
+              <Link href="/settings/llm-api-keys">Go to LLM API Keys</Link>
             </Button>
           </CardContent>
         </Card>

@@ -109,7 +109,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       const keyName = makeRandomString(8, "Test Key");
 
       // Open Create personal chat API key form and fill in the form
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByRole("textbox", { name: "Name" }).fill(keyName);
 
@@ -165,7 +165,7 @@ test.describe("Chat API Keys with Readonly Vault", () => {
       ).toBeVisible();
 
       // Cleanup
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
       await adminPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
         .click();

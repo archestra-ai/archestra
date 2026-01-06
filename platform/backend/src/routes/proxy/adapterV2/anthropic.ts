@@ -684,31 +684,6 @@ class AnthropicStreamAdapter
       },
     };
   }
-
-  toProviderRefusalResponse(
-    _refusalMessage: string,
-    contentMessage: string,
-  ): AnthropicResponse {
-    return {
-      id: this.state.responseId,
-      type: "message",
-      role: "assistant",
-      content: [
-        {
-          type: "text",
-          text: contentMessage,
-          citations: null,
-        },
-      ],
-      model: this.state.model,
-      stop_reason: "end_turn",
-      stop_sequence: null,
-      usage: {
-        input_tokens: this.state.usage?.inputTokens ?? 0,
-        output_tokens: this.state.usage?.outputTokens ?? 0,
-      },
-    };
-  }
 }
 
 // =============================================================================

@@ -191,6 +191,7 @@ tests:
   - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
     documentIndex: 1
     set:
+      postgresql.enabled: false
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
       - equal:
@@ -225,11 +226,38 @@ tests:
   - it: should configure init container to wait for external postgres
     documentIndex: 1
     set:
+      postgresql.enabled: false
       postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: ".*external-db.example.com.*5432.*"
+
+  - it: should configure init container to wait for external postgres with postgres:// scheme
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgres://user:pass@external-db.example.com:5433/mydb
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*external-db.example.com.*5433.*"
+
+  - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgres://external:pass@external-host:5434/externaldb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: ARCHESTRA_DATABASE_URL
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-archestra-platform-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: database-url
 
   - it: when archestra.env is empty should set a specific set of environment variables
     documentIndex: 1

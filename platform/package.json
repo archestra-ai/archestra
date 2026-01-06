@@ -31,7 +31,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.10",
     "tsx": "^4.21.0",
-    "turbo": "^2.7.1",
+    "turbo": "^2.7.2",
     "typescript": "^5.9.2"
   },
   "pnpm": {
@@ -46,5 +46,5 @@
       "jws": "4.0.1"
     }
   },
-  "packageManager": "pnpm@10.24.0"
+  "packageManager": "pnpm@10.27.0"
 }

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
+import { ServiceAccountField } from "./service-account-field";
 
 const InlineVaultSecretSelector = lazy(
   () =>
@@ -61,6 +62,8 @@ export interface LocalServerInstallResult {
   teamId?: string | null;
   /** Whether environmentValues contains BYOS vault references in path#key format */
   isByosVault?: boolean;
+  /** Kubernetes service account for the MCP server pod */
+  serviceAccount?: string;
 }
 
 interface LocalServerInstallDialogProps {
@@ -81,6 +84,9 @@ export function LocalServerInstallDialog({
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
     "personal",
+  );
+  const [serviceAccount, setServiceAccount] = useState<string | undefined>(
+    catalogItem?.localConfig?.serviceAccount,
   );
 
   // Extract environment variables that need prompting during installation
@@ -169,6 +175,7 @@ export function LocalServerInstallDialog({
       environmentValues: finalEnvironmentValues,
       teamId: selectedTeamId,
       isByosVault: useVaultSecrets && secretEnvVars.length > 0,
+      serviceAccount: serviceAccount || undefined,
     });
 
     // Reset form
@@ -185,6 +192,7 @@ export function LocalServerInstallDialog({
     setSelectedTeamId(null);
     setCredentialType(byosEnabled ? "team" : "personal");
     setVaultSecrets({});
+    setServiceAccount(catalogItem?.localConfig?.serviceAccount);
   };
 
   const handleClose = () => {
@@ -245,6 +253,16 @@ export function LocalServerInstallDialog({
           catalogId={catalogItem?.id}
           onCredentialTypeChange={setCredentialType}
         />
+
+        {catalogItem?.localConfig?.serviceAccount !== undefined && (
+          <div className="mt-4">
+            <ServiceAccountField
+              value={serviceAccount}
+              onChange={setServiceAccount}
+              disabled={isInstalling}
+            />
+          </div>
+        )}
 
         <div className="space-y-6 mt-4">
           {/* Non-secret Environment Variables (always editable) */}

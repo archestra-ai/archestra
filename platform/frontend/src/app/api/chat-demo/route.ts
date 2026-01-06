@@ -14,9 +14,10 @@ export async function POST(req: Request) {
     webSearch: boolean;
   } = await req.json();
 
+  const modelMessages = await convertToModelMessages(messages);
   const result = streamText({
     model: webSearch ? "perplexity/sonar" : model,
-    messages: convertToModelMessages(messages),
+    messages: modelMessages,
     system:
       "You are a helpful assistant that can answer questions and help with tasks",
   });

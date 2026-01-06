@@ -7,6 +7,7 @@ import {
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -2420,11 +2421,16 @@ export async function getAgentTools(context: {
   // Filter by user access if user ID is provided
   let accessibleTools = allToolsWithDetails;
   if (userId) {
+    // Check if user has profile admin permission directly (don't trust caller)
+    const isAgentAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "profile",
+      "admin",
+    );
+
     const userAccessibleAgentIds =
-      await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false, // Not admin - check actual access
-      );
+      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
     accessibleTools = allToolsWithDetails.filter((t) =>
       userAccessibleAgentIds.includes(t.profileId),
     );

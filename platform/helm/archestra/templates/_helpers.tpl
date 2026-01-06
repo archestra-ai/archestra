@@ -141,7 +141,7 @@ PostgreSQL host for database connectivity checks
 */}}
 {{- define "archestra-platform.postgresql.host" -}}
 {{- if .Values.postgresql.external_database_url -}}
-{{- regexReplaceAll "^postgresql://[^@]+@([^:/]+).*$" .Values.postgresql.external_database_url "${1}" -}}
+{{- regexReplaceAll "^postgres(ql)?://[^@]+@([^:/]+).*$" .Values.postgresql.external_database_url "${2}" -}}
 {{- else -}}
 {{- include "archestra-platform.fullname" . }}-postgresql
 {{- end -}}
@@ -152,7 +152,7 @@ PostgreSQL port for database connectivity checks
 */}}
 {{- define "archestra-platform.postgresql.port" -}}
 {{- if .Values.postgresql.external_database_url -}}
-{{- regexReplaceAll "^postgresql://[^@]+@[^:]+:([0-9]+).*$" .Values.postgresql.external_database_url "${1}" -}}
+{{- regexReplaceAll "^postgres(ql)?://[^@]+@[^:]+:([0-9]+).*$" .Values.postgresql.external_database_url "${2}" -}}
 {{- else -}}
 5432
 {{- end -}}

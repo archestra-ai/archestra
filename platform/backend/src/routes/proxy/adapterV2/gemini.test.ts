@@ -582,35 +582,4 @@ describe("GeminiStreamAdapter", () => {
       expect(response.usageMetadata?.candidatesTokenCount).toBe(5);
     });
   });
-
-  describe("toProviderRefusalResponse", () => {
-    test("creates refusal response with message", () => {
-      const adapter = geminiAdapterFactory.createStreamAdapter();
-
-      // Initialize model version
-      adapter.processChunk({
-        candidates: [
-          {
-            content: {
-              role: "model",
-              parts: [],
-            },
-            index: 0,
-          },
-        ],
-        modelVersion: "gemini-2.5-pro",
-        responseId: "test-response",
-      } as unknown as GeminiStreamChunk);
-
-      const response = adapter.toProviderRefusalResponse(
-        "Refusal",
-        "Tool blocked by policy",
-      );
-
-      expect(response.candidates?.[0]?.content?.parts?.[0]).toEqual({
-        text: "Tool blocked by policy",
-      });
-      expect(response.candidates?.[0]?.finishReason).toBe("STOP");
-    });
-  });
 });

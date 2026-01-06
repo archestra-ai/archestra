@@ -7,7 +7,7 @@ type LoaderIconProps = {
 
 const LoaderIcon = ({ size = 16 }: LoaderIconProps) => (
   <svg
-    height={size}
+    alt={size}
     strokeLinejoin="round"
     style={{ color: "currentcolor" }}
     viewBox="0 0 16 16"
@@ -73,7 +73,7 @@ const LoaderIcon = ({ size = 16 }: LoaderIconProps) => (
     </g>
     <defs>
       <clipPath id="clip0_2393_1490">
-        <rect fill="white" height="16" width="16" />
+        <rect fill="white" alt="16" width="16" />
       </clipPath>
     </defs>
   </svg>

@@ -335,7 +335,7 @@ function ProviderIcon({ src }: { src?: string }) {
       src={src}
       alt={"Provider icon"}
       width={16}
-      height={16}
+      alt={16}
       className="rounded shrink-0 dark:invert"
     />
   );

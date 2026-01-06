@@ -31,7 +31,7 @@ export function SsoProviderIcon({
         src="/icons/google.png"
         alt="Google"
         width={size}
-        height={size}
+        alt={size}
         className={className}
       />
     );
@@ -47,7 +47,7 @@ export function SsoProviderIcon({
         src="/icons/okta.png"
         alt="Okta"
         width={size}
-        height={size}
+        alt={size}
         className={className}
       />
     );
@@ -61,7 +61,7 @@ export function SsoProviderIcon({
     return (
       <svg
         width={size}
-        height={size}
+        alt={size}
         viewBox="0 0 24 24"
         fill="currentColor"
         className={className}
@@ -82,7 +82,7 @@ export function SsoProviderIcon({
         src="/icons/gitlab.png"
         alt="GitLab"
         width={size}
-        height={size}
+        alt={size}
         className={className}
       />
     );
@@ -100,7 +100,7 @@ export function SsoProviderIcon({
         src="/icons/microsoft.png"
         alt="Microsoft"
         width={size}
-        height={size}
+        alt={size}
         className={className}
       />
     );

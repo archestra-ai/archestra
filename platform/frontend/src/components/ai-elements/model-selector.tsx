@@ -174,7 +174,7 @@ export const ModelSelectorLogo = ({
     {...props}
     alt={`${provider} logo`}
     className={cn("size-3 dark:invert", className)}
-    height={12}
+    alt={12}
     src={`https://models.dev/logos/${provider}.svg`}
     width={12}
   />

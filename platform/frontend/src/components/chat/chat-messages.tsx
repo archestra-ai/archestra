@@ -418,7 +418,7 @@ export function ChatMessages({
                 src={"/logo.png"}
                 alt="Loading logo"
                 width={40}
-                height={40}
+                alt={40}
                 className="object-contain h-8 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
               />
             </Message>

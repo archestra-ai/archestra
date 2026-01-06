@@ -293,12 +293,23 @@ export async function handleLLMProxy<
       `${providerName} proxy: tool results compression completed`,
     );
 
+    // Extract provider-specific headers to forward (e.g., anthropic-beta)
+    // Type cast is necessary because this is a generic handler for multiple providers,
+    // and only Anthropic has the anthropic-beta header in its type definition
+    const headersToForward: Record<string, string> = {};
+    const headersObj = headers as Record<string, unknown>;
+    if (typeof headersObj["anthropic-beta"] === "string") {
+      headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
+    }
+
     // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
       mockMode: config.benchmark.mockMode,
       agent: resolvedAgent,
       externalAgentId,
+      defaultHeaders:
+        Object.keys(headersToForward).length > 0 ? headersToForward : undefined,
     });
 
     // Build final request
@@ -719,13 +730,17 @@ async function handleNonStreaming<
   // Tool calls allowed (or no tool calls) - return response
   const usage = responseAdapter.getUsage();
 
-  reportLLMTokens(
-    providerName,
-    agent,
-    { input: usage.inputTokens, output: usage.outputTokens },
-    actualModel,
-    externalAgentId,
-  );
+  // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
+  // for non-streaming requests. We only report cost here to avoid double counting.
+  // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
+  // mocked API clients can't use an observable fetch.
+  // reportLLMTokens(
+  //   providerName,
+  //   agent,
+  //   { input: usage.inputTokens, output: usage.outputTokens },
+  //   actualModel,
+  //   externalAgentId,
+  // );
 
   const baselineCost = await utils.costOptimization.calculateCost(
     baselineModel,

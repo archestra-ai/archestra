@@ -16,7 +16,7 @@ export default function CostLayout({
         { label: "Limits", href: "/cost/limits" },
         { label: "Token Price", href: "/cost/token-price" },
         { label: "Optimization Rules", href: "/cost/optimization-rules" },
-        { label: "Tool results compression", href: "/cost/compression" },
+        { label: "Tool Results Compression", href: "/cost/compression" },
       ]}
     >
       {children}

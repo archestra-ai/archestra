@@ -624,37 +624,6 @@ class OpenAIStreamAdapter
       },
     };
   }
-
-  toProviderRefusalResponse(
-    _refusalMessage: string,
-    contentMessage: string,
-  ): OpenAiResponse {
-    return {
-      id: this.state.responseId,
-      object: "chat.completion",
-      created: Math.floor(Date.now() / 1000),
-      model: this.state.model,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: "assistant",
-            content: contentMessage,
-            refusal: null,
-          },
-          logprobs: null,
-          finish_reason: "stop",
-        },
-      ],
-      usage: {
-        prompt_tokens: this.state.usage?.inputTokens ?? 0,
-        completion_tokens: this.state.usage?.outputTokens ?? 0,
-        total_tokens:
-          (this.state.usage?.inputTokens ?? 0) +
-          (this.state.usage?.outputTokens ?? 0),
-      },
-    };
-  }
 }
 
 // =============================================================================

@@ -16,7 +16,7 @@ test.describe("Chat API Keys", () => {
     const updatedName = makeRandomString(8, "Updated Test Key");
 
     // Navigate and wait for page to load
-    await goToPage(page, "/settings/chat");
+    await goToPage(page, "/settings/llm-api-keys");
 
     // Click Add API Key button
     await page.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -88,7 +88,7 @@ test.describe("Chat API Keys", () => {
         "Test Key 3",
         "Test Key 4",
       ].map((name) => makeRandomString(8, name));
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
 
       // Admin create a personal scope for Anthropic
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -107,7 +107,7 @@ test.describe("Chat API Keys", () => {
       });
 
       // Editor cannot see Admin's personal api key in the list
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
       await expect(
         editorPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyNames[0]}`),
       ).not.toBeVisible();
@@ -123,7 +123,7 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // But Admin can still create personal scope for OpenAI
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await adminPage.getByLabel(/Name/i).fill(testKeyNames[1]);
       await adminPage.getByRole("combobox", { name: "Provider" }).click();
@@ -142,7 +142,7 @@ test.describe("Chat API Keys", () => {
       });
 
       // Then editor create a personal scope for Anthropic
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await editorPage.getByLabel(/Name/i).fill(testKeyNames[2]);
       await editorPage
@@ -159,7 +159,7 @@ test.describe("Chat API Keys", () => {
       });
 
       // Admin cannot see Editor's personal scope in the list
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
       await expect(
         adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyNames[2]}`),
       ).not.toBeVisible();
@@ -175,7 +175,7 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // But he can create personal scope for OpenAI
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await editorPage.getByLabel(/Name/i).fill(testKeyNames[3]);
       await editorPage.getByRole("combobox", { name: "Provider" }).click();
@@ -211,7 +211,7 @@ test.describe("Chat API Keys", () => {
       makeRandomString,
     }) => {
       const testKeyName = makeRandomString(8, "Test Key");
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
 
       // Editor create a team scope key for Engineering team
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -234,21 +234,21 @@ test.describe("Chat API Keys", () => {
       });
 
       // Editor and Admin can see it but Member cannot (he is not a member of the Engineering team)
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
       await expect(
         editorPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
       ).toBeVisible();
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
       await expect(
         adminPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
       ).toBeVisible();
-      await goToPage(memberPage, "/settings/chat");
+      await goToPage(memberPage, "/settings/llm-api-keys");
       await expect(
         memberPage.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
       ).not.toBeVisible();
 
       // Editor cannot create second team scope for Engineering team
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
       await editorPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
       await editorPage.getByRole("combobox", { name: "Scope" }).click();
       await editorPage.getByRole("option", { name: "Team" }).click();
@@ -258,7 +258,7 @@ test.describe("Chat API Keys", () => {
       ).not.toBeVisible();
 
       // Cleanup: delete the created key
-      await goToPage(editorPage, "/settings/chat");
+      await goToPage(editorPage, "/settings/llm-api-keys");
       await editorPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
         .click();
@@ -273,7 +273,7 @@ test.describe("Chat API Keys", () => {
       makeRandomString,
     }) => {
       const testKeyName = makeRandomString(8, "Test Key");
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
 
       // Admin create an org-wide key
       await adminPage.getByTestId(E2eTestId.AddChatApiKeyButton).click();
@@ -297,7 +297,7 @@ test.describe("Chat API Keys", () => {
 
       // Every user can see it
       for (const p of [adminPage, editorPage, memberPage]) {
-        await goToPage(p, "/settings/chat");
+        await goToPage(p, "/settings/llm-api-keys");
         await p.waitForLoadState("networkidle");
         await expect(
           p.getByTestId(`${E2eTestId.ChatApiKeyRow}-${testKeyName}`),
@@ -312,7 +312,7 @@ test.describe("Chat API Keys", () => {
       ).toBeVisible();
 
       // Cleanup: delete the created key
-      await goToPage(adminPage, "/settings/chat");
+      await goToPage(adminPage, "/settings/llm-api-keys");
       await adminPage
         .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${testKeyName}`)
         .click();

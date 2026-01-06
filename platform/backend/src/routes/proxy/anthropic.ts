@@ -186,7 +186,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "[AnthropicProxy] Agent resolved",
     );
 
-    const { "x-api-key": anthropicApiKey } = headers;
+    const { "x-api-key": anthropicApiKey, "anthropic-beta": anthropicBeta } =
+      headers;
 
     const anthropicClient = config.benchmark.mockMode
       ? (new MockAnthropicClient() as unknown as AnthropicProvider)
@@ -198,6 +199,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgent,
             externalAgentId,
           ),
+          defaultHeaders: anthropicBeta
+            ? { "anthropic-beta": anthropicBeta }
+            : undefined,
         });
 
     try {

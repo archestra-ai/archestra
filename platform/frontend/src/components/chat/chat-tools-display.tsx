@@ -52,17 +52,11 @@ export function ChatToolsDisplay({
   // Debug: Log tools when they're loaded
   useEffect(() => {
     if (!isLoading) {
-      console.log("[ChatToolsDisplay] Tools loaded:", {
-        profileTools,
-        promptTools,
-        allTools: [...profileTools, ...promptTools],
-      });
     }
-  }, [isLoading, profileTools, promptTools]);
+  }, [isLoading]);
 
   // State for tooltip open state per server
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
-  const componentRef = useRef<HTMLDivElement>(null);
   const tooltipContentRef = useRef<HTMLDivElement | null>(null);
 
   // Handle click outside to close tooltips
@@ -70,13 +64,16 @@ export function ChatToolsDisplay({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      // Check if click is within the component
-      if (componentRef.current?.contains(target)) {
+      // Check if click is within the main tooltip content
+      if (tooltipContentRef.current?.contains(target)) {
         return;
       }
 
-      // Check if click is within the main tooltip content
-      if (tooltipContentRef.current?.contains(target)) {
+      // Check if click is on any of the tool buttons
+      const clickedButton = (target as HTMLElement).closest(
+        "[data-tool-button]",
+      );
+      if (clickedButton) {
         return;
       }
 
@@ -238,15 +235,11 @@ export function ChatToolsDisplay({
   }
 
   if (Object.keys(groupedTools).length === 0) {
-    return (
-      <div className={className}>
-        <div className="flex flex-wrap gap-2" />
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className={className} ref={componentRef}>
+    <div className={className}>
       <TooltipProvider>
         <div className="flex flex-wrap gap-2">
           {sortedServerEntries.map(([serverName]) => {
@@ -279,6 +272,7 @@ export function ChatToolsDisplay({
               <Tooltip key={serverName} open={isOpen} onOpenChange={() => {}}>
                 <TooltipTrigger asChild>
                   <PromptInputButton
+                    data-tool-button
                     className="w-[fit-content]"
                     size="sm"
                     variant="outline"

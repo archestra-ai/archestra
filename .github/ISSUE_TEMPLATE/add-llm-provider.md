@@ -7,32 +7,17 @@ assignees: ''
 
 ---
 
-## Provider Details
-
 **Provider Name:** <!-- e.g., Mistral, Cohere, Together AI -->
 
 **Provider Website:** <!-- Link to the provider's main page -->
 
 **API Documentation:** <!-- Link to the provider's API docs -->
 
-## Why Add This Provider?
-
-<!--
-Help us understand the value this provider brings:
-- What makes this provider unique or valuable?
-- Are there specific use cases or models you're interested in?
-- Is there community demand for this integration?
--->
-
----
-
 ## Implementation Checklist
 
 Adding a new provider involves integrating it into both **LLM Proxy** and **Chat**. For detailed guidance, see our [Adding LLM Providers documentation](/docs/platform-adding-llm-providers).
 
----
-
-## PR Requirements
+## Requirements
 
 When submitting a PR to add this provider, please ensure:
 
@@ -61,6 +46,8 @@ If the provider doesn't support streaming, document this limitation.
 - Streaming responses
 - Error handling
 
+Chat functionality requires [Vercel AI SDK](https://ai-sdk.dev/providers/ai-sdk-providers) support. Please check if the provider is available — if not, note this in the PR so we can plan accordingly.
+
 ### 4. Demo Video
 Please include a short demo video showing:
 - Non-streaming response in action
@@ -68,8 +55,6 @@ Please include a short demo video showing:
 
 ### 5. Documentation
 Update the [Supported LLM Providers](https://archestra.ai/docs/platform-supported-llm-providers) page to include the new provider.
-
----
 
 ## Additional Context
 

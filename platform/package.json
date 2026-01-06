@@ -46,5 +46,5 @@
       "jws": "4.0.1"
     }
   },
-  "packageManager": "pnpm@10.24.0"
+  "packageManager": "pnpm@10.27.0"
 }

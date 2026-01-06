@@ -529,6 +529,13 @@ The following environment variables can be used to configure Archestra Platform:
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+
+  - Default: None
+  - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
+  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
+  - Required when configuring SSO with external identity providers hosted on different domains
+
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
   - Default: `https://api.openai.com/v1`

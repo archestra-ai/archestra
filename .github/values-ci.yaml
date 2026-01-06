@@ -24,6 +24,8 @@ archestra:
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests
     ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
+    # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)
+    ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS: "http://e2e-tests-keycloak:8080"
     # Secrets manager configuration for BYOS tests
     ARCHESTRA_SECRETS_MANAGER: "Vault"
     # Vault configuration for BYOS tests

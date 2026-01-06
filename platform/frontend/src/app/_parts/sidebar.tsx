@@ -8,6 +8,7 @@ import {
   Cable,
   DollarSign,
   Github,
+  Layers,
   LogIn,
   type LucideIcon,
   MessageCircle,
@@ -16,7 +17,6 @@ import {
   Settings,
   Slack,
   Star,
-  Users,
   Wrench,
 } from "lucide-react";
 import Image from "next/image";
@@ -76,7 +76,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
     {
       title: "Profiles",
       url: "/profiles",
-      icon: Users,
+      icon: Layers,
     },
     {
       title: "Logs",

@@ -24,9 +24,12 @@ import { Button } from "../ui/button";
 
 interface ChatToolsDisplayProps {
   agentId: string;
-  conversationId: string;
+  /** Required for enable/disable functionality. Optional for read-only display. */
+  conversationId?: string;
   promptId?: string | null;
   className?: string;
+  /** When true, hides enable/disable buttons and shows all tools as enabled */
+  readOnly?: boolean;
 }
 
 /**
@@ -39,6 +42,7 @@ export function ChatToolsDisplay({
   conversationId,
   promptId,
   className,
+  readOnly = false,
 }: ChatToolsDisplayProps) {
   const { data: profileTools = [], isLoading: isLoadingProfileTools } =
     useProfileToolsWithIds(agentId);
@@ -87,9 +91,10 @@ export function ChatToolsDisplay({
     };
   }, []);
 
-  // Fetch enabled tools for the conversation
-  const { data: enabledToolsData } =
-    useConversationEnabledTools(conversationId);
+  // Fetch enabled tools for the conversation (skip in readOnly mode or without conversationId)
+  const { data: enabledToolsData } = useConversationEnabledTools(
+    readOnly || !conversationId ? undefined : conversationId,
+  );
   const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
   const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
 
@@ -97,11 +102,10 @@ export function ChatToolsDisplay({
   const updateEnabledTools = useUpdateConversationEnabledTools();
 
   // Get the current list of enabled tools
-  // If no custom selection, all tools (profile + prompt) are enabled by default
+  // If no custom selection or readOnly mode, all tools (profile + prompt) are enabled by default
   const allToolIds = [...profileTools, ...promptTools].map((t) => t.id);
-  const currentEnabledToolIds = hasCustomSelection
-    ? enabledToolIds
-    : allToolIds;
+  const currentEnabledToolIds =
+    readOnly || !hasCustomSelection ? allToolIds : enabledToolIds;
 
   // Create enabled tool IDs set for quick lookup
   // Use currentEnabledToolIds to handle both custom and default states
@@ -197,27 +201,28 @@ export function ChatToolsDisplay({
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm">{toolName}</span>
           <div className="flex-1" />
-          {isDisabled ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 rounded-full"
-              onClick={(e) => handleEnableTool(tool.id, e)}
-              title={`Enable ${toolName} for this chat`}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 hover:text-destructive"
-              onClick={(e) => handleDisableTool(tool.id, e)}
-              title={`Disable ${toolName} for this chat`}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          )}
+          {!readOnly &&
+            (isDisabled ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 rounded-full"
+                onClick={(e) => handleEnableTool(tool.id, e)}
+                title={`Enable ${toolName} for this chat`}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 hover:text-destructive"
+                onClick={(e) => handleDisableTool(tool.id, e)}
+                title={`Disable ${toolName} for this chat`}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            ))}
         </div>
       </div>
     );
@@ -238,11 +243,7 @@ export function ChatToolsDisplay({
     return null;
   }
 
-  return (
-    <div className={className}>
-      <TooltipProvider>
-        <div className="flex flex-wrap gap-2">
-          {sortedServerEntries.map(([serverName]) => {
+  const toolButtons = sortedServerEntries.map(([serverName]) => {
             // Get all tools for this server from allTools (profile tools + agent tools)
             const allServerTools = allTools.filter((tool) => {
               const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
@@ -293,7 +294,8 @@ export function ChatToolsDisplay({
                   side="top"
                   align="center"
                   className="min-w-80 max-h-96 p-0 overflow-y-auto"
-                  sideOffset={10}
+                  sideOffset={4}
+                  noArrow
                   onWheel={(e) => e.stopPropagation()}
                   onTouchMove={(e) => e.stopPropagation()}
                   onPointerDownOutside={(e) => {
@@ -306,21 +308,25 @@ export function ChatToolsDisplay({
                       <div>
                         <div className="flex items-center justify-between px-3 py-2">
                           <span className="text-xs font-semibold text-muted-foreground">
-                            Enabled ({enabledTools.length})
+                            {readOnly
+                              ? `Tools (${enabledTools.length})`
+                              : `Enabled (${enabledTools.length})`}
                           </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={(e) =>
-                              handleDisableAll(
-                                enabledTools.map((t) => t.id),
-                                e,
-                              )
-                            }
-                          >
-                            Disable All
-                          </Button>
+                          {!readOnly && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              onClick={(e) =>
+                                handleDisableAll(
+                                  enabledTools.map((t) => t.id),
+                                  e,
+                                )
+                              }
+                            >
+                              Disable All
+                            </Button>
+                          )}
                         </div>
                         <div className="space-y-1 px-2 pb-2">
                           {enabledTools.map((tool) =>
@@ -330,8 +336,8 @@ export function ChatToolsDisplay({
                       </div>
                     )}
 
-                    {/* Disabled section */}
-                    {disabledTools.length > 0 && (
+                    {/* Disabled section - hide in readOnly mode */}
+                    {!readOnly && disabledTools.length > 0 && (
                       <div>
                         <div className="flex items-center justify-between px-3 py-2">
                           <span className="text-xs font-semibold text-muted-foreground">
@@ -362,9 +368,7 @@ export function ChatToolsDisplay({
                 </TooltipContent>
               </Tooltip>
             );
-          })}
-        </div>
-      </TooltipProvider>
-    </div>
-  );
+  });
+
+  return <TooltipProvider>{toolButtons}</TooltipProvider>;
 }

@@ -1,14 +1,22 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import { useMemo } from "react";
+import { Check, ChevronDown, ChevronRight, Layers } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { useProfiles } from "@/lib/agent.query";
 import { useUpdateConversation } from "@/lib/chat.query";
 
@@ -27,6 +35,7 @@ export function ProfileSelector({
 }: ProfileSelectorProps) {
   const { data: profiles = [] } = useProfiles();
   const updateConversationMutation = useUpdateConversation();
+  const [open, setOpen] = useState(false);
 
   const currentProfile = useMemo(
     () => profiles.find((p) => p.id === currentAgentId),
@@ -34,7 +43,10 @@ export function ProfileSelector({
   );
 
   const handleProfileChange = (newAgentId: string) => {
-    if (newAgentId === currentAgentId) return;
+    if (newAgentId === currentAgentId) {
+      setOpen(false);
+      return;
+    }
 
     if (conversationId) {
       // Update existing conversation
@@ -46,6 +58,7 @@ export function ProfileSelector({
       // Call callback for initial chat (no conversation yet)
       onProfileChange(newAgentId);
     }
+    setOpen(false);
   };
 
   if (profiles.length === 0) {
@@ -53,32 +66,52 @@ export function ProfileSelector({
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 px-3">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-8 justify-between"
+        >
+          <Layers className="h-3 w-3 shrink-0 opacity-70" />
           <span className="text-xs font-medium">
             {currentProfile?.name || "Select Profile"}
           </span>
-          <ChevronDown className="ml-2 h-3 w-3" />
+          {open ? (
+            <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          ) : (
+            <ChevronRight className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          )}
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[200px]">
-        {profiles.map((profile) => (
-          <DropdownMenuItem
-            key={profile.id}
-            onClick={() => handleProfileChange(profile.id)}
-            className="cursor-pointer"
-          >
-            <span
-              className={
-                profile.id === currentAgentId ? "font-semibold" : "font-normal"
-              }
-            >
-              {profile.name}
-            </span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search profile..." className="h-9" />
+          <CommandList>
+            <CommandEmpty>No profile found.</CommandEmpty>
+            <CommandGroup>
+              {profiles.map((profile) => (
+                <CommandItem
+                  key={profile.id}
+                  value={profile.name}
+                  onSelect={() => handleProfileChange(profile.id)}
+                >
+                  {profile.name}
+                  <Check
+                    className={cn(
+                      "ml-auto h-4 w-4",
+                      currentAgentId === profile.id
+                        ? "opacity-100"
+                        : "opacity-0",
+                    )}
+                  />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

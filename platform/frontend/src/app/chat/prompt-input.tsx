@@ -20,7 +20,6 @@ import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ProfileSelector } from "@/components/chat/profile-selector";
-import Divider from "@/components/divider";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -99,7 +98,6 @@ const PromptInputContent = ({
           </div>
         )}
       </PromptInputHeader>
-      <Divider className="my-1 w-[calc(100%-2rem)] mx-auto" />
       <PromptInputBody>
         <PromptInputTextarea
           placeholder="Type a message..."

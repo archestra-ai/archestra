@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Search, X } from "lucide-react";
+import { Eye, EyeOff, FileText, Pencil, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -16,8 +16,11 @@ import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { AgentSelector } from "@/components/chat/agent-selector";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { PromptDialog } from "@/components/chat/prompt-dialog";
+import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,7 +50,7 @@ import {
 } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
-import { usePrompts } from "@/lib/prompts.query";
+import { usePrompt, usePrompts } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -61,15 +64,11 @@ export default function ChatPage() {
     () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
   );
 
-  // Hide version display only when viewing a specific conversation
+  // Hide version display from layout - chat page has its own version display
   useEffect(() => {
-    if (conversationId) {
-      document.body.classList.add("hide-version");
-    } else {
-      document.body.classList.remove("hide-version");
-    }
+    document.body.classList.add("hide-version");
     return () => document.body.classList.remove("hide-version");
-  }, [conversationId]);
+  }, []);
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -112,6 +111,14 @@ export default function ChatPage() {
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState("");
+
+  // Prompt edit dialog state
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<
+    (typeof prompts)[number] | null
+  >(null);
+  const { data: editingPrompt } = usePrompt(editingPromptId || "");
 
   // Set default initial agent and model when data loads
   useEffect(() => {
@@ -558,6 +565,15 @@ export default function ChatPage() {
     const handleSelectAgent = (agentId: string, promptId?: string) => {
       // Set the selected agent and create conversation immediately
       setInitialAgentId(agentId);
+
+      // If this prompt has a userPrompt, store it to send after conversation is created
+      if (promptId) {
+        const selectedPrompt = prompts.find((p) => p.id === promptId);
+        if (selectedPrompt?.userPrompt) {
+          pendingPromptRef.current = selectedPrompt.userPrompt;
+        }
+      }
+
       // Create conversation with the selected agent
       createConversationMutation.mutate(
         {
@@ -611,14 +627,32 @@ export default function ChatPage() {
                 {/* Horizontal pill buttons */}
                 <div className="flex flex-wrap gap-2">
                   {filteredAgents.map((agent) => (
-                    <button
+                    <div
                       key={agent.id}
-                      type="button"
-                      onClick={() => handleSelectAgent(agent.agentId, agent.id)}
-                      className="rounded-full px-4 py-2 text-sm font-medium bg-muted hover:bg-primary/10 border border-transparent hover:border-primary transition-colors"
+                      className="group relative inline-flex items-center rounded-full bg-muted hover:bg-primary/10 border border-transparent hover:border-primary transition-colors"
                     >
-                      {agent.name}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSelectAgent(agent.agentId, agent.id)
+                        }
+                        className="rounded-full px-4 py-2 text-sm font-medium pr-2 group-hover:pr-1"
+                      >
+                        {agent.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingPromptId(agent.id);
+                          setIsPromptDialogOpen(true);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 mr-1 rounded-full hover:bg-primary/20 transition-opacity"
+                        title="Edit agent"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </div>
                   ))}
                   {filteredAgents.length === 0 && (
                     <p className="text-sm text-muted-foreground">
@@ -656,6 +690,28 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
+
+        <PromptDialog
+          open={isPromptDialogOpen}
+          onOpenChange={(open) => {
+            setIsPromptDialogOpen(open);
+            if (!open) {
+              setEditingPromptId(null);
+            }
+          }}
+          prompt={editingPrompt}
+          onViewVersionHistory={setVersionHistoryPrompt}
+        />
+
+        <PromptVersionHistoryDialog
+          open={!!versionHistoryPrompt}
+          onOpenChange={(open) => {
+            if (!open) {
+              setVersionHistoryPrompt(null);
+            }
+          }}
+          prompt={versionHistoryPrompt}
+        />
       </div>
     );
   }
@@ -668,9 +724,12 @@ export default function ChatPage() {
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">
-                {conversationPrompt ? conversationPrompt.name : "Free chat"}
-              </span>
+              <AgentSelector
+                conversationId={conversationId}
+                currentPromptId={conversation?.promptId ?? null}
+                currentAgentId={conversation?.agentId ?? ""}
+                currentModel={conversation?.selectedModel ?? ""}
+              />
             </div>
             <div className="flex gap-2 items-center">
               {!isArtifactOpen && (

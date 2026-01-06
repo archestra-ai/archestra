@@ -61,6 +61,14 @@ export function useLayoutNodes() {
     ): Promise<Node<AgentNodeData>[]> => {
       if (nodes.length === 0) return nodes;
 
+      // Build set of valid node IDs for filtering edges
+      const nodeIds = new Set(nodes.map((n) => n.id));
+
+      // Filter edges to only include those with valid source and target nodes
+      const validEdges = edges.filter(
+        (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
+      );
+
       // Build ELK graph structure
       const elkGraph: ElkNode = {
         id: "root",
@@ -88,7 +96,7 @@ export function useLayoutNodes() {
             "org.eclipse.elk.portConstraints": "FIXED_SIDE",
           },
         })),
-        edges: edges.map((edge) => ({
+        edges: validEdges.map((edge) => ({
           id: edge.id,
           sources: [`${edge.source}-source-${edge.sourceHandle || "tools"}`],
           targets: [`${edge.target}-target`],

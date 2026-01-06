@@ -1,18 +1,12 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
-import { WithPermissions } from "@/components/roles/with-permissions";
-import { Badge } from "@/components/ui/badge";
+import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
+import { ProfileSelector } from "@/components/chat/profile-selector";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -24,13 +18,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import {
@@ -72,7 +59,6 @@ export function PromptDialog({
   const [selectedAgentPromptIds, setSelectedAgentPromptIds] = useState<
     string[]
   >([]);
-  const [isA2AOpen, setIsA2AOpen] = useState(false);
 
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
@@ -210,7 +196,7 @@ export function PromptDialog({
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {prompt ? "Edit Prompt" : "Create New Prompt"}
+            {prompt ? "Edit Agent" : "Create New Agent"}
             {prompt && onViewVersionHistory && (
               <Button
                 variant="link"
@@ -225,11 +211,6 @@ export function PromptDialog({
               </Button>
             )}
           </DialogTitle>
-          <DialogDescription>
-            {prompt
-              ? "This will create a new version of the prompt"
-              : "Create a new prompt for a profile. It will be shared across your organization."}
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -242,32 +223,41 @@ export function PromptDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="agentId">Profile with tools*</Label>
-            <WithPermissions
-              permissions={{ profile: ["read"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => {
-                return hasPermission === undefined ? null : hasPermission ? (
-                  <Select value={agentId} onValueChange={setProfileId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a profile" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allProfiles.map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Badge variant="outline" className="text-xs">
-                    Unable to show the list of profiles
-                  </Badge>
-                );
-              }}
-            </WithPermissions>
+            <Label htmlFor="agentId">Tools *</Label>
+            <p className="text-sm text-muted-foreground">
+              Select profile with the tools that will be available
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <ProfileSelector
+                currentAgentId={agentId}
+                onProfileChange={setProfileId}
+              />
+              {agentId && (
+                <ChatToolsDisplay
+                  agentId={agentId}
+                  promptId={prompt?.id}
+                  readOnly
+                />
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Agents</Label>
+            <p className="text-sm text-muted-foreground">
+              Select other agents to delelegate tasks
+            </p>
+            <MultiSelect
+              value={selectedAgentPromptIds}
+              onValueChange={setSelectedAgentPromptIds}
+              items={availableAgentPrompts}
+              placeholder="Select agents..."
+              disabled={availableAgentPrompts.length === 0}
+            />
+            {availableAgentPrompts.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No other agent available
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt</Label>
@@ -289,49 +279,6 @@ export function PromptDialog({
               className="min-h-[150px] font-mono"
             />
           </div>
-          <div className="space-y-2">
-            <Label>Agents</Label>
-            <p className="text-sm text-muted-foreground">
-              Select agents that this prompt can delegate tasks to. Each agent
-              becomes a tool available to the LLM.
-            </p>
-            <MultiSelect
-              value={selectedAgentPromptIds}
-              onValueChange={setSelectedAgentPromptIds}
-              items={availableAgentPrompts}
-              placeholder="Select agents..."
-              disabled={availableAgentPrompts.length === 0}
-            />
-            {availableAgentPrompts.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No other prompts available to use as agents.
-              </p>
-            )}
-          </div>
-
-          {/* A2A Connection Section - only show for existing prompts */}
-          {prompt && (
-            <Collapsible open={isA2AOpen} onOpenChange={setIsA2AOpen}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between p-0 h-auto hover:bg-transparent"
-                >
-                  <Label className="cursor-pointer">A2A Connection</Label>
-                  {isA2AOpen ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-3">
-                <div className="border rounded-lg p-4 bg-muted/30">
-                  <A2AConnectionInstructions prompt={prompt} />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

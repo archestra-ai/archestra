@@ -29,9 +29,9 @@ export function ServiceAccountField({
         <br />
         Make sure this service account is available in{" "}
         <code className="bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono">
-          kubectl get sa -n &lt;namespace&gt;
+          {`kubectl get sa -n <namespace>`}
         </code>{" "}
-        where &lt;namespace&gt; is MCP server namespace.
+        {`where <namespace> is MCP server namespace.`}
       </p>
     </div>
   );

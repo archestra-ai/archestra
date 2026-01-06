@@ -50,16 +50,6 @@ class TrustedDataPolicyModel {
     return policy || null;
   }
 
-  static async findByToolId(
-    toolId: string,
-  ): Promise<TrustedData.TrustedDataPolicy[]> {
-    return db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId))
-      .orderBy(desc(schema.trustedDataPoliciesTable.createdAt));
-  }
-
   static async update(
     id: string,
     policy: Partial<TrustedData.InsertTrustedDataPolicy>,
@@ -386,7 +376,7 @@ class TrustedDataPolicyModel {
       Array<{
         policyId: string | null;
         policyDescription: string | null;
-        conditions: ResultPolicyCondition[] | null;
+        conditions: ResultPolicyCondition[];
         action: TrustedData.TrustedDataPolicyAction | null;
       }>
     >();
@@ -404,7 +394,7 @@ class TrustedDataPolicyModel {
       policiesByTool.get(row.toolName)?.push({
         policyId: row.policyId,
         policyDescription: row.policyDescription,
-        conditions: row.conditions as ResultPolicyCondition[] | null,
+        conditions: row.conditions as ResultPolicyCondition[],
         action: row.action,
       });
     }
@@ -447,18 +437,11 @@ class TrustedDataPolicyModel {
       let blockReason = "";
 
       for (const policy of specificPolicies) {
-        if (policy.action === "block_always" && policy.conditions) {
-          if (
-            TrustedDataPolicyModel.evaluateConditions(
-              policy.conditions,
-              toolOutput,
-            )
-          ) {
+        if (policy.action === "block_always" && TrustedDataPolicyModel.evaluateConditions(policy.conditions, toolOutput)) {
             isBlocked = true;
             blockReason = `Data blocked by policy: ${policy.policyDescription || "Unnamed policy"}`;
             break;
           }
-        }
       }
 
       if (isBlocked) {
@@ -474,31 +457,24 @@ class TrustedDataPolicyModel {
       // Check specific policies for trust/sanitize
       let matchedSpecific = false;
       for (const policy of specificPolicies) {
-        if (policy.conditions) {
-          if (
-            TrustedDataPolicyModel.evaluateConditions(
-              policy.conditions,
-              toolOutput,
-            )
-          ) {
-            matchedSpecific = true;
-            if (policy.action === "mark_as_trusted") {
-              results.set(i.toString(), {
-                isTrusted: true,
-                isBlocked: false,
-                shouldSanitizeWithDualLlm: false,
-                reason: `Data trusted by policy: ${policy.policyDescription || "Unnamed policy"}`,
-              });
-            } else if (policy.action === "sanitize_with_dual_llm") {
-              results.set(i.toString(), {
-                isTrusted: false,
-                isBlocked: false,
-                shouldSanitizeWithDualLlm: true,
-                reason: `Data requires dual LLM sanitization by policy: ${policy.policyDescription || "Unnamed policy"}`,
-              });
-            }
-            break;
+        if (TrustedDataPolicyModel.evaluateConditions(policy.conditions, toolOutput)) {
+          matchedSpecific = true;
+          if (policy.action === "mark_as_trusted") {
+            results.set(i.toString(), {
+              isTrusted: true,
+              isBlocked: false,
+              shouldSanitizeWithDualLlm: false,
+              reason: `Data trusted by policy: ${policy.policyDescription || "Unnamed policy"}`,
+            });
+          } else if (policy.action === "sanitize_with_dual_llm") {
+            results.set(i.toString(), {
+              isTrusted: false,
+              isBlocked: false,
+              shouldSanitizeWithDualLlm: true,
+              reason: `Data requires dual LLM sanitization by policy: ${policy.policyDescription || "Unnamed policy"}`,
+            });
           }
+          break;
         }
       }
 

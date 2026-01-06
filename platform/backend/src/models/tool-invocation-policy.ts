@@ -48,16 +48,6 @@ class ToolInvocationPolicyModel {
     return policy || null;
   }
 
-  static async findByToolId(
-    toolId: string,
-  ): Promise<ToolInvocation.ToolInvocationPolicy[]> {
-    return db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId))
-      .orderBy(desc(schema.toolInvocationPoliciesTable.createdAt));
-  }
-
   static async update(
     id: string,
     policy: Partial<ToolInvocation.InsertToolInvocationPolicy>,
@@ -168,72 +158,6 @@ class ToolInvocationPolicyModel {
   }
 
   /**
-   * Evaluate a single condition against tool input
-   */
-  private static evaluateCondition(
-    condition: CallPolicyCondition,
-    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
-    toolInput: Record<string, any>,
-  ): boolean {
-    const argumentValue = get(toolInput, condition.key);
-
-    if (argumentValue === undefined) {
-      return false;
-    }
-
-    switch (condition.operator) {
-      case "endsWith":
-        return (
-          typeof argumentValue === "string" &&
-          argumentValue.endsWith(condition.value)
-        );
-      case "startsWith":
-        return (
-          typeof argumentValue === "string" &&
-          argumentValue.startsWith(condition.value)
-        );
-      case "contains":
-        return (
-          typeof argumentValue === "string" &&
-          argumentValue.includes(condition.value)
-        );
-      case "notContains":
-        return (
-          typeof argumentValue === "string" &&
-          !argumentValue.includes(condition.value)
-        );
-      case "equal":
-        return argumentValue === condition.value;
-      case "notEqual":
-        return argumentValue !== condition.value;
-      case "regex":
-        return (
-          typeof argumentValue === "string" &&
-          new RegExp(condition.value).test(argumentValue)
-        );
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * Check if all conditions in a policy match (AND logic)
-   * Empty conditions array means the policy applies to all calls
-   */
-  private static allConditionsMatch(
-    conditions: CallPolicyCondition[],
-    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
-    toolInput: Record<string, any>,
-  ): boolean {
-    if (conditions.length === 0) {
-      return true; // No conditions = applies to all
-    }
-    return conditions.every((condition) =>
-      ToolInvocationPolicyModel.evaluateCondition(condition, toolInput),
-    );
-  }
-
-  /**
    * Batch evaluate tool invocation policies for multiple tool calls at once.
    * This avoids N+1 queries by fetching all policies upfront.
    *
@@ -311,10 +235,45 @@ class ToolInvocationPolicyModel {
       let specificAllowsUntrusted = false;
 
       for (const policy of specificPolicies) {
-        const conditionsMatch = ToolInvocationPolicyModel.allConditionsMatch(
-          policy.conditions,
-          toolInput,
-        );
+        // Check if all conditions match (AND logic)
+        const conditionsMatch = policy.conditions.every((condition) => {
+          const argumentValue = get(toolInput, condition.key);
+          if (argumentValue === undefined) return false;
+
+          switch (condition.operator) {
+            case "endsWith":
+              return (
+                typeof argumentValue === "string" &&
+                argumentValue.endsWith(condition.value)
+              );
+            case "startsWith":
+              return (
+                typeof argumentValue === "string" &&
+                argumentValue.startsWith(condition.value)
+              );
+            case "contains":
+              return (
+                typeof argumentValue === "string" &&
+                argumentValue.includes(condition.value)
+              );
+            case "notContains":
+              return (
+                typeof argumentValue === "string" &&
+                !argumentValue.includes(condition.value)
+              );
+            case "equal":
+              return argumentValue === condition.value;
+            case "notEqual":
+              return argumentValue !== condition.value;
+            case "regex":
+              return (
+                typeof argumentValue === "string" &&
+                new RegExp(condition.value).test(argumentValue)
+              );
+            default:
+              return false;
+          }
+        });
 
         if (!conditionsMatch) continue;
 

@@ -177,20 +177,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Update catalog's serviceAccount if user provided a different value
+        const normalizedServiceAccount =
+          serviceAccount === "" ? undefined : serviceAccount;
         if (
-          serviceAccount !== undefined &&
-          catalogItem.localConfig?.serviceAccount !== serviceAccount
+          normalizedServiceAccount !== undefined &&
+          catalogItem.localConfig?.serviceAccount !== normalizedServiceAccount
         ) {
           await InternalMcpCatalogModel.update(catalogItem.id, {
             localConfig: {
               ...catalogItem.localConfig,
-              serviceAccount: serviceAccount || undefined,
+              serviceAccount: normalizedServiceAccount,
             },
           });
           // Update local reference for deployment
           if (catalogItem.localConfig) {
             catalogItem.localConfig.serviceAccount =
-              serviceAccount || undefined;
+              normalizedServiceAccount;
           }
         }
       }

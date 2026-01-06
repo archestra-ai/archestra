@@ -42,7 +42,9 @@ export function ToolCallPolicies({
 
   const allPolicies = byProfileToolId[agentTool.tool.id] || [];
   // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
-  const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
+  const policies = allPolicies.filter(
+    (policy) => policy.conditions.length > 0,
+  );
 
   const argumentNames = Object.keys(
     agentTool.tool.parameters?.properties || [],

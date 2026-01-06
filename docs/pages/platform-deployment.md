@@ -390,7 +390,7 @@ See the Kubernetes documentation for more details:
 **PostgreSQL Settings**:
 
 - `postgresql.external_database_url` - External PostgreSQL connection string (recommended for production)
-- `postgresql.enabled` - Enable managed PostgreSQL instance (default: true, disabled if external_database_url is set)
+- `postgresql.enabled` - Whether to deploy a self-hosted PostgreSQL instance in your Kubernetes cluster (default: true)
 
 For external PostgreSQL (recommended for production):
 

@@ -3,13 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   assignToolToAgent,
+  autoConfigureAgentToolPolicies,
   bulkAssignTools,
   getAllAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
-  autoConfigureAgentToolPolicies,
-  bulkUpsertDefaultCallPolicy,
-  bulkUpsertDefaultResultPolicy,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -277,50 +275,6 @@ export function useAutoConfigurePolicies() {
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
       });
-    },
-  });
-}
-
-// Bulk update profile tools - operates on policies via bulk API endpoints
-export function useBulkUpdateProfileTools() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: {
-      toolIds: string[];
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment";
-      value: boolean | "trusted" | "untrusted" | "sanitize_with_dual_llm";
-    }) => {
-      const { toolIds, field, value } = params;
-
-      if (field === "allowUsageWhenUntrustedDataIsPresent") {
-        const action =
-          value === true ? "allow_when_context_is_untrusted" : "block_always";
-        const result = await bulkUpsertDefaultCallPolicy({
-          body: { toolIds, action },
-        });
-        return result.data ?? { updated: 0, created: 0 };
-      }
-
-      if (field === "toolResultTreatment") {
-        const actionMap = {
-          trusted: "mark_as_trusted",
-          untrusted: "block_always",
-          sanitize_with_dual_llm: "sanitize_with_dual_llm",
-        } as const;
-        const action = actionMap[value as keyof typeof actionMap];
-        const result = await bulkUpsertDefaultResultPolicy({
-          body: { toolIds, action },
-        });
-        return result.data ?? { updated: 0, created: 0 };
-      }
-
-      return { updated: 0, created: 0 };
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
-      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
     },
   });
 }

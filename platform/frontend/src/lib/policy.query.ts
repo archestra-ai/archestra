@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-query";
 
 const {
+  bulkUpsertDefaultCallPolicy,
+  bulkUpsertDefaultResultPolicy,
   createToolInvocationPolicy,
   createTrustedDataPolicy,
   deleteToolInvocationPolicy,
@@ -325,6 +327,61 @@ export function useResultPolicyMutation() {
           action,
         },
       });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+    },
+  });
+}
+
+// Bulk update default call policies for multiple tools
+export function useBulkCallPolicyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      toolIds,
+      allowUsage,
+    }: {
+      toolIds: string[];
+      allowUsage: boolean;
+    }) => {
+      const action = allowUsage
+        ? "allow_when_context_is_untrusted"
+        : "block_always";
+      const result = await bulkUpsertDefaultCallPolicy({
+        body: { toolIds, action },
+      });
+      return result.data ?? { updated: 0, created: 0 };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+    },
+  });
+}
+
+// Bulk update default result policies for multiple tools
+export function useBulkResultPolicyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      toolIds,
+      treatment,
+    }: {
+      toolIds: string[];
+      treatment: "trusted" | "untrusted" | "sanitize_with_dual_llm";
+    }) => {
+      const actionMap = {
+        trusted: "mark_as_trusted",
+        untrusted: "block_always",
+        sanitize_with_dual_llm: "sanitize_with_dual_llm",
+      } as const;
+      const action = actionMap[treatment];
+      const result = await bulkUpsertDefaultResultPolicy({
+        body: { toolIds, action },
+      });
+      return result.data ?? { updated: 0, created: 0 };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });

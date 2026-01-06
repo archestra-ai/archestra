@@ -50,13 +50,14 @@ import { useProfiles } from "@/lib/agent.query";
 import {
   useAllProfileTools,
   useAutoConfigurePolicies,
-  useBulkUpdateProfileTools,
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import {
+  useBulkCallPolicyMutation,
+  useBulkResultPolicyMutation,
   useCallPolicyMutation,
   useResultPolicyMutation,
   useToolInvocationPolicies,
@@ -116,7 +117,8 @@ export function AssignedToolsTable({
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const callPolicyMutation = useCallPolicyMutation();
   const resultPolicyMutation = useResultPolicyMutation();
-  const bulkUpdateMutation = useBulkUpdateProfileTools();
+  const bulkCallPolicyMutation = useBulkCallPolicyMutation();
+  const bulkResultPolicyMutation = useBulkResultPolicyMutation();
   const autoConfigureMutation = useAutoConfigurePolicies();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies(
@@ -358,8 +360,6 @@ export function AssignedToolsTable({
       field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
       value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
     ) => {
-      setIsBulkUpdating(true);
-
       // Filter out tools with custom policies (non-empty conditions)
       const toolIds = selectedTools
         .filter((tool) => {
@@ -378,23 +378,30 @@ export function AssignedToolsTable({
         .map((tool) => tool.tool.id);
 
       if (toolIds.length === 0) {
-        setIsBulkUpdating(false);
         return;
       }
+      setIsBulkUpdating(true);
 
-      try {
-        await bulkUpdateMutation.mutateAsync({
+      if (field === "allowUsageWhenUntrustedDataIsPresent") {
+        bulkCallPolicyMutation.mutate({
           toolIds,
-          field,
-          value,
+          allowUsage: value as boolean,
         });
-      } catch (error) {
-        console.error("Bulk update failed:", error);
-      } finally {
-        setIsBulkUpdating(false);
+      } else {
+        bulkResultPolicyMutation.mutate({
+          toolIds,
+          treatment: value as "trusted" | "untrusted" | "sanitize_with_dual_llm",
+        });
       }
+      setIsBulkUpdating(false);
     },
-    [selectedTools, bulkUpdateMutation, invocationPolicies, resultPolicies],
+    [
+      selectedTools,
+      bulkCallPolicyMutation,
+      bulkResultPolicyMutation,
+      invocationPolicies,
+      resultPolicies,
+    ],
   );
 
   const handleAutoConfigurePolicies = useCallback(async () => {

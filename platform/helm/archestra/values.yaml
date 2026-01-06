@@ -336,10 +336,13 @@ archestra:
 postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance
   # If null, a PostgreSQL instance will be deployed using the Bitnami PostgreSQL chart
-  # Example: postgresql://username:password@host:5432/database
+  # Accepts both postgres:// and postgresql:// URI schemes
+  # Example: postgres://username:password@host:5432/database
+  # IMPORTANT: When setting external_database_url, you MUST also set enabled=false
   external_database_url: null
 
-  # PostgreSQL subchart configuration (only used when external_database_url is null)
+  # Whether to deploy the bundled PostgreSQL instance
+  # Set to false when using external_database_url
   enabled: true
   auth:
     database: archestra_dev

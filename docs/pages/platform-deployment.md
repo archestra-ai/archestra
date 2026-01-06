@@ -14,19 +14,21 @@ The Archestra Platform can be deployed using Docker for development and testing,
 
 ## Docker Deployment
 
-Docker deployment provides the fastest way to get started with Archestra Platform, ideal for development and testing purposes.
+Docker deployment provides the fastest way to get started with Archestra Platform, ideal for tinkering and testing purposes.
 
 ### Docker Prerequisites
 
 - **Docker** - Container runtime ([Install Docker](https://docs.docker.com/get-docker/))
 
-### Basic Deployment
+### Quickstart Deployment
 
 Run the platform with a single command:
 
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
+   -e ARCHESTRA_QUICKSTART=true \
+   -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
    -v archestra-app-data:/app/data \
    archestra/platform;
@@ -37,6 +39,22 @@ This will start the platform with:
 - **Admin UI** available at <http://localhost:3000>
 - **API** available at <http://localhost:9000>
 - **Auth Secret** auto-generated and saved to `/app/data/.auth_secret` (persisted across restarts)
+- **MCP Kubernetes Orchestrator** via KinD
+
+**Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
+
+If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
+
+```diff
+docker run -p 9000:9000 -p 3000:3000 \
+-  -e ARCHESTRA_QUICKSTART=true \
+-  -v /var/run/docker.sock:/var/run/docker.sock \
+   -v archestra-postgres-data:/var/lib/postgresql/data \
+   -v archestra-app-data:/app/data \
+   archestra/platform;
+```
+
+Running the platform without Kubernetes (or its alternatives) is also possible. This just makes MCP orchestrator unavailable in the app.
 
 ### Using External PostgreSQL
 
@@ -51,7 +69,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 
 ⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
-## Helm Deployment (Recommended for Production)
+## Helm Deployment
 
 Helm deployment is our recommended approach for deploying Archestra Platform to production environments.
 
@@ -70,7 +88,6 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
-  --set archestra.image="archestra/platform:0.6.27" \
   --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
@@ -91,7 +108,11 @@ The Helm chart provides extensive configuration options through values. For the 
 **Archestra Platform Settings**:
 
 - `archestra.image` - Docker image for the Archestra Platform (contains both backend API and frontend). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
-- `archestra.env` - Environment variables to pass to the container (see Environment Variables section above for available options)
+- `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
+- `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
+- `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options)
+- `archestra.envFromSecrets` - Environment variables from Kubernetes Secrets (inject sensitive data from secrets)
+- `archestra.envFrom` - Import all key-value pairs from Secrets or ConfigMaps as environment variables
 
 **Example**:
 
@@ -133,17 +154,24 @@ openssl rand -base64 32
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
+- `archestra.orchestrator.kubernetes.mcpServerRbac.create` - Create MCP server RBAC resources (ServiceAccount, Role, RoleBinding) for Kubernetes MCP server (default: true)
+- `archestra.orchestrator.kubernetes.mcpServerRbac.additionalClusterRoleBindings` - Additional ClusterRoleBindings to attach to the MCP K8s operator service account for cluster-wide permissions
+- `archestra.orchestrator.kubernetes.mcpServerRbac.additionalRoleBindings` - Additional RoleBindings to attach to the MCP K8s operator service account for namespace-scoped permissions
 
 #### Service, Deployment, & Ingress Configuration
 
 **Deployment Settings**:
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
+- `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types)
+- `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with maxUnavailable: 0 for zero-downtime deployments)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 
 **Service Settings**:
 
+- `archestra.service.type` - Service type: ClusterIP, NodePort, or LoadBalancer (default: ClusterIP)
 - `archestra.service.annotations` - Annotations to add to the Kubernetes Service for cloud provider integrations
+- `archestra.service.nodePorts` - Node ports for NodePort service type (backend, metrics, frontend)
 
 **Ingress Settings**:
 
@@ -362,7 +390,7 @@ See the Kubernetes documentation for more details:
 **PostgreSQL Settings**:
 
 - `postgresql.external_database_url` - External PostgreSQL connection string (recommended for production)
-- `postgresql.enabled` - Enable managed PostgreSQL instance (default: true, disabled if external_database_url is set)
+- `postgresql.enabled` - Whether to deploy a self-hosted PostgreSQL instance in your Kubernetes cluster (default: true)
 
 For external PostgreSQL (recommended for production):
 
@@ -391,6 +419,20 @@ Then visit:
 
 - **Admin UI**: <http://localhost:3000>
 - **API**: <http://localhost:9000>
+
+### Production Recommendations
+
+#### PostgreSQL Infrastructure
+
+For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the bundled PostgreSQL instance. Cloud-managed databases provide:
+
+- **High availability** with automatic failover
+- **Automated backups** and point-in-time recovery
+- **Scaling** without downtime
+- **Security** with encryption at rest and in transit
+- **Monitoring** and alerting out of the box
+
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
 
 ## Infrastructure as Code
 
@@ -452,7 +494,7 @@ The following environment variables can be used to configure Archestra Platform:
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
 
   - Example: `https://frontend.example.com`
-  - Optional for local development
+  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
 
@@ -486,6 +528,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+
+  - Default: None
+  - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
+  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
+  - Required when configuring SSO with external identity providers hosted on different domains
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
@@ -598,6 +647,12 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+- **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
+
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`
+  - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
   - Please reach out to sales@archestra.ai to learn more about the license.

@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
+  getAdditionalTrustedOrigins,
   getAdditionalTrustedSsoProviderIds,
   getDatabaseUrl,
   getOtlpAuthHeaders,
@@ -237,6 +238,81 @@ describe("getOtlpAuthHeaders", () => {
   });
 });
 
+describe("getAdditionalTrustedOrigins", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("should return empty array when env var is not set", () => {
+    delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
+    const result = getAdditionalTrustedOrigins();
+
+    expect(result).toEqual([]);
+  });
+
+  test("should return empty array when env var is empty", () => {
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS = "";
+
+    const result = getAdditionalTrustedOrigins();
+
+    expect(result).toEqual([]);
+  });
+
+  test("should return single origin", () => {
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+      "http://keycloak:8080";
+
+    const result = getAdditionalTrustedOrigins();
+
+    expect(result).toEqual(["http://keycloak:8080"]);
+  });
+
+  test("should return multiple origins from comma-separated list", () => {
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+      "http://keycloak:8080,https://auth.example.com,http://idp.local:9000";
+
+    const result = getAdditionalTrustedOrigins();
+
+    expect(result).toEqual([
+      "http://keycloak:8080",
+      "https://auth.example.com",
+      "http://idp.local:9000",
+    ]);
+  });
+
+  test("should trim whitespace from origins", () => {
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+      "  http://keycloak:8080 , https://auth.example.com  ";
+
+    const result = getAdditionalTrustedOrigins();
+
+    expect(result).toEqual([
+      "http://keycloak:8080",
+      "https://auth.example.com",
+    ]);
+  });
+
+  test("should filter out empty entries", () => {
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+      "http://keycloak:8080,,https://auth.example.com,";
+
+    const result = getAdditionalTrustedOrigins();
+
+    expect(result).toEqual([
+      "http://keycloak:8080",
+      "https://auth.example.com",
+    ]);
+  });
+});
+
 describe("getTrustedOrigins", () => {
   const originalEnv = process.env;
 
@@ -254,6 +330,8 @@ describe("getTrustedOrigins", () => {
     // since the test environment is not production
 
     test("should return localhost wildcards in development", () => {
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+
       const result = getTrustedOrigins();
 
       expect(result).toEqual([
@@ -261,6 +339,21 @@ describe("getTrustedOrigins", () => {
         "https://localhost:*",
         "http://127.0.0.1:*",
         "https://127.0.0.1:*",
+      ]);
+    });
+
+    test("should include additional trusted origins in development", () => {
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://keycloak:8080";
+
+      const result = getTrustedOrigins();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "http://keycloak:8080",
       ]);
     });
   });
@@ -276,6 +369,7 @@ describe("getTrustedOrigins", () => {
     test("should return frontend URL in production", async () => {
       process.env.NODE_ENV = "production";
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
       const { getTrustedOrigins: getTrustedOriginsProd } = await import(
         "./config"
@@ -283,6 +377,23 @@ describe("getTrustedOrigins", () => {
       const result = getTrustedOriginsProd();
 
       expect(result).toEqual(["https://app.example.com"]);
+    });
+
+    test("should include additional trusted origins in production", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS =
+        "http://idp.example.com:8080";
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toEqual([
+        "https://app.example.com",
+        "http://idp.example.com:8080",
+      ]);
     });
   });
 });

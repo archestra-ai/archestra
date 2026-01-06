@@ -29,6 +29,9 @@ export const UpdateConversationSchema = createUpdateSchema(
 ).pick({
   title: true,
   selectedModel: true,
+  chatApiKeyId: true,
+  agentId: true,
+  artifact: true,
 });
 
 export type Conversation = z.infer<typeof SelectConversationSchema>;

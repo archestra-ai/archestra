@@ -5,18 +5,23 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-type SupportedChatProvider =
+export type SupportedChatProvider =
   archestraApiTypes.GetChatApiKeysResponses["200"][number]["provider"];
+
+export type ChatApiKeyScope =
+  archestraApiTypes.GetChatApiKeysResponses["200"][number]["scope"];
+
+export type ChatApiKey =
+  archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
 const {
   getChatApiKeys,
+  getAvailableChatApiKeys,
   createChatApiKey,
   updateChatApiKey,
   deleteChatApiKey,
-  setChatApiKeyDefault,
-  unsetChatApiKeyDefault,
-  updateChatApiKeyProfiles,
 } = archestraApiSdk;
 
 export function useChatApiKeys() {
@@ -36,16 +41,18 @@ export function useChatApiKeys() {
   });
 }
 
-export function useChatApiKeysOptional() {
+export function useAvailableChatApiKeys(provider?: SupportedChatProvider) {
   return useQuery({
-    queryKey: ["chat-api-keys"],
+    queryKey: ["available-chat-api-keys", provider],
     queryFn: async () => {
-      const { data, error } = await getChatApiKeys();
+      const { data, error } = await getAvailableChatApiKeys({
+        query: provider ? { provider } : undefined,
+      });
       if (error) {
         throw new Error(
           typeof error.error === "string"
             ? error.error
-            : error.error?.message || "Failed to fetch chat API keys",
+            : error.error?.message || "Failed to fetch available chat API keys",
         );
       }
       return data ?? [];
@@ -56,12 +63,9 @@ export function useChatApiKeysOptional() {
 export function useCreateChatApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
-      name: string;
-      provider: SupportedChatProvider;
-      apiKey: string;
-      isOrganizationDefault?: boolean;
-    }) => {
+    mutationFn: async (
+      data: archestraApiTypes.CreateChatApiKeyData["body"],
+    ) => {
       const { data: responseData, error } = await createChatApiKey({
         body: data,
       });
@@ -74,8 +78,14 @@ export function useCreateChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
+      toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
 }
@@ -88,10 +98,7 @@ export function useUpdateChatApiKey() {
       data,
     }: {
       id: string;
-      data: {
-        name?: string;
-        apiKey?: string;
-      };
+      data: archestraApiTypes.UpdateChatApiKeyData["body"];
     }) => {
       const { data: responseData, error } = await updateChatApiKey({
         path: { id },
@@ -106,8 +113,13 @@ export function useUpdateChatApiKey() {
       }
       return responseData;
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
     onSuccess: () => {
+      toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
     },
   });
 }
@@ -128,81 +140,13 @@ export function useDeleteChatApiKey() {
       }
       return responseData;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-    },
-  });
-}
-
-export function useSetChatApiKeyDefault() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: responseData, error } = await setChatApiKeyDefault({
-        path: { id },
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to set API key as default";
-        throw new Error(msg);
-      }
-      return responseData;
+    onError: (error) => {
+      toast.error(error.message);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-    },
-  });
-}
-
-export function useUnsetChatApiKeyDefault() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: responseData, error } = await unsetChatApiKeyDefault({
-        path: { id },
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to unset API key as default";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
-    },
-  });
-}
-
-export function useUpdateChatApiKeyProfiles() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      id,
-      profileIds,
-    }: {
-      id: string;
-      profileIds: string[];
-    }) => {
-      const { data: responseData, error } = await updateChatApiKeyProfiles({
-        path: { id },
-        body: { profileIds },
-      });
-      if (error) {
-        const msg =
-          typeof error.error === "string"
-            ? error.error
-            : error.error?.message || "Failed to update API key profiles";
-        throw new Error(msg);
-      }
-      return responseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chat-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["available-chat-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["chat-models"] });
     },
   });
 }

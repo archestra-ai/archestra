@@ -10,7 +10,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,
@@ -92,6 +92,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken: z.string().optional(),
           // When true, environmentValues and userConfigValues contain vault references in "path#key" format
           isByosVault: z.boolean().optional(),
+          // Kubernetes service account override for local MCP servers
+          serviceAccount: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -104,6 +106,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isByosVault,
         userConfigValues,
         environmentValues,
+        serviceAccount,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -172,6 +175,26 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
+
+        // Update catalog's serviceAccount if user provided a different value
+        const normalizedServiceAccount =
+          serviceAccount === "" ? undefined : serviceAccount;
+        if (
+          catalogItem?.serverType === "local" &&
+          normalizedServiceAccount !== undefined &&
+          catalogItem.localConfig?.serviceAccount !== normalizedServiceAccount
+        ) {
+          await InternalMcpCatalogModel.update(catalogItem.id, {
+            localConfig: {
+              ...catalogItem.localConfig,
+              serviceAccount: normalizedServiceAccount,
+            },
+          });
+          // Update local reference for deployment
+          if (catalogItem.localConfig) {
+            catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
+          }
+        }
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -187,7 +210,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // userConfigValues already contains vault references in "path#key" format
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             userConfigValues as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
@@ -208,7 +231,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
             );
           }
-          const secret = await secretManager.createSecret(
+          const secret = await secretManager().createSecret(
             { access_token: accessToken },
             `${serverData.name}-token`,
           );
@@ -227,7 +250,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!isValid) {
             // Clean up the secret we just created if validation fails
             if (createdSecretId) {
-              secretManager.deleteSecret(createdSecretId);
+              secretManager().deleteSecret(createdSecretId);
             }
 
             throw new ApiError(
@@ -238,7 +261,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // For LOCAL servers: validate env vars and create secrets (no connection validation, since pod will be started later)
+      // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
@@ -291,7 +314,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager.createSecret(
+            const secret = await secretManager().createSecret(
               secretEnvVars,
               `${serverData.name}-vault-secret`,
             );
@@ -343,7 +366,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager.createSecret(
+            const secret = await secretManager().createSecret(
               secretEnvVars,
               `mcp-server-${serverData.name}-env`,
             );
@@ -367,14 +390,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       try {
-        // For local servers, start the K8s pod first
+        // For local servers, start the K8s deployment first
         if (catalogItem?.serverType === "local") {
           try {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
             const capturedCatalogName = catalogItem.name;
 
-            // Set status to pending before starting the pod
+            // Set status to pending before starting the deployment
             await McpServerModel.update(mcpServer.id, {
               localInstallationStatus: "pending",
               localInstallationError: null,
@@ -386,11 +409,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               environmentValues,
             );
             fastify.log.info(
-              `Started K8s pod for local MCP server: ${mcpServer.name}`,
+              `Started K8s deployment for local MCP server: ${mcpServer.name}`,
             );
 
             // For local servers, return immediately without waiting for tools
-            // Tools will be fetched asynchronously after the pod is ready
+            // Tools will be fetched asynchronously after the deployment is ready
             fastify.log.info(
               `Skipping synchronous tool fetch for local server: ${mcpServer.name}. Tools will be fetched asynchronously.`,
             );
@@ -398,22 +421,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Start async tool fetching in the background (non-blocking)
             (async () => {
               try {
-                // Wait for the pod to be fully ready before fetching tools
-                const podManager = McpServerRuntimeManager.getPod(mcpServer.id);
-                if (!podManager) {
-                  throw new Error("Pod manager not found");
+                // Wait for the deployment to be fully ready before fetching tools
+                const k8sDeployment = McpServerRuntimeManager.getDeployment(
+                  mcpServer.id,
+                );
+                if (!k8sDeployment) {
+                  throw new Error("Deployment manager not found");
                 }
 
                 fastify.log.info(
-                  `Waiting for pod to be ready: ${mcpServer.name}`,
+                  `Waiting for deployment to be ready: ${mcpServer.name}`,
                 );
 
-                // Wait for pod to be ready (with timeout)
-                // This will throw an error if the pod fails or times out
-                await podManager.waitForPodReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+                // Wait for deployment to be ready (with timeout)
+                await k8sDeployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
 
                 fastify.log.info(
-                  `Pod is ready, updating status to discovering-tools: ${mcpServer.name}`,
+                  `Deployment is ready, updating status to discovering-tools: ${mcpServer.name}`,
                 );
 
                 await McpServerModel.update(mcpServer.id, {
@@ -487,23 +511,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               localInstallationError: null,
             });
           } catch (podError) {
-            // If pod fails to start, set status to error
+            // If deployment fails to start, set status to error
             const errorMessage =
               podError instanceof Error ? podError.message : "Unknown error";
             fastify.log.error(
-              `Failed to start K8s pod for MCP server ${mcpServer.name}: ${errorMessage}`,
+              `Failed to start K8s deployment for MCP server ${mcpServer.name}: ${errorMessage}`,
             );
 
             await McpServerModel.update(mcpServer.id, {
               localInstallationStatus: "error",
-              localInstallationError: `Failed to start pod: ${errorMessage}`,
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
 
             // Return the server with error status instead of throwing 500
             return reply.send({
               ...mcpServer,
               localInstallationStatus: "error",
-              localInstallationError: `Failed to start pod: ${errorMessage}`,
+              localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
           }
         }
@@ -554,7 +578,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Also clean up the secret if we created one
         if (createdSecretId) {
-          await secretManager.deleteSecret(createdSecretId);
+          await secretManager().deleteSecret(createdSecretId);
         }
 
         throw new ApiError(
@@ -592,12 +616,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await McpServerRuntimeManager.stopServer(mcpServerId);
           logger.info(
             { mcpServerId },
-            "Stopped K8s pod and deleted K8s Secret for local MCP server",
+            "Stopped K8s deployment and deleted K8s Secret for local MCP server",
           );
         } catch (error) {
           logger.error(
             { err: error, mcpServerId },
-            "Failed to stop local MCP server pod",
+            "Failed to stop local MCP server deployment",
           );
           // Continue with deletion even if pod stop fails
         }
@@ -607,7 +631,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // (don't delete OAuth tokens for remote servers)
       if (mcpServer.secretId && mcpServer.serverType === "local") {
         try {
-          await secretManager.deleteSecret(mcpServer.secretId);
+          await secretManager().deleteSecret(mcpServer.secretId);
           logger.info(
             { mcpServerId },
             "Deleted database secret for local MCP server",
@@ -715,7 +739,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMcpServerLogs,
-        description: "Get logs for a specific MCP server pod",
+        description: "Get logs for a specific MCP server deployment",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -782,7 +806,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.RestartMcpServer,
-        description: "Restart a single MCP server pod",
+        description: "Restart a single MCP server deployment",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -816,6 +840,110 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `Failed to restart MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
       }
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_catalog/:catalogId/restart-all-installations",
+    {
+      schema: {
+        operationId: RouteId.RestartAllMcpServerInstallations,
+        description:
+          "Restart all MCP server installations for a given catalog item",
+        tags: ["MCP Server"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            message: z.string(),
+            results: z.array(
+              z.object({
+                serverId: z.string(),
+                serverName: z.string(),
+                success: z.boolean(),
+                error: z.string().optional(),
+              }),
+            ),
+            summary: z.object({
+              total: z.number(),
+              succeeded: z.number(),
+              failed: z.number(),
+            }),
+          }),
+        ),
+      },
+    },
+    async ({ params: { catalogId } }, reply) => {
+      // Verify the catalog item exists
+      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+      if (!catalogItem) {
+        throw new ApiError(404, `Catalog item ${catalogId} not found`);
+      }
+
+      // Find all MCP server installations for this catalog item
+      const servers = await McpServerModel.findByCatalogId(catalogId);
+
+      if (servers.length === 0) {
+        return reply.send({
+          success: true,
+          message: "No installations found for this catalog item",
+          results: [],
+          summary: { total: 0, succeeded: 0, failed: 0 },
+        });
+      }
+
+      // Restart each server sequentially
+      const results: Array<{
+        serverId: string;
+        serverName: string;
+        success: boolean;
+        error?: string;
+      }> = [];
+
+      for (const server of servers) {
+        try {
+          await McpServerRuntimeManager.restartServer(server.id);
+          results.push({
+            serverId: server.id,
+            serverName: server.name,
+            success: true,
+          });
+          logger.info(
+            `Restarted MCP server ${server.id} (${server.name}) as part of restart-all for catalog ${catalogId}`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          results.push({
+            serverId: server.id,
+            serverName: server.name,
+            success: false,
+            error: errorMessage,
+          });
+          logger.error(
+            `Failed to restart MCP server ${server.id} (${server.name}): ${errorMessage}`,
+          );
+        }
+      }
+
+      const succeeded = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).length;
+
+      return reply.send({
+        success: failed === 0,
+        message:
+          failed === 0
+            ? `Successfully restarted all ${succeeded} installation(s)`
+            : `Restarted ${succeeded} of ${servers.length} installation(s), ${failed} failed`,
+        results,
+        summary: {
+          total: servers.length,
+          succeeded,
+          failed,
+        },
+      });
     },
   );
 };

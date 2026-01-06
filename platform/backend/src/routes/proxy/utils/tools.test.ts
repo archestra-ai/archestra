@@ -84,6 +84,40 @@ describe("persistTools", () => {
     expect(proxyTools[0].name).toBe("regular-tool");
   });
 
+  test("skips agent delegation tools (agent__*)", async ({ makeAgent }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    // Try to persist tools including agent delegation tools
+    const tools = [
+      {
+        toolName: "agent__research_bot", // Agent delegation tool
+        toolParameters: { type: "object" },
+        toolDescription: "Should be skipped",
+      },
+      {
+        toolName: "agent__code_reviewer", // Another agent delegation tool
+        toolParameters: { type: "object" },
+        toolDescription: "Should also be skipped",
+      },
+      {
+        toolName: "regular-tool",
+        toolParameters: { type: "object" },
+        toolDescription: "Regular tool",
+      },
+    ];
+
+    await persistTools(tools, agent.id);
+
+    // Only the regular tool should be created
+    const agentTools = await ToolModel.getToolsByAgent(agent.id);
+    const proxyTools = agentTools.filter(
+      (t) => t.agentId === agent.id && t.catalogId === null,
+    );
+
+    expect(proxyTools).toHaveLength(1);
+    expect(proxyTools[0].name).toBe("regular-tool");
+  });
+
   test("skips MCP tools already assigned to the agent", async ({
     makeAgent,
     makeInternalMcpCatalog,

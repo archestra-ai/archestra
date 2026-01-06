@@ -79,8 +79,8 @@ ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17 and supervisord
-    apk add --no-cache postgresql17 postgresql17-contrib su-exec && \
+    # Install PostgreSQL 17, supervisord, and wget (needed for KinD download and health checks)
+    apk add --no-cache postgresql17 postgresql17-contrib su-exec wget && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
     rm -rf /usr/local/lib/node_modules/npm && \
@@ -91,6 +91,22 @@ RUN apk --no-cache upgrade && \
     mkdir -p /var/log/supervisor && \
     # Clean up
     rm -rf /tmp/*
+
+# Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
+RUN apk add --no-cache docker-cli && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64"; \
+        KIND_SHA256="eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        KIND_URL="https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64"; \
+        KIND_SHA256="8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4"; \
+    else \
+        echo "ERROR: Unsupported architecture: $ARCH. KinD is only available for x86_64 and aarch64."; \
+        exit 1; \
+    fi && \
+    wget -O /usr/local/bin/kind "${KIND_URL}" && \
+    chmod +x /usr/local/bin/kind
 
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
@@ -192,6 +208,39 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Track if we created a KinD cluster for cleanup
+KIND_CLUSTER=""
+# Track supervisord PID for cleanup
+SUPERVISOR_PID=""
+
+# Cleanup function for graceful shutdown
+# Usage: cleanup [exit_code]
+# If exit_code not provided, defaults to 0 (signal-triggered cleanup)
+cleanup() {
+    CLEANUP_EXIT_CODE="${1:-0}"
+
+    echo "Shutting down..."
+
+    # Stop supervisord gracefully before cleaning up KinD cluster
+    if [ -n "$SUPERVISOR_PID" ] && kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
+        echo "Stopping services..."
+        kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
+        wait "$SUPERVISOR_PID" 2>/dev/null || true
+    fi
+
+    # Delete KinD cluster if we created one in quickstart mode
+    if [ -n "$KIND_CLUSTER" ]; then
+        echo "Deleting KinD cluster '${KIND_CLUSTER}'..."
+        if kind delete cluster --name "${KIND_CLUSTER}" 2>/dev/null; then
+            echo "KinD cluster deleted successfully"
+        else
+            echo "Warning: Failed to delete KinD cluster"
+        fi
+    fi
+
+    exit "$CLEANUP_EXIT_CODE"
+}
+
 # Generate and persist ARCHESTRA_AUTH_SECRET if not set
 if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
     SECRET_FILE="/app/data/.auth_secret"
@@ -209,6 +258,111 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
         echo "$ARCHESTRA_AUTH_SECRET" > "$SECRET_FILE"
         chmod 600 "$SECRET_FILE"
         echo "Generated and saved new ARCHESTRA_AUTH_SECRET to $SECRET_FILE"
+    fi
+fi
+
+# Quickstart mode: enable if ARCHESTRA_QUICKSTART is set
+# WARNING: Docker socket mounting provides container with privileged access to the host.
+# This is intended for local development ONLY. Never use in production environments.
+# For production, use external Kubernetes clusters without mounting the Docker socket.
+if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
+    echo "ARCHESTRA_QUICKSTART=true detected"
+    echo "Quickstart mode enabled - initializing embedded KinD cluster..."
+    if [ ! -S /var/run/docker.sock ]; then
+        echo "Quickstart mode is on but Docker socket is not mounted"
+        echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"
+        exit 1
+    fi
+    echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
+
+    if ! command -v kind >/dev/null 2>&1; then
+        echo "ERROR: KinD binary not found in this image."
+        exit 1
+    fi
+
+    # Quickstart mode always uses embedded KinD cluster
+    CLUSTER_NAME="archestra-mcp"
+    KUBECONFIG_PATH="/app/data/.kubeconfig"
+
+    # Check if cluster already exists
+    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+        echo "KinD cluster '${CLUSTER_NAME}' already exists"
+    else
+        echo "Creating KinD cluster '${CLUSTER_NAME}'..."
+        if ! kind create cluster --name "${CLUSTER_NAME}" --wait 120s; then
+            echo "ERROR: Failed to create KinD cluster"
+            exit 1
+        fi
+        echo "KinD cluster created successfully"
+        # Mark for cleanup on shutdown
+        KIND_CLUSTER="${CLUSTER_NAME}"
+    fi
+
+    # Export kubeconfig
+    if ! kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"; then
+        echo "ERROR: Failed to export kubeconfig for KinD cluster"
+        exit 1
+    fi
+    chmod 600 "${KUBECONFIG_PATH}"
+
+    # Get the KinD control plane container IP address
+    CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
+    CONTROL_PLANE_IP=$(docker inspect -f '{{with index .NetworkSettings.Networks "kind"}}{{.IPAddress}}{{end}}' "${CONTROL_PLANE_CONTAINER}")
+
+    if [ -z "$CONTROL_PLANE_IP" ]; then
+        echo "ERROR: Could not get KinD control plane IP address"
+        exit 1
+    else
+        echo "KinD control plane IP: ${CONTROL_PLANE_IP}"
+
+        # Update kubeconfig to use control plane IP and skip TLS verification
+        # TLS verification is disabled here because:
+        # 1. This is ONLY for local development with embedded KinD cluster
+        # 2. Traffic never leaves the host machine (container-to-container communication)
+        # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
+        # 4. Production deployments use external K8s clusters with proper TLS certificates
+        # Use targeted approach to avoid duplicates and only modify KinD cluster entries
+        cat "${KUBECONFIG_PATH}" | \
+            sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
+            awk '
+                /^    server: https:\/\/.*:6443$/ {
+                    print
+                    if (!insecure_added) {
+                        print "    insecure-skip-tls-verify: true"
+                        insecure_added = 1
+                    }
+                    next
+                }
+                /^    insecure-skip-tls-verify:/ { next }
+                { print }
+            ' > "${KUBECONFIG_PATH}.tmp"
+        mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
+        chmod 600 "${KUBECONFIG_PATH}"
+
+        # Connect this container to the KinD network for direct communication
+        # SECURITY WARNING: This grants the container privileged access to manipulate
+        # host Docker networks. This is acceptable ONLY for local development.
+        CONTAINER_ID=$(hostname)
+        if ! docker network inspect kind >/dev/null 2>&1; then
+            echo "WARNING: KinD network not found"
+        else
+            # Check if already connected to kind network
+            if docker inspect "$CONTAINER_ID" -f '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "kind"; then
+                echo "Container already connected to KinD network"
+            else
+                echo "Connecting container to KinD network..."
+                if ! docker network connect kind "$CONTAINER_ID"; then
+                    echo "ERROR: Failed to connect container to KinD network"
+                    exit 1
+                fi
+                echo "Connected to KinD network successfully"
+            fi
+        fi
+
+        # Export the kubeconfig path for supervisord to inherit, only if setup succeeded
+        export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
+        export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
+        echo "Kubernetes orchestrator configured with embedded KinD cluster"
     fi
 fi
 
@@ -288,8 +442,23 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 CONF
 
-# Start supervisord
-exec /usr/bin/supervisord -c /etc/supervisord.conf
+# Set up signal handlers now that all initialization is complete
+trap cleanup SIGTERM SIGINT
+
+# Start supervisord in foreground but allow signal handling
+# Run in background and wait so trap can catch signals
+/usr/bin/supervisord -c /etc/supervisord.conf &
+SUPERVISOR_PID=$!
+
+# Wait for supervisord to exit (or for a signal)
+wait "$SUPERVISOR_PID"
+# Note: if supervisord is terminated by a signal, `wait` returns 128 + signal.
+# We intentionally propagate this composite exit code to `cleanup` for diagnostics.
+EXIT_CODE=$?
+
+# If we get here, supervisord exited on its own or was terminated by a signal.
+# Run cleanup with the raw exit code from `wait` (may be 128 + signal on signals).
+cleanup "$EXIT_CODE"
 EOF
 
 RUN chmod +x /docker-entrypoint.sh

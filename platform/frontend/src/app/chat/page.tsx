@@ -1,36 +1,29 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, Plus } from "lucide-react";
+import { Eye, EyeOff, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  type FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
-import { ChatError } from "@/components/chat/chat-error";
+import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -45,14 +38,24 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useConversation, useCreateConversation } from "@/lib/chat.query";
-import { useChatApiKeysOptional } from "@/lib/chat-settings.query";
+import {
+  useConversation,
+  useCreateConversation,
+  useUpdateConversation,
+} from "@/lib/chat.query";
+import { useChatModelsQuery } from "@/lib/chat-models.query";
+import {
+  type SupportedChatProvider,
+  useChatApiKeys,
+} from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -61,7 +64,19 @@ export default function ChatPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [conversationId, setConversationId] = useState<string>();
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
+  );
+
+  // Hide version display only when viewing a specific conversation
+  useEffect(() => {
+    if (conversationId) {
+      document.body.classList.add("hide-version");
+    } else {
+      document.body.classList.remove("hide-version");
+    }
+    return () => document.body.classList.remove("hide-version");
+  }, [conversationId]);
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -69,9 +84,18 @@ export default function ChatPage() {
     }
     return false;
   });
+  const [isArtifactOpen, setIsArtifactOpen] = useState(() => {
+    // Initialize artifact panel state from localStorage
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("archestra-chat-artifact-open") === "true";
+    }
+    return false;
+  });
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
+  const userMessageJustEdited = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
@@ -99,11 +123,14 @@ export default function ChatPage() {
   const chatSession = useChatSession(conversationId);
 
   // Check if API key is configured for any provider
-  const { data: chatApiKeys = [] } = useChatApiKeysOptional();
-  const { data: features } = useFeatures();
+  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
+    useChatApiKeys();
+  const { data: features, isLoading: isLoadingFeatures } = useFeatures();
+  const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
   const hasAnyApiKey =
     chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
+  const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -127,7 +154,40 @@ export default function ChatPage() {
   );
 
   // Fetch conversation with messages
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation, isLoading: isLoadingConversation } =
+    useConversation(conversationId);
+
+  // Derive current provider from selected model
+  const currentProvider = useMemo((): SupportedChatProvider | undefined => {
+    if (!conversation?.selectedModel) return undefined;
+    const model = chatModels.find((m) => m.id === conversation.selectedModel);
+    return model?.provider as SupportedChatProvider | undefined;
+  }, [conversation?.selectedModel, chatModels]);
+
+  // Mutation for updating conversation model
+  const updateConversationMutation = useUpdateConversation();
+
+  // Handle model change with error handling
+  const handleModelChange = useCallback(
+    (model: string) => {
+      if (!conversation) return;
+
+      updateConversationMutation.mutate(
+        {
+          id: conversation.id,
+          selectedModel: model,
+        },
+        {
+          onError: (error) => {
+            toast.error(
+              `Failed to change model: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          },
+        },
+      );
+    },
+    [conversation, updateConversationMutation],
+  );
 
   // Find the specific prompt for this conversation (if any)
   const conversationPrompt = conversation?.promptId
@@ -235,6 +295,34 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
+  // Persist artifact panel state
+  const toggleArtifactPanel = useCallback(() => {
+    const newValue = !isArtifactOpen;
+    setIsArtifactOpen(newValue);
+    localStorage.setItem("archestra-chat-artifact-open", String(newValue));
+  }, [isArtifactOpen]);
+
+  // Auto-open artifact panel when artifact is updated
+  const previousArtifactRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    // Only auto-open if:
+    // 1. We have a conversation with an artifact
+    // 2. The artifact has changed (not just initial load)
+    // 3. The panel is currently closed
+    if (
+      conversation?.artifact &&
+      previousArtifactRef.current !== undefined && // Not the initial render
+      previousArtifactRef.current !== conversation.artifact &&
+      !isArtifactOpen
+    ) {
+      setIsArtifactOpen(true);
+      localStorage.setItem("archestra-chat-artifact-open", "true");
+    }
+
+    // Update the ref for next comparison
+    previousArtifactRef.current = conversation?.artifact;
+  }, [conversation?.artifact, isArtifactOpen]);
+
   // Extract chat session properties (or use defaults if session not ready)
   const messages = chatSession?.messages ?? [];
   const sendMessage = chatSession?.sendMessage;
@@ -303,26 +391,23 @@ export default function ChatPage() {
       loadedConversationRef.current = undefined;
     }
 
-    // Only sync messages from backend if:
-    // 1. We have conversation data
-    // 2. We haven't synced this conversation yet
-    // 3. The session doesn't already have messages (don't overwrite active session)
-    if (
+    // Sync messages from backend only on initial load or when recovering from empty state
+    // The AI SDK manages message state correctly during streaming, so we shouldn't overwrite it
+    const shouldSync =
       conversation?.messages &&
       conversation.id === conversationId &&
-      loadedConversationRef.current !== conversationId &&
-      messages.length === 0 // Only sync if session is empty
-    ) {
+      status !== "submitted" &&
+      status !== "streaming" &&
+      !userMessageJustEdited.current &&
+      (loadedConversationRef.current !== conversationId ||
+        messages.length === 0);
+
+    if (shouldSync) {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
       // If there's a pending prompt and the conversation is empty, send it
-      if (
-        pendingPromptRef.current &&
-        conversation.messages.length === 0 &&
-        status !== "submitted" &&
-        status !== "streaming"
-      ) {
+      if (pendingPromptRef.current && conversation.messages.length === 0) {
         const promptToSend = pendingPromptRef.current;
         pendingPromptRef.current = undefined;
         sendMessage({
@@ -331,43 +416,111 @@ export default function ChatPage() {
         });
       }
     }
+
+    // Clear the edit flag when status changes to ready (streaming finished)
+    if (status === "ready" && userMessageJustEdited.current) {
+      userMessageJustEdited.current = false;
+    }
   }, [
     conversationId,
     conversation,
     setMessages,
     sendMessage,
     status,
-    messages,
+    messages.length,
   ]);
 
-  const handleSubmit = useCallback(
-    (
-      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
-      message: { text?: string; files?: any[] },
-      e: FormEvent<HTMLFormElement>,
-    ) => {
-      e.preventDefault();
-      if (
-        !sendMessage ||
-        !message.text?.trim() ||
-        status === "submitted" ||
-        status === "streaming"
-      ) {
-        return;
-      }
+  // Merge database UUIDs from backend into local message state
+  // This runs after streaming completes and backend query has fetched
+  useEffect(() => {
+    if (
+      !setMessages ||
+      !conversation?.messages ||
+      conversation.id !== conversationId ||
+      status === "streaming" ||
+      status === "submitted"
+    ) {
+      return;
+    }
 
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: message.text }],
-      });
-    },
-    [sendMessage, status],
-  );
+    // Only merge IDs if backend has same or more messages than local state
+    if (conversation.messages.length < messages.length) {
+      return;
+    }
+
+    // Check if any message has a non-UUID ID that needs updating
+    const needsIdUpdate = messages.some((localMsg, idx) => {
+      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
+      return (
+        backendMsg &&
+        backendMsg.id !== localMsg.id &&
+        // Check if backend ID looks like a UUID (has dashes)
+        backendMsg.id.includes("-")
+      );
+    });
+
+    if (!needsIdUpdate) {
+      return;
+    }
+
+    // Merge IDs from backend into local messages
+    const mergedMessages = messages.map((localMsg, idx) => {
+      const backendMsg = conversation.messages[idx] as UIMessage | undefined;
+      if (
+        backendMsg &&
+        backendMsg.id !== localMsg.id &&
+        backendMsg.id.includes("-")
+      ) {
+        // Update only the ID, keep everything else from local state
+        return { ...localMsg, id: backendMsg.id };
+      }
+      return localMsg;
+    });
+
+    setMessages(mergedMessages as UIMessage[]);
+  }, [
+    conversationId,
+    conversation?.messages,
+    conversation?.id,
+    messages,
+    setMessages,
+    status,
+  ]);
+
+  // Auto-focus textarea when status becomes ready (message sent or stream finished)
+  // or when conversation loads (e.g., new chat created, hard refresh)
+  useLayoutEffect(() => {
+    if (status === "ready" && conversation?.id && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [status, conversation?.id]);
+
+  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
+    e.preventDefault();
+    if (status === "submitted" || status === "streaming") {
+      stop?.();
+    }
+
+    if (
+      !sendMessage ||
+      !message.text?.trim() ||
+      status === "submitted" ||
+      status === "streaming"
+    ) {
+      return;
+    }
+
+    sendMessage?.({
+      role: "user",
+      parts: [{ type: "text", text: message.text }],
+    });
+  };
 
   // If API key is not configured, show setup message
-  if (!hasAnyApiKey) {
+  // Only show after loading completes to avoid flash of incorrect content
+  if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
     return (
-      <div className="flex h-screen items-center justify-center p-8">
+      <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>LLM Provider API Key Required</CardTitle>
@@ -377,11 +530,11 @@ export default function ChatPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure an LLM provider API key in Chat Settings to start
-              using the chat feature.
+              Please configure an LLM provider API key to start using the chat
+              feature.
             </p>
             <Button asChild>
-              <Link href="/settings/chat">Go to Chat Settings</Link>
+              <Link href="/settings/llm-api-keys">Go to LLM API Keys</Link>
             </Button>
           </CardContent>
         </Card>
@@ -389,56 +542,12 @@ export default function ChatPage() {
     );
   }
 
-  const profileName = conversationPrompt?.agentId
-    ? allProfiles.find((a) => a.id === conversationPrompt.agentId)?.name
-    : null;
-  const promptBadge = (
-    <>
-      {conversationPrompt ? (
-        <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs font-medium cursor-help">
-                  Prompt: {conversationPrompt.name}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                className="max-w-md max-h-64 overflow-y-auto"
-              >
-                <div className="space-y-2">
-                  {profileName && (
-                    <div>
-                      <div className="font-semibold text-xs mb-1">Profile:</div>
-                      <div className="text-xs">{profileName}</div>
-                    </div>
-                  )}
-                  {conversationPrompt.systemPrompt && (
-                    <div>
-                      <div className="font-semibold text-xs mb-1">
-                        System Prompt:
-                      </div>
-                      <pre className="text-xs whitespace-pre-wrap">
-                        {conversationPrompt.systemPrompt}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      ) : null}
-    </>
-  );
-
   if (!conversationId) {
     const hasNoProfiles = allProfiles.length === 0;
 
     return (
       <PageLayout
-        title="New Chat"
+        title="Chats"
         description="Start a free chat or select a prompt from your library to start a guided chat"
         actionButton={
           <WithPermissions
@@ -504,20 +613,26 @@ export default function ChatPage() {
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
         <div className="flex flex-col h-full">
-          {error && <ChatError error={error} />}
           <StreamTimeoutWarning status={status} messages={messages} />
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-            <div className="flex-1" />
-            {conversation?.agent?.name && (
-              <div className="flex-1 text-center">
-                <span className="text-sm font-medium text-muted-foreground">
-                  {conversation.agent.name}
-                </span>
-              </div>
-            )}
-            <div className="flex-1 flex justify-end gap-2 items-center">
-              {promptBadge}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">
+                {conversationPrompt ? conversationPrompt.name : "Free chat"}
+              </span>
+            </div>
+            <div className="flex gap-2 items-center">
+              {!isArtifactOpen && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleArtifactPanel}
+                  className="text-xs"
+                >
+                  <FileText className="h-3 w-3 mr-1" />
+                  Show Artifact
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -541,48 +656,70 @@ export default function ChatPage() {
 
           <div className="flex-1 overflow-y-auto">
             <ChatMessages
+              conversationId={conversationId}
+              agentId={currentProfileId}
               messages={messages}
               hideToolCalls={hideToolCalls}
               status={status}
+              isLoadingConversation={isLoadingConversation}
+              onMessagesUpdate={setMessages}
+              onUserMessageEdit={(
+                editedMessage,
+                updatedMessages,
+                editedPartIndex,
+              ) => {
+                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
+                if (setMessages && sendMessage) {
+                  // Set flag to prevent message sync from overwriting our state
+                  userMessageJustEdited.current = true;
+
+                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
+                  const messagesWithoutEditedMessage = updatedMessages.slice(
+                    0,
+                    -1,
+                  );
+                  setMessages(messagesWithoutEditedMessage);
+
+                  // Send the edited message to generate new response (same as handleSubmit)
+                  // Use the specific part that was edited (via editedPartIndex) instead of finding
+                  // the first text part, in case the message has multiple text parts
+                  const editedPart = editedMessage.parts?.[editedPartIndex];
+                  const editedText =
+                    editedPart?.type === "text" ? editedPart.text : "";
+                  if (editedText?.trim()) {
+                    sendMessage({
+                      role: "user",
+                      parts: [{ type: "text", text: editedText }],
+                    });
+                  }
+                }
+              }}
+              error={error}
             />
           </div>
 
-          <div className="sticky bottom-0 bg-background border-t p-4">
-            <div className="max-w-3xl mx-auto space-y-3">
-              {currentProfileId && (
-                <WithPermissions
-                  permissions={{ profile: ["read"] }}
-                  noPermissionHandle="tooltip"
-                >
-                  {({ hasPermission }) => {
-                    return hasPermission ===
-                      undefined ? null : hasPermission ? (
-                      <McpToolsDisplay
-                        agentId={currentProfileId}
-                        className="text-xs text-muted-foreground"
-                      />
-                    ) : (
-                      <Badge variant="outline" className="text-xs my-2">
-                        Unable to show the list of tools
-                      </Badge>
-                    );
-                  }}
-                </WithPermissions>
-              )}
-              <PromptInput onSubmit={handleSubmit}>
-                <PromptInputBody>
-                  <PromptInputTextarea placeholder="Type a message..." />
-                </PromptInputBody>
-                <PromptInputToolbar>
-                  <PromptInputTools />
-                  <PromptInputSubmit
-                    status={status === "error" ? "ready" : status}
-                    onStop={stop}
-                  />
-                </PromptInputToolbar>
-              </PromptInput>
+          {conversation?.agent.id && conversation?.id && (
+            <div className="sticky bottom-0 bg-background border-t p-4">
+              <div className="max-w-4xl mx-auto space-y-3">
+                <ArchestraPromptInput
+                  onSubmit={handleSubmit}
+                  status={status}
+                  selectedModel={conversation?.selectedModel ?? ""}
+                  onModelChange={handleModelChange}
+                  messageCount={messages.length}
+                  agentId={conversation?.agent.id}
+                  conversationId={conversation?.id}
+                  promptId={conversation?.promptId}
+                  currentConversationChatApiKeyId={conversation?.chatApiKeyId}
+                  currentProvider={currentProvider}
+                  textareaRef={textareaRef}
+                />
+                <div className="text-center">
+                  <Version inline />
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -594,6 +731,13 @@ export default function ChatPage() {
         isOpen={isDialogOpened("create-catalog")}
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
+      />
+
+      {/* Right-side artifact panel */}
+      <ConversationArtifactPanel
+        artifact={conversation?.artifact}
+        isOpen={isArtifactOpen}
+        onToggle={toggleArtifactPanel}
       />
     </div>
   );

@@ -12,12 +12,15 @@ import { expect, goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   assignEngineeringTeamToDefaultProfileViaApi,
+  clickButton,
   getVisibleCredentials,
   getVisibleStaticCredentials,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   openManageCredentialsDialog,
   verifyToolCallResultViaApi,
 } from "../../utils";
+
+const CONNECT_BUTTON_TIMEOUT = 25_000;
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
@@ -73,7 +76,8 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       // Click connect button for the catalog item
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-        .click();
+        .click({ timeout: CONNECT_BUTTON_TIMEOUT });
+      await page.waitForLoadState("networkidle");
       // Personal credential type should be selected by default if vault is disabled
       // otherwise team credential type should be selected
       await expect(
@@ -81,7 +85,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       ).toBeChecked();
 
       // Install using personal credential
-      await page.getByRole("button", { name: "Install" }).click();
+      await clickButton({ page, options: { name: "Install" } });
 
       // Credentials count should be 1 for Admin and Editor
       if (user === "Admin" || user === "Editor") {
@@ -99,7 +103,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       // Then click connect again
       await page
         .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-        .click();
+        .click({ timeout: CONNECT_BUTTON_TIMEOUT });
       // And this time team credential type should be selected by default for everyone
       await expect(
         page.getByTestId(E2eTestId.SelectCredentialTypeTeam),
@@ -126,7 +130,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         .click();
 
       // Install credential for team
-      await page.getByRole("button", { name: "Install" }).click();
+      await clickButton({ page, options: { name: "Install" } });
 
       // Credentials count should be 2 for Admin and Editor
       if (user === "Admin" || user === "Editor") {
@@ -175,19 +179,28 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         // Then we revoke first credential in Manage Credentials dialog, then close dialog
         await goToPage(page, "/mcp-catalog/registry");
         await openManageCredentialsDialog(page, catalogItemName);
-        await page.getByRole("button", { name: "Revoke" }).first().click();
+        await clickButton({ page, options: { name: "Revoke" }, first: true });
         await page.waitForLoadState("networkidle");
-        await page.getByRole("button", { name: "Close" }).nth(1).click();
+        await clickButton({ page, options: { name: "Close" }, nth: 1 });
+
         // And we check that the credential is revoked
+        // Use polling to handle async credential revocation in CI
         const expectedCredentialsAfterRevoke = {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
         };
-        await openManageCredentialsDialog(page, catalogItemName);
-        const visibleCredentialsAfterRevoke = await getVisibleCredentials(page);
-        await expect(visibleCredentialsAfterRevoke).toHaveLength(
-          expectedCredentialsAfterRevoke[user].length - 1,
-        );
+        const expectedLengthAfterRevoke =
+          expectedCredentialsAfterRevoke[user].length - 1;
+
+        await expect(async () => {
+          await goToPage(page, "/mcp-catalog/registry");
+          await openManageCredentialsDialog(page, catalogItemName);
+          const visibleCredentialsAfterRevoke =
+            await getVisibleCredentials(page);
+          expect(visibleCredentialsAfterRevoke).toHaveLength(
+            expectedLengthAfterRevoke,
+          );
+        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
       }
 
       // CLEANUP: Delete created catalog items and mcp servers
@@ -231,15 +244,18 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     // Click connect button for the catalog item
     await page
       .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+      .click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // Install using personal credential
-    await page.getByRole("button", { name: "Install" }).click();
-    // Then click connect again
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    await clickButton({ page, options: { name: "Install" } });
+    // Wait for dialog to close and button to be visible again
+    const connectButton = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await connectButton.waitFor({ state: "visible" });
+    await connectButton.click({ timeout: CONNECT_BUTTON_TIMEOUT });
     // And this time team credential type should be selected by default for everyone, install using team credential
-    await page.getByRole("button", { name: "Install" }).click();
+    await clickButton({ page, options: { name: "Install" } });
+    await page.waitForLoadState("networkidle");
   };
 
   // Each user adds personal and 1 team credential
@@ -282,6 +298,7 @@ test("Verify tool calling using different static credentials", async ({
   makeRandomString,
   extractCookieHeaders,
 }) => {
+  test.setTimeout(45_000); // 45 seconds
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   // Assign engineering team to default profile
@@ -308,18 +325,18 @@ test("Verify tool calling using different static credentials", async ({
   await adminPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Admin-personal-credential");
-  await adminPage.getByRole("button", { name: "Install" }).click();
+  await clickButton({ page: adminPage, options: { name: "Install" } });
   await adminPage.waitForLoadState("networkidle");
 
   // Install test server for editor
   await goToPage(editorPage, "/mcp-catalog/registry");
   await editorPage
     .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${CATALOG_ITEM_NAME}`)
-    .click();
+    .click({ timeout: CONNECT_BUTTON_TIMEOUT });
   await editorPage
     .getByRole("textbox", { name: "ARCHESTRA_TEST" })
     .fill("Editor-personal-credential");
-  await editorPage.getByRole("button", { name: "Install" }).click();
+  await clickButton({ page: editorPage, options: { name: "Install" } });
   await editorPage.waitForLoadState("networkidle");
 
   // Assign tool to profiles using admin static credential

@@ -2,13 +2,14 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { AgentTeamModel, PromptModel } from "@/models";
+import { AgentTeamModel, PromptModel, ToolModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertPromptSchema,
   SelectPromptSchema,
+  SelectToolSchema,
   UpdatePromptSchema,
   UuidIdSchema,
 } from "@/types";
@@ -152,6 +153,53 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(versions);
+    },
+  );
+
+  fastify.get(
+    "/api/prompts/:id/tools",
+    {
+      schema: {
+        operationId: RouteId.GetPromptTools,
+        description:
+          "Get agent delegation tools for a prompt (tools created from prompt agents)",
+        tags: ["Prompts"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(z.array(SelectToolSchema)),
+      },
+    },
+    async ({ params: { id }, organizationId, user, headers }, reply) => {
+      // Verify the prompt belongs to this organization
+      const prompt = await PromptModel.findByIdAndOrganizationId(
+        id,
+        organizationId,
+      );
+
+      if (!prompt) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Get all agent delegation tools for this prompt
+      const allToolsWithDetails =
+        await ToolModel.getAgentDelegationToolsWithDetails(id);
+
+      // Filter by user access
+      const userAccessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(user.id, isAgentAdmin);
+
+      const accessibleTools = allToolsWithDetails
+        .filter((t) => userAccessibleAgentIds.includes(t.profileId))
+        .map((t) => t.tool);
+
+      return reply.send(accessibleTools);
     },
   );
 

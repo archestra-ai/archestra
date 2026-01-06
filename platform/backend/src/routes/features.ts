@@ -4,7 +4,7 @@ import { z } from "zod";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
-import { getByosVaultKvVersion, isByosEnabled } from "@/secretsmanager";
+import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

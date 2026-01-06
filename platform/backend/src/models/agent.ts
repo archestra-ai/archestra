@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_NAME } from "@shared";
+import { DEFAULT_PROFILE_NAME, isArchestraMcpServerTool } from "@shared";
 import {
   and,
   asc,
@@ -11,7 +11,6 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -394,8 +393,12 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
         schema.toolsTable,
-        eq(schema.agentsTable.id, schema.toolsTable.agentId),
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
       .where(eq(schema.agentsTable.id, id));
 
@@ -404,7 +407,12 @@ class AgentModel {
     }
 
     const agent = rows[0].agents;
-    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
+    const tools = rows
+      .map((row) => row.tools)
+      .filter(
+        (tool): tool is NonNullable<typeof tool> =>
+          tool !== null && !isArchestraMcpServerTool(tool.name),
+      );
 
     const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
@@ -423,8 +431,12 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
         schema.toolsTable,
-        eq(schema.agentsTable.id, schema.toolsTable.agentId),
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
       .where(eq(schema.agentsTable.isDefault, true));
 
@@ -433,7 +445,10 @@ class AgentModel {
       const agent = rows[0].agents;
       const tools = rows
         .map((row) => row.tools)
-        .filter((tool) => tool !== null);
+        .filter(
+          (tool): tool is NonNullable<typeof tool> =>
+            tool !== null && !isArchestraMcpServerTool(tool.name),
+        );
 
       return {
         ...agent,

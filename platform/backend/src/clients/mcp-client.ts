@@ -10,7 +10,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
@@ -44,7 +44,9 @@ export type TokenAuthContext = {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
-  /** Optional user ID for user-owned server priority (set when called from chat) */
+  /** True if this is a personal user token */
+  isUserToken?: boolean;
+  /** Optional user ID for user-owned server priority (set when called from chat or from user token) */
   userId?: string;
 };
 
@@ -271,7 +273,7 @@ class McpClient {
       };
     }
     if (mcpServer.secretId) {
-      const secret = await secretManager.getSecret(mcpServer.secretId);
+      const secret = await secretManager().getSecret(mcpServer.secretId);
       if (secret?.secret) {
         logger.info(
           {
@@ -287,7 +289,7 @@ class McpClient {
   }
 
   // Determines the target MCP server ID for a local catalog item
-  // Since there are multiple pods for a single catalog item that can receive request
+  // Since there are multiple deployments for a single catalog item that can receive request
   private async determineTargetMcpServerIdForCatalogItem({
     tool,
     tokenAuth,
@@ -522,15 +524,22 @@ class McpClient {
       }
 
       // Stdio transport - use K8s attach!
-      const k8sPod = McpServerRuntimeManager.getPod(targetLocalMcpServerId);
-      if (!k8sPod) {
-        throw new Error("Pod not found for MCP server");
+      const k8sDeployment = McpServerRuntimeManager.getDeployment(
+        targetLocalMcpServerId,
+      );
+      if (!k8sDeployment) {
+        throw new Error("Deployment not found for MCP server");
+      }
+
+      const podName = await k8sDeployment.getRunningPodName();
+      if (!podName) {
+        throw new Error("No running pod found for MCP server deployment");
       }
 
       return new K8sAttachTransport({
-        k8sAttach: k8sPod.k8sAttachClient,
-        namespace: k8sPod.k8sNamespace,
-        podName: k8sPod.k8sPodName,
+        k8sAttach: k8sDeployment.k8sAttachClient,
+        namespace: k8sDeployment.k8sNamespace,
+        podName: podName,
         containerName: "mcp-server",
       });
     }
@@ -556,7 +565,7 @@ class McpClient {
 
   /**
    * Strip server prefix from tool name
-   * Slugifies the prefix (lowercase + spaces to underscores) to match how tool names are created
+   * Slugifies the prefix using ToolModel.slugifyName to match how tool names are created
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
     // Slugify the prefix the same way ToolModel.slugifyName does

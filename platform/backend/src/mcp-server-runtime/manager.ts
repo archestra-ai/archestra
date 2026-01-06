@@ -1,11 +1,12 @@
+import * as fs from "node:fs";
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
-import { secretManager } from "@/secretsmanager";
+import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
-import K8sPod from "./k8s-pod";
+import K8sDeployment, { fetchPlatformPodNodeSelector } from "./k8s-deployment";
 import type {
   AvailableTool,
   K8sRuntimeStatus,
@@ -20,17 +21,72 @@ const {
 } = config;
 
 /**
- * McpServerRuntimeManager manages MCP servers running in Kubernetes pods.
- * This is analogous to McpServerSandboxManager in the desktop app,
- * but uses Kubernetes instead of Podman.
+ * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ */
+export function validateKubeconfig(path?: string) {
+  /**
+   * CASE 1 — No kubeconfig provided
+   */
+  if (!path) {
+    return;
+  }
+
+  /**
+   * CASE 2 — Developer explicitly provided a custom kubeconfig
+   */
+
+  if (!fs.existsSync(path)) {
+    throw new Error(`❌ Kubeconfig file not found at ${path}`);
+  }
+
+  const content = fs.readFileSync(path, "utf8");
+
+  // Try parsing with the official Kubernetes parser
+  const kc = new k8s.KubeConfig();
+  try {
+    kc.loadFromString(content);
+  } catch {
+    throw new Error(`❌ Malformed kubeconfig: could not parse YAML`);
+  }
+
+  // Structural validation
+  if (!kc.clusters || kc.clusters.length === 0) {
+    throw new Error(`❌ Invalid kubeconfig: clusters section missing`);
+  }
+
+  const c0 = kc.clusters[0];
+  if (!c0) {
+    throw new Error(`❌ Invalid kubeconfig: clusters[0] is missing`);
+  }
+
+  if (!c0.name || !c0.server) {
+    throw new Error(
+      `❌ Invalid kubeconfig: cluster entry is missing required fields`,
+    );
+  }
+
+  if (!kc.contexts || kc.contexts.length === 0) {
+    throw new Error(`❌ Invalid kubeconfig: contexts section missing`);
+  }
+
+  if (!kc.users || kc.users.length === 0) {
+    throw new Error(`❌ Invalid kubeconfig: users section missing`);
+  }
+
+  logger.info("✓ Custom kubeconfig validated successfully.");
+}
+
+/**
+ * McpServerRuntimeManager manages MCP servers running in Kubernetes.
  */
 export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
-  private k8sAttach: Attach;
-  private k8sLog: k8s.Log;
-  private namespace: string;
-  private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
+  private k8sAppsApi?: k8s.AppsV1Api;
+  private k8sAttach?: Attach;
+  private k8sLog?: k8s.Log;
+  private namespace: string = "default";
+  private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
   // Callbacks for initialization events
@@ -40,34 +96,41 @@ export class McpServerRuntimeManager {
   constructor() {
     this.k8sConfig = new k8s.KubeConfig();
 
-    // Load K8s config from environment or default locations
+    // Normalize kubeconfig input: treat empty string as undefined
+    const kubeconfigPath =
+      kubeconfig && kubeconfig.trim().length > 0
+        ? kubeconfig.trim()
+        : undefined;
+
     try {
+      // Validate and load kubeconfig based on configuration
       if (loadKubeconfigFromCurrentCluster) {
-        /**
-         * Running inside a K8s cluster
-         *
-         * Automatically configure the client to connect to the Kubernetes API
-         * when the application is running inside a Kubernetes cluster
-         */
         this.k8sConfig.loadFromCluster();
-      } else if (kubeconfig) {
-        // Load from KUBECONFIG env var
-        this.k8sConfig.loadFromFile(kubeconfig);
+        logger.info("Loaded kubeconfig from current cluster");
+      } else if (kubeconfigPath) {
+        validateKubeconfig(kubeconfigPath);
+        this.k8sConfig.loadFromFile(kubeconfigPath);
+        logger.info(`Loaded kubeconfig from ${kubeconfigPath}`);
       } else {
-        // Load from default location (~/.kube/config)
         this.k8sConfig.loadFromDefault();
+        logger.info("No kubeconfig provided — using default kubeconfig");
       }
 
-      // Only create API client if K8s config loaded successfully
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
+      this.k8sAppsApi = this.k8sConfig.makeApiClient(k8s.AppsV1Api);
+      this.k8sAttach = new Attach(this.k8sConfig);
+      this.k8sLog = new k8s.Log(this.k8sConfig);
+      this.namespace = namespace || this.namespace;
     } catch (error) {
-      logger.error({ err: error }, "Failed to load Kubernetes config:");
+      logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
+      this.k8sApi = undefined;
+      this.k8sAppsApi = undefined;
+      this.k8sAttach = undefined;
+      this.k8sLog = undefined;
+      this.namespace = "";
+      return; // graceful fallback: constructor completes with runtime disabled
     }
-
-    this.k8sAttach = new Attach(this.k8sConfig);
-    this.k8sLog = new k8s.Log(this.k8sConfig);
-    this.namespace = namespace;
   }
 
   /**
@@ -83,7 +146,7 @@ export class McpServerRuntimeManager {
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
-    if (!this.k8sApi) {
+    if (!this.k8sApi || !this.k8sAppsApi) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -94,12 +157,16 @@ export class McpServerRuntimeManager {
       // Verify K8s connectivity
       await this.verifyK8sConnection();
 
+      // Fetch the platform pod's nodeSelector to inherit for MCP server deployments
+      // This allows MCP servers to be scheduled on the same node pool as the platform
+      await fetchPlatformPodNodeSelector(this.k8sApi, this.namespace);
+
       this.status = "running";
 
       // Get all installed local MCP servers from database
       const installedServers = await McpServerModel.findAll();
 
-      // Filter for local servers only (remote servers don't need pods)
+      // Filter for local servers only (remote servers don't need deployments)
       const localServers: McpServer[] = [];
       for (const server of installedServers) {
         if (server.catalogId) {
@@ -162,7 +229,7 @@ export class McpServerRuntimeManager {
     try {
       logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
 
-      // Try to list pods in the namespace to verify connectivity
+      // Try to list pods in the namespace to verify K8s API connectivity
       await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
 
       logger.info("K8s connection verified successfully");
@@ -174,19 +241,19 @@ export class McpServerRuntimeManager {
   }
 
   /**
-   * Start a single MCP server pod
+   * Start a single MCP server deployment
    */
   async startServer(
     mcpServer: McpServer,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ): Promise<void> {
-    if (!this.k8sApi) {
+    if (!this.k8sApi || !this.k8sAppsApi) {
       throw new Error("Kubernetes API client not initialized");
     }
 
     const { id, name } = mcpServer;
-    logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
+    logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
 
     try {
       // Fetch catalog item (needed for conditional env var logic)
@@ -197,9 +264,14 @@ export class McpServerRuntimeManager {
         );
       }
 
-      const k8sPod = new K8sPod(
+      if (!this.k8sAttach || !this.k8sLog) {
+        throw new Error("Kubernetes clients not initialized");
+      }
+
+      const k8sDeployment = new K8sDeployment(
         mcpServer,
         this.k8sApi,
+        this.k8sAppsApi,
         this.k8sAttach,
         this.k8sLog,
         this.namespace,
@@ -208,24 +280,24 @@ export class McpServerRuntimeManager {
         environmentValues,
       );
 
-      // Register the pod BEFORE starting it
-      this.mcpServerIdToPodMap.set(id, k8sPod);
-      logger.info(`Registered MCP server pod ${id} in map`);
+      // Register the deployment BEFORE starting it
+      this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
+      logger.info(`Registered MCP server deployment ${id} in map`);
 
       // If MCP server has a secretId, fetch secret and create K8s Secret
       if (mcpServer.secretId) {
-        const secret = await secretManager.getSecret(mcpServer.secretId);
+        const secret = await secretManager().getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
           const secretData: Record<string, string> = {};
 
-          // Convert secret.secret (Record<string, unknown>) to Record<string, string>
+          // Convert secret.secret to Record<string, string>
           for (const [key, value] of Object.entries(secret.secret)) {
             secretData[key] = String(value);
           }
 
           // Create K8s Secret
-          await k8sPod.createK8sSecret(secretData);
+          await k8sDeployment.createK8sSecret(secretData);
           logger.info(
             { mcpServerId: id, secretId: mcpServer.secretId },
             "Created K8s Secret from secret manager",
@@ -233,77 +305,80 @@ export class McpServerRuntimeManager {
         }
       }
 
-      await k8sPod.startOrCreatePod();
-      logger.info(`Successfully started MCP server pod ${id} (${name})`);
+      await k8sDeployment.startOrCreateDeployment();
+      logger.info(`Successfully started MCP server deployment ${id} (${name})`);
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to start MCP server pod ${id} (${name}):`,
+        `Failed to start MCP server deployment ${id} (${name}):`,
       );
-      // Keep the pod in the map even if it failed to start
+      // Keep the deployment in the map even if it failed to start
       // This ensures it appears in status updates with error state
       logger.warn(
-        `MCP server pod ${id} failed to start but remains registered for error display`,
+        `MCP server deployment ${id} failed to start but remains registered for error display`,
       );
       throw error;
     }
   }
 
   /**
-   * Stop a single MCP server pod
+   * Stop a single MCP server deployment
    */
   async stopServer(mcpServerId: string): Promise<void> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
 
-    if (k8sPod) {
-      // Delete pod first
-      await k8sPod.stopPod();
+    if (k8sDeployment) {
+      // Delete deployment first
+      await k8sDeployment.stopDeployment();
+
+      // Delete K8s Service (if it exists, for HTTP-based servers)
+      await k8sDeployment.deleteK8sService();
 
       // Delete K8s Secret (if it exists)
-      await k8sPod.deleteK8sSecret();
+      await k8sDeployment.deleteK8sSecret();
 
-      this.mcpServerIdToPodMap.delete(mcpServerId);
+      this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
   }
 
   /**
-   * Get a pod by MCP server ID
+   * Get a deployment by MCP server ID
    */
-  getPod(mcpServerId: string): K8sPod | undefined {
-    return this.mcpServerIdToPodMap.get(mcpServerId);
+  getDeployment(mcpServerId: string): K8sDeployment | undefined {
+    return this.mcpServerIdToDeploymentMap.get(mcpServerId);
   }
 
   /**
-   * Remove an MCP server pod completely
+   * Remove an MCP server deployment completely
    */
   async removeMcpServer(mcpServerId: string): Promise<void> {
-    logger.info(`Removing MCP server pod for: ${mcpServerId}`);
+    logger.info(`Removing MCP server deployment for: ${mcpServerId}`);
 
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      logger.warn(`No pod found for MCP server ${mcpServerId}`);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      logger.warn(`No deployment found for MCP server ${mcpServerId}`);
       return;
     }
 
     try {
-      await k8sPod.removePod();
-      logger.info(`Successfully removed MCP server pod ${mcpServerId}`);
+      await k8sDeployment.removeDeployment();
+      logger.info(`Successfully removed MCP server deployment ${mcpServerId}`);
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to remove MCP server pod ${mcpServerId}:`,
+        `Failed to remove MCP server deployment ${mcpServerId}:`,
       );
       throw error;
     } finally {
-      this.mcpServerIdToPodMap.delete(mcpServerId);
+      this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
   }
 
   /**
-   * Restart a single MCP server pod
+   * Restart a single MCP server deployment
    */
   async restartServer(mcpServerId: string): Promise<void> {
-    logger.info(`Restarting MCP server pod: ${mcpServerId}`);
+    logger.info(`Restarting MCP server deployment: ${mcpServerId}`);
 
     try {
       // Get the MCP server from database
@@ -313,20 +388,22 @@ export class McpServerRuntimeManager {
         throw new Error(`MCP server with id ${mcpServerId} not found`);
       }
 
-      // Stop the pod
+      // Stop the deployment
       await this.stopServer(mcpServerId);
 
       // Wait a moment for shutdown to complete
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Start the pod again
+      // Start the deployment again
       await this.startServer(mcpServer);
 
-      logger.info(`MCP server pod ${mcpServerId} restarted successfully`);
+      logger.info(
+        `MCP server deployment ${mcpServerId} restarted successfully`,
+      );
     } catch (error) {
       logger.error(
         { err: error },
-        `Failed to restart MCP server pod ${mcpServerId}:`,
+        `Failed to restart MCP server deployment ${mcpServerId}:`,
       );
       throw error;
     }
@@ -336,71 +413,67 @@ export class McpServerRuntimeManager {
    * Check if an MCP server uses streamable HTTP transport
    */
   async usesStreamableHttp(mcpServerId: string): Promise<boolean> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
       return false;
     }
-    return await k8sPod.usesStreamableHttp();
+    return await k8sDeployment.usesStreamableHttp();
   }
 
   /**
    * Get the HTTP endpoint URL for a streamable-http server
    */
   getHttpEndpointUrl(mcpServerId: string): string | undefined {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
       return undefined;
     }
-    return k8sPod.getHttpEndpointUrl();
+    return k8sDeployment.getHttpEndpointUrl();
   }
 
   /**
-   * Get logs from an MCP server pod
+   * Get logs from an MCP server deployment
    */
   async getMcpServerLogs(
     mcpServerId: string,
     lines: number = 100,
   ): Promise<McpServerContainerLogs> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
     }
 
-    const containerName = k8sPod.containerName;
+    const containerName = k8sDeployment.containerName;
+    const sanitizedId = K8sDeployment.sanitizeLabelValue(mcpServerId);
     return {
-      logs: await k8sPod.getRecentLogs(lines),
+      logs: await k8sDeployment.getRecentLogs(lines),
       containerName,
       // Construct the kubectl command for the user to manually get the logs if they'd like
-      command: `kubectl logs -n ${this.namespace} ${containerName} --tail=${lines}`,
+      command: `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines}`,
       namespace: this.namespace,
     };
   }
 
   /**
-   * Stream logs from an MCP server pod with follow enabled
+   * Stream logs from an MCP server deployment with follow enabled
    */
   async streamMcpServerLogs(
     mcpServerId: string,
     responseStream: NodeJS.WritableStream,
     lines: number = 100,
   ): Promise<void> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
+    const k8sDeployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!k8sDeployment) {
+      throw new Error(`Deployment not found for MCP server ${mcpServerId}`);
     }
 
-    await k8sPod.streamLogs(responseStream, lines);
+    await k8sDeployment.streamLogs(responseStream, lines);
   }
 
   /**
    * Get all available tools from all running MCP servers
-   * Note: In the platform, tools are managed via the database and MCP client,
-   * not directly through the runtime manager like in desktop app.
-   * This is a placeholder for compatibility.
    */
   get allAvailableTools(): AvailableTool[] {
-    // Tools are managed by the MCP client and stored in the database
-    // This method is here for compatibility with the desktop app interface
     return [];
   }
 
@@ -411,8 +484,11 @@ export class McpServerRuntimeManager {
     return {
       status: this.status,
       mcpServers: Object.fromEntries(
-        Array.from(this.mcpServerIdToPodMap.entries()).map(
-          ([mcpServerId, k8sPod]) => [mcpServerId, k8sPod.statusSummary],
+        Array.from(this.mcpServerIdToDeploymentMap.entries()).map(
+          ([mcpServerId, k8sDeployment]) => [
+            mcpServerId,
+            k8sDeployment.statusSummary,
+          ],
         ),
       ),
     };
@@ -425,15 +501,15 @@ export class McpServerRuntimeManager {
     logger.info("Shutting down MCP Server Runtime...");
     this.status = "stopped";
 
-    // Stop all pods
-    const stopPromises = Array.from(this.mcpServerIdToPodMap.keys()).map(
+    // Stop all deployments
+    const stopPromises = Array.from(this.mcpServerIdToDeploymentMap.keys()).map(
       async (serverId) => {
         try {
           await this.stopServer(serverId);
         } catch (error) {
           logger.error(
             { err: error },
-            `Failed to stop MCP server pod ${serverId} during shutdown:`,
+            `Failed to stop MCP server deployment ${serverId} during shutdown:`,
           );
         }
       },

@@ -16,7 +16,7 @@ import {
   createAgentServer,
   createTransport,
   extractProfileIdAndTokenFromRequest,
-  validateTeamToken,
+  validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
 
 // =============================================================================
@@ -73,18 +73,32 @@ async function handleMcpPostRequest(
           "Re-initialize on existing session - will reuse existing server",
         );
       }
-    } else if (isInitialize) {
+    } else {
+      // Either initialize request OR request with invalid/expired session
+      // In both cases, create a new session
       const effectiveSessionId =
         sessionId || `session-${Date.now()}-${randomUUID()}`;
 
-      fastify.log.info(
-        {
-          profileId,
-          sessionId: effectiveSessionId,
-          hasTokenAuth: !!tokenAuthContext,
-        },
-        "Initialize request - creating NEW session",
-      );
+      if (isInitialize) {
+        fastify.log.info(
+          {
+            profileId,
+            sessionId: effectiveSessionId,
+            hasTokenAuth: !!tokenAuthContext,
+          },
+          "Initialize request - creating NEW session",
+        );
+      } else {
+        fastify.log.info(
+          {
+            profileId,
+            sessionId: effectiveSessionId,
+            method: body?.method,
+            hasTokenAuth: !!tokenAuthContext,
+          },
+          "Request received with invalid/expired session - auto-creating new session",
+        );
+      }
 
       const { server: newServer, agent } = await createAgentServer(
         profileId,
@@ -138,20 +152,6 @@ async function handleMcpPostRequest(
         },
         "Session stored before handleRequest",
       );
-    } else if (!server || !transport) {
-      fastify.log.error(
-        { profileId, sessionId, method: body?.method },
-        "Request received without valid session",
-      );
-      reply.status(400);
-      return {
-        jsonrpc: "2.0",
-        error: {
-          code: -32000,
-          message: "Bad Request: Invalid or expired session",
-        },
-        id: null,
-      };
     }
 
     fastify.log.info(
@@ -466,6 +466,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 tokenId: z.string(),
                 teamId: z.string().nullable(),
                 isOrganizationToken: z.boolean(),
+                isUserToken: z.boolean().optional(),
+                userId: z.string().optional(),
               })
               .optional(),
           }),
@@ -489,7 +491,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateTeamToken(profileId, token);
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -505,6 +507,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenId: tokenAuth.tokenId,
             teamId: tokenAuth.teamId,
             isOrganizationToken: tokenAuth.isOrganizationToken,
+            ...(tokenAuth.isUserToken && { isUserToken: true }),
+            ...(tokenAuth.userId && { userId: tokenAuth.userId }),
           },
         }),
       };
@@ -541,7 +545,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateTeamToken(profileId, token);
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
       if (!tokenAuth) {
         reply.status(401);
         return {
@@ -558,6 +562,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
         isOrganizationToken: tokenAuth.isOrganizationToken,
+        ...(tokenAuth.isUserToken && { isUserToken: true }),
+        ...(tokenAuth.userId && { userId: tokenAuth.userId }),
       };
 
       return handleMcpPostRequest(

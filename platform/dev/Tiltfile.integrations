@@ -45,171 +45,37 @@ local_resource(
 #       ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token
 local_resource(
   'vault-docker',
-  serve_cmd='docker compose -f docker-compose.vault.yml up',
+  serve_cmd='docker compose -f docker-compose.vault.ee.yml up',
   serve_dir='.',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False
 )
 
-# HashiCorp Vault in K8s (manual trigger)
-# Start with: tilt trigger vault
-# NOTE: Vault K8s integration is skipped on Windows due to helm_remote compatibility issues.
-# Use vault-docker instead on Windows: tilt trigger vault-docker
-load('ext://helm_remote', 'helm_remote')
+# HashiCorp Vault in K8s with K8s auth (manual trigger)
+# Start with: tilt trigger vault-k8s
+# Uses the e2e-tests helm chart with only vault enabled + K8s auth auto-configured
+# .env: ARCHESTRA_SECRETS_MANAGER=Vault, ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=K8S,
+#       ARCHESTRA_HASHICORP_VAULT_ADDR=http://vault.archestra-dev:8200,
+#       ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=archestra
+load('ext://helm_resource', 'helm_resource')
 
-if os.name != 'nt':
-  helm_remote(
-    'vault',
-    repo_url='https://helm.releases.hashicorp.com',
-    namespace='archestra-dev',
-    create_namespace=False,  # Namespace already created by Tiltfile.database
-    set=[
-      # Run in dev mode (unsealed, in-memory storage)
-      'server.dev.enabled=true',
-      'server.dev.devRootToken=dev-root-token',
-      # Disable injector and CSI (not needed for dev)
-      'injector.enabled=false',
-      'csi.enabled=false',
-      # Resource limits for dev
-      'server.resources.requests.memory=256Mi',
-      'server.resources.requests.cpu=250m',
-    ]
-  )
-
-  k8s_resource(
-    'vault',
-    port_forwards=['8200:8200'],
-    labels=['integrations'],
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    auto_init=False
-  )
-
-# Configure Vault K8s auth with KV v1 (run after vault is started)
-# Use this for: ARCHESTRA_HASHICORP_VAULT_KV_VERSION=1, ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=kv/archestra
-# NOTE: On Windows, run this resource from Git Bash, WSL, or use the PowerShell script in dev/scripts/
-local_resource(
-  'vault-k8s-auth-v1',
-  cmd='''
-    echo "⏳ Waiting for Vault to be ready..."
-    for i in {1..30}; do
-      if kubectl exec -n archestra-dev vault-0 -- vault status 2>/dev/null | grep -q "Initialized.*true"; then
-        echo "✅ Vault is ready"
-        break
-      fi
-      echo "Waiting... (attempt $i/30)"
-      sleep 2
-    done
-
-    echo "🔧 Configuring Vault K8s auth with KV v1..."
-
-    # Enable KV v1 secrets engine at kv/ path
-    kubectl exec -n archestra-dev vault-0 -- vault secrets enable -path=kv -version=1 kv 2>/dev/null || true
-
-    # Enable Kubernetes auth method
-    kubectl exec -n archestra-dev vault-0 -- vault auth enable kubernetes 2>/dev/null || true
-
-    # Configure K8s auth to use the in-cluster API
-    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
-
-    # Create a policy for archestra secrets (KV v1 paths - no /data/ prefix)
-    # Note: LIST on kv/archestra requires permission on the path itself, not just kv/archestra/*
-    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault policy write archestra-secrets-v1 - <<EOF
-path "kv/archestra" {
-  capabilities = ["list"]
-}
-path "kv/archestra/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-EOF'
-
-    # Create a role bound to the archestra-platform service account
-    kubectl exec -n archestra-dev vault-0 -- vault write auth/kubernetes/role/archestra \
-      bound_service_account_names="archestra-platform" \
-      bound_service_account_namespaces="archestra-dev" \
-      policies="archestra-secrets-v1" \
-      ttl="24h"
-
-    echo ""
-    echo "✅ Vault K8s auth configured with KV v1!"
-    echo ""
-    echo "Configuration:"
-    echo "  ARCHESTRA_HASHICORP_VAULT_KV_VERSION=1"
-    echo "  ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=kv/archestra"
-    echo ""
-    echo "Created:"
-    echo "  - KV v1 engine at: kv/"
-    echo "  - Vault role: archestra (bound to archestra-platform SA)"
-    echo "  - Vault policy: archestra-secrets-v1 (path: kv/archestra/*)"
-  ''',
-  # Windows: This resource requires bash scripting. Use Git Bash or WSL.
-  cmd_bat='echo ERROR: vault-k8s-auth-v1 requires bash. Please run from Git Bash or WSL. && exit /b 1',
+helm_resource(
+  'vault-k8s',
+  '../helm/e2e-tests',
+  namespace='archestra-dev',
+  flags=[
+    '--set', 'vault.enabled=true',
+    '--set', 'vault.service.type=ClusterIP',
+    '--set', 'vault.k8sAuth.enabled=true',
+    '--set', 'vault.k8sAuth.kvVersion=2',
+    '--set', 'wiremock.enabled=false',
+    '--set', 'keycloak.enabled=false',
+  ],
+  port_forwards=['8200:8200'],
   labels=['integrations'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
-)
-
-# Configure Vault K8s auth with KV v2 (run after vault is started)
-# Use this for: ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2, ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=secret/data/archestra
-# NOTE: On Windows, run this resource from Git Bash, WSL, or use the PowerShell script in dev/scripts/
-local_resource(
-  'vault-k8s-auth-v2',
-  cmd='''
-    echo "⏳ Waiting for Vault to be ready..."
-    for i in {1..30}; do
-      if kubectl exec -n archestra-dev vault-0 -- vault status 2>/dev/null | grep -q "Initialized.*true"; then
-        echo "✅ Vault is ready"
-        break
-      fi
-      echo "Waiting... (attempt $i/30)"
-      sleep 2
-    done
-
-    echo "🔧 Configuring Vault K8s auth with KV v2..."
-
-    # Enable KV v2 secrets engine at secret/ path
-    kubectl exec -n archestra-dev vault-0 -- vault secrets enable -path=secret kv-v2 2>/dev/null || true
-
-    # Enable Kubernetes auth method
-    kubectl exec -n archestra-dev vault-0 -- vault auth enable kubernetes 2>/dev/null || true
-
-    # Configure K8s auth to use the in-cluster API
-    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
-
-    # Create a policy for archestra secrets (KV v2 paths - with /data/ and /metadata/ prefixes)
-    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault policy write archestra-secrets-v2 - <<EOF
-path "secret/data/archestra/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-path "secret/metadata/archestra/*" {
-  capabilities = ["read", "delete", "list"]
-}
-EOF'
-
-    # Create a role bound to the archestra-platform service account
-    kubectl exec -n archestra-dev vault-0 -- vault write auth/kubernetes/role/archestra \
-      bound_service_account_names="archestra-platform" \
-      bound_service_account_namespaces="archestra-dev" \
-      policies="archestra-secrets-v2" \
-      ttl="24h"
-
-    echo ""
-    echo "✅ Vault K8s auth configured with KV v2!"
-    echo ""
-    echo "Configuration:"
-    echo "  ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2"
-    echo "  ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=secret/data/archestra"
-    echo ""
-    echo "Created:"
-    echo "  - KV v2 engine at: secret/"
-    echo "  - Vault role: archestra (bound to archestra-platform SA)"
-    echo "  - Vault policy: archestra-secrets-v2 (paths: secret/data/archestra/*, secret/metadata/archestra/*)"
-  ''',
-  # Windows: This resource requires bash scripting. Use Git Bash or WSL.
-  cmd_bat='echo ERROR: vault-k8s-auth-v2 requires bash. Please run from Git Bash or WSL. && exit /b 1',
-  labels=['integrations'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
+  auto_init=False,
+  resource_deps=[],
 )
 
 # Archestra running in K8s (for testing Vault K8s auth, etc.)
@@ -248,5 +114,5 @@ if os.name != 'nt':
     labels=['integrations'],
     trigger_mode=TRIGGER_MODE_MANUAL,
     auto_init=False,
-    resource_deps=['postgresql', 'vault']
+    resource_deps=['postgresql', 'vault-k8s']
   )

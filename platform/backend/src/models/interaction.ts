@@ -20,6 +20,7 @@ import type {
   Interaction,
   PaginationQuery,
   SortingQuery,
+  UserInfo,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
@@ -51,9 +52,9 @@ class InteractionModel {
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: SortingQuery,
-    userId?: string,
+    requestingUserId?: string,
     isAgentAdmin?: boolean,
-    filters?: { profileId?: string; externalAgentId?: string },
+    filters?: { profileId?: string; externalAgentId?: string; userId?: string },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
@@ -62,9 +63,9 @@ class InteractionModel {
     const conditions: SQL[] = [];
 
     // Access control filter
-    if (userId && !isAgentAdmin) {
+    if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
+        requestingUserId,
         false,
       );
 
@@ -89,6 +90,11 @@ class InteractionModel {
       conditions.push(
         eq(schema.interactionsTable.externalAgentId, filters.externalAgentId),
       );
+    }
+
+    // User ID filter (from X-Archestra-User-Id header)
+    if (filters?.userId) {
+      conditions.push(eq(schema.interactionsTable.userId, filters.userId));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -127,6 +133,8 @@ class InteractionModel {
         return direction(schema.interactionsTable.profileId);
       case "externalAgentId":
         return direction(schema.interactionsTable.externalAgentId);
+      case "userId":
+        return direction(schema.interactionsTable.userId);
       case "model":
         // Extract model from the JSONB request column
         // Wrap in parentheses to ensure correct precedence for the JSON operator
@@ -233,7 +241,7 @@ class InteractionModel {
    * Used for filtering dropdowns in the UI
    */
   static async getUniqueExternalAgentIds(
-    userId?: string,
+    requestingUserId?: string,
     isAgentAdmin?: boolean,
   ): Promise<string[]> {
     // Build where clause for access control
@@ -241,9 +249,9 @@ class InteractionModel {
       isNotNull(schema.interactionsTable.externalAgentId),
     ];
 
-    if (userId && !isAgentAdmin) {
+    if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
+        requestingUserId,
         false,
       );
 
@@ -267,6 +275,57 @@ class InteractionModel {
     return result
       .map((r) => r.externalAgentId)
       .filter((id): id is string => id !== null);
+  }
+
+  /**
+   * Get all unique user IDs with user names
+   * Used for filtering dropdowns in the UI
+   * Returns user info (id and name) for the dropdown to display names but filter by id
+   */
+  static async getUniqueUserIds(
+    requestingUserId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<UserInfo[]> {
+    // Build where clause for access control
+    const conditions: SQL[] = [isNotNull(schema.interactionsTable.userId)];
+
+    if (requestingUserId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        requestingUserId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      conditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
+      );
+    }
+
+    // Get distinct user IDs from interactions and join with users table to get names
+    const result = await db
+      .selectDistinct({
+        userId: schema.interactionsTable.userId,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.interactionsTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.interactionsTable.userId, schema.usersTable.id),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(schema.usersTable.name));
+
+    return result
+      .filter(
+        (r): r is { userId: string; userName: string } => r.userId !== null,
+      )
+      .map((r) => ({
+        id: r.userId,
+        name: r.userName,
+      }));
   }
 
   /**

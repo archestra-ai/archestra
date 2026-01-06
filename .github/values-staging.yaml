@@ -1,6 +1,13 @@
 archestra:
   replicaCount: 4
 
+  # Faster rolling updates: allow 2 pods to be created at once
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: "50%"
+
   # Vertex AI Gemini configuration
   # Uses Application Default Credentials (ADC) via GKE Workload Identity
   # instead of API keys for authentication
@@ -18,6 +25,23 @@ archestra:
         # is created and bound in the archestra-ai/infra repo (gke/main.tf)
         annotations:
           iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+
+      # Additional RBAC for MCP K8s operator service account
+      # Grants cluster-wide read access and namespace-specific permissions for the Kubernetes MCP server
+      # The ClusterRole and Roles are created in archestra-ai/infra repo (gke/archestra-rbac.tf)
+      mcpServerRbac:
+        additionalClusterRoleBindings:
+          - clusterRoleName: archestra-cluster-reader
+        additionalRoleBindings:
+          # Full access to ai-sre namespace (for AI SRE demo)
+          - roleName: archestra-ai-sre-admin
+            namespace: ai-sre
+          # Full access to argocd namespace (for GitOps operations)
+          - roleName: archestra-argocd-admin
+            namespace: argocd
+          # Read-only access to archestra namespace
+          - roleName: archestra-namespace-reader
+            namespace: archestra
 
   service:
     annotations:

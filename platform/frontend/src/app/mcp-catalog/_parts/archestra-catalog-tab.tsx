@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  type archestraCatalogTypes,
+  E2eTestId,
+} from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -140,6 +144,9 @@ export function ArchestraCatalogTab({
                   ]
                     .filter(Boolean)
                     .join(": "),
+                  default: Array.isArray(userConfigEntry.default)
+                    ? undefined
+                    : userConfigEntry.default,
                 };
               }
             }
@@ -152,6 +159,7 @@ export function ArchestraCatalogTab({
               promptOnInstallation: false,
               required: false,
               description: "",
+              default: undefined,
             };
           })
         : [];
@@ -169,6 +177,9 @@ export function ArchestraCatalogTab({
               description: [config.title, config.description]
                 .filter(Boolean)
                 .join(": "),
+              default: Array.isArray(config.default)
+                ? undefined
+                : config.default,
             }))
         : [];
 
@@ -191,6 +202,9 @@ export function ArchestraCatalogTab({
       type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
+      required?: boolean;
+      description?: string;
+      default?: string | number | boolean;
     }>,
   ) => {
     // Rewrite redirect URIs to prefer platform callback (port 3000)
@@ -600,6 +614,7 @@ function ServerCard({
             disabled={isAdding || isInCatalog}
             size="sm"
             className="w-full"
+            data-testid={E2eTestId.AddCatalogItemButton}
           >
             {isInCatalog
               ? "Added"

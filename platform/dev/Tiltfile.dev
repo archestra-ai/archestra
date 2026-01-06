@@ -3,7 +3,7 @@
 # MCP Server RBAC resources for local development
 # Render from Helm chart and filter to only RBAC resources (avoid duplication)
 k8s_yaml(local(
-  'helm template archestra ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
+  'helm template archestra-platform ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
   quiet=True
 ))
 
@@ -11,9 +11,9 @@ k8s_resource(
   new_name='mcp-rbac',
   labels=['dev'],
   objects=[
-    'archestra-archestra-platform-mcp-k8s-operator:serviceaccount:default',
-    'archestra-archestra-platform-mcp-server-operator:role:default',
-    'archestra-archestra-platform-mcp-server-operator:rolebinding:default'
+    'archestra-platform-mcp-k8s-operator:serviceaccount:default',
+    'archestra-platform-mcp-server-operator:role:default',
+    'archestra-platform-mcp-server-operator:rolebinding:default'
   ]
 )
 
@@ -77,7 +77,9 @@ if is_prod:
 else:
   local_resource(
     dev_resource_name,
-    serve_cmd='pnpm dev',
+    # Trap ensures all child processes are killed when Tilt stops, preventing orphaned processes from blocking port 3000
+    # Uses pkill -P to kill by parent PID since child processes may have their own process groups on macOS
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev & wait $!',
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],

@@ -18,11 +18,13 @@ import {
 interface DataTablePaginationProps<TData> {
   table: Table<TData>;
   totalRows?: number;
+  hideSelectedCount?: boolean;
 }
 
 export function DataTablePagination<TData>({
   table,
   totalRows,
+  hideSelectedCount = false,
 }: DataTablePaginationProps<TData>) {
   const paginationState = table.getState().pagination;
   const currentPage = (paginationState?.pageIndex ?? 0) + 1;
@@ -61,12 +63,7 @@ export function DataTablePagination<TData>({
   return (
     <div className="flex items-center justify-between">
       <div className="flex-1 text-sm text-muted-foreground">
-        {totalRows !== undefined ? (
-          <>
-            Showing {(currentPage - 1) * pageSize + 1} to{" "}
-            {Math.min(currentPage * pageSize, totalRows)} of {totalRows} rows
-          </>
-        ) : (
+        {hideSelectedCount ? null : (
           <>
             {table.getFilteredSelectedRowModel().rows.length} of{" "}
             {table.getFilteredRowModel().rows.length} row(s) selected.

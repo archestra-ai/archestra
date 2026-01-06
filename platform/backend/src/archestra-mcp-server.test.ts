@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test...
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  isArchestraMcpServerTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { AgentModel, InternalMcpCatalogModel } from "@/models";
@@ -10,14 +11,13 @@ import {
   type ArchestraContext,
   executeArchestraTool,
   getArchestraMcpTools,
-  isArchestraMcpServerTool,
 } from "./archestra-mcp-server";
 
 describe("getArchestraMcpTools", () => {
-  test("should return an array of 24 tools", () => {
+  test("should return an array of 26 tools", () => {
     const tools = getArchestraMcpTools();
 
-    expect(tools).toHaveLength(24);
+    expect(tools).toHaveLength(26);
     expect(tools[0]).toHaveProperty("name");
     expect(tools[0]).toHaveProperty("title");
     expect(tools[0]).toHaveProperty("description");

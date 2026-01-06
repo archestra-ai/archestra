@@ -57,7 +57,7 @@ export const Tool = ({
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state: ToolUIPart["state"] | "output-available-dual-llm";
+  state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
   className?: string;
   icon?: React.ReactNode;
   errorText?: ToolUIPart["errorText"];
@@ -65,24 +65,30 @@ export type ToolHeaderProps = {
 };
 
 const getStatusBadge = (
-  status: ToolUIPart["state"] | "output-available-dual-llm",
+  status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
 ) => {
   const labels = {
     "input-streaming": "Pending",
     "input-available": "Running",
+    "approval-requested": "Approval Requested",
+    "approval-responded": "Approval Responded",
     "output-available": "Completed",
     "output-available-dual-llm": "Completed with dual LLM",
     "output-error": "Error",
+    "output-denied": "Denied",
   } as const;
 
   const icons = {
     "input-streaming": <CircleIcon className="size-4" />,
     "input-available": <ClockIcon className="size-4 animate-pulse" />,
+    "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
+    "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
     "output-available-dual-llm": (
       <CheckCircleIcon className="size-4 text-green-600" />
     ),
     "output-error": <XCircleIcon className="size-4 text-destructive" />,
+    "output-denied": <XCircleIcon className="size-4 text-orange-600" />,
   } as const;
 
   return (
@@ -120,7 +126,20 @@ export const ToolHeader = ({
         {getStatusBadge(state)}
       </div>
       {errorText && (
-        <div className="text-destructive text-xs mt-2 text-left">
+        // biome-ignore lint/a11y/useSemanticElements: We need text selection within the button trigger
+        <div
+          className="text-destructive text-xs mt-2 text-left select-text"
+          style={{
+            userSelect: "text",
+            WebkitUserSelect: "text",
+            pointerEvents: "auto",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="button"
+          tabIndex={-1}
+        >
           {errorText}
         </div>
       )}
@@ -222,7 +241,7 @@ export const ToolOutput = ({
                     "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
                     conv.role === "assistant"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-foreground",
+                      : "bg-secondary text-secondary-foreground",
                   )}
                 >
                   {contentStr}
@@ -238,8 +257,19 @@ export const ToolOutput = ({
   let Output = <div>{output as ReactNode}</div>;
 
   if (typeof output === "object" || typeof output === "string") {
+    // If output is a string, try to parse it as JSON for proper formatting
+    let formattedOutput = output;
+    if (typeof output === "string") {
+      try {
+        formattedOutput = JSON.parse(output);
+      } catch {
+        // Not valid JSON, use as-is
+      }
+    }
     const codeString =
-      typeof output === "object" ? JSON.stringify(output, null, 2) : output;
+      typeof formattedOutput === "object"
+        ? JSON.stringify(formattedOutput, null, 2)
+        : String(formattedOutput);
     const lines = codeString.split("\n");
     const MAX_LINES = 50;
     const isLarge = lines.length > MAX_LINES;

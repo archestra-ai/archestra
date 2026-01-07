@@ -1,0 +1,35 @@
+# Secrets - never include in image
+.env
+.env.*
+*.pem
+*.key
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*.egg-info
+.venv
+venv
+.pytest_cache
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Docs
+*.md
+!README.md
+
+# Data
+data/
+*.db
+*.sqlite

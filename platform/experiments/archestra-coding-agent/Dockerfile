@@ -42,29 +42,16 @@ COPY src/ /app/custom_tools/src/
 COPY src/config/coding_agent_context.yml /root/.serena/coding_agent_context.yml
 
 # Set up Python path to include custom tools
-ENV PYTHONPATH="${PYTHONPATH}:/app/custom_tools"
+ENV PYTHONPATH="/app/custom_tools"
+ENV SERENA_CUSTOM_TOOLS_PATH="/app/custom_tools"
 
-# Create entrypoint script that registers custom tools
-RUN echo '#!/bin/bash\n\
-# Register custom tools with Serena\n\
-export SERENA_CUSTOM_TOOLS_PATH=/app/custom_tools/src/tools\n\
-\n\
-# If GITHUB_TOKEN is set, configure git to use it for HTTPS\n\
-if [ -n "$GITHUB_TOKEN" ]; then\n\
-    git config --global credential.helper "!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f"\n\
-fi\n\
-\n\
-# Configure git with safe defaults\n\
-git config --global init.defaultBranch main\n\
-git config --global --add safe.directory "*"\n\
-\n\
-# Run the original Serena entrypoint or command\n\
-exec "$@"\n\
-' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+# Copy and setup entrypoint script
+COPY scripts/docker-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set the entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# Default command: start Serena MCP server
-CMD ["serena", "start-mcp-server"]
+# Default command: no additional args (entrypoint.py handles starting the MCP server)
+CMD []
 

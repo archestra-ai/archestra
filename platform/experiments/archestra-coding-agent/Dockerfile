@@ -27,7 +27,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up workspace directory
+# Set up workspace directory (this will be the default project)
 ENV WORKSPACE_DIR=/workspace
 RUN mkdir -p /workspace && chmod 777 /workspace
 
@@ -38,8 +38,11 @@ RUN uv pip install --python /workspaces/serena/.venv/bin/python -r /app/custom_t
 # Copy custom tools
 COPY src/ /app/custom_tools/src/
 
-# Copy Serena context configuration
-COPY src/config/coding_agent_context.yml /root/.serena/coding_agent_context.yml
+# Copy Serena configuration to the proper location
+# This includes our custom tools in included_optional_tools
+RUN mkdir -p /root/.serena/prompt_templates
+COPY src/config/serena_config.yml /root/.serena/serena_config.yml
+COPY src/config/prompt_templates/ /root/.serena/prompt_templates/
 
 # Set up Python path to include custom tools
 ENV PYTHONPATH="/app/custom_tools"

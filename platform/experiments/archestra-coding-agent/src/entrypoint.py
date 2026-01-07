@@ -9,7 +9,7 @@ The key insight is that Serena's ToolRegistry is a singleton that scans for
 Tool subclasses only from packages listed in `tool_packages`. We need to:
 1. Add our package to `tool_packages` BEFORE ToolRegistry is instantiated
 2. Import our tools (so they're discovered as Tool subclasses)
-3. Then start the MCP server
+3. Then start the MCP server with proper context and project settings
 """
 
 import sys
@@ -54,17 +54,46 @@ logger.info(f"Registered {len(custom_tools)} custom tools: {custom_tools}")
 # Now start the Serena MCP server using the CLI
 if __name__ == "__main__":
     from serena.cli import start_mcp_server
-    import click
     
-    # Get the context from click and invoke the command
-    ctx = click.Context(start_mcp_server)
-    
-    # Pass through any CLI arguments
+    # Build CLI arguments for Serena
+    # See: https://oraios.github.io/serena/02-usage/050_configuration.html#contexts
     args = sys.argv[1:] if len(sys.argv) > 1 else []
+    
+    # Default Serena configuration for coding agent:
+    # - context "agent": Designed for autonomous agent scenarios
+    # - mode "interactive" + "editing": Default modes for back-and-forth editing
+    # - mode "no-onboarding": Skip onboarding since we clone repos dynamically
+    # - project /workspace: Set default project so tools don't fail with "No active project"
+    #
+    # These can be overridden by passing CLI args to the container
+    default_args = [
+        "--context", "agent",
+        "--mode", "interactive",
+        "--mode", "editing", 
+        "--mode", "no-onboarding",
+    ]
+    
+    # Check if /workspace has a git repo (cloned by git_clone tool)
+    # If so, set it as the default project
+    workspace_dir = os.environ.get("WORKSPACE_DIR", "/workspace")
+    if os.path.isdir(workspace_dir):
+        # Find first git repo in workspace
+        for item in os.listdir(workspace_dir):
+            item_path = os.path.join(workspace_dir, item)
+            if os.path.isdir(item_path) and os.path.isdir(os.path.join(item_path, ".git")):
+                default_args.extend(["--project", item_path])
+                logger.info(f"Auto-detected project: {item_path}")
+                break
+    
+    # Merge: user args take precedence over defaults
+    # Simple approach: prepend defaults, let Serena handle overrides
+    final_args = default_args + args
+    
+    logger.info(f"Starting Serena MCP server with args: {final_args}")
     
     # Use click to invoke the command with proper argument parsing
     try:
-        start_mcp_server.main(args, standalone_mode=True)
+        start_mcp_server.main(final_args, standalone_mode=True)
     except SystemExit as e:
         sys.exit(e.code)
 

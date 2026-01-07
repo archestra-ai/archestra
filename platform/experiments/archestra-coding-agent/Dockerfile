@@ -1,0 +1,70 @@
+# Archestra Coding Agent
+# A custom MCP server combining Serena with Git/GitHub operations
+#
+# Build: docker build -t archestra-coding-agent .
+# Run:   docker run -it --rm -e GITHUB_TOKEN=<token> archestra-coding-agent
+
+FROM ghcr.io/oraios/serena:latest
+
+# Set labels for the image
+LABEL org.opencontainers.image.title="Archestra Coding Agent"
+LABEL org.opencontainers.image.description="MCP server combining Serena semantic code operations with Git/GitHub tools"
+LABEL org.opencontainers.image.source="https://github.com/archestra-ai/archestra"
+
+# Install system dependencies
+# - git: for git operations
+# - gh: GitHub CLI (optional, for advanced operations)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up workspace directory
+ENV WORKSPACE_DIR=/workspace
+RUN mkdir -p /workspace && chmod 777 /workspace
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt /app/custom_tools/requirements.txt
+RUN pip install --no-cache-dir -r /app/custom_tools/requirements.txt
+
+# Copy custom tools
+COPY src/ /app/custom_tools/src/
+
+# Copy Serena context configuration
+COPY src/config/coding_agent_context.yml /root/.serena/coding_agent_context.yml
+
+# Set up Python path to include custom tools
+ENV PYTHONPATH="${PYTHONPATH}:/app/custom_tools"
+
+# Create entrypoint script that registers custom tools
+RUN echo '#!/bin/bash\n\
+# Register custom tools with Serena\n\
+export SERENA_CUSTOM_TOOLS_PATH=/app/custom_tools/src/tools\n\
+\n\
+# If GITHUB_TOKEN is set, configure git to use it for HTTPS\n\
+if [ -n "$GITHUB_TOKEN" ]; then\n\
+    git config --global credential.helper "!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f"\n\
+fi\n\
+\n\
+# Configure git with safe defaults\n\
+git config --global init.defaultBranch main\n\
+git config --global --add safe.directory "*"\n\
+\n\
+# Run the original Serena entrypoint or command\n\
+exec "$@"\n\
+' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
+# Set the entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command: start Serena MCP server
+CMD ["serena", "start-mcp-server"]
+

@@ -16,9 +16,15 @@ sys.modules['serena'] = MagicMock()
 sys.modules['serena.tools'] = MagicMock()
 sys.modules['serena.tools'].Tool = object
 
-# Mock github module
+# Mock github module with a proper exception class
+class MockGithubException(Exception):
+    def __init__(self, status, data=None):
+        super().__init__(f"GithubException: {status}")
+        self.status = status
+        self.data = data
+
 mock_github = MagicMock()
-mock_github.GithubException = Exception
+mock_github.GithubException = MockGithubException
 sys.modules['github'] = mock_github
 
 # Now import our tools
@@ -27,6 +33,7 @@ from src.tools.github_tools import (
     GitHubListPRsTool,
     GitHubGetIssueTool,
     _parse_repo_info,
+    _get_github_error_message,
 )
 
 
@@ -45,11 +52,47 @@ class TestParseRepoInfo:
         assert owner == "owner"
         assert repo == "repo"
 
+    def test_parse_url_with_trailing_slash(self):
+        """Test parsing URL with trailing slash."""
+        owner, repo = _parse_repo_info("https://github.com/owner/repo/")
+        assert owner == "owner"
+        assert repo == "repo"
+
+    def test_parse_url_without_https(self):
+        """Test parsing URL without https prefix."""
+        owner, repo = _parse_repo_info("github.com/owner/repo")
+        assert owner == "owner"
+        assert repo == "repo"
+
+    def test_parse_url_with_www(self):
+        """Test parsing URL with www prefix."""
+        owner, repo = _parse_repo_info("https://www.github.com/owner/repo")
+        assert owner == "owner"
+        assert repo == "repo"
+
+    def test_parse_ssh_url(self):
+        """Test parsing SSH URL format."""
+        owner, repo = _parse_repo_info("git@github.com:owner/repo")
+        assert owner == "owner"
+        assert repo == "repo"
+
+    def test_parse_ssh_url_with_git_suffix(self):
+        """Test parsing SSH URL with .git suffix."""
+        owner, repo = _parse_repo_info("git@github.com:owner/repo.git")
+        assert owner == "owner"
+        assert repo == "repo"
+
     def test_parse_owner_repo_format(self):
         """Test parsing owner/repo format."""
         owner, repo = _parse_repo_info("owner/repo")
         assert owner == "owner"
         assert repo == "repo"
+
+    def test_parse_owner_repo_with_special_chars(self):
+        """Test parsing owner/repo with allowed special characters."""
+        owner, repo = _parse_repo_info("my-org/my_repo.test")
+        assert owner == "my-org"
+        assert repo == "my_repo.test"
 
     def test_parse_invalid_format(self):
         """Test parsing invalid format."""
@@ -62,6 +105,81 @@ class TestParseRepoInfo:
         owner, repo = _parse_repo_info(None)
         assert owner is None
         assert repo is None
+
+    def test_parse_with_whitespace(self):
+        """Test parsing with leading/trailing whitespace."""
+        owner, repo = _parse_repo_info("  owner/repo  ")
+        assert owner == "owner"
+        assert repo == "repo"
+
+    # Security tests - URL injection prevention
+    def test_reject_malicious_url_with_github_in_path(self):
+        """Test that URLs with github.com in path (not host) are rejected."""
+        owner, repo = _parse_repo_info("https://evil.com/github.com/malicious/repo")
+        assert owner is None
+        assert repo is None
+
+    def test_reject_malicious_url_with_subdomain(self):
+        """Test that URLs with github.com as subdomain are rejected."""
+        owner, repo = _parse_repo_info("https://github.com.evil.com/owner/repo")
+        assert owner is None
+        assert repo is None
+
+    def test_reject_malicious_url_with_github_in_query(self):
+        """Test that URLs with github.com in query string are rejected."""
+        owner, repo = _parse_repo_info("https://evil.com/path?redirect=github.com/owner/repo")
+        assert owner is None
+        assert repo is None
+
+    def test_reject_malicious_url_with_at_sign(self):
+        """Test that URLs with @ credential injection are rejected."""
+        owner, repo = _parse_repo_info("https://github.com@evil.com/owner/repo")
+        assert owner is None
+        assert repo is None
+
+    def test_reject_too_many_path_segments(self):
+        """Test that URLs with extra path segments are rejected."""
+        owner, repo = _parse_repo_info("owner/repo/extra/path")
+        assert owner is None
+        assert repo is None
+
+
+class TestGetGithubErrorMessage:
+    """Tests for the _get_github_error_message helper function."""
+
+    def test_error_with_dict_data(self):
+        """Test error message extraction when data is a dict."""
+        exc = MockGithubException(404, {"message": "Not Found"})
+        assert _get_github_error_message(exc) == "Not Found"
+
+    def test_error_with_dict_data_no_message(self):
+        """Test error message extraction when dict has no message key."""
+        exc = MockGithubException(500, {"error": "Internal Server Error"})
+        # Should fall back to str(e)
+        message = _get_github_error_message(exc)
+        assert "500" in message or "GithubException" in message
+
+    def test_error_with_none_data(self):
+        """Test error message extraction when data is None."""
+        exc = MockGithubException(401, None)
+        message = _get_github_error_message(exc)
+        # Should return str(e) when data is None
+        assert message is not None
+        assert len(message) > 0
+
+    def test_error_with_string_data(self):
+        """Test error message extraction when data is a string."""
+        exc = MockGithubException(400, "Bad Request")
+        message = _get_github_error_message(exc)
+        assert message == "Bad Request"
+
+    def test_error_with_empty_string_data(self):
+        """Test error message extraction when data is empty string."""
+        exc = MockGithubException(400, "")
+        message = _get_github_error_message(exc)
+        # Empty string is falsy, should fall back to str(e)
+        assert message is not None
+        assert len(message) > 0
 
 
 class TestGitHubCreatePRTool:

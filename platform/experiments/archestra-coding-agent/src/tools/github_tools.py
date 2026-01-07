@@ -7,6 +7,7 @@ Serena's semantic code editing and Git tools.
 
 import json
 import os
+import re
 from typing import Optional
 
 from serena.tools import Tool
@@ -19,6 +20,19 @@ except ImportError:
     GITHUB_AVAILABLE = False
     Github = None
     GithubException = Exception
+
+
+# Regex to validate GitHub URLs - must start with https://github.com/ or git@github.com:
+GITHUB_URL_PATTERN = re.compile(
+    r"^(?:https?://)?(?:www\.)?github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?/?$"
+)
+GITHUB_SSH_PATTERN = re.compile(
+    r"^git@github\.com:([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?$"
+)
+# Pattern for owner/repo format (no URL)
+OWNER_REPO_PATTERN = re.compile(
+    r"^([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)$"
+)
 
 
 def _get_github_client() -> Optional["Github"]:
@@ -38,9 +52,36 @@ def _get_github_client() -> Optional["Github"]:
     return Github(token)
 
 
+def _get_github_error_message(e: "GithubException") -> str:
+    """
+    Safely extract error message from GithubException.
+
+    PyGithub's GithubException.data can be None, a string, or a dict.
+    This helper handles all cases gracefully.
+
+    Args:
+        e: The GithubException instance
+
+    Returns:
+        Human-readable error message
+    """
+    if e.data is None:
+        return str(e)
+    if isinstance(e.data, dict):
+        return e.data.get("message", str(e))
+    # e.data is a string or other type
+    return str(e.data) if e.data else str(e)
+
+
 def _parse_repo_info(repo_url: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     """
     Parse owner and repo name from a repository URL or path.
+
+    Uses strict regex patterns to prevent URL injection attacks.
+    Only accepts:
+    - https://github.com/owner/repo
+    - git@github.com:owner/repo
+    - owner/repo format
 
     Args:
         repo_url: GitHub URL (https://github.com/owner/repo) or owner/repo format
@@ -51,21 +92,23 @@ def _parse_repo_info(repo_url: Optional[str] = None) -> tuple[Optional[str], Opt
     if repo_url is None:
         return None, None
 
-    # Handle full GitHub URL
-    if "github.com" in repo_url:
-        parts = repo_url.rstrip("/").split("/")
-        if len(parts) >= 2:
-            repo_name = parts[-1]
-            if repo_name.endswith(".git"):
-                repo_name = repo_name[:-4]
-            owner = parts[-2]
-            return owner, repo_name
+    # Strip whitespace
+    repo_url = repo_url.strip()
 
-    # Handle owner/repo format
-    if "/" in repo_url:
-        parts = repo_url.split("/")
-        if len(parts) == 2:
-            return parts[0], parts[1]
+    # Try HTTPS URL pattern (must start with github.com domain)
+    match = GITHUB_URL_PATTERN.match(repo_url)
+    if match:
+        return match.group(1), match.group(2)
+
+    # Try SSH URL pattern
+    match = GITHUB_SSH_PATTERN.match(repo_url)
+    if match:
+        return match.group(1), match.group(2)
+
+    # Try simple owner/repo format (no URL)
+    match = OWNER_REPO_PATTERN.match(repo_url)
+    if match:
+        return match.group(1), match.group(2)
 
     return None, None
 
@@ -136,7 +179,7 @@ class GitHubCreatePRTool(Tool):
         except GithubException as e:
             return json.dumps({
                 "success": False,
-                "error": f"GitHub API error: {e.data.get('message', str(e))}",
+                "error": f"GitHub API error: {_get_github_error_message(e)}",
                 "status": e.status,
             })
         except Exception as e:
@@ -212,7 +255,7 @@ class GitHubListPRsTool(Tool):
         except GithubException as e:
             return json.dumps({
                 "success": False,
-                "error": f"GitHub API error: {e.data.get('message', str(e))}",
+                "error": f"GitHub API error: {_get_github_error_message(e)}",
                 "status": e.status,
             })
         except Exception as e:
@@ -303,7 +346,7 @@ class GitHubGetIssueTool(Tool):
         except GithubException as e:
             return json.dumps({
                 "success": False,
-                "error": f"GitHub API error: {e.data.get('message', str(e))}",
+                "error": f"GitHub API error: {_get_github_error_message(e)}",
                 "status": e.status,
             })
         except Exception as e:

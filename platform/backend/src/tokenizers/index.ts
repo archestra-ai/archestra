@@ -16,6 +16,9 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
       return new AnthropicTokenizer();
     case "openai":
       return new TiktokenTokenizer();
+    case "cohere":
+      // Cohere doesn't provide a public tokenizer, use tiktoken as approximation
+      return new TiktokenTokenizer();
     default:
       // For any other provider including Gemini, use tiktoken as fallback
       return new TiktokenTokenizer();

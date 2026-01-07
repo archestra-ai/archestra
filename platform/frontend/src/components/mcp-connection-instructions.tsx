@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { archestraApiSdk } from '@shared';
+import { archestraApiSdk } from "@shared";
 import {
   Check,
   Copy,
@@ -10,26 +10,26 @@ import {
   Package,
   Server,
   User,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { CodeText } from '@/components/code-text';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { CodeText } from "@/components/code-text";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useProfiles } from '@/lib/agent.query';
-import { useHasPermissions } from '@/lib/auth.query';
-import config from '@/lib/config';
-import { useMcpServers } from '@/lib/mcp-server.query';
-import { useTokens } from '@/lib/team-token.query';
-import { useUserToken } from '@/lib/user-token.query';
+} from "@/components/ui/select";
+import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
+import config from "@/lib/config";
+import { useMcpServers } from "@/lib/mcp-server.query";
+import { useTokens } from "@/lib/team-token.query";
+import { useUserToken } from "@/lib/user-token.query";
 
 const { displayProxyUrl: apiBaseUrl } = config.api;
 
@@ -38,7 +38,7 @@ interface McpConnectionInstructionsProps {
 }
 
 // Special ID for personal token in the dropdown
-const PERSONAL_TOKEN_ID = '__personal_token__';
+const PERSONAL_TOKEN_ID = "__personal_token__";
 
 export function McpConnectionInstructions({
   agentId,
@@ -47,7 +47,7 @@ export function McpConnectionInstructions({
   const { data: mcpServers } = useMcpServers();
   const { data: userToken } = useUserToken();
   const { data: hasProfileAdminPermission } = useHasPermissions({
-    profile: ['admin'],
+    profile: ["admin"],
   });
 
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -60,7 +60,7 @@ export function McpConnectionInstructions({
   const tokens = tokensData?.tokens;
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
-    null
+    null,
   );
   const [isLoadingToken, setIsLoadingToken] = useState(false);
 
@@ -110,7 +110,7 @@ export function McpConnectionInstructions({
         return acc;
       }, 0);
     },
-    [mcpServers]
+    [mcpServers],
   );
 
   // Use the new URL format with selected profile ID
@@ -120,7 +120,7 @@ export function McpConnectionInstructions({
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
   const defaultTokenId = userToken
     ? PERSONAL_TOKEN_ID
-    : orgToken?.id ?? tokens?.[0]?.id ?? '';
+    : (orgToken?.id ?? tokens?.[0]?.id ?? "");
 
   // Check if personal token is selected (either explicitly or by default)
   const effectiveTokenId = selectedTokenId ?? defaultTokenId;
@@ -134,18 +134,18 @@ export function McpConnectionInstructions({
   // Get display name for selected token
   const getTokenDisplayName = () => {
     if (isPersonalTokenSelected) {
-      return 'Personal Token';
+      return "Personal Token";
     }
     if (selectedTeamToken) {
       if (selectedTeamToken.isOrganizationToken) {
-        return 'Organization Token';
+        return "Organization Token";
       }
       if (selectedTeamToken.team?.name) {
         return `Team Token (${selectedTeamToken.team.name})`;
       }
       return selectedTeamToken.name;
     }
-    return 'Select token';
+    return "Select token";
   };
 
   // Determine display token based on selection
@@ -155,10 +155,10 @@ export function McpConnectionInstructions({
       : isPersonalTokenSelected
         ? userToken
           ? `${userToken.tokenStart}***`
-          : 'ask-admin-for-access-token'
+          : "ask-admin-for-access-token"
         : hasProfileAdminPermission && selectedTeamToken
           ? `${selectedTeamToken.tokenStart}***`
-          : 'ask-admin-for-access-token';
+          : "ask-admin-for-access-token";
 
   const mcpConfig = useMemo(
     () =>
@@ -174,9 +174,9 @@ export function McpConnectionInstructions({
           },
         },
         null,
-        2
+        2,
       ),
-    [mcpUrl, tokenForDisplay]
+    [mcpUrl, tokenForDisplay],
   );
 
   const handleExposeToken = useCallback(async () => {
@@ -195,7 +195,7 @@ export function McpConnectionInstructions({
         // Fetch personal token value
         const response = await archestraApiSdk.getUserTokenValue();
         if (response.error || !response.data) {
-          throw new Error('Failed to fetch personal token value');
+          throw new Error("Failed to fetch personal token value");
         }
         tokenValue = (response.data as { value: string }).value;
       } else {
@@ -208,7 +208,7 @@ export function McpConnectionInstructions({
           path: { tokenId: selectedTeamToken.id },
         });
         if (response.error || !response.data) {
-          throw new Error('Failed to fetch token value');
+          throw new Error("Failed to fetch token value");
         }
         tokenValue = (response.data as { value: string }).value;
       }
@@ -216,7 +216,7 @@ export function McpConnectionInstructions({
       setExposedTokenValue(tokenValue);
       setShowExposedToken(true);
     } catch (error) {
-      toast.error('Failed to fetch token');
+      toast.error("Failed to fetch token");
       console.error(error);
     } finally {
       setIsLoadingToken(false);
@@ -236,12 +236,12 @@ export function McpConnectionInstructions({
         },
       },
       null,
-      2
+      2,
     );
 
     await navigator.clipboard.writeText(fullConfig);
     setCopiedConfig(true);
-    toast.success('Configuration copied (preview only)');
+    toast.success("Configuration copied (preview only)");
     setTimeout(() => setCopiedConfig(false), 2000);
   };
 
@@ -254,7 +254,7 @@ export function McpConnectionInstructions({
         // Fetch personal token value
         const response = await archestraApiSdk.getUserTokenValue();
         if (response.error || !response.data) {
-          throw new Error('Failed to fetch personal token value');
+          throw new Error("Failed to fetch personal token value");
         }
         tokenValue = (response.data as { value: string }).value;
       } else {
@@ -267,7 +267,7 @@ export function McpConnectionInstructions({
           path: { tokenId: selectedTeamToken.id },
         });
         if (response.error || !response.data) {
-          throw new Error('Failed to fetch token value');
+          throw new Error("Failed to fetch token value");
         }
         tokenValue = (response.data as { value: string }).value;
       }
@@ -284,15 +284,15 @@ export function McpConnectionInstructions({
           },
         },
         null,
-        2
+        2,
       );
 
       await navigator.clipboard.writeText(fullConfig);
       setCopiedConfig(true);
-      toast.success('Configuration copied');
+      toast.success("Configuration copied");
       setTimeout(() => setCopiedConfig(false), 2000);
     } catch {
-      toast.error('Failed to copy configuration');
+      toast.error("Failed to copy configuration");
     } finally {
       setIsCopyingConfig(false);
     }
@@ -343,8 +343,8 @@ export function McpConnectionInstructions({
               MCP servers assigned to this profile and accessible via gateway
             </Label>
             <span className="text-xs text-muted-foreground">
-              {mcpServerToolCounts.size}{' '}
-              {mcpServerToolCounts.size === 1 ? 'server' : 'servers'}
+              {mcpServerToolCounts.size}{" "}
+              {mcpServerToolCounts.size === 1 ? "server" : "servers"}
             </span>
           </div>
 
@@ -367,13 +367,13 @@ export function McpConnectionInstructions({
                         <div className="flex items-center gap-1 mt-0.5">
                           <Package className="h-3 w-3 text-muted-foreground" />
                           <span className="text-[11px] text-muted-foreground">
-                            {toolCount} {toolCount === 1 ? 'tool' : 'tools'}
+                            {toolCount} {toolCount === 1 ? "tool" : "tools"}
                           </span>
                         </div>
                       </div>
                     </div>
                   </Card>
-                )
+                ),
               )}
             </div>
           ) : (
@@ -415,10 +415,10 @@ export function McpConnectionInstructions({
                   <div>{getTokenDisplayName()}</div>
                   <div className="text-xs text-muted-foreground">
                     {isPersonalTokenSelected
-                      ? 'The most secure option.'
+                      ? "The most secure option."
                       : selectedTeamToken?.isOrganizationToken
-                        ? 'To share org-wide'
-                        : 'To share with your teammates'}
+                        ? "To share org-wide"
+                        : "To share with your teammates"}
                   </div>
                 </div>
               )}
@@ -542,9 +542,9 @@ export function McpConnectionInstructions({
         </div>
 
         <p className="text-sm text-muted-foreground">
-          The host/port is configurable via the{' '}
-          <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText>{' '}
-          environment variable. See{' '}
+          The host/port is configurable via the{" "}
+          <CodeText className="text-xs">ARCHESTRA_API_BASE_URL</CodeText>{" "}
+          environment variable. See{" "}
           <a
             href="https://archestra.ai/docs/platform-deployment#environment-variables"
             target="_blank"
@@ -552,7 +552,7 @@ export function McpConnectionInstructions({
             className="text-blue-500"
           >
             here
-          </a>{' '}
+          </a>{" "}
           for more details.
         </p>
       </div>

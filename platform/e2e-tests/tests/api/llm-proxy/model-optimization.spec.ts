@@ -19,7 +19,7 @@ interface ToolDefinition {
 
 interface ModelOptimizationTestConfig {
   providerName: string;
-  provider: "openai" | "anthropic" | "gemini";
+  provider: "openai" | "anthropic" | "gemini" | "cohere";
 
   // Request building
   endpoint: (agentId: string) => string;

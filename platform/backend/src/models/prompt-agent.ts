@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
 
 /**
@@ -307,12 +308,15 @@ class PromptAgentModel {
   /**
    * Get all prompt-agent connections for an organization
    * Used for canvas visualization of agent relationships
+   * Filters by user's team access unless they're an admin
    */
   static async findAllByOrganizationId(
     organizationId: string,
+    userId: string,
+    isAgentAdmin: boolean,
   ): Promise<Array<{ id: string; promptId: string; agentPromptId: string }>> {
     logger.debug(
-      { organizationId },
+      { organizationId, userId, isAgentAdmin },
       "PromptAgentModel.findAllByOrganizationId: fetching all connections for organization",
     );
 
@@ -321,6 +325,8 @@ class PromptAgentModel {
         id: schema.promptAgentsTable.id,
         promptId: schema.promptAgentsTable.promptId,
         agentPromptId: schema.promptAgentsTable.agentPromptId,
+        // Include agentId for filtering
+        agentId: schema.promptsTable.agentId,
       })
       .from(schema.promptAgentsTable)
       .innerJoin(
@@ -329,7 +335,40 @@ class PromptAgentModel {
       )
       .where(eq(schema.promptsTable.organizationId, organizationId));
 
-    return results;
+    // Admins see all connections
+    if (isAgentAdmin) {
+      return results.map(({ id, promptId, agentPromptId }) => ({
+        id,
+        promptId,
+        agentPromptId,
+      }));
+    }
+
+    // For non-admins, filter to only connections where user has access to the profile
+    const filteredResults: Array<{
+      id: string;
+      promptId: string;
+      agentPromptId: string;
+    }> = [];
+
+    for (const result of results) {
+      if (result.agentId) {
+        const hasAccess = await AgentTeamModel.userHasAgentAccess(
+          userId,
+          result.agentId,
+          false,
+        );
+        if (hasAccess) {
+          filteredResults.push({
+            id: result.id,
+            promptId: result.promptId,
+            agentPromptId: result.agentPromptId,
+          });
+        }
+      }
+    }
+
+    return filteredResults;
   }
 
   /**

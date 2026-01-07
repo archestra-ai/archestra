@@ -58,13 +58,20 @@ export function useCreateConversation() {
       agentId,
       promptId,
       selectedModel,
+      chatApiKeyId,
     }: {
       agentId: string;
       promptId?: string;
       selectedModel?: string;
+      chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId, promptId, selectedModel },
+        body: {
+          agentId,
+          promptId,
+          selectedModel,
+          chatApiKeyId: chatApiKeyId ?? undefined,
+        },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;

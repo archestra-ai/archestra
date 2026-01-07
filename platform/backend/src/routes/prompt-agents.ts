@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { PromptAgentModel, PromptModel } from "@/models";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
@@ -46,9 +47,18 @@ const promptAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(PromptAgentConnectionSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      const connections =
-        await PromptAgentModel.findAllByOrganizationId(organizationId);
+    async ({ organizationId, user, headers }, reply) => {
+      // Check if user has admin access to profiles
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const connections = await PromptAgentModel.findAllByOrganizationId(
+        organizationId,
+        user.id,
+        isAgentAdmin,
+      );
       return reply.send(connections);
     },
   );

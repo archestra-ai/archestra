@@ -525,6 +525,7 @@ export default function ChatPage() {
           agentId: initialAgentId,
           selectedModel: initialModel,
           promptId: initialPromptId ?? undefined,
+          chatApiKeyId: initialApiKeyId,
         },
         {
           onSuccess: (newConversation) => {
@@ -618,6 +619,7 @@ export default function ChatPage() {
                                 agentId: initialAgentId,
                                 selectedModel: initialModel,
                                 promptId: initialPromptId ?? undefined,
+                                chatApiKeyId: initialApiKeyId,
                               },
                               {
                                 onSuccess: (newConversation) => {
@@ -881,6 +883,7 @@ export default function ChatPage() {
                           agentId: initialAgentId,
                           selectedModel: initialModel,
                           promptId: initialPromptId ?? undefined,
+                          chatApiKeyId: initialApiKeyId,
                         },
                         {
                           onSuccess: (newConversation) => {

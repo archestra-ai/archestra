@@ -237,7 +237,7 @@ export function PromptDialog({
           <div className="space-y-2">
             <Label>Agents</Label>
             <p className="text-sm text-muted-foreground">
-              Select other agents to delelegate tasks
+              Select other agents to delegate tasks
             </p>
             <MultiSelect
               value={selectedAgentPromptIds}

@@ -1,7 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { CommonToolCallSchema } from "./tool-execution";
+import { CommonToolCallSchema } from "./common-llm-format";
 
 /**
  * Select schema for MCP tool calls

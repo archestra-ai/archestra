@@ -1,11 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import {
-  type DualLlmResult,
-  type Interaction,
-  type InteractionUtils,
-  parseRefusalMessage,
-} from "./common";
+import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
   private request: archestraApiTypes.OpenAiChatCompletionRequest;
@@ -220,25 +215,8 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
           }
         }
       } else if (refusal) {
-        // Handle assistant messages with refusals (but no tool calls)
-
-        // Parse the refusal message to extract tool information
-        const refusalInfo = parseRefusalMessage(refusal);
-
-        // Check if this is a tool invocation policy block
-        if (refusalInfo.toolName) {
-          // Create a special blocked tool part
-          parts.push({
-            type: "blocked-tool",
-            toolName: refusalInfo.toolName,
-            toolArguments: refusalInfo.toolArguments,
-            reason: refusalInfo.reason || "Tool invocation blocked by policy",
-            fullRefusal: refusal,
-          });
-        } else {
-          // Regular refusal text
-          parts.push({ type: "text", text: refusal });
-        }
+        // Push as text - parsePolicyDenied in chatbot-demo will handle policy denials
+        parts.push({ type: "text", text: refusal });
       }
     } else if (message.role === "tool") {
       // Handle tool response messages

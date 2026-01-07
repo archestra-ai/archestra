@@ -5,7 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
-import { isByosEnabled, secretManager } from "@/secretsmanager";
+import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -706,7 +706,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "OAuth callback: creating secret with payload",
       );
 
-      const secret = await secretManager.createSecret(
+      const secret = await secretManager().createSecret(
         secretPayload,
         `${catalogItem.name}-oauth`,
         isByosEnabled(), // forceDB: store in DB when BYOS is enabled

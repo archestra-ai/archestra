@@ -6,6 +6,7 @@ import {
   Info,
   MoreVertical,
   Pencil,
+  RefreshCcw,
   RefreshCw,
   Trash2,
   User,
@@ -89,6 +90,7 @@ export type McpServerCardProps = {
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   onReinstall: () => void;
+  onRestartAll: () => void;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -110,6 +112,7 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
+  onRestartAll,
   onDetails,
   onEdit,
   onDelete,
@@ -168,7 +171,6 @@ export function McpServerCard({
   const [selectedToolForAssignment, setSelectedToolForAssignment] =
     useState<ToolForAssignment | null>(null);
   const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
-  const [toolsDialogKey, setToolsDialogKey] = useState(0);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
     name: string;
@@ -259,6 +261,33 @@ export function McpServerCard({
               )}
             </Tooltip>
           </TooltipProvider>
+          <WithPermissions
+            permissions={{ mcpServer: ["admin"] }}
+            noPermissionHandle="hide"
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <DropdownMenuItem
+                      onClick={onRestartAll}
+                      disabled={variant !== "local"}
+                    >
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      Restart
+                    </DropdownMenuItem>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {variant !== "local"
+                      ? "Only available for local MCP servers"
+                      : "Restarts all running instances of this MCP server."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </WithPermissions>
           <DropdownMenuItem onClick={onDetails}>
             <Info className="mr-2 h-4 w-4" />
             About
@@ -343,7 +372,7 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <Wrench className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Tools assigned:{" "}
+          Assigned to profile:{" "}
           <span className="font-medium text-foreground">
             {getToolsAssignedCount()}{" "}
             {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}
@@ -364,6 +393,17 @@ export function McpServerCard({
     </>
   );
 
+  const errorBanner = isCurrentUserAuthenticated &&
+    hasError &&
+    errorMessage && (
+      <div
+        className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md"
+        data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+      >
+        {errorMessage}
+      </div>
+    );
+
   const remoteCardContent = (
     <>
       <WithPermissions
@@ -379,11 +419,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
-      {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
-          {errorMessage}
-        </div>
-      )}
+      {errorBanner}
       {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
@@ -445,11 +481,7 @@ export function McpServerCard({
           </div>
         </div>
       </WithPermissions>
-      {isCurrentUserAuthenticated && hasError && errorMessage && (
-        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
-          {errorMessage}
-        </div>
-      )}
+      {errorBanner}
       {isCurrentUserAuthenticated && needsReinstall && (
         <PermissionButton
           permissions={{ mcpServer: ["update"] }}
@@ -512,7 +544,6 @@ export function McpServerCard({
   const dialogs = (
     <>
       <McpToolsDialog
-        key={toolsDialogKey}
         open={isToolsDialogOpen}
         onOpenChange={(open) => {
           setIsToolsDialogOpen(open);
@@ -548,10 +579,6 @@ export function McpServerCard({
         onOpenChange={(open) => {
           if (!open) {
             setBulkAssignTools([]);
-            // Close the parent tools dialog as well
-            setIsToolsDialogOpen(false);
-            // Reset the tools dialog to clear selections
-            setToolsDialogKey((prev) => prev + 1);
           }
         }}
         catalogId={item.id}
@@ -562,12 +589,13 @@ export function McpServerCard({
           selectedToolForAssignment
             ? {
                 id: selectedToolForAssignment.id,
-                allowUsageWhenUntrustedDataIsPresent: false,
-                toolResultTreatment: "untrusted" as const,
                 responseModifierTemplate: null,
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
                 useDynamicTeamCredential: false,
+                policiesAutoConfiguredAt: null,
+                policiesAutoConfiguringStartedAt: null,
+                policiesAutoConfiguredReasoning: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,

@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
+import type { Action, Permissions, Resource } from "@shared";
 import logger from "@/logging";
+import { getUserPermissions } from "@/models/user.ee";
 import { auth as betterAuth } from "./better-auth";
 
 export const hasPermission = async (
@@ -60,4 +61,21 @@ export const hasPermission = async (
     logger.debug("[hasPermission] No valid API key provided");
     return { success: false, error: new Error("No API key provided") };
   }
+};
+
+/**
+ * Check if a user has a specific permission based on their role
+ * @param userId - The user's ID
+ * @param organizationId - The organization ID
+ * @param resource - The resource to check (e.g., "profile", "mcpServer")
+ * @param action - The action to check (e.g., "admin", "read", "write")
+ */
+export const userHasPermission = async (
+  userId: string,
+  organizationId: string,
+  resource: Resource,
+  action: Action,
+): Promise<boolean> => {
+  const permissions = await getUserPermissions(userId, organizationId);
+  return permissions[resource]?.includes(action) ?? false;
 };

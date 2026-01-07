@@ -8,6 +8,7 @@ import {
   editorAuthFile,
   memberAuthFile,
   UI_BASE_URL,
+  WIREMOCK_BASE_URL,
 } from "../../consts";
 
 /**
@@ -28,12 +29,28 @@ export interface TestFixtures {
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
+  restartMcpServer: typeof restartMcpServer;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
   waitForAgentTool: typeof waitForAgentTool;
   getTeamByName: typeof getTeamByName;
   addTeamMember: typeof addTeamMember;
   removeTeamMember: typeof removeTeamMember;
+  getActiveOrganizationId: typeof getActiveOrganizationId;
+  createOptimizationRule: typeof createOptimizationRule;
+  deleteOptimizationRule: typeof deleteOptimizationRule;
+  updateOptimizationRule: typeof updateOptimizationRule;
+  createLimit: typeof createLimit;
+  deleteLimit: typeof deleteLimit;
+  getLimits: typeof getLimits;
+  createTokenPrice: typeof createTokenPrice;
+  deleteTokenPrice: typeof deleteTokenPrice;
+  getTokenPrices: typeof getTokenPrices;
+  getOrganization: typeof getOrganization;
+  updateOrganization: typeof updateOrganization;
+  getInteractions: typeof getInteractions;
+  getWiremockRequests: typeof getWiremockRequests;
+  clearWiremockRequests: typeof clearWiremockRequests;
   /** API request context authenticated as admin (same as default `request`) */
   adminRequest: APIRequestContext;
   /** API request context authenticated as editor */
@@ -141,10 +158,8 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createToolInvocationPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
-    argumentPath: string;
-    operator: string;
-    value: string;
+    toolId: string;
+    conditions: Array<{ key: string; operator: string; value: string }>;
     action: "allow_when_context_is_untrusted" | "block_always";
     reason?: string;
   },
@@ -154,10 +169,8 @@ const createToolInvocationPolicy = async (
     method: "post",
     urlSuffix: "/api/autonomy-policies/tool-invocation",
     data: {
-      agentToolId: policy.agentToolId,
-      argumentName: policy.argumentPath, // argumentPath maps to argumentName in the schema
-      operator: policy.operator,
-      value: policy.value,
+      toolId: policy.toolId,
+      conditions: policy.conditions,
       action: policy.action,
       reason: policy.reason,
     },
@@ -184,19 +197,22 @@ const deleteToolInvocationPolicy = async (
 const createTrustedDataPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
-    description: string;
-    attributePath: string;
-    operator: string;
-    value: string;
+    toolId: string;
+    conditions: Array<{ key: string; operator: string; value: string }>;
     action: "block_always" | "mark_as_trusted" | "sanitize_with_dual_llm";
+    description?: string;
   },
 ) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/trusted-data-policies",
-    data: policy,
+    data: {
+      toolId: policy.toolId,
+      conditions: policy.conditions,
+      action: policy.action,
+      description: policy.description,
+    },
   });
 
 /**
@@ -258,7 +274,7 @@ const installMcpServer = async (
   serverData: {
     name: string;
     catalogId?: string;
-    teams?: string[];
+    teamId?: string;
     userConfigValues?: Record<string, string>;
     environmentValues?: Record<string, string>;
     accessToken?: string;
@@ -283,6 +299,17 @@ const uninstallMcpServer = async (
     request,
     method: "delete",
     urlSuffix: `/api/mcp_server/${serverId}`,
+  });
+
+/**
+ * Restart an MCP server (local servers only)
+ * (authnz is handled by the authenticated session)
+ */
+const restartMcpServer = async (request: APIRequestContext, serverId: string) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/mcp_server/${serverId}/restart`,
   });
 
 /**
@@ -317,6 +344,11 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
 /**
  * Wait for an agent-tool to be registered with retry/polling logic.
  * This helps avoid race conditions when a tool is registered asynchronously.
+ * In CI with parallel workers, tool registration can take longer due to resource contention.
+ *
+ * IMPORTANT: Uses server-side filtering by agentId to avoid pagination issues.
+ * The default API limit is 20 items, so without filtering, the tool might not
+ * appear in results if there are many agent-tools in the database.
  */
 const waitForAgentTool = async (
   request: APIRequestContext,
@@ -326,22 +358,30 @@ const waitForAgentTool = async (
     maxAttempts?: number;
     delayMs?: number;
   },
-): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
-  const maxAttempts = options?.maxAttempts ?? 10;
-  const delayMs = options?.delayMs ?? 500;
+): Promise<{
+  id: string;
+  agent: { id: string };
+  tool: { id: string; name: string };
+}> => {
+  // Increased defaults for CI stability: 20 attempts × 1000ms = 20 seconds total wait
+  const maxAttempts = options?.maxAttempts ?? 20;
+  const delayMs = options?.delayMs ?? 1000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Use server-side filtering by agentId and increase limit to avoid pagination issues
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/agent-tools",
+      urlSuffix: `/api/agent-tools?agentId=${agentId}&limit=100`,
       ignoreStatusCheck: true,
     });
 
     if (agentToolsResponse.ok()) {
       const agentTools = await agentToolsResponse.json();
+      // Defense-in-depth: validate both agentId AND toolName client-side
+      // in case the API silently ignores unknown query params
       const foundTool = agentTools.data.find(
-        (at: { agent: { id: string }; tool: { name: string } }) =>
+        (at: { agent: { id: string }; tool: { id: string; name: string } }) =>
           at.agent.id === agentId && at.tool.name === toolName,
       );
 
@@ -423,6 +463,314 @@ export const removeTeamMember = async (
     urlSuffix: `/api/teams/${teamId}/members/${userId}`,
   });
 
+/**
+ * Get the active organization ID from the current session
+ */
+const getActiveOrganizationId = async (
+  request: APIRequestContext,
+): Promise<string> => {
+  const response = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/auth/get-session",
+  });
+  const data = await response.json();
+  const organizationId = data?.session?.activeOrganizationId;
+  if (!organizationId) {
+    throw new Error("Failed to get organization ID from session");
+  }
+  return organizationId;
+};
+
+/**
+ * Optimization rule condition types
+ */
+type OptimizationRuleCondition = { maxLength: number } | { hasTools: boolean };
+
+/**
+ * Create an optimization rule
+ * (authnz is handled by the authenticated session)
+ */
+const createOptimizationRule = async (
+  request: APIRequestContext,
+  rule: {
+    entityType: "organization" | "team" | "agent";
+    entityId: string;
+    provider: "openai" | "anthropic" | "gemini";
+    conditions: OptimizationRuleCondition[];
+    targetModel: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/optimization-rules",
+    data: {
+      ...rule,
+      enabled: rule.enabled ?? true,
+    },
+  });
+
+/**
+ * Update an optimization rule
+ * (authnz is handled by the authenticated session)
+ */
+const updateOptimizationRule = async (
+  request: APIRequestContext,
+  ruleId: string,
+  updates: {
+    conditions?: OptimizationRuleCondition[];
+    targetModel?: string;
+    enabled?: boolean;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "put",
+    urlSuffix: `/api/optimization-rules/${ruleId}`,
+    data: updates,
+  });
+
+/**
+ * Delete an optimization rule
+ * (authnz is handled by the authenticated session)
+ */
+const deleteOptimizationRule = async (
+  request: APIRequestContext,
+  ruleId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/optimization-rules/${ruleId}`,
+  });
+
+/**
+ * Create a limit (token cost, mcp_server_calls, or tool_calls)
+ * (authnz is handled by the authenticated session)
+ */
+const createLimit = async (
+  request: APIRequestContext,
+  limit: {
+    entityType: "organization" | "team" | "agent";
+    entityId: string;
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls";
+    limitValue: number;
+    model?: string[];
+    mcpServerName?: string;
+    toolName?: string;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/limits",
+    data: limit,
+  });
+
+/**
+ * Delete a limit by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteLimit = async (request: APIRequestContext, limitId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/limits/${limitId}`,
+  });
+
+/**
+ * Get limits with optional filtering
+ * (authnz is handled by the authenticated session)
+ */
+const getLimits = async (
+  request: APIRequestContext,
+  entityType?: "organization" | "team" | "agent",
+  entityId?: string,
+) => {
+  const params = new URLSearchParams();
+  if (entityType) params.append("entityType", entityType);
+  if (entityId) params.append("entityId", entityId);
+  const queryString = params.toString();
+  return makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/limits${queryString ? `?${queryString}` : ""}`,
+  });
+};
+
+/**
+ * Create a token price for a model
+ * (authnz is handled by the authenticated session)
+ */
+const createTokenPrice = async (
+  request: APIRequestContext,
+  tokenPrice: {
+    provider: "openai" | "anthropic" | "gemini";
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/token-prices",
+    data: tokenPrice,
+    ignoreStatusCheck: true, // May return 409 if already exists
+  });
+
+/**
+ * Delete a token price by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteTokenPrice = async (
+  request: APIRequestContext,
+  tokenPriceId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/token-prices/${tokenPriceId}`,
+    ignoreStatusCheck: true, // May already be deleted
+  });
+
+/**
+ * Get all token prices
+ * (authnz is handled by the authenticated session)
+ */
+const getTokenPrices = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/token-prices",
+  });
+
+/**
+ * Get organization details
+ * (authnz is handled by the authenticated session)
+ */
+const getOrganization = async (request: APIRequestContext) =>
+  makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/organization",
+  });
+
+/**
+ * Update organization settings
+ * (authnz is handled by the authenticated session)
+ */
+const updateOrganization = async (
+  request: APIRequestContext,
+  updates: {
+    convertToolResultsToToon?: boolean;
+    compressionScope?: "organization" | "team";
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "patch",
+    urlSuffix: "/api/organization",
+    data: updates,
+  });
+
+/**
+ * Get interactions with optional filtering by profileId
+ * (authnz is handled by the authenticated session)
+ */
+const getInteractions = async (
+  request: APIRequestContext,
+  options?: {
+    profileId?: string;
+    limit?: number;
+    offset?: number;
+    sortBy?: string;
+    sortDirection?: "asc" | "desc";
+  },
+) => {
+  const params = new URLSearchParams();
+  if (options?.profileId) params.append("profileId", options.profileId);
+  if (options?.limit) params.append("limit", String(options.limit));
+  if (options?.offset) params.append("offset", String(options.offset));
+  if (options?.sortBy) params.append("sortBy", options.sortBy);
+  if (options?.sortDirection)
+    params.append("sortDirection", options.sortDirection);
+  const queryString = params.toString();
+  return makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/interactions${queryString ? `?${queryString}` : ""}`,
+  });
+};
+
+/**
+ * WireMock request journal entry structure
+ */
+export interface WiremockRequest {
+  id: string;
+  request: {
+    url: string;
+    absoluteUrl: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+    loggedDate: number;
+    loggedDateString: string;
+  };
+  responseDefinition: {
+    status: number;
+  };
+}
+
+/**
+ * Get requests from WireMock's request journal
+ * Useful for verifying what was actually sent to mock LLM providers
+ */
+const getWiremockRequests = async (
+  request: APIRequestContext,
+  options?: {
+    limit?: number;
+    method?: string;
+    urlPattern?: string;
+  },
+): Promise<WiremockRequest[]> => {
+  const params = new URLSearchParams();
+  if (options?.limit) params.append("limit", String(options.limit));
+
+  const queryString = params.toString();
+  const response = await request.get(
+    `${WIREMOCK_BASE_URL}/__admin/requests${queryString ? `?${queryString}` : ""}`,
+  );
+  const data = await response.json();
+
+  let requests: WiremockRequest[] = data.requests || [];
+
+  // Filter by method if specified
+  if (options?.method) {
+    requests = requests.filter(
+      (r) => r.request.method.toUpperCase() === options.method?.toUpperCase(),
+    );
+  }
+
+  // Filter by URL pattern if specified
+  if (options?.urlPattern) {
+    const pattern = new RegExp(options.urlPattern);
+    requests = requests.filter((r) => pattern.test(r.request.url));
+  }
+
+  return requests;
+};
+
+/**
+ * Clear WireMock's request journal
+ * Useful for test isolation - call in beforeEach to ensure clean state
+ */
+const clearWiremockRequests = async (request: APIRequestContext) => {
+  await request.delete(`${WIREMOCK_BASE_URL}/__admin/requests`);
+};
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -464,6 +812,9 @@ export const test = base.extend<TestFixtures>({
   uninstallMcpServer: async ({}, use) => {
     await use(uninstallMcpServer);
   },
+  restartMcpServer: async ({}, use) => {
+    await use(restartMcpServer);
+  },
   createRole: async ({}, use) => {
     await use(createRole);
   },
@@ -481,6 +832,51 @@ export const test = base.extend<TestFixtures>({
   },
   removeTeamMember: async ({}, use) => {
     await use(removeTeamMember);
+  },
+  getActiveOrganizationId: async ({}, use) => {
+    await use(getActiveOrganizationId);
+  },
+  createOptimizationRule: async ({}, use) => {
+    await use(createOptimizationRule);
+  },
+  deleteOptimizationRule: async ({}, use) => {
+    await use(deleteOptimizationRule);
+  },
+  updateOptimizationRule: async ({}, use) => {
+    await use(updateOptimizationRule);
+  },
+  createLimit: async ({}, use) => {
+    await use(createLimit);
+  },
+  deleteLimit: async ({}, use) => {
+    await use(deleteLimit);
+  },
+  getLimits: async ({}, use) => {
+    await use(getLimits);
+  },
+  createTokenPrice: async ({}, use) => {
+    await use(createTokenPrice);
+  },
+  deleteTokenPrice: async ({}, use) => {
+    await use(deleteTokenPrice);
+  },
+  getTokenPrices: async ({}, use) => {
+    await use(getTokenPrices);
+  },
+  getOrganization: async ({}, use) => {
+    await use(getOrganization);
+  },
+  updateOrganization: async ({}, use) => {
+    await use(updateOrganization);
+  },
+  getInteractions: async ({}, use) => {
+    await use(getInteractions);
+  },
+  getWiremockRequests: async ({}, use) => {
+    await use(getWiremockRequests);
+  },
+  clearWiremockRequests: async ({}, use) => {
+    await use(clearWiremockRequests);
   },
   /**
    * Admin request - same auth as default `request` fixture

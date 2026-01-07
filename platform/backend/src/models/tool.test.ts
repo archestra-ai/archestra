@@ -1,9 +1,121 @@
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
 import TeamModel from "./team";
 import ToolModel from "./tool";
 
 describe("ToolModel", () => {
+  describe("slugifyName", () => {
+    test("creates valid tool name from simple server and tool names", () => {
+      const result = ToolModel.slugifyName("github", "list_repos");
+      expect(result).toBe(`github${MCP_SERVER_TOOL_NAME_SEPARATOR}list_repos`);
+    });
+
+    test("converts to lowercase", () => {
+      const result = ToolModel.slugifyName("GitHub", "ListRepos");
+      expect(result).toBe(`github${MCP_SERVER_TOOL_NAME_SEPARATOR}listrepos`);
+    });
+
+    test("replaces spaces with underscores", () => {
+      const result = ToolModel.slugifyName("My Server", "list all repos");
+      expect(result).toBe(
+        `my_server${MCP_SERVER_TOOL_NAME_SEPARATOR}list_all_repos`,
+      );
+    });
+
+    test("removes brackets from server name", () => {
+      const result = ToolModel.slugifyName(
+        "[AI SRE Demo] Kubernetes MCP Server",
+        "list_namespaces",
+      );
+      expect(result).toBe(
+        `ai_sre_demo_kubernetes_mcp_server${MCP_SERVER_TOOL_NAME_SEPARATOR}list_namespaces`,
+      );
+    });
+
+    test("removes parentheses from server name", () => {
+      const result = ToolModel.slugifyName("Server (Production)", "get_status");
+      expect(result).toBe(
+        `server_production${MCP_SERVER_TOOL_NAME_SEPARATOR}get_status`,
+      );
+    });
+
+    test("removes special characters while preserving hyphens", () => {
+      const result = ToolModel.slugifyName("my-server!@#$%", "tool-name");
+      expect(result).toBe(
+        `my-server${MCP_SERVER_TOOL_NAME_SEPARATOR}tool-name`,
+      );
+    });
+
+    test("collapses multiple consecutive spaces into single underscore", () => {
+      const result = ToolModel.slugifyName("My   Server", "list    repos");
+      // Multiple spaces become a single underscore for cleaner names
+      expect(result).toBe(
+        `my_server${MCP_SERVER_TOOL_NAME_SEPARATOR}list_repos`,
+      );
+    });
+
+    test("handles tabs and newlines as whitespace", () => {
+      const result = ToolModel.slugifyName("My\tServer", "list\nrepos");
+      expect(result).toBe(
+        `my_server${MCP_SERVER_TOOL_NAME_SEPARATOR}list_repos`,
+      );
+    });
+
+    test("preserves numbers in names", () => {
+      const result = ToolModel.slugifyName("Server123", "tool456");
+      expect(result).toBe(`server123${MCP_SERVER_TOOL_NAME_SEPARATOR}tool456`);
+    });
+
+    test("handles empty tool name", () => {
+      const result = ToolModel.slugifyName("server", "");
+      expect(result).toBe(`server${MCP_SERVER_TOOL_NAME_SEPARATOR}`);
+    });
+
+    test("produces names matching LLM provider pattern", () => {
+      // Anthropic pattern: ^[a-zA-Z0-9_-]{1,128}$
+      const pattern = /^[a-zA-Z0-9_-]+$/;
+
+      const testCases = [
+        ["[AI SRE Demo] Kubernetes MCP Server", "list_namespaces"],
+        ["Server (v2.0)", "get_data"],
+        ["My Server!", "tool@name"],
+        ["Test & Demo", "run#test"],
+        ["Unicode: 日本語", "tool"],
+      ];
+
+      for (const [serverName, toolName] of testCases) {
+        const result = ToolModel.slugifyName(serverName, toolName);
+        expect(result).toMatch(pattern);
+      }
+    });
+  });
+
+  describe("unslugifyName", () => {
+    test("extracts tool name from slugified name", () => {
+      const slugified = `server${MCP_SERVER_TOOL_NAME_SEPARATOR}list_repos`;
+      const result = ToolModel.unslugifyName(slugified);
+      expect(result).toBe("list_repos");
+    });
+
+    test("handles tool names containing separator", () => {
+      const slugified = `server${MCP_SERVER_TOOL_NAME_SEPARATOR}tool${MCP_SERVER_TOOL_NAME_SEPARATOR}name`;
+      const result = ToolModel.unslugifyName(slugified);
+      expect(result).toBe(`tool${MCP_SERVER_TOOL_NAME_SEPARATOR}name`);
+    });
+
+    test("returns original name if no separator found", () => {
+      const result = ToolModel.unslugifyName("simple_tool_name");
+      expect(result).toBe("simple_tool_name");
+    });
+
+    test("handles empty string after separator", () => {
+      const slugified = `server${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+      const result = ToolModel.unslugifyName(slugified);
+      expect(result).toBe("");
+    });
+  });
+
   describe("Access Control", () => {
     test("admin can see all tools", async ({
       makeAdmin,

@@ -1,3 +1,13 @@
+/**
+ * @deprecated LEGACY V1 ROUTE - LLM Proxy v2 is now the default
+ *
+ * This is the legacy v1 Anthropic proxy route handler.
+ *
+ * The new unified LLM proxy handler (./llm-proxy-handler.ts) is now the default.
+ * V2 routes are located at: ./routesv2/anthropic.ts
+ *
+ * This file should be removed after full migration to v2 routes.
+ */
 import AnthropicProvider from "@anthropic-ai/sdk";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
@@ -25,9 +35,11 @@ import {
 import {
   type Agent,
   Anthropic,
+  ApiError,
   constructResponseSchema,
   UuidIdSchema,
 } from "@/types";
+import { convertToolResultsToToon } from "./adapterV2/anthropic";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";
@@ -109,6 +121,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     _organizationId: string,
     agentId?: string,
     externalAgentId?: string,
+    userId?: string,
   ) => {
     const { tools, stream } = body;
 
@@ -183,7 +196,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "[AnthropicProxy] Agent resolved",
     );
 
-    const { "x-api-key": anthropicApiKey } = headers;
+    const { "x-api-key": anthropicApiKey, "anthropic-beta": anthropicBeta } =
+      headers;
 
     const anthropicClient = config.benchmark.mockMode
       ? (new MockAnthropicClient() as unknown as AnthropicProvider)
@@ -195,6 +209,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgent,
             externalAgentId,
           ),
+          defaultHeaders: anthropicBeta
+            ? { "anthropic-beta": anthropicBeta }
+            : undefined,
         });
 
     try {
@@ -258,6 +275,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Client declares tools they want to use - no injection needed
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
+
+      // Extract enabled tool names for filtering in evaluatePolicies
+      const enabledToolNames = new Set(
+        mergedTools.map((tool) => tool.name).filter(Boolean),
+      );
 
       const baselineModel = body.model;
       let model = baselineModel;
@@ -415,10 +437,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
-          await utils.adapters.anthropic.convertToolResultsToToon(
-            filteredMessages,
-            model,
-          );
+          await convertToolResultsToToon(filteredMessages, model);
         filteredMessages = convertedMessages;
         toonTokensBefore = stats.toonTokensBefore;
         toonTokensAfter = stats.toonTokensAfter;
@@ -455,6 +474,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const stream = anthropicClient.messages.stream({
               // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
               ...(body as any),
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
             });
@@ -607,6 +627,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               })),
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
             fastify.log.info(
               { refused: !!toolInvocationRefusal },
@@ -877,6 +898,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await InteractionModel.create({
               profileId: resolvedAgentId,
               externalAgentId,
+              userId,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -920,6 +942,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await anthropicClient.messages.create({
               // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
               ...(body as any),
+              model,
               messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,
@@ -947,6 +970,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               })),
               resolvedAgentId,
               contextIsTrusted,
+              enabledToolNames,
             );
 
           if (toolInvocationRefusal) {
@@ -999,6 +1023,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await InteractionModel.create({
               profileId: resolvedAgentId,
               externalAgentId,
+              userId,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -1023,36 +1048,37 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Extract token usage and store the complete interaction
-        const tokenUsage = response.usage
+        const tokenUsageFinal = response.usage
           ? utils.adapters.anthropic.getUsageTokens(response.usage)
           : { input: null, output: null };
 
         // Calculate costs using database pricing (TokenPriceModel)
         // Always calculate costs for proper TOON compression tracking
-        const baselineCost = await utils.costOptimization.calculateCost(
+        const baselineCostFinal = await utils.costOptimization.calculateCost(
           body.model,
-          tokenUsage.input,
-          tokenUsage.output,
+          tokenUsageFinal.input,
+          tokenUsageFinal.output,
         );
 
         // Calculate actual cost (potentially optimized model)
-        const costAfterModelOptimization =
+        const costAfterModelOptimizationFinal =
           await utils.costOptimization.calculateCost(
             model,
-            tokenUsage.input,
-            tokenUsage.output,
+            tokenUsageFinal.input,
+            tokenUsageFinal.output,
           );
         reportLLMCost(
           "anthropic",
           resolvedAgent,
           model,
-          costAfterModelOptimization,
+          costAfterModelOptimizationFinal,
           externalAgentId,
         );
 
         await InteractionModel.create({
           profileId: resolvedAgentId,
           externalAgentId,
+          userId,
           type: "anthropic:messages",
           request: body,
           processedRequest: {
@@ -1061,10 +1087,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           response: response,
           model: model,
-          inputTokens: tokenUsage.input,
-          outputTokens: tokenUsage.output,
-          cost: costAfterModelOptimization?.toFixed(10) ?? null,
-          baselineCost: baselineCost?.toFixed(10) ?? null,
+          inputTokens: tokenUsageFinal.input,
+          outputTokens: tokenUsageFinal.output,
+          cost: costAfterModelOptimizationFinal?.toFixed(10) ?? null,
+          baselineCost: baselineCostFinal?.toFixed(10) ?? null,
           toonTokensBefore,
           toonTokensAfter,
           toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
@@ -1077,7 +1103,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const statusCode =
         error instanceof Error && "status" in error
-          ? (error.status as 200 | 400 | 404 | 403 | 500)
+          ? (error.status as 400 | 404 | 403 | 500)
           : 500;
 
       // Extract the actual error message from Anthropic SDK errors using lodash get
@@ -1133,13 +1159,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply;
       }
 
-      // For non-streaming, send JSON error
-      return reply.status(statusCode).send({
-        error: {
-          message: errorMessage,
-          type: "api_error",
-        },
-      });
+      // For non-streaming, throw ApiError to let the central error handler format the response correctly
+      // This ensures the error type matches the expected schema for each status code
+      throw new ApiError(statusCode, errorMessage);
     }
   };
 
@@ -1164,6 +1186,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleMessages(
         request.body,
         request.headers,
@@ -1171,6 +1194,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
         undefined,
         externalAgentId,
+        userId,
       );
     },
   );
@@ -1202,6 +1226,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = utils.externalAgentId.getExternalAgentId(
         request.headers,
       );
+      const userId = await utils.userId.getUserId(request.headers);
       return handleMessages(
         request.body,
         request.headers,
@@ -1209,6 +1234,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.organizationId,
         request.params.agentId,
         externalAgentId,
+        userId,
       );
     },
   );

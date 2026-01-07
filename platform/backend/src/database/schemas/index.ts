@@ -4,8 +4,12 @@ export { default as agentLabelsTable } from "./agent-label";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
-export { default as chatApiKeysTable } from "./chat-api-key";
+export {
+  type ChatApiKeyScope,
+  default as chatApiKeysTable,
+} from "./chat-api-key";
 export { default as conversationsTable } from "./conversation";
+export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as interactionsTable } from "./interaction";
@@ -24,8 +28,8 @@ export { default as messagesTable } from "./message";
 export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
-export { default as profileChatApiKeysTable } from "./profile-chat-api-key";
 export { default as promptsTable } from "./prompt";
+export { default as promptAgentsTable } from "./prompt-agent";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
 export { default as ssoProvidersTable } from "./sso-provider";
@@ -39,4 +43,5 @@ export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";

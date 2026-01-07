@@ -1,7 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import { modelsByProvider, providerDisplayNames } from "@shared";
+import {
+  type archestraApiTypes,
+  providerDisplayNames,
+  type SupportedProvider,
+  SupportedProviders,
+} from "@shared";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -41,17 +45,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { type ChatModel, useChatModelsQuery } from "@/lib/chat-models.query";
 import {
   useCreateTokenPrice,
   useDeleteTokenPrice,
   useTokenPrices,
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
-
-type Providers = Extract<
-  archestraApiTypes.SupportedProviders,
-  "openai" | "anthropic"
->;
 
 // Type aliases for better readability
 type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
@@ -77,13 +77,15 @@ function TokenPriceInlineForm({
   initialData,
   onSave,
   onCancel,
+  models = [],
 }: {
   initialData?: TokenPriceData;
   onSave: (data: archestraApiTypes.CreateTokenPriceData["body"]) => void;
   onCancel: () => void;
+  models?: ChatModel[];
 }) {
   const [formData, setFormData] = useState({
-    provider: (initialData?.provider as Providers) || ("openai" as const),
+    provider: initialData?.provider || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
@@ -91,11 +93,13 @@ function TokenPriceInlineForm({
 
   const modelOptions = useMemo(
     () =>
-      modelsByProvider[formData.provider].map((model: string) => ({
-        value: model,
-        label: model,
-      })),
-    [formData.provider],
+      models
+        .filter((model) => model.provider === formData.provider)
+        .map((model) => ({
+          value: model.id,
+          label: model.displayName,
+        })),
+    [formData.provider, models],
   );
 
   const isValid =
@@ -125,7 +129,7 @@ function TokenPriceInlineForm({
                 onValueChange={(value) =>
                   setFormData({
                     ...formData,
-                    provider: value as Providers,
+                    provider: value as SupportedProvider,
                     model: "", // Clear model when provider changes
                   })
                 }
@@ -134,13 +138,11 @@ function TokenPriceInlineForm({
                   <SelectValue placeholder="Select provider" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(providerDisplayNames) as Providers[]).map(
-                    (provider) => (
-                      <SelectItem key={provider} value={provider}>
-                        {providerDisplayNames[provider]}
-                      </SelectItem>
-                    ),
-                  )}
+                  {SupportedProviders.map((provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {providerDisplayNames[provider]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -222,6 +224,7 @@ function TokenPriceRow({
   onSave,
   onCancel,
   onDelete,
+  models = [],
 }: {
   tokenPrice: TokenPriceData;
   isEditing: boolean;
@@ -229,6 +232,7 @@ function TokenPriceRow({
   onSave: (data: archestraApiTypes.UpdateTokenPriceData["body"]) => void;
   onCancel: () => void;
   onDelete: () => void;
+  models?: ChatModel[];
 }) {
   if (isEditing) {
     return (
@@ -236,6 +240,7 @@ function TokenPriceRow({
         initialData={tokenPrice}
         onSave={onSave}
         onCancel={onCancel}
+        models={models}
       />
     );
   }
@@ -243,8 +248,7 @@ function TokenPriceRow({
   return (
     <tr className="border-b hover:bg-muted/30">
       <td className="p-4 capitalize">
-        {providerDisplayNames[tokenPrice.provider as Providers] ||
-          tokenPrice.provider}
+        {providerDisplayNames[tokenPrice.provider]}
       </td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">
@@ -307,6 +311,7 @@ export default function TokenPricePage() {
 
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
+  const { data: chatModels = [] } = useChatModelsQuery();
   const deleteTokenPrice = useDeleteTokenPrice();
   const createTokenPrice = useCreateTokenPrice();
   const updateTokenPrice = useUpdateTokenPrice();
@@ -385,6 +390,7 @@ export default function TokenPricePage() {
                   <TokenPriceInlineForm
                     onSave={handleCreateTokenPrice}
                     onCancel={handleCancelEdit}
+                    models={chatModels}
                   />
                 )}
                 {tokenPrices.length === 0 && !isAddingTokenPrice ? (
@@ -412,6 +418,7 @@ export default function TokenPricePage() {
                       }
                       onCancel={handleCancelEdit}
                       onDelete={() => handleDeleteTokenPrice(tokenPrice.id)}
+                      models={chatModels}
                     />
                   ))
                 )}

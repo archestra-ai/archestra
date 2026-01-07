@@ -327,6 +327,169 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("Team Assignment Validation", () => {
+    test("admin can create agent without any team", async () => {
+      const agent = await AgentModel.create({
+        name: "No Team Agent",
+        teams: [],
+      });
+
+      expect(agent.teams).toHaveLength(0);
+
+      // Verify agent is accessible (admins can see all agents)
+      const foundAgent = await AgentModel.findById(agent.id);
+      expect(foundAgent).not.toBeNull();
+    });
+
+    test("admin can create agent with any team regardless of membership", async ({
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Create a team where admin is NOT a member
+      const team = await makeTeam(org.id, admin.id, {
+        name: "Team Admin Not In",
+      });
+      // Note: makeTeam creates team but doesn't automatically add the creator as member
+
+      const agent = await AgentModel.create({
+        name: "Admin Created Agent",
+        teams: [team.id],
+      });
+
+      expect(agent.teams).toHaveLength(1);
+      expect(agent.teams[0].id).toBe(team.id);
+    });
+
+    test("non-admin user can only see agents in teams they belong to", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const userTeam = await makeTeam(org.id, admin.id, { name: "User Team" });
+      const otherTeam = await makeTeam(org.id, admin.id, {
+        name: "Other Team",
+      });
+
+      // Add user to userTeam only
+      await TeamModel.addMember(userTeam.id, user.id);
+
+      // Create agents in different teams
+      const userTeamAgent = await AgentModel.create({
+        name: "User Team Agent",
+        teams: [userTeam.id],
+      });
+      await AgentModel.create({
+        name: "Other Team Agent",
+        teams: [otherTeam.id],
+      });
+      await AgentModel.create({
+        name: "No Team Agent",
+        teams: [],
+      });
+
+      // Non-admin user should only see agent in their team
+      const agents = await AgentModel.findAll(user.id, false);
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(userTeamAgent.id);
+    });
+
+    test("non-admin user cannot see agents with no team", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const userTeam = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(userTeam.id, user.id);
+
+      // Create agent with no teams
+      await AgentModel.create({
+        name: "No Team Agent",
+        teams: [],
+      });
+
+      // Non-admin user should not see agent with no teams
+      const agents = await AgentModel.findAll(user.id, false);
+      // Only agents in user's team should be visible
+      expect(agents.every((a) => a.teams.length > 0)).toBe(true);
+    });
+
+    test("user with no team membership sees empty list", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const userWithNoTeam = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+
+      // Create agents with and without teams
+      await AgentModel.create({
+        name: "Agent in Team",
+        teams: [team.id],
+      });
+      await AgentModel.create({
+        name: "Agent without Team",
+        teams: [],
+      });
+
+      // User with no team membership should see nothing
+      const agents = await AgentModel.findAll(userWithNoTeam.id, false);
+      expect(agents).toHaveLength(0);
+    });
+
+    test("getUserTeamIds returns correct teams for validation", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
+      const team3 = await makeTeam(org.id, admin.id, { name: "Team 3" });
+
+      // Add user to team1 and team2 only
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      // User should be in exactly 2 teams
+      expect(userTeamIds).toHaveLength(2);
+      expect(userTeamIds).toContain(team1.id);
+      expect(userTeamIds).toContain(team2.id);
+      expect(userTeamIds).not.toContain(team3.id);
+
+      // Creating an agent with team1 should work (user is member)
+      const agent = await AgentModel.create({
+        name: "Valid Agent",
+        teams: [team1.id],
+      });
+      expect(agent.teams).toHaveLength(1);
+      expect(agent.teams[0].id).toBe(team1.id);
+    });
+  });
+
   describe("Label Ordering", () => {
     test("labels are returned in alphabetical order by key", async () => {
       // Create an agent with labels in non-alphabetical order
@@ -979,6 +1142,220 @@ describe("AgentModel", () => {
 
       // Should show 0 tools since all were Archestra tools
       expect(testAgent?.tools).toHaveLength(0);
+    });
+  });
+
+  describe("findById Junction Table", () => {
+    test("findById returns tools from junction table", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      // Add tools via the junction table (agent_tools)
+      const tool1 = await makeTool({
+        name: "junction_tool_1",
+        description: "Tool 1",
+        parameters: {},
+      });
+      const tool2 = await makeTool({
+        name: "junction_tool_2",
+        description: "Tool 2",
+        parameters: {},
+      });
+      const tool3 = await makeTool({
+        name: "junction_tool_3",
+        description: "Tool 3",
+        parameters: {},
+      });
+
+      await makeAgentTool(agent.id, tool1.id);
+      await makeAgentTool(agent.id, tool2.id);
+      await makeAgentTool(agent.id, tool3.id);
+
+      // Retrieve the agent by ID
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent?.tools).toHaveLength(3);
+
+      const toolNames = foundAgent?.tools.map((t) => t.name).sort();
+      expect(toolNames).toEqual([
+        "junction_tool_1",
+        "junction_tool_2",
+        "junction_tool_3",
+      ]);
+    });
+
+    test("findById excludes Archestra MCP tools", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      // Add regular tools
+      const regularTool1 = await makeTool({
+        name: "findbyid_regular_tool_1",
+        description: "Regular tool 1",
+        parameters: {},
+      });
+      const regularTool2 = await makeTool({
+        name: "findbyid_regular_tool_2",
+        description: "Regular tool 2",
+        parameters: {},
+      });
+
+      // Add Archestra tools (should be excluded)
+      const archestraTool1 = await makeTool({
+        name: "archestra__findbyid_tool_1",
+        description: "Archestra tool 1",
+        parameters: {},
+      });
+      const archestraTool2 = await makeTool({
+        name: "archestra__findbyid_tool_2",
+        description: "Archestra tool 2",
+        parameters: {},
+      });
+
+      await makeAgentTool(agent.id, regularTool1.id);
+      await makeAgentTool(agent.id, regularTool2.id);
+      await makeAgentTool(agent.id, archestraTool1.id);
+      await makeAgentTool(agent.id, archestraTool2.id);
+
+      // Retrieve the agent by ID
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      // Should only include 2 regular tools, not the Archestra tools
+      expect(foundAgent?.tools).toHaveLength(2);
+
+      // Verify all returned tools are regular tools
+      for (const tool of foundAgent?.tools ?? []) {
+        expect(tool.name).not.toMatch(/^archestra__/);
+      }
+
+      const toolNames = foundAgent?.tools.map((t) => t.name).sort();
+      expect(toolNames).toEqual([
+        "findbyid_regular_tool_1",
+        "findbyid_regular_tool_2",
+      ]);
+    });
+
+    test("findById returns empty tools array when agent has no tools", async () => {
+      // Create an agent with no tools
+      const agent = await AgentModel.create({
+        name: "No Tools Agent",
+        teams: [],
+      });
+
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent?.tools).toHaveLength(0);
+    });
+
+    test("findById returns empty tools array when agent has only Archestra tools", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Archestra Only Agent",
+        teams: [],
+      });
+
+      // Add only Archestra tools
+      const archestraTool = await makeTool({
+        name: "archestra__some_tool",
+        description: "Archestra tool",
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, archestraTool.id);
+
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent?.tools).toHaveLength(0);
+    });
+  });
+
+  describe("getAgentOrCreateDefault Junction Table", () => {
+    test("getAgentOrCreateDefault returns tools from junction table", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Get the default agent
+      const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+      // Add tools to the default agent via junction table
+      const tool1 = await makeTool({
+        name: "default_agent_tool_1",
+        description: "Tool 1",
+        parameters: {},
+      });
+      const tool2 = await makeTool({
+        name: "default_agent_tool_2",
+        description: "Tool 2",
+        parameters: {},
+      });
+
+      await makeAgentTool(defaultAgent.id, tool1.id);
+      await makeAgentTool(defaultAgent.id, tool2.id);
+
+      // Get the default agent again - should include the tools
+      const foundAgent = await AgentModel.getAgentOrCreateDefault();
+
+      expect(foundAgent).not.toBeNull();
+      expect(foundAgent.tools.length).toBeGreaterThanOrEqual(2);
+
+      const toolNames = foundAgent.tools.map((t) => t.name);
+      expect(toolNames).toContain("default_agent_tool_1");
+      expect(toolNames).toContain("default_agent_tool_2");
+    });
+
+    test("getAgentOrCreateDefault excludes Archestra MCP tools", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Get the default agent
+      const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+      // Add regular tools
+      const regularTool = await makeTool({
+        name: "default_regular_tool",
+        description: "Regular tool",
+        parameters: {},
+      });
+
+      // Add Archestra tools (should be excluded)
+      const archestraTool = await makeTool({
+        name: "archestra__default_tool",
+        description: "Archestra tool",
+        parameters: {},
+      });
+
+      await makeAgentTool(defaultAgent.id, regularTool.id);
+      await makeAgentTool(defaultAgent.id, archestraTool.id);
+
+      // Get the default agent again
+      const foundAgent = await AgentModel.getAgentOrCreateDefault();
+
+      // Verify Archestra tools are excluded
+      for (const tool of foundAgent.tools) {
+        expect(tool.name).not.toMatch(/^archestra__/);
+      }
+
+      // Verify regular tool is included
+      const toolNames = foundAgent.tools.map((t) => t.name);
+      expect(toolNames).toContain("default_regular_tool");
     });
   });
 });

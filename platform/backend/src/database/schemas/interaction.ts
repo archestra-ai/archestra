@@ -1,19 +1,18 @@
+import type { SupportedProviderDiscriminator } from "@shared";
 import {
   index,
   integer,
   jsonb,
   numeric,
   pgTable,
+  text,
   timestamp,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type {
-  InteractionRequest,
-  InteractionResponse,
-  SupportedProviderDiscriminator,
-} from "@/types";
+import type { InteractionRequest, InteractionResponse } from "@/types";
 import agentsTable from "./agent";
+import usersTable from "./user";
 
 const interactionsTable = pgTable(
   "interactions",
@@ -27,6 +26,14 @@ const interactionsTable = pgTable(
      * This allows clients to associate interactions with their own agent identifiers.
      */
     externalAgentId: varchar("external_agent_id"),
+    /**
+     * Optional user ID passed via X-Archestra-User-Id header.
+     * This allows clients to associate interactions with a specific Archestra user.
+     * Particularly useful for identifying which user was using the Archestra Chat.
+     */
+    userId: text("user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
@@ -46,6 +53,7 @@ const interactionsTable = pgTable(
     externalAgentIdIdx: index("interactions_external_agent_id_idx").on(
       table.externalAgentId,
     ),
+    userIdIdx: index("interactions_user_id_idx").on(table.userId),
   }),
 );
 

@@ -15,6 +15,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { userHasPermission } from "@/auth/utils";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
@@ -24,18 +25,26 @@ import {
   AgentTeamModel,
   isArchestraPrefixedToken,
   McpToolCallModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
+  UserTokenModel,
 } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
  * Token authentication result
  */
-interface TokenAuthResult {
+export interface TokenAuthResult {
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
+  /** Organization ID the token belongs to */
+  organizationId: string;
+  /** True if this is a personal user token */
+  isUserToken?: boolean;
+  /** User ID for user tokens */
+  userId?: string;
 }
 
 /**
@@ -305,16 +314,24 @@ export function createTransport(
   return transport;
 }
 
-export function extractProfileIdAndTokenFromRequest(
-  request: FastifyRequest,
-): { profileId: string; token: string } | null {
+/**
+ * Extract bearer token from Authorization header
+ * Returns the token string if valid, null otherwise
+ */
+export function extractBearerToken(request: FastifyRequest): string | null {
   const authHeader = request.headers.authorization as string | undefined;
   if (!authHeader) {
     return null;
   }
 
-  const tokenFromHeaderMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-  const token = tokenFromHeaderMatch?.[1];
+  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  return tokenMatch?.[1] ?? null;
+}
+
+export function extractProfileIdAndTokenFromRequest(
+  request: FastifyRequest,
+): { profileId: string; token: string } | null {
+  const token = extractBearerToken(request);
   if (!token) {
     return null;
   }
@@ -357,17 +374,35 @@ export async function validateTeamToken(
   // Validate the token itself
   const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
+    logger.debug(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateTeamToken: token not found in team_token table",
+    );
     return null;
   }
+
+  logger.debug(
+    {
+      profileId,
+      tokenId: token.id,
+      isOrganizationToken: token.isOrganizationToken,
+      tokenTeamId: token.teamId,
+    },
+    "validateTeamToken: token found",
+  );
 
   // Check if profile is accessible via this token
   if (!token.isOrganizationToken) {
     // Team token: profile must be assigned to this team
     const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
     const hasAccess = token.teamId && profileTeamIds.includes(token.teamId);
+    logger.debug(
+      { profileId, tokenTeamId: token.teamId, profileTeamIds, hasAccess },
+      "validateTeamToken: checking team access",
+    );
     if (!hasAccess) {
       logger.warn(
-        { profileId, tokenTeamId: token.teamId },
+        { profileId, tokenTeamId: token.teamId, profileTeamIds },
         "Profile not accessible via team token",
       );
       return null;
@@ -380,7 +415,125 @@ export async function validateTeamToken(
     tokenId: token.id,
     teamId: token.teamId,
     isOrganizationToken: token.isOrganizationToken,
+    organizationId: token.organizationId,
   };
+}
+
+/**
+ * Validate a user token for a specific profile
+ * Returns token auth info if valid, null otherwise
+ *
+ * Validates that:
+ * 1. The token is valid (exists and matches)
+ * 2. The profile is accessible via this token:
+ *    - User has profile:admin permission (can access all profiles), OR
+ *    - User is a member of at least one team that the profile is assigned to
+ */
+export async function validateUserToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  // Validate the token itself
+  const token = await UserTokenModel.validateToken(tokenValue);
+  if (!token) {
+    logger.debug(
+      { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+      "validateUserToken: token not found in user_token table",
+    );
+    return null;
+  }
+
+  // Check if user has profile admin permission (can access all profiles)
+  const isProfileAdmin = await userHasPermission(
+    token.userId,
+    token.organizationId,
+    "profile",
+    "admin",
+  );
+
+  if (isProfileAdmin) {
+    return {
+      tokenId: token.id,
+      teamId: null, // User tokens aren't scoped to a single team
+      isOrganizationToken: false,
+      organizationId: token.organizationId,
+      isUserToken: true,
+      userId: token.userId,
+    };
+  }
+
+  // Non-admin: user can access profile if they are a member of any team assigned to the profile
+  const userTeamIds = await TeamModel.getUserTeamIds(token.userId);
+  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+  const hasAccess = userTeamIds.some((teamId) =>
+    profileTeamIds.includes(teamId),
+  );
+
+  logger.debug(
+    { profileId, userId: token.userId, userTeamIds, profileTeamIds, hasAccess },
+    "validateUserToken: checking team access",
+  );
+
+  if (!hasAccess) {
+    logger.warn(
+      { profileId, userId: token.userId, userTeamIds, profileTeamIds },
+      "Profile not accessible via user token (no shared teams)",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: token.id,
+    teamId: null, // User tokens aren't scoped to a single team
+    isOrganizationToken: false,
+    organizationId: token.organizationId,
+    isUserToken: true,
+    userId: token.userId,
+  };
+}
+
+/**
+ * Validate any archestra_ prefixed token for a specific profile
+ * Tries team/org tokens first, then user tokens
+ * Returns token auth info if valid, null otherwise
+ */
+export async function validateMCPGatewayToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  logger.debug(
+    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    "validateMCPGatewayToken: starting validation",
+  );
+
+  // First try team/org token validation
+  const teamTokenResult = await validateTeamToken(profileId, tokenValue);
+  if (teamTokenResult) {
+    logger.debug(
+      {
+        profileId,
+        tokenType: teamTokenResult.isOrganizationToken ? "org" : "team",
+      },
+      "validateMCPGatewayToken: validated as team/org token",
+    );
+    return teamTokenResult;
+  }
+
+  // Then try user token validation
+  const userTokenResult = await validateUserToken(profileId, tokenValue);
+  if (userTokenResult) {
+    logger.debug(
+      { profileId, userId: userTokenResult.userId },
+      "validateMCPGatewayToken: validated as user token",
+    );
+    return userTokenResult;
+  }
+
+  logger.warn(
+    { profileId, tokenPrefix: tokenValue.substring(0, 14) },
+    "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
+  );
+  return null;
 }
 
 /**

@@ -11,14 +11,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
+  useCallPolicyMutation,
   useOperators,
   useToolInvocationPolicies,
   useToolInvocationPolicyCreateMutation,
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
+import { getAllowUsageFromPolicies } from "@/lib/policy.utils";
 import { PolicyCard } from "./policy-card";
 
 export function ToolCallPolicies({
@@ -28,20 +29,29 @@ export function ToolCallPolicies({
 }) {
   const {
     data: { byProfileToolId },
+    data: invocationPolicies,
   } = useToolInvocationPolicies();
-  const agentToolPatchMutation = useProfileToolPatchMutation();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
     useToolInvocationPolicyDeleteMutation();
   const toolInvocationPolicyUpdateMutation =
     useToolInvocationPolicyUpdateMutation();
+  const callPolicyMutation = useCallPolicyMutation();
   const { data: operators } = useOperators();
 
-  const policies = byProfileToolId[agentTool.id] || [];
+  const allPolicies = byProfileToolId[agentTool.tool.id] || [];
+  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
+  const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
 
   const argumentNames = Object.keys(
     agentTool.tool.parameters?.properties || [],
+  );
+
+  // Derive allow usage from policies (default policy with empty conditions)
+  const allowUsageWhenUntrustedDataIsPresent = getAllowUsageFromPolicies(
+    agentTool.tool.id,
+    invocationPolicies,
   );
 
   return (
@@ -62,14 +72,14 @@ export function ToolCallPolicies({
           </span>
         </div>
         <Switch
-          checked={agentTool.allowUsageWhenUntrustedDataIsPresent}
-          onCheckedChange={() =>
-            agentToolPatchMutation.mutate({
-              id: agentTool.id,
-              allowUsageWhenUntrustedDataIsPresent:
-                !agentTool.allowUsageWhenUntrustedDataIsPresent,
-            })
-          }
+          checked={allowUsageWhenUntrustedDataIsPresent}
+          onCheckedChange={(checked) => {
+            if (checked === allowUsageWhenUntrustedDataIsPresent) return;
+            callPolicyMutation.mutate({
+              toolId: agentTool.tool.id,
+              allowUsage: checked,
+            });
+          }}
         />
       </div>
       {policies.map((policy) => (
@@ -100,9 +110,7 @@ export function ToolCallPolicies({
                 </Select>
                 <Select
                   defaultValue={policy.operator}
-                  onValueChange={(
-                    value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["operator"],
-                  ) =>
+                  onValueChange={(value: string) =>
                     toolInvocationPolicyUpdateMutation.mutate({
                       ...policy,
                       operator: value,
@@ -193,12 +201,11 @@ export function ToolCallPolicies({
         className="w-full"
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({
-            agentToolId: agentTool.id,
+            toolId: agentTool.tool.id,
+            argumentName: argumentNames[0],
           })
         }
-        disabled={
-          Object.keys(agentTool.tool.parameters?.properties || {}).length === 0
-        }
+        disabled={argumentNames.length === 0}
         disabledText="This tool has no parameters"
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters

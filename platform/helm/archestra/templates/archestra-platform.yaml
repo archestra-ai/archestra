@@ -1,7 +1,15 @@
+{{/*
+Validation: Ensure postgresql.enabled=false when using external database
+*/}}
+{{- if and .Values.postgresql.external_database_url .Values.postgresql.enabled }}
+{{- fail "Configuration error: When postgresql.external_database_url is set, you must also set postgresql.enabled=false to prevent deploying an unused PostgreSQL instance." }}
+{{- end }}
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "archestra-platform.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
   {{- with .Values.archestra.service.annotations }}
@@ -39,6 +47,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "archestra-platform.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
 spec:
@@ -134,6 +143,10 @@ spec:
               mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
               readOnly: true
           {{- end }}
+      {{- with .Values.archestra.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
       volumes:
         - name: kubeconfig

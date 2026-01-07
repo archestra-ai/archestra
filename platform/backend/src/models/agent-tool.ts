@@ -15,6 +15,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import logger from "@/logging";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -33,8 +34,6 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -49,6 +48,48 @@ class AgentToolModel {
         ...options,
       })
       .returning();
+
+    // Auto-configure policies if enabled (run in background)
+    // Import at top of method to avoid circular dependency
+    const { agentToolAutoPolicyService } = await import(
+      "./agent-tool-auto-policy"
+    );
+    const { default: OrganizationModel } = await import("./organization");
+
+    // Get agent's organization via team relationship and trigger auto-configure in background
+    db.select({ organizationId: schema.teamsTable.organizationId })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId))
+      .limit(1)
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+
+        const organizationId = rows[0].organizationId;
+        const organization = await OrganizationModel.getById(organizationId);
+
+        if (organization?.autoConfigureNewTools) {
+          // Use the unified method with timeout and loading state management
+          await agentToolAutoPolicyService.configurePoliciesForAgentToolWithTimeout(
+            agentTool.id,
+            organizationId,
+          );
+        }
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            agentToolId: agentTool.id,
+            agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to trigger auto-configure for new agent-tool",
+        );
+      });
+
     return agentTool;
   }
 
@@ -112,8 +153,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
-          | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
@@ -178,8 +217,6 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -192,8 +229,6 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
-      allowUsageWhenUntrustedDataIsPresent?: boolean;
-      toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
       responseModifierTemplate?: string | null;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
@@ -268,8 +303,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
-          | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
@@ -335,12 +368,13 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
         | "useDynamicTeamCredential"
+        | "policiesAutoConfiguredAt"
+        | "policiesAutoConfiguringStartedAt"
+        | "policiesAutoConfiguredReasoning"
       >
     >,
   ) {
@@ -353,26 +387,6 @@ class AgentToolModel {
       .where(eq(schema.agentToolsTable.id, id))
       .returning();
     return agentTool;
-  }
-
-  static async bulkUpdateSameValue(
-    ids: string[],
-    field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-    value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
-  ): Promise<number> {
-    if (ids.length === 0) {
-      return 0;
-    }
-
-    const result = await db
-      .update(schema.agentToolsTable)
-      .set({
-        [field]: value,
-        updatedAt: new Date(),
-      })
-      .where(inArray(schema.agentToolsTable.id, ids));
-
-    return result.rowCount ?? 0;
   }
 
   static async findAll(
@@ -542,11 +556,6 @@ class AgentToolModel {
           sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
         );
         break;
-      case "allowUsageWhenUntrustedDataIsPresent":
-        orderByClause = direction(
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        );
-        break;
       default:
         orderByClause = direction(schema.agentToolsTable.createdAt);
         break;
@@ -610,34 +619,6 @@ class AgentToolModel {
     ]);
 
     return createPaginatedResult(data, Number(total), pagination);
-  }
-
-  static async getSecurityConfig(
-    agentId: string,
-    toolName: string,
-  ): Promise<{
-    allowUsageWhenUntrustedDataIsPresent: boolean;
-    toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-  } | null> {
-    const [agentTool] = await db
-      .select({
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agentId),
-          eq(schema.toolsTable.name, toolName),
-        ),
-      );
-
-    return agentTool || null;
   }
 
   /**

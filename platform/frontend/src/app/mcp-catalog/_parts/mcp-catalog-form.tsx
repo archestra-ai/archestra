@@ -3,10 +3,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Info } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
-import { ExternalSecretSelector } from "@/components/external-secret-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,6 +35,13 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+import { ServiceAccountField } from "./service-account-field";
+
+const ExternalSecretSelector = lazy(
+  () =>
+    // biome-ignore lint/style/noRestrictedImports: lazy loading
+    import("@/components/external-secret-selector.ee"),
+);
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -281,6 +287,19 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
+
+              {initialValues?.localConfig?.serviceAccount !== undefined && (
+                <FormField
+                  control={form.control}
+                  name="localConfig.serviceAccount"
+                  render={({ field }) => (
+                    <ServiceAccountField
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              )}
 
               <EnvironmentVariablesFormField
                 control={form.control}

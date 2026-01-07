@@ -652,6 +652,66 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("getUserTeamIds", () => {
+    test("should return empty array when user is not in any team", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+
+      expect(teamIds).toEqual([]);
+    });
+
+    test("should return all team IDs the user belongs to", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const _team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+
+      // Add user to team1 and team2, but not team3
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+
+      expect(teamIds).toHaveLength(2);
+      expect(teamIds.sort()).toEqual([team1.id, team2.id].sort());
+    });
+
+    test("should return team IDs from multiple organizations", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeUser();
+      const org1 = await makeOrganization({ name: "Org 1" });
+      const org2 = await makeOrganization({ name: "Org 2" });
+      const team1 = await makeTeam(org1.id, admin.id, {
+        name: "Team in Org 1",
+      });
+      const team2 = await makeTeam(org2.id, admin.id, {
+        name: "Team in Org 2",
+      });
+
+      // Add user to both teams
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+
+      expect(teamIds).toHaveLength(2);
+      expect(teamIds).toContain(team1.id);
+      expect(teamIds).toContain(team2.id);
+    });
+  });
+
   describe("syncUserTeams", () => {
     test("should add user to teams based on their SSO groups", async ({
       makeUser,

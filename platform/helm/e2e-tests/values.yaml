@@ -79,3 +79,45 @@ keycloak:
   # Set import: true to auto-import the realm on startup
   realm:
     import: true
+
+# HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
+vault:
+  enabled: true
+  image:
+    repository: hashicorp/vault
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  # Dev mode root token (auto-unsealed, in-memory storage)
+  devRootToken: "dev-root-token"
+  # Service configuration
+  service:
+    type: NodePort
+    port: 8200
+    nodePort: 30200
+  # Resource limits for CI environment
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # Readiness probe
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+  # Kubernetes auth configuration (auto-configures K8s auth on startup)
+  k8sAuth:
+    enabled: false
+    # KV secrets engine version: 1 or 2
+    # v1: paths like kv/archestra/*
+    # v2: paths like secret/data/archestra/*
+    kvVersion: 2
+    # Service account for the vault pod itself
+    serviceAccountName: default
+    # Service account that will authenticate to Vault (e.g., archestra-platform)
+    boundServiceAccountName: archestra-platform
+    boundServiceAccountNamespace: archestra-dev
+    ttl: "24h"

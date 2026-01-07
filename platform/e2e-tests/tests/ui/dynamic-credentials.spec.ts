@@ -4,6 +4,7 @@ import { goToPage, test } from "../../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
   assignEngineeringTeamToDefaultProfileViaApi,
+  clickButton,
   goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect,
   openManageCredentialsDialog,
   verifyToolCallResultViaApi,
@@ -17,7 +18,7 @@ test("Verify tool calling using dynamic credentials", async ({
   makeRandomString,
   extractCookieHeaders,
 }) => {
-  test.setTimeout(45_000); // 45 seconds
+  test.setTimeout(90_000); // 90 seconds
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
   await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
@@ -48,39 +49,53 @@ test("Verify tool calling using dynamic credentials", async ({
     // Go to MCP Registry page
     await goToPage(page, "/mcp-catalog/registry");
     await page.waitForLoadState("networkidle");
-    // Click connect button for the catalog item
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    // Click connect button for the catalog item - wait for it to be visible
+    const btn = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await btn.waitFor({ state: "visible" });
+    await btn.click();
     // Fill ARCHESTRA_TEST environment variable to mark personal credential
     await page
       .getByRole("textbox", { name: "ARCHESTRA_TEST" })
       .fill(`${user}-personal-credential`);
     // Install using personal credential
-    await page.getByRole("button", { name: "Install" }).click();
-    // Then click connect again
-    await page
-      .getByTestId(`${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`)
-      .click();
+    await clickButton({ page, options: { name: "Install" } });
+    // Wait for dialog to close and button to be visible again
+    const connectButton = page.getByTestId(
+      `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
+    );
+    await connectButton.waitFor({ state: "visible" });
+    await connectButton.click();
     // Fill ARCHESTRA_TEST environment variable to mark team credential
     await page
       .getByRole("textbox", { name: "ARCHESTRA_TEST" })
       .fill(`${team}-team-credential`);
     // And this time team credential type should be selected by default for everyone, install using team credential
-    await page.getByRole("button", { name: "Install" }).click();
-    // Wait a bit till pod is up and running
-    await page.waitForTimeout(3_000);
+    await clickButton({ page, options: { name: "Install" } });
+    // Wait for installation to complete and pod to be ready
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1_000); // Additional wait for pod to be ready
   };
 
   // Each user adds personal and 1 team credential
-  await Promise.all(MATRIX_A.map((config) => install(config)));
+  for (const config of MATRIX_A) {
+    await install(config);
+  }
 
   // Assign tool to profiles using dynamic credential
   await goToMcpRegistryAndOpenManageToolsAndOpenTokenSelect({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
   });
-  await adminPage.getByRole("option", { name: "Resolve at call time" }).click();
+  // Wait for dropdown option to be visible and stable before clicking
+  const resolveAtCallTimeOption = adminPage.getByRole("option", {
+    name: "Resolve at call time",
+  });
+  await resolveAtCallTimeOption.waitFor({ state: "visible" });
+  // Additional wait to ensure option is stable (not animating)
+  await adminPage.waitForTimeout(200);
+  await resolveAtCallTimeOption.click();
   await adminPage.getByText("Assign to 1 profile").click();
   await adminPage.waitForLoadState("networkidle");
 

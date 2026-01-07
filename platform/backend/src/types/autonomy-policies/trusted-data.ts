@@ -9,17 +9,23 @@ export const TrustedDataPolicyActionSchema = z.enum([
   "sanitize_with_dual_llm",
 ]);
 
+export const ResultPolicyConditionSchema = z.object({
+  key: z.string(),
+  operator: SupportedOperatorSchema,
+  value: z.string(),
+});
+
 export const SelectTrustedDataPolicySchema = createSelectSchema(
   schema.trustedDataPoliciesTable,
   {
-    operator: SupportedOperatorSchema,
+    conditions: z.array(ResultPolicyConditionSchema),
     action: TrustedDataPolicyActionSchema,
   },
 );
 export const InsertTrustedDataPolicySchema = createInsertSchema(
   schema.trustedDataPoliciesTable,
   {
-    operator: SupportedOperatorSchema,
+    conditions: z.array(ResultPolicyConditionSchema),
     action: TrustedDataPolicyActionSchema,
   },
 ).omit({
@@ -36,3 +42,5 @@ export type InsertTrustedDataPolicy = z.infer<
 export type TrustedDataPolicyAction = z.infer<
   typeof TrustedDataPolicyActionSchema
 >;
+
+export type ResultPolicyCondition = z.infer<typeof ResultPolicyConditionSchema>;

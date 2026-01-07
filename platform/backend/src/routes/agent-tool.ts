@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
@@ -12,14 +13,13 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentToolAutoPolicyService } from "@/models/agent-tool-auto-policy";
 import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
   ApiError,
-  BulkUpdateAgentToolsRequestSchema,
-  BulkUpdateAgentToolsResponseSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
@@ -273,26 +273,79 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/agent-tools/bulk-update",
+    "/api/agent-tools/auto-configure-policies",
     {
       schema: {
-        operationId: RouteId.BulkUpdateAgentTools,
-        description: "Update multiple agent tools with the same value in bulk",
+        operationId: RouteId.AutoConfigureAgentToolPolicies,
+        description:
+          "Automatically configure security policies for agent-tool assignments using Anthropic LLM analysis",
         tags: ["Agent Tools"],
-        body: BulkUpdateAgentToolsRequestSchema,
-        response: constructResponseSchema(BulkUpdateAgentToolsResponseSchema),
+        body: z.object({
+          agentToolIds: z.array(z.string().uuid()).min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            results: z.array(
+              z.object({
+                agentToolId: z.string().uuid(),
+                success: z.boolean(),
+                config: z
+                  .object({
+                    toolResultTreatment: z.enum([
+                      "trusted",
+                      "sanitize_with_dual_llm",
+                      "untrusted",
+                    ]),
+                    reasoning: z.string(),
+                  })
+                  .optional(),
+                error: z.string().optional(),
+              }),
+            ),
+          }),
+        ),
       },
     },
-    async (request, reply) => {
-      const { ids, field, value } = request.body;
+    async ({ body, organizationId, user }, reply) => {
+      const { agentToolIds } = body;
 
-      const updatedCount = await AgentToolModel.bulkUpdateSameValue(
-        ids,
-        field,
-        value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+      logger.info(
+        { organizationId, userId: user.id, count: agentToolIds.length },
+        "POST /api/agent-tools/auto-configure-policies: request received",
       );
 
-      return reply.send({ updatedCount });
+      // Check if service is available for this organization
+      const available =
+        await agentToolAutoPolicyService.isAvailable(organizationId);
+      if (!available) {
+        logger.warn(
+          { organizationId, userId: user.id },
+          "POST /api/agent-tools/auto-configure-policies: service not available",
+        );
+        throw new ApiError(
+          503,
+          "Auto-policy requires a default Anthropic chat API key to be configured",
+        );
+      }
+
+      const result =
+        await agentToolAutoPolicyService.configurePoliciesForAgentTools(
+          agentToolIds,
+          organizationId,
+        );
+
+      logger.info(
+        {
+          organizationId,
+          userId: user.id,
+          success: result.success,
+          resultsCount: result.results.length,
+        },
+        "POST /api/agent-tools/auto-configure-policies: completed",
+      );
+
+      return reply.send(result);
     },
   );
 
@@ -362,12 +415,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          allowUsageWhenUntrustedDataIsPresent: true,
-          toolResultTreatment: true,
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
           useDynamicTeamCredential: true,
+          policiesAutoConfiguredAt: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },

@@ -3,9 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   assignToolToAgent,
+  autoConfigureAgentToolPolicies,
   bulkAssignTools,
   getAllAgentTools,
-  bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
 } = archestraApiSdk;
@@ -251,21 +251,30 @@ export function useProfileToolPatchMutation() {
   });
 }
 
-export function useBulkUpdateProfileTools() {
+export function useAutoConfigurePolicies() {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: async (
-      bulkUpdate: archestraApiTypes.BulkUpdateAgentToolsData["body"],
-    ) => {
-      const result = await bulkUpdateAgentTools({ body: bulkUpdate });
+    mutationFn: async (agentToolIds: string[]) => {
+      const result = await autoConfigureAgentToolPolicies({
+        body: { agentToolIds },
+      });
+
+      if (!result.data) {
+        const errorMessage =
+          result.error && "message" in result.error
+            ? String(result.error.message)
+            : "Failed to auto-configure policies";
+        throw new Error(errorMessage);
+      }
+
       return result.data;
     },
     onSuccess: () => {
-      // Invalidate all agent-tools queries to refetch updated data
+      // Invalidate agent-tools queries to refetch with new policies
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
       });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

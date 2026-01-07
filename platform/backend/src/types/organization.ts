@@ -33,6 +33,7 @@ export const UpdateOrganizationSchema = z.object({
   onboardingComplete: z.boolean(),
   convertToolResultsToToon: z.boolean(),
   compressionScope: OrganizationCompressionScopeSchema,
+  autoConfigureNewTools: z.boolean(),
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<

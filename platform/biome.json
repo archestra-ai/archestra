@@ -12,6 +12,7 @@
       "**/*.ts",
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
+      "standalone-scripts/**/*.ts",
       "!node_modules",
       "!.next",
       "!**/dist",
@@ -53,7 +54,15 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.ts", "**/*.tsx", "!**/*.ee.ts", "!**/*.ee.tsx", "!**/*.ee.test.ts", "!**/*.ee.test.tsx", "!**/*.ee.spec.ts"],
+      "includes": [
+        "**/*.ts",
+        "**/*.tsx",
+        "!**/*.ee.ts",
+        "!**/*.ee.tsx",
+        "!**/*.ee.test.ts",
+        "!**/*.ee.test.tsx",
+        "!**/*.ee.spec.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -68,6 +77,16 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["standalone-scripts/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           }
         }
       }

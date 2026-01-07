@@ -166,6 +166,10 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["update"],
     tool: ["update"],
   },
+  [RouteId.AutoConfigureAgentToolPolicies]: {
+    profile: ["update"],
+    tool: ["update"],
+  },
   [RouteId.UnassignToolFromAgent]: {
     profile: ["update"],
   },
@@ -200,6 +204,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUniqueExternalAgentIds]: {
     interaction: ["read"],
   },
+  [RouteId.GetUniqueUserIds]: {
+    interaction: ["read"],
+  },
   [RouteId.GetOperators]: {
     policy: ["read"],
   },
@@ -218,6 +225,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteToolInvocationPolicy]: {
     policy: ["delete"],
   },
+  [RouteId.BulkUpsertDefaultCallPolicy]: {
+    policy: ["update"],
+  },
   [RouteId.GetTrustedDataPolicies]: {
     policy: ["read"],
   },
@@ -232,6 +242,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteTrustedDataPolicy]: {
     policy: ["delete"],
+  },
+  [RouteId.BulkUpsertDefaultResultPolicy]: {
+    policy: ["update"],
+  },
+  [RouteId.GetPolicyConfigSubagentPrompt]: {
+    organization: ["read"],
   },
   [RouteId.GetDefaultDualLlmConfig]: {
     dualLlmConfig: ["read"],
@@ -292,6 +308,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
+  },
+  [RouteId.RestartMcpServer]: {
+    mcpServer: ["update"],
+  },
+  [RouteId.RestartAllMcpServerInstallations]: {
+    mcpServer: ["admin"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServer: ["read"],
@@ -428,7 +450,25 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
   },
+  [RouteId.GetChatModels]: {
+    conversation: ["read"],
+  },
+  [RouteId.UpdateChatMessage]: {
+    conversation: ["update"],
+  },
+  [RouteId.GetConversationEnabledTools]: {
+    conversation: ["read"],
+  },
+  [RouteId.UpdateConversationEnabledTools]: {
+    conversation: ["update"],
+  },
+  [RouteId.DeleteConversationEnabledTools]: {
+    conversation: ["update"],
+  },
   [RouteId.GetChatApiKeys]: {
+    chatSettings: ["read"],
+  },
+  [RouteId.GetAvailableChatApiKeys]: {
     chatSettings: ["read"],
   },
   [RouteId.CreateChatApiKey]: {
@@ -443,15 +483,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatApiKey]: {
     chatSettings: ["delete"],
   },
-  [RouteId.SetChatApiKeyDefault]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.UnsetChatApiKeyDefault]: {
-    chatSettings: ["update"],
-  },
-  [RouteId.UpdateChatApiKeyProfiles]: {
-    chatSettings: ["update"],
-  },
   [RouteId.GetPrompts]: {
     prompt: ["read"],
   },
@@ -464,6 +495,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPromptVersions]: {
     prompt: ["read"],
   },
+  [RouteId.GetPromptTools]: {
+    prompt: ["read"],
+  },
   [RouteId.RollbackPrompt]: {
     prompt: ["update"],
   },
@@ -472,6 +506,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeletePrompt]: {
     prompt: ["delete"],
+  },
+  [RouteId.GetAllPromptAgentConnections]: {
+    prompt: ["read"],
+  },
+  [RouteId.GetPromptAgents]: {
+    prompt: ["read"],
+  },
+  [RouteId.SyncPromptAgents]: {
+    prompt: ["update"],
+  },
+  [RouteId.DeletePromptAgent]: {
+    prompt: ["update"],
   },
   [RouteId.GetAgentPrompts]: {
     profile: ["read"],
@@ -535,6 +581,11 @@ export const requiredEndpointPermissionsMap: Partial<
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+
+  // User token routes - available to all authenticated users (manages their own personal token)
+  [RouteId.GetUserToken]: {},
+  [RouteId.GetUserTokenValue]: {},
+  [RouteId.RotateUserToken]: {},
   [RouteId.GetTokenPrices]: {
     tokenPrice: ["read"],
   },
@@ -583,6 +634,9 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["read"],
   },
   [RouteId.CheckSecretsConnectivity]: {
+    organization: ["update"],
+  },
+  [RouteId.InitializeSecretsManager]: {
     organization: ["update"],
   },
   [RouteId.GetSecret]: {
@@ -651,7 +705,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/appearance": {
     organization: ["update"],
   },
-  "/settings/chat": {
+  "/settings/llm-api-keys": {
     chatSettings: ["read"],
   },
   "/settings/sso-providers": {

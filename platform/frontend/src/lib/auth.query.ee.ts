@@ -79,11 +79,16 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
 /**
  * Resolves the permission map with given keys and results of permission checks as values.
  * Use in cases where multiple useHasPermissions calls are impossible.
+ * @returns A record with the same keys as the input map and boolean values indicating permission checks, or null if still loading.
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
-): Record<Key, boolean> {
-  const { data: userPermissions } = useAllPermissions();
+): Record<Key, boolean> | null {
+  const { data: userPermissions, isLoading } = useAllPermissions();
+
+  if (isLoading) {
+    return null;
+  }
 
   const result = {} as Record<Key, boolean>;
 

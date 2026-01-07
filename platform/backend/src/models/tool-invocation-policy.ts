@@ -2,6 +2,7 @@ import { isAgentTool, isArchestraMcpServerTool } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { GlobalToolPolicy, ToolInvocation } from "@/types";
 
 type EvaluationResult = {
@@ -172,8 +173,12 @@ class ToolInvocationPolicyModel {
       toolInput: Record<string, any>;
     }>,
     isContextTrusted: boolean,
-    globalToolPolicy?: GlobalToolPolicy,
+    globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
+    logger.debug(
+      { globalToolPolicy },
+      "ToolInvocationPolicy.evaluateBatch: global policy",
+    );
     // If global tool policy is permissive, bypass all policy checks
     if (globalToolPolicy === "permissive") {
       return { isAllowed: true, reason: "" };
@@ -214,6 +219,11 @@ class ToolInvocationPolicyModel {
       .select()
       .from(schema.toolInvocationPoliciesTable)
       .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+
+    logger.debug(
+      { allPolicies },
+      "ToolInvocationPolicy.evaluateBatch: evaluating policies",
+    );
 
     // Group policies by tool ID
     const policiesByToolId = new Map<

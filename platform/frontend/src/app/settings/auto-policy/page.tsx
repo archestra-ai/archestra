@@ -10,13 +10,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useChatApiKeys } from "@/lib/chat-settings.query";
 import {
@@ -45,49 +38,8 @@ export default function AutoPolicySettingsPage() {
     });
   };
 
-  const handleGlobalToolPolicyChange = async (
-    value: "permissive" | "restrictive",
-  ) => {
-    await updateOrgMutation.mutateAsync({
-      globalToolPolicy: value,
-    });
-  };
-
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Global Tool Policy</CardTitle>
-          <CardDescription>
-            Control tool call and result trust behavior globally
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Policy mode</Label>
-              <p className="text-sm text-muted-foreground">
-                Permissive bypasses all tool policy checks and trusts all
-                results. Restrictive enforces per-tool policies.
-              </p>
-            </div>
-            <Select
-              value={organization?.globalToolPolicy ?? "permissive"}
-              onValueChange={handleGlobalToolPolicyChange}
-              disabled={updateOrgMutation.isPending}
-            >
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="permissive">Permissive</SelectItem>
-                <SelectItem value="restrictive">Restrictive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">

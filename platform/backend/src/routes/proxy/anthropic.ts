@@ -196,6 +196,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "[AnthropicProxy] Agent resolved",
     );
 
+    const globalToolPolicy = config.llm.globalToolPolicy;
+
     const { "x-api-key": anthropicApiKey, "anthropic-beta": anthropicBeta } =
       headers;
 
@@ -370,6 +372,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           anthropicApiKey,
           "anthropic",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -628,6 +631,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
             fastify.log.info(
               { refused: !!toolInvocationRefusal },
@@ -971,6 +975,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
 
           if (toolInvocationRefusal) {

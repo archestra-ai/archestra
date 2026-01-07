@@ -20,7 +20,6 @@ import {
   AgentModel,
   InteractionModel,
   LimitValidationService,
-  OrganizationModel,
   TokenPriceModel,
 } from "@/models";
 import {
@@ -108,9 +107,7 @@ export async function handleLLMProxy<
     `[${providerName}Proxy] Agent resolved`,
   );
 
-  // Fetch organization's global tool policy
-  const organization = await OrganizationModel.getById(context.organizationId);
-  const globalToolPolicy = organization?.globalToolPolicy;
+  const globalToolPolicy = config.llm.globalToolPolicy;
 
   // Extract API key
   const apiKey = provider.extractApiKey(headers);
@@ -234,6 +231,7 @@ export async function handleLLMProxy<
         apiKey,
         providerName,
         resolvedAgent.considerContextUntrusted,
+        globalToolPolicy,
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
@@ -260,7 +258,6 @@ export async function handleLLMProxy<
               );
             }
           : undefined,
-        globalToolPolicy,
       );
 
     // Apply tool result updates
@@ -393,7 +390,7 @@ async function handleStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
-  globalToolPolicy: "permissive" | "restrictive" | undefined,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
 ): Promise<FastifyReply> {
@@ -625,7 +622,7 @@ async function handleNonStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
-  globalToolPolicy: "permissive" | "restrictive" | undefined,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
 ): Promise<FastifyReply> {

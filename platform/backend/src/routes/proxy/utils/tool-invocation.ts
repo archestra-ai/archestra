@@ -20,11 +20,16 @@ export const evaluatePolicies = async (
   toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
   agentId: string,
   contextIsTrusted: boolean,
-  enabledToolNames?: Set<string>,
-  globalToolPolicy?: GlobalToolPolicy,
+  enabledToolNames: Set<string>,
+  globalToolPolicy: GlobalToolPolicy,
 ): Promise<null | [string, string]> => {
   logger.debug(
-    { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
+    {
+      agentId,
+      toolCallCount: toolCalls.length,
+      contextIsTrusted,
+      globalToolPolicy,
+    },
     "[toolInvocation] evaluatePolicies: starting evaluation",
   );
 

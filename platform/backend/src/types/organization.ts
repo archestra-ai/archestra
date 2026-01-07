@@ -12,17 +12,13 @@ export const OrganizationCompressionScopeSchema = z.enum([
   "team",
 ]);
 
-export const GlobalToolPolicySchema = z.enum([
-  "permissive",
-  "restrictive",
-]);
+export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
 
 const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
-  globalToolPolicy: GlobalToolPolicySchema,
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -40,7 +36,6 @@ export const UpdateOrganizationSchema = z.object({
   convertToolResultsToToon: z.boolean(),
   compressionScope: OrganizationCompressionScopeSchema,
   autoConfigureNewTools: z.boolean(),
-  globalToolPolicy: GlobalToolPolicySchema,
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<

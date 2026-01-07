@@ -276,7 +276,7 @@ class TrustedDataPolicyModel {
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
-    globalToolPolicy?: GlobalToolPolicy,
+    globalToolPolicy: GlobalToolPolicy,
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -310,7 +310,7 @@ class TrustedDataPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
     }>,
-    globalToolPolicy?: GlobalToolPolicy,
+    globalToolPolicy: GlobalToolPolicy,
   ): Promise<
     Map<
       string,

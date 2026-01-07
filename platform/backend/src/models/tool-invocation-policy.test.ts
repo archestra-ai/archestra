@@ -22,6 +22,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-2", toolInput: { arg: "value2" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -64,6 +65,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-2", toolInput: { email: "bad@evil.com" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -84,6 +86,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "archestra__get_profile", toolInput: { id: "123" } },
         ],
         false, // untrusted context
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -115,6 +118,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "regular-tool", toolInput: { action: "delete" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -131,6 +135,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [],
         false,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -162,6 +167,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [{ toolCallName: "permissive-tool", toolInput: { arg: "value" } }],
         false, // untrusted context
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -182,6 +188,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [{ toolCallName: "strict-tool", toolInput: { arg: "value" } }],
         false, // untrusted context
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -215,6 +222,7 @@ describe("ToolInvocationPolicyModel", () => {
           },
         ],
         false,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -254,6 +262,7 @@ describe("ToolInvocationPolicyModel", () => {
           },
         ],
         false,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -312,6 +321,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "another-blocked", toolInput: { bad: "yes" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -340,6 +350,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { status: "active" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -347,6 +358,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { status: "inactive" } }],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -373,6 +385,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { env: "development" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -380,6 +393,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { env: "production" } }],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -411,6 +425,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -423,6 +438,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -454,6 +470,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -466,6 +483,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -490,6 +508,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { path: "/tmp/file.txt" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -502,6 +521,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -526,6 +546,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { file: "malware.exe" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -533,6 +554,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { file: "document.pdf" } }],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -568,6 +590,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -580,6 +603,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -615,6 +639,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -627,6 +652,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -656,6 +682,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
           false, // context is untrusted
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(false);
@@ -682,6 +709,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
           true, // context is trusted
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(true);
@@ -726,6 +754,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           false, // untrusted context
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(true);
@@ -767,6 +796,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           false, // untrusted context
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(true);

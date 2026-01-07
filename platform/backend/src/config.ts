@@ -235,6 +235,17 @@ export default {
     url: getDatabaseUrl(),
   },
   llm: {
+    /**
+     * Global tool policy controls whether tool invocation and trusted data policies are enforced.
+     * - "permissive": Bypasses all policy checks, trusts all tool results
+     * - "restrictive": Enforces per-tool policies
+     *
+     * This is an environment variable (not an organization setting) because LLM proxy routes
+     * skip authentication and have no organization context - they're passthrough routes where
+     * clients bring their own API keys.
+     */
+    globalToolPolicy: (process.env.ARCHESTRA_GLOBAL_TOOL_POLICY ||
+      "permissive") as "permissive" | "restrictive",
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",

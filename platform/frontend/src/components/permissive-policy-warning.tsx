@@ -1,37 +1,31 @@
 "use client";
 
 import { ShieldAlert } from "lucide-react";
-import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useOrganization } from "@/lib/organization.query";
+import { useFeatures } from "@/lib/features.query";
 
 export function PermissivePolicyWarning() {
-  const { data: organization, isLoading } = useOrganization();
+  const { data: features, isLoading } = useFeatures();
 
-  if (isLoading || !organization) {
+  if (isLoading || !features) {
     return null;
   }
 
-  if (organization.globalToolPolicy !== "permissive") {
+  if (features.globalToolPolicy !== "permissive") {
     return null;
   }
 
   return (
     <div className="px-2 pb-2">
-      <Alert variant="default" className="text-xs border-yellow-500/50 bg-yellow-500/10">
-        <ShieldAlert className="h-4 w-4 text-yellow-600" />
+      <Alert variant="destructive" className="text-xs">
         <AlertTitle className="text-xs font-semibold">
           Permissive Policy Enabled
         </AlertTitle>
-        <AlertDescription className="text-xs mt-1">
+        <AlertDescription className="text-xs mt-1 text-orange-600">
           <p>All tool calls are allowed and results are trusted.</p>
-          <p className="mt-1">
-            <Link
-              href="/settings/auto-policy"
-              className="underline hover:no-underline"
-            >
-              Consider restricting in production
-            </Link>
+          <p className="mt-1 inline-flex items-center">
+            <ShieldAlert className="mr-1 flex-shrink-0" size={12} />
+            Set ARCHESTRA_GLOBAL_TOOL_POLICY=restrictive if not running locally
           </p>
         </AlertDescription>
       </Alert>

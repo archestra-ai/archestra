@@ -17,6 +17,7 @@ import type {
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableGenAI,
@@ -160,6 +161,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       "[GeminiProxy] Agent resolved",
     );
+
+    const globalToolPolicy = config.llm.globalToolPolicy;
 
     // Create GoogleGenAI client - supports both Vertex AI (ADC) and API key modes
     const { "x-goog-api-key": geminiApiKey } = headers;
@@ -316,6 +319,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           geminiApiKey,
           "gemini",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -546,6 +550,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   resolvedAgentId,
                   contextIsTrusted,
                   enabledToolNames,
+                  globalToolPolicy,
                 );
             }
 
@@ -827,6 +832,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
           }
         }

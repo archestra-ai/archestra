@@ -176,6 +176,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "Agent resolved",
     );
 
+    const globalToolPolicy = config.llm.globalToolPolicy;
+
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
       ? (new MockOpenAIClient() as unknown as OpenAIProvider)
@@ -313,6 +315,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           openAiApiKey,
           "openai",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -581,6 +584,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
 
           // If there are tool calls, evaluate policies and stream the result
@@ -888,6 +892,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgentId,
             contextIsTrusted,
             enabledToolNames,
+            globalToolPolicy,
           );
 
         if (toolInvocationRefusal) {

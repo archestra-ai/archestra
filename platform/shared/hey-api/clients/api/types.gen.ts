@@ -8329,6 +8329,7 @@ export type GetFeaturesResponses = {
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
         geminiVertexAiEnabled: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 

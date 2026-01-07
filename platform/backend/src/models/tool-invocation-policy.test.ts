@@ -174,7 +174,7 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toBe("");
     });
 
-    test("blocks tool when context is untrusted and no allow rule exists", async ({
+    test("blocks tool when no policies exist and globalToolPolicy is restrictive", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
@@ -182,7 +182,7 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "strict-tool" });
       await makeAgentTool(agent.id, tool.id);
-      // No policies, so blocked in untrusted context by default
+      // No policies - falls back to globalToolPolicy
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
@@ -192,8 +192,28 @@ describe("ToolInvocationPolicyModel", () => {
       );
 
       expect(result.isAllowed).toBe(false);
-      expect(result.toolCallName).toBe("strict-tool");
-      expect(result.reason).toContain("context contains untrusted data");
+      expect(result.reason).toContain("forbidden by default");
+    });
+
+    test("allows tool when no policies exist and globalToolPolicy is permissive", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ agentId: agent.id, name: "lenient-tool" });
+      await makeAgentTool(agent.id, tool.id);
+      // No policies - falls back to globalToolPolicy
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "lenient-tool", toolInput: { arg: "value" } }],
+        false, // untrusted context
+        "permissive",
+      );
+
+      expect(result.isAllowed).toBe(true);
+      expect(result.reason).toBe("");
     });
 
     test("allows tool when explicit allow rule matches in untrusted context", async ({
@@ -677,7 +697,7 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Since the condition doesn't match (missing argument), the specific policy doesn't apply
-        // Fall back to default behavior - blocked in untrusted context
+        // No default policy exists, so falls back to globalToolPolicy (restrictive = blocked)
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
@@ -686,7 +706,7 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("context contains untrusted data");
+        expect(result.reason).toContain("forbidden by default");
       });
 
       test("block policy does not apply when argument is missing", async ({

@@ -244,8 +244,10 @@ export default {
      * skip authentication and have no organization context - they're passthrough routes where
      * clients bring their own API keys.
      */
-    globalToolPolicy: (process.env.ARCHESTRA_GLOBAL_TOOL_POLICY ||
-      "permissive") as "permissive" | "restrictive",
+    globalToolPolicy:
+      process.env.ARCHESTRA_GLOBAL_TOOL_POLICY === "restrictive"
+        ? "restrictive"
+        : "permissive",
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",

@@ -40,7 +40,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -86,7 +85,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       // Context should be untrusted and tool result should be blocked
@@ -138,7 +136,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -183,7 +180,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       // Context should be untrusted when no policies match
@@ -240,7 +236,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       // Context should be untrusted if any tool result is blocked or untrusted
@@ -272,7 +267,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       // Should mark as untrusted when tool is not found
@@ -301,7 +295,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       // Should handle gracefully and mark as untrusted
@@ -322,7 +315,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -372,7 +364,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -430,7 +421,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       expect(result.contextIsTrusted).toBe(false);
@@ -467,7 +457,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
 
       // Both should be untrusted (no policies match)
@@ -512,7 +501,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "openai",
         false,
-        "restrictive",
       );
       const updated = applyUpdates(openAiMessages, result.toolResultUpdates);
 
@@ -559,7 +547,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         "test-api-key",
         "anthropic",
         false,
-        "restrictive",
       );
       const updated = applyUpdates(anthropicMessages, result.toolResultUpdates);
 

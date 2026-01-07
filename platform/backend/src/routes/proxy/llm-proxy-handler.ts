@@ -231,7 +231,6 @@ export async function handleLLMProxy<
         apiKey,
         providerName,
         resolvedAgent.considerContextUntrusted,
-        globalToolPolicy,
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {

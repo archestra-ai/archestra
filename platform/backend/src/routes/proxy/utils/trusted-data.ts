@@ -1,11 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
-import type {
-  CommonMessage,
-  GlobalToolPolicy,
-  ToolResultUpdates,
-} from "@/types";
+import type { CommonMessage, ToolResultUpdates } from "@/types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**
@@ -16,7 +12,6 @@ import { DualLlmSubagent } from "./dual-llm-subagent";
  * @param apiKey - API key for the LLM provider (optional for Gemini with Vertex AI)
  * @param provider - The LLM provider
  * @param considerContextUntrusted - If true, marks context as untrusted from the beginning
- * @param globalToolPolicy - Global tool policy setting to fall back to
  * @param onDualLlmStart - Optional callback when dual LLM processing starts
  * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
  * @returns Object with tool result updates and trust status
@@ -27,7 +22,6 @@ export async function evaluateIfContextIsTrusted(
   apiKey: string | undefined,
   provider: SupportedProvider,
   considerContextUntrusted: boolean = false,
-  globalToolPolicy: GlobalToolPolicy,
   onDualLlmStart?: () => void,
   onDualLlmProgress?: (progress: {
     question: string;

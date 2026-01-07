@@ -249,44 +249,46 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every(function matchesCondition(condition) {
-          const argumentValue = get(toolInput, condition.key);
-          if (argumentValue === undefined) return false;
+        const conditionsMatch = policy.conditions.every(
+          function matchesCondition(condition) {
+            const argumentValue = get(toolInput, condition.key);
+            if (argumentValue === undefined) return false;
 
-          switch (condition.operator) {
-            case "endsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.endsWith(condition.value)
-              );
-            case "startsWith":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.startsWith(condition.value)
-              );
-            case "contains":
-              return (
-                typeof argumentValue === "string" &&
-                argumentValue.includes(condition.value)
-              );
-            case "notContains":
-              return (
-                typeof argumentValue === "string" &&
-                !argumentValue.includes(condition.value)
-              );
-            case "equal":
-              return argumentValue === condition.value;
-            case "notEqual":
-              return argumentValue !== condition.value;
-            case "regex":
-              return (
-                typeof argumentValue === "string" &&
-                new RegExp(condition.value).test(argumentValue)
-              );
-            default:
-              return false;
-          }
-        });
+            switch (condition.operator) {
+              case "endsWith":
+                return (
+                  typeof argumentValue === "string" &&
+                  argumentValue.endsWith(condition.value)
+                );
+              case "startsWith":
+                return (
+                  typeof argumentValue === "string" &&
+                  argumentValue.startsWith(condition.value)
+                );
+              case "contains":
+                return (
+                  typeof argumentValue === "string" &&
+                  argumentValue.includes(condition.value)
+                );
+              case "notContains":
+                return (
+                  typeof argumentValue === "string" &&
+                  !argumentValue.includes(condition.value)
+                );
+              case "equal":
+                return argumentValue === condition.value;
+              case "notEqual":
+                return argumentValue !== condition.value;
+              case "regex":
+                return (
+                  typeof argumentValue === "string" &&
+                  new RegExp(condition.value).test(argumentValue)
+                );
+              default:
+                return false;
+            }
+          },
+        );
 
         if (!conditionsMatch) continue;
 
@@ -349,7 +351,10 @@ class ToolInvocationPolicyModel {
     if (globalToolPolicy === "permissive") {
       return { isAllowed: true, reason: "" };
     } else {
-      return { isAllowed: false, reason: "Tool invocation blocked: forbidden by default" };
+      return {
+        isAllowed: false,
+        reason: "Tool invocation blocked: forbidden by default",
+      };
     }
   }
 }

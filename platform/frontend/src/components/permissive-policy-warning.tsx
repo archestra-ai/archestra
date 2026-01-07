@@ -1,6 +1,6 @@
 "use client";
 
-import { Link, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useFeatures } from "@/lib/features.query";
 
@@ -30,7 +30,7 @@ export function PermissivePolicyWarning() {
               rel="noopener noreferrer"
               className="inline-flex items-center underline"
             >
-              <ShieldAlert className="mr-1 flex-shrink-0" size={12}/>
+              <ShieldAlert className="mr-1 flex-shrink-0" size={12} />
               Change if not running locally!
             </a>
           </p>

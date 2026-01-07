@@ -315,7 +315,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           openAiApiKey,
           "openai",
           resolvedAgent.considerContextUntrusted,
-          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)

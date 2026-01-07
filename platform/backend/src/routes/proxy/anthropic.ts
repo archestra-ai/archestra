@@ -372,7 +372,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           anthropicApiKey,
           "anthropic",
           resolvedAgent.considerContextUntrusted,
-          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)

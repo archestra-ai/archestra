@@ -36,10 +36,8 @@ export { default as promptRoutes } from "./prompts";
 export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
   ? anthropicProxyRoutesV2
   : anthropicProxyRoutesV1;
-// Cohere proxy routes - V2 only (no legacy V1)
-export const cohereProxyRoutes = config.llm.cohere.useV2Routes
-  ? cohereProxyRoutesV2
-  : cohereProxyRoutesV2; // No V1 for Cohere, always use V2
+// Cohere proxy routes - V2 only (no legacy V1, no toggle)
+export const cohereProxyRoutes = cohereProxyRoutesV2;
 // Gemini proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const geminiProxyRoutes = config.llm.gemini.useV2Routes
   ? geminiProxyRoutesV2

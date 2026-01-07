@@ -58,19 +58,33 @@ export function useCreateConversation() {
       agentId,
       promptId,
       selectedModel,
+      chatApiKeyId,
     }: {
       agentId: string;
       promptId?: string;
       selectedModel?: string;
+      chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId, promptId, selectedModel },
+        body: {
+          agentId,
+          promptId,
+          selectedModel,
+          chatApiKeyId: chatApiKeyId ?? undefined,
+        },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Immediately populate the individual conversation cache to avoid loading state
+      if (newConversation) {
+        queryClient.setQueryData(
+          ["conversation", newConversation.id],
+          newConversation,
+        );
+      }
     },
   });
 }
@@ -130,6 +144,7 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+      toast.success("Conversation deleted");
     },
   });
 }

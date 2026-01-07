@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { PromptAgentModel, PromptModel } from "@/models";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
@@ -24,7 +25,44 @@ const SyncPromptAgentsResponseSchema = z.object({
   removed: z.array(z.string().uuid()),
 });
 
+const PromptAgentConnectionSchema = z.object({
+  id: z.string().uuid(),
+  promptId: z.string().uuid(),
+  agentPromptId: z.string().uuid(),
+});
+
 const promptAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Get all prompt-agent connections for the organization
+   * Used for canvas visualization
+   */
+  fastify.get(
+    "/api/prompt-agents",
+    {
+      schema: {
+        operationId: RouteId.GetAllPromptAgentConnections,
+        description:
+          "Get all prompt-agent connections for the organization (for canvas visualization)",
+        tags: ["Prompt Agents"],
+        response: constructResponseSchema(z.array(PromptAgentConnectionSchema)),
+      },
+    },
+    async ({ organizationId, user, headers }, reply) => {
+      // Check if user has admin access to profiles
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const connections = await PromptAgentModel.findAllByOrganizationId(
+        organizationId,
+        user.id,
+        isAgentAdmin,
+      );
+      return reply.send(connections);
+    },
+  );
+
   /**
    * Get all agents assigned to a prompt
    */

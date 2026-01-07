@@ -2,16 +2,35 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const { getPromptAgents, syncPromptAgents, deletePromptAgent } =
-  archestraApiSdk;
+const {
+  getAllPromptAgentConnections,
+  getPromptAgents,
+  syncPromptAgents,
+  deletePromptAgent,
+} = archestraApiSdk;
 
 /**
  * Query key factory for prompt agents
  */
 export const promptAgentsQueryKeys = {
   all: ["prompt-agents"] as const,
+  connections: ["prompt-agents", "connections"] as const,
   byPrompt: (promptId: string) => ["prompt-agents", promptId] as const,
 };
+
+/**
+ * Get all prompt-agent connections for the organization
+ * Used for canvas visualization
+ */
+export function useAllPromptAgentConnections() {
+  return useQuery({
+    queryKey: promptAgentsQueryKeys.connections,
+    queryFn: async () => {
+      const response = await getAllPromptAgentConnections();
+      return response.data ?? [];
+    },
+  });
+}
 
 /**
  * Get all agents assigned to a prompt
@@ -52,6 +71,9 @@ export function useSyncPromptAgents() {
       queryClient.invalidateQueries({
         queryKey: promptAgentsQueryKeys.byPrompt(variables.promptId),
       });
+      queryClient.invalidateQueries({
+        queryKey: promptAgentsQueryKeys.connections,
+      });
       toast.success("Agents updated successfully");
     },
     onError: (error) => {
@@ -83,6 +105,9 @@ export function useDeletePromptAgent() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: promptAgentsQueryKeys.byPrompt(variables.promptId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: promptAgentsQueryKeys.connections,
       });
       toast.success("Agent removed successfully");
     },

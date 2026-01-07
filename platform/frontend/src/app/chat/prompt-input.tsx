@@ -20,7 +20,6 @@ import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ProfileSelector } from "@/components/chat/profile-selector";
-import Divider from "@/components/divider";
 import type { SupportedChatProvider } from "@/lib/chat-settings.query";
 
 interface ArchestraPromptInputProps {
@@ -34,13 +33,23 @@ interface ArchestraPromptInputProps {
   messageCount?: number;
   // Tools integration props
   agentId: string;
-  conversationId: string;
-  promptId?: string | null;
+  /** Optional - if not provided, it's initial chat mode (no conversation yet) */
+  conversationId?: string;
   // API key selector props
   currentConversationChatApiKeyId?: string | null;
   currentProvider?: SupportedChatProvider;
+  /** Selected API key ID for initial chat mode */
+  initialApiKeyId?: string | null;
+  /** Callback for API key change in initial chat mode (no conversation) */
+  onApiKeyChange?: (apiKeyId: string) => void;
+  /** Callback when user switches to a different provider's API key - should switch to first model of that provider */
+  onProviderChange?: (provider: SupportedChatProvider) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  /** Callback for profile change in initial chat mode (no conversation) */
+  onProfileChange?: (agentId: string) => void;
+  /** Called when user tries to interact with tools in initial state (no conversation) */
+  onCreateConversation?: () => void;
 }
 
 // Inner component that has access to the controller context
@@ -52,10 +61,14 @@ const PromptInputContent = ({
   messageCount,
   agentId,
   conversationId,
-  promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  initialApiKeyId,
+  onApiKeyChange,
+  onProviderChange,
   textareaRef: externalTextareaRef,
+  onProfileChange,
+  onCreateConversation,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -74,26 +87,27 @@ const PromptInputContent = ({
   return (
     <PromptInput globalDrop multiple onSubmit={onSubmit}>
       <PromptInputHeader className="pt-3">
-        {agentId && conversationId && (
+        {agentId && (
           <div className="flex flex-wrap items-center gap-2">
             <ProfileSelector
               currentAgentId={agentId}
               conversationId={conversationId}
+              onProfileChange={onProfileChange}
             />
             <ChatToolsDisplay
               agentId={agentId}
               conversationId={conversationId}
-              promptId={promptId}
+              onCreateConversation={onCreateConversation}
             />
           </div>
         )}
       </PromptInputHeader>
-      <Divider className="my-1 w-[calc(100%-2rem)] mx-auto" />
       <PromptInputBody>
         <PromptInputTextarea
           placeholder="Type a message..."
           ref={textareaRef}
           className="px-4"
+          disableEnterSubmit={status !== "ready"}
         />
       </PromptInputBody>
       <PromptInputFooter>
@@ -103,14 +117,18 @@ const PromptInputContent = ({
             onModelChange={onModelChange}
             messageCount={messageCount}
           />
-          {conversationId && (
+          {(conversationId || onApiKeyChange) && (
             <ChatApiKeySelector
               conversationId={conversationId}
               currentProvider={currentProvider}
               currentConversationChatApiKeyId={
-                currentConversationChatApiKeyId ?? null
+                conversationId
+                  ? (currentConversationChatApiKeyId ?? null)
+                  : (initialApiKeyId ?? null)
               }
               messageCount={messageCount}
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
             />
           )}
         </PromptInputTools>
@@ -134,10 +152,14 @@ const ArchestraPromptInput = ({
   messageCount = 0,
   agentId,
   conversationId,
-  promptId,
   currentConversationChatApiKeyId,
   currentProvider,
+  initialApiKeyId,
+  onApiKeyChange,
+  onProviderChange,
   textareaRef,
+  onProfileChange,
+  onCreateConversation,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -150,10 +172,14 @@ const ArchestraPromptInput = ({
           messageCount={messageCount}
           agentId={agentId}
           conversationId={conversationId}
-          promptId={promptId}
           currentConversationChatApiKeyId={currentConversationChatApiKeyId}
           currentProvider={currentProvider}
+          initialApiKeyId={initialApiKeyId}
+          onApiKeyChange={onApiKeyChange}
+          onProviderChange={onProviderChange}
           textareaRef={textareaRef}
+          onProfileChange={onProfileChange}
+          onCreateConversation={onCreateConversation}
         />
       </PromptInputProvider>
     </div>

@@ -20,8 +20,6 @@ import {
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
   ApiError,
-  BulkUpdateAgentToolsRequestSchema,
-  BulkUpdateAgentToolsResponseSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
@@ -275,31 +273,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/agent-tools/bulk-update",
-    {
-      schema: {
-        operationId: RouteId.BulkUpdateAgentTools,
-        description: "Update multiple agent tools with the same value in bulk",
-        tags: ["Agent Tools"],
-        body: BulkUpdateAgentToolsRequestSchema,
-        response: constructResponseSchema(BulkUpdateAgentToolsResponseSchema),
-      },
-    },
-    async (request, reply) => {
-      const { ids, field, value, clearAutoConfigured } = request.body;
-
-      const updatedCount = await AgentToolModel.bulkUpdateSameValue(
-        ids,
-        field,
-        value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
-        clearAutoConfigured,
-      );
-
-      return reply.send({ updatedCount });
-    },
-  );
-
-  fastify.post(
     "/api/agent-tools/auto-configure-policies",
     {
       schema: {
@@ -319,7 +292,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 success: z.boolean(),
                 config: z
                   .object({
-                    allowUsageWhenUntrustedDataIsPresent: z.boolean(),
                     toolResultTreatment: z.enum([
                       "trusted",
                       "sanitize_with_dual_llm",
@@ -443,8 +415,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
-          allowUsageWhenUntrustedDataIsPresent: true,
-          toolResultTreatment: true,
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,

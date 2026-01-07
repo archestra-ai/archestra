@@ -15,15 +15,17 @@ import {
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { Response } from "@/components/ai-elements/response";
+import { AgentSelector } from "@/components/chat/agent-selector";
+import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
-import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { PageLayout } from "@/components/page-layout";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,12 +34,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Version } from "@/components/version";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
@@ -47,14 +43,17 @@ import {
   useCreateConversation,
   useUpdateConversation,
 } from "@/lib/chat.query";
-import { useChatModelsQuery } from "@/lib/chat-models.query";
+import {
+  useChatModelsQuery,
+  useModelsByProvider,
+} from "@/lib/chat-models.query";
 import {
   type SupportedChatProvider,
   useChatApiKeys,
 } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
-import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
+import { usePrompt, usePrompts } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -68,15 +67,11 @@ export default function ChatPage() {
     () => searchParams.get(CONVERSATION_QUERY_PARAM) || undefined,
   );
 
-  // Hide version display only when viewing a specific conversation
+  // Hide version display from layout - chat page has its own version display
   useEffect(() => {
-    if (conversationId) {
-      document.body.classList.add("hide-version");
-    } else {
-      document.body.classList.remove("hide-version");
-    }
+    document.body.classList.add("hide-version");
     return () => document.body.classList.remove("hide-version");
-  }, [conversationId]);
+  }, []);
   const [hideToolCalls, setHideToolCalls] = useState(() => {
     // Initialize from localStorage
     if (typeof window !== "undefined") {
@@ -107,18 +102,58 @@ export default function ChatPage() {
     internalMcpCatalog: ["create"],
   });
 
-  // State for prompt management
+  // Fetch prompts for conversation prompt name lookup
+  const { data: prompts = [] } = usePrompts();
+
+  // Fetch profiles and models for initial chat (no conversation)
+  const { data: allProfiles = [] } = useProfiles();
+  const { modelsByProvider } = useModelsByProvider();
+
+  // State for initial chat (when no conversation exists yet)
+  const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
+  const [initialPromptId, setInitialPromptId] = useState<string | null>(null);
+  const [initialModel, setInitialModel] = useState<string>("");
+  const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
+
+  // Prompt edit dialog state
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<
     (typeof prompts)[number] | null
   >(null);
-
-  // Fetch prompts and current editing prompt
-  const { data: prompts = [] } = usePrompts();
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
-  const deletePromptMutation = useDeletePrompt();
-  const { data: allProfiles = [] } = useProfiles();
+
+  // Set default initial agent and model when data loads
+  useEffect(() => {
+    if (!initialAgentId && allProfiles.length > 0) {
+      setInitialAgentId(allProfiles[0].id);
+    }
+  }, [allProfiles, initialAgentId]);
+
+  useEffect(() => {
+    if (!initialModel) {
+      const providers = Object.keys(modelsByProvider);
+      if (providers.length > 0) {
+        const firstProvider = providers[0];
+        const models =
+          modelsByProvider[firstProvider as keyof typeof modelsByProvider];
+        if (models && models.length > 0) {
+          setInitialModel(models[0].id);
+        }
+      }
+    }
+  }, [modelsByProvider, initialModel]);
+
+  // Derive provider from initial model for API key filtering
+  const initialProvider = useMemo((): SupportedChatProvider | undefined => {
+    if (!initialModel) return undefined;
+    for (const [provider, models] of Object.entries(modelsByProvider)) {
+      if (models?.some((m) => m.id === initialModel)) {
+        return provider as SupportedChatProvider;
+      }
+    }
+    return undefined;
+  }, [initialModel, modelsByProvider]);
 
   const chatSession = useChatSession(conversationId);
 
@@ -189,8 +224,30 @@ export default function ChatPage() {
     [conversation, updateConversationMutation],
   );
 
+  // Handle provider change for existing conversation - switch to first model of new provider
+  const handleProviderChange = useCallback(
+    (provider: SupportedChatProvider) => {
+      const models = modelsByProvider[provider];
+      if (models && models.length > 0) {
+        handleModelChange(models[0].id);
+      }
+    },
+    [modelsByProvider, handleModelChange],
+  );
+
+  // Handle provider change for initial chat - switch to first model of new provider
+  const handleInitialProviderChange = useCallback(
+    (provider: SupportedChatProvider) => {
+      const models = modelsByProvider[provider];
+      if (models && models.length > 0) {
+        setInitialModel(models[0].id);
+      }
+    },
+    [modelsByProvider],
+  );
+
   // Find the specific prompt for this conversation (if any)
-  const conversationPrompt = conversation?.promptId
+  const _conversationPrompt = conversation?.promptId
     ? prompts.find((p) => p.id === conversation.promptId)
     : undefined;
 
@@ -230,63 +287,6 @@ export default function ChatPage() {
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
-
-  // Handle prompt selection from library
-  const handleSelectPrompt = useCallback(
-    async (agentId: string, promptId?: string) => {
-      // If promptId is provided, fetch the prompt and use its userPrompt
-      if (promptId) {
-        const selectedPrompt = prompts.find((p) => p.id === promptId);
-        if (selectedPrompt?.userPrompt) {
-          pendingPromptRef.current = selectedPrompt.userPrompt;
-        }
-      }
-
-      // Create conversation for the selected agent with optional promptId
-      const newConversation = await createConversationMutation.mutateAsync({
-        agentId,
-        promptId,
-      });
-      if (newConversation) {
-        // Mark this as a newly created conversation
-        newlyCreatedConversationRef.current = newConversation.id;
-        selectConversation(newConversation.id);
-      }
-    },
-    [createConversationMutation, selectConversation, prompts],
-  );
-
-  const handleEditPrompt = useCallback((prompt: (typeof prompts)[number]) => {
-    setEditingPromptId(prompt.id);
-    setIsPromptDialogOpen(true);
-  }, []);
-
-  const handleCreatePrompt = useCallback(() => {
-    setEditingPromptId(null);
-    setIsPromptDialogOpen(true);
-  }, []);
-
-  // Listen for custom event from layout to open dialog
-  useEffect(() => {
-    const handleOpenDialog = () => {
-      handleCreatePrompt();
-    };
-    window.addEventListener("open-prompt-dialog", handleOpenDialog);
-    return () => {
-      window.removeEventListener("open-prompt-dialog", handleOpenDialog);
-    };
-  }, [handleCreatePrompt]);
-
-  const handleDeletePrompt = useCallback(
-    async (promptId: string) => {
-      try {
-        await deletePromptMutation.mutateAsync(promptId);
-      } catch (error) {
-        console.error("Failed to delete prompt:", error);
-      }
-    },
-    [deletePromptMutation],
-  );
 
   // Persist hide tool calls preference
   const toggleHideToolCalls = useCallback(() => {
@@ -516,6 +516,65 @@ export default function ChatPage() {
     });
   };
 
+  // Handle initial prompt change (when no conversation exists)
+  const handleInitialPromptChange = useCallback(
+    (promptId: string | null, agentId: string) => {
+      setInitialAgentId(agentId);
+      setInitialPromptId(promptId);
+    },
+    [],
+  );
+
+  // Handle initial submit (when no conversation exists)
+  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
+    (message, e) => {
+      e.preventDefault();
+      if (
+        !message.text?.trim() ||
+        !initialAgentId ||
+        !initialModel ||
+        createConversationMutation.isPending
+      ) {
+        return;
+      }
+
+      // Store the message to send after conversation is created
+      pendingPromptRef.current = message.text;
+
+      // Create conversation with the selected agent and prompt
+      createConversationMutation.mutate(
+        {
+          agentId: initialAgentId,
+          selectedModel: initialModel,
+          promptId: initialPromptId ?? undefined,
+          chatApiKeyId: initialApiKeyId,
+        },
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              newlyCreatedConversationRef.current = newConversation.id;
+              selectConversation(newConversation.id);
+              toast.success("Conversation created");
+            }
+          },
+        },
+      );
+    },
+    [
+      initialAgentId,
+      initialPromptId,
+      initialModel,
+      initialApiKeyId,
+      createConversationMutation,
+      selectConversation,
+    ],
+  );
+
+  // Determine which agent ID to use for prompt input
+  const activeAgentId = conversationId
+    ? conversation?.agent?.id
+    : initialAgentId;
+
   // If API key is not configured, show setup message
   // Only show after loading completes to avoid flash of incorrect content
   if (!isLoadingApiKeyCheck && !hasAnyApiKey) {
@@ -542,73 +601,6 @@ export default function ChatPage() {
     );
   }
 
-  if (!conversationId) {
-    const hasNoProfiles = allProfiles.length === 0;
-
-    return (
-      <PageLayout
-        title="Chats"
-        description="Start a free chat or select a prompt from your library to start a guided chat"
-        actionButton={
-          <WithPermissions
-            permissions={{ prompt: ["create"] }}
-            noPermissionHandle="hide"
-          >
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      onClick={handleCreatePrompt}
-                      size="sm"
-                      disabled={hasNoProfiles}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Prompt
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {hasNoProfiles && (
-                  <TooltipContent>
-                    <p>No profiles available</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          </WithPermissions>
-        }
-      >
-        <PromptLibraryGrid
-          prompts={prompts}
-          onSelectPrompt={handleSelectPrompt}
-          onEdit={handleEditPrompt}
-          onDelete={handleDeletePrompt}
-          onViewVersionHistory={setVersionHistoryPrompt}
-        />
-        <PromptDialog
-          open={isPromptDialogOpen}
-          onOpenChange={(open) => {
-            setIsPromptDialogOpen(open);
-            if (!open) {
-              setEditingPromptId(null);
-            }
-          }}
-          prompt={editingPrompt}
-          onViewVersionHistory={setVersionHistoryPrompt}
-        />
-        <PromptVersionHistoryDialog
-          open={!!versionHistoryPrompt}
-          onOpenChange={(open) => {
-            if (!open) {
-              setVersionHistoryPrompt(null);
-            }
-          }}
-          prompt={versionHistoryPrompt}
-        />
-      </PageLayout>
-    );
-  }
-
   return (
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
@@ -617,9 +609,73 @@ export default function ChatPage() {
 
           <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">
-                {conversationPrompt ? conversationPrompt.name : "Free chat"}
-              </span>
+              {/* Agent/Profile selector */}
+              {conversationId ? (
+                <AgentSelector
+                  currentPromptId={conversation?.promptId ?? null}
+                  currentAgentId={conversation?.agentId ?? ""}
+                  currentModel={conversation?.selectedModel ?? ""}
+                />
+              ) : (
+                <InitialAgentSelector
+                  currentPromptId={initialPromptId}
+                  onPromptChange={handleInitialPromptChange}
+                  defaultAgentId={initialAgentId ?? allProfiles[0]?.id ?? ""}
+                />
+              )}
+
+              {/* Single AgentToolsDisplay instance - no remounting */}
+              {/* Use stable promptId that doesn't change during conversation creation */}
+              {(initialPromptId || conversation?.promptId) && (
+                <>
+                  <AgentToolsDisplay
+                    promptId={conversation?.promptId ?? initialPromptId}
+                    conversationId={conversationId}
+                    onCreateConversation={
+                      conversationId
+                        ? undefined
+                        : () => {
+                            // Create conversation when user toggles an agent
+                            if (!initialAgentId || !initialModel) return;
+                            createConversationMutation.mutate(
+                              {
+                                agentId: initialAgentId,
+                                selectedModel: initialModel,
+                                promptId: initialPromptId ?? undefined,
+                                chatApiKeyId: initialApiKeyId,
+                              },
+                              {
+                                onSuccess: (newConversation) => {
+                                  if (newConversation) {
+                                    newlyCreatedConversationRef.current =
+                                      newConversation.id;
+                                    selectConversation(newConversation.id);
+                                    toast.success("Conversation created");
+                                  }
+                                },
+                              },
+                            );
+                          }
+                    }
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 gap-1.5 text-xs border-dashed"
+                    onClick={() => {
+                      const promptIdToEdit =
+                        conversation?.promptId ?? initialPromptId;
+                      if (promptIdToEdit) {
+                        setEditingPromptId(promptIdToEdit);
+                        setIsPromptDialogOpen(true);
+                      }
+                    }}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add agents
+                  </Button>
+                </>
+              )}
             </div>
             <div className="flex gap-2 items-center">
               {!isArtifactOpen && (
@@ -655,65 +711,219 @@ export default function ChatPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <ChatMessages
-              conversationId={conversationId}
-              agentId={currentProfileId}
-              messages={messages}
-              hideToolCalls={hideToolCalls}
-              status={status}
-              isLoadingConversation={isLoadingConversation}
-              onMessagesUpdate={setMessages}
-              onUserMessageEdit={(
-                editedMessage,
-                updatedMessages,
-                editedPartIndex,
-              ) => {
-                // After user message is edited, set messages WITHOUT the edited one, then send it fresh
-                if (setMessages && sendMessage) {
-                  // Set flag to prevent message sync from overwriting our state
-                  userMessageJustEdited.current = true;
+            {conversationId ? (
+              <ChatMessages
+                conversationId={conversationId}
+                agentId={currentProfileId}
+                messages={messages}
+                hideToolCalls={hideToolCalls}
+                status={status}
+                isLoadingConversation={isLoadingConversation}
+                onMessagesUpdate={setMessages}
+                onUserMessageEdit={(
+                  editedMessage,
+                  updatedMessages,
+                  editedPartIndex,
+                ) => {
+                  // After user message is edited, set messages WITHOUT the edited one, then send it fresh
+                  if (setMessages && sendMessage) {
+                    // Set flag to prevent message sync from overwriting our state
+                    userMessageJustEdited.current = true;
 
-                  // Remove the edited message (last one) - we'll re-send it via sendMessage()
-                  const messagesWithoutEditedMessage = updatedMessages.slice(
-                    0,
-                    -1,
-                  );
-                  setMessages(messagesWithoutEditedMessage);
+                    // Remove the edited message (last one) - we'll re-send it via sendMessage()
+                    const messagesWithoutEditedMessage = updatedMessages.slice(
+                      0,
+                      -1,
+                    );
+                    setMessages(messagesWithoutEditedMessage);
 
-                  // Send the edited message to generate new response (same as handleSubmit)
-                  // Use the specific part that was edited (via editedPartIndex) instead of finding
-                  // the first text part, in case the message has multiple text parts
-                  const editedPart = editedMessage.parts?.[editedPartIndex];
-                  const editedText =
-                    editedPart?.type === "text" ? editedPart.text : "";
-                  if (editedText?.trim()) {
-                    sendMessage({
-                      role: "user",
-                      parts: [{ type: "text", text: editedText }],
-                    });
+                    // Send the edited message to generate new response (same as handleSubmit)
+                    // Use the specific part that was edited (via editedPartIndex) instead of finding
+                    // the first text part, in case the message has multiple text parts
+                    const editedPart = editedMessage.parts?.[editedPartIndex];
+                    const editedText =
+                      editedPart?.type === "text" ? editedPart.text : "";
+                    if (editedText?.trim()) {
+                      sendMessage({
+                        role: "user",
+                        parts: [{ type: "text", text: editedText }],
+                      });
+                    }
                   }
-                }
-              }}
-              error={error}
-            />
+                }}
+                error={error}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center space-y-6 max-w-2xl px-4">
+                  {initialPromptId ? (
+                    // Agent selected - show prompt
+                    (() => {
+                      const selectedPrompt = prompts.find(
+                        (p) => p.id === initialPromptId,
+                      );
+
+                      return (
+                        <>
+                          <p className="text-lg text-muted-foreground">
+                            To start conversation with{" "}
+                            <span className="font-medium text-foreground">
+                              {selectedPrompt?.name}
+                            </span>{" "}
+                            {selectedPrompt?.userPrompt
+                              ? "select a prompt or start typing below"
+                              : "start typing below"}
+                          </p>
+                          {selectedPrompt?.userPrompt && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const userPrompt = selectedPrompt.userPrompt;
+                                if (!userPrompt) return;
+                                const syntheticEvent = {
+                                  preventDefault: () => {},
+                                } as React.FormEvent<HTMLFormElement>;
+                                handleInitialSubmit(
+                                  { text: userPrompt, files: [] },
+                                  syntheticEvent,
+                                );
+                              }}
+                              className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
+                            >
+                              <Message
+                                from="assistant"
+                                className="max-w-none justify-center"
+                              >
+                                <MessageContent className="max-w-none text-center">
+                                  <Response>
+                                    {selectedPrompt.userPrompt}
+                                  </Response>
+                                </MessageContent>
+                              </Message>
+                            </button>
+                          )}
+                          <p className="text-sm text-muted-foreground">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleInitialPromptChange(
+                                  null,
+                                  allProfiles[0]?.id ?? "",
+                                )
+                              }
+                              className="underline hover:text-foreground"
+                            >
+                              back to agent selection
+                            </button>
+                          </p>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    // No agent selected - show agent list
+                    <>
+                      <p className="text-lg text-muted-foreground">
+                        {prompts.length > 0
+                          ? "To start conversation select an agent or start typing below"
+                          : "To start conversation start typing below"}
+                      </p>
+                      {prompts.length > 0 ? (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {prompts.map((prompt) => (
+                            <Button
+                              key={prompt.id}
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 text-sm"
+                              onClick={() =>
+                                handleInitialPromptChange(
+                                  prompt.id,
+                                  prompt.agentId,
+                                )
+                              }
+                            >
+                              {prompt.name}
+                            </Button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPromptId(null);
+                              setIsPromptDialogOpen(true);
+                            }}
+                            className="underline hover:text-foreground"
+                          >
+                            create agent
+                          </button>
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {conversation?.agent.id && conversation?.id && (
+          {activeAgentId && (
             <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-4xl mx-auto space-y-3">
-                <ArchestraPromptInput
-                  onSubmit={handleSubmit}
-                  status={status}
-                  selectedModel={conversation?.selectedModel ?? ""}
-                  onModelChange={handleModelChange}
-                  messageCount={messages.length}
-                  agentId={conversation?.agent.id}
-                  conversationId={conversation?.id}
-                  promptId={conversation?.promptId}
-                  currentConversationChatApiKeyId={conversation?.chatApiKeyId}
-                  currentProvider={currentProvider}
-                  textareaRef={textareaRef}
-                />
+                {conversationId && conversation?.agent.id ? (
+                  <ArchestraPromptInput
+                    onSubmit={handleSubmit}
+                    status={status}
+                    selectedModel={conversation?.selectedModel ?? ""}
+                    onModelChange={handleModelChange}
+                    messageCount={messages.length}
+                    agentId={conversation.agent.id}
+                    conversationId={conversationId}
+                    currentConversationChatApiKeyId={conversation?.chatApiKeyId}
+                    currentProvider={currentProvider}
+                    onProviderChange={handleProviderChange}
+                    textareaRef={textareaRef}
+                  />
+                ) : (
+                  <ArchestraPromptInput
+                    onSubmit={handleInitialSubmit}
+                    status={
+                      createConversationMutation.isPending
+                        ? "submitted"
+                        : "ready"
+                    }
+                    selectedModel={initialModel}
+                    onModelChange={setInitialModel}
+                    agentId={activeAgentId}
+                    onProfileChange={setInitialAgentId}
+                    currentProvider={initialProvider}
+                    initialApiKeyId={initialApiKeyId}
+                    onApiKeyChange={setInitialApiKeyId}
+                    onProviderChange={handleInitialProviderChange}
+                    onCreateConversation={() => {
+                      // Create conversation when user interacts with tools
+                      if (!initialAgentId || !initialModel) return;
+                      createConversationMutation.mutate(
+                        {
+                          agentId: initialAgentId,
+                          selectedModel: initialModel,
+                          promptId: initialPromptId ?? undefined,
+                          chatApiKeyId: initialApiKeyId,
+                        },
+                        {
+                          onSuccess: (newConversation) => {
+                            if (newConversation) {
+                              newlyCreatedConversationRef.current =
+                                newConversation.id;
+                              selectConversation(newConversation.id);
+                              toast.success("Conversation created");
+                            }
+                          },
+                        },
+                      );
+                    }}
+                  />
+                )}
                 <div className="text-center">
                   <Version inline />
                 </div>
@@ -738,6 +948,28 @@ export default function ChatPage() {
         artifact={conversation?.artifact}
         isOpen={isArtifactOpen}
         onToggle={toggleArtifactPanel}
+      />
+
+      <PromptDialog
+        open={isPromptDialogOpen}
+        onOpenChange={(open) => {
+          setIsPromptDialogOpen(open);
+          if (!open) {
+            setEditingPromptId(null);
+          }
+        }}
+        prompt={editingPrompt}
+        onViewVersionHistory={setVersionHistoryPrompt}
+      />
+
+      <PromptVersionHistoryDialog
+        open={!!versionHistoryPrompt}
+        onOpenChange={(open) => {
+          if (!open) {
+            setVersionHistoryPrompt(null);
+          }
+        }}
+        prompt={versionHistoryPrompt}
       />
     </div>
   );

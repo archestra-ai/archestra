@@ -54,4 +54,3 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default command: no additional args (entrypoint.py handles starting the MCP server)
 CMD []
-

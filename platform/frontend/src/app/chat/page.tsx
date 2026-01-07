@@ -542,6 +542,7 @@ export default function ChatPage() {
       initialAgentId,
       initialPromptId,
       initialModel,
+      initialApiKeyId,
       createConversationMutation,
       selectConversation,
     ],

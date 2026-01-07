@@ -45,7 +45,8 @@
   },
   "pnpm": {
     "overrides": {
-      "jws": "4.0.1"
+      "jws": "4.0.1",
+      "@modelcontextprotocol/sdk": "^1.25.2"
     }
   }
 }

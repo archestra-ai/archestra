@@ -1,8 +1,9 @@
 # Archestra Coding Agent Makefile
 #
 # Usage:
-#   make build        - Build the Docker image locally
-#   make push         - Build and push to GCP Artifact Registry
+#   make build        - Build multi-arch Docker image (amd64 + arm64)
+#   make build-local  - Build for local architecture only
+#   make push         - Build multi-arch and push to GCP Artifact Registry
 #   make run          - Run the container locally (requires GITHUB_TOKEN)
 #   make test         - Run tests
 #   make clean        - Remove local Docker images
@@ -11,6 +12,8 @@
 IMAGE_REGISTRY := europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
 IMAGE_NAME := archestra-coding-agent
 VERSION ?= 0.0.1
+PLATFORMS := linux/amd64,linux/arm64
+BUILDER_NAME := archestra-multiarch
 
 # Full image name
 FULL_IMAGE_NAME := $(IMAGE_REGISTRY)/$(IMAGE_NAME)
@@ -19,21 +22,42 @@ FULL_IMAGE_NAME := $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 .PHONY: all
 all: build
 
-# Build the Docker image
+# Ensure buildx builder exists
+.PHONY: setup-builder
+setup-builder:
+	@if ! docker buildx inspect $(BUILDER_NAME) > /dev/null 2>&1; then \
+		echo "Creating buildx builder '$(BUILDER_NAME)'..."; \
+		docker buildx create --name $(BUILDER_NAME) --use --bootstrap; \
+	else \
+		docker buildx use $(BUILDER_NAME); \
+	fi
+
+# Build multi-arch Docker image (loads to local docker for testing)
+# Note: Multi-arch builds can only be loaded if building for single platform
+# Use 'make push' to build and push multi-arch images
 .PHONY: build
-build:
-	@echo "Building $(FULL_IMAGE_NAME):$(VERSION)..."
+build: setup-builder
+	@echo "Building $(FULL_IMAGE_NAME):$(VERSION) for $(PLATFORMS)..."
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		-t $(FULL_IMAGE_NAME):$(VERSION) \
+		-t $(FULL_IMAGE_NAME):latest \
+		--push \
+		.
+	@echo "Build and push complete!"
+
+# Build for local architecture only (faster for development)
+.PHONY: build-local
+build-local:
+	@echo "Building $(FULL_IMAGE_NAME):$(VERSION) for local architecture..."
 	docker build -t $(FULL_IMAGE_NAME):$(VERSION) .
 	docker tag $(FULL_IMAGE_NAME):$(VERSION) $(FULL_IMAGE_NAME):latest
 	@echo "Build complete!"
 
-# Push to GCP Artifact Registry
+# Push to GCP Artifact Registry (multi-arch)
 .PHONY: push
 push: build
-	@echo "Pushing $(FULL_IMAGE_NAME):$(VERSION) to registry..."
-	docker push $(FULL_IMAGE_NAME):$(VERSION)
-	docker push $(FULL_IMAGE_NAME):latest
-	@echo "Push complete!"
+	@echo "Images already pushed during build (buildx --push)"
 
 # Run the container locally
 .PHONY: run
@@ -65,7 +89,7 @@ test:
 	pip install -r requirements.txt pytest
 	PYTHONPATH=. pytest tests/ -v
 
-# Clean up local images
+# Clean up local images and builder
 .PHONY: clean
 clean:
 	@echo "Removing local Docker images..."
@@ -73,20 +97,29 @@ clean:
 	-docker rmi $(FULL_IMAGE_NAME):latest
 	@echo "Clean complete!"
 
+# Remove buildx builder
+.PHONY: clean-builder
+clean-builder:
+	@echo "Removing buildx builder..."
+	-docker buildx rm $(BUILDER_NAME)
+	@echo "Builder removed!"
+
 # Show help
 .PHONY: help
 help:
 	@echo "Archestra Coding Agent Makefile"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make build    - Build the Docker image locally"
-	@echo "  make push     - Build and push to GCP Artifact Registry"
-	@echo "  make run      - Run the container locally (requires GITHUB_TOKEN)"
-	@echo "  make shell    - Start an interactive shell in the container"
-	@echo "  make test     - Run tests"
-	@echo "  make clean    - Remove local Docker images"
+	@echo "  make build       - Build multi-arch image (amd64+arm64) and push to registry"
+	@echo "  make build-local - Build for local architecture only (faster for dev)"
+	@echo "  make push        - Alias for 'make build' (multi-arch build+push)"
+	@echo "  make run         - Run the container locally (requires GITHUB_TOKEN)"
+	@echo "  make shell       - Start an interactive shell in the container"
+	@echo "  make test        - Run tests"
+	@echo "  make clean       - Remove local Docker images and buildx builder"
 	@echo ""
 	@echo "Variables:"
 	@echo "  VERSION       - Image version tag (default: 0.0.1)"
 	@echo "  GITHUB_TOKEN  - GitHub personal access token (required for run)"
+	@echo "  PLATFORMS     - Target platforms (default: linux/amd64,linux/arm64)"
 

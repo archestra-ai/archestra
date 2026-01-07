@@ -756,7 +756,13 @@ export const perplexityAdapterFactory: LLMProvider<
     },
 
     extractApiKey(headers: PerplexityHeaders): string | undefined {
-        return headers.authorization;
+        const auth = headers.authorization;
+        if (!auth) {
+            return undefined;
+        }
+
+        // Normalize to a bare API key, matching the header schema behavior
+        return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : auth;
     },
 
     getBaseUrl(): string | undefined {

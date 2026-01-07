@@ -289,7 +289,7 @@ class GitDiffTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
 
 class GitCommitTool(Tool, ToolMarkerDoesNotRequireActiveProject):
-    """Stage and commit changes in a repository."""
+    """Stage all changes and commit them. Automatically runs 'git add' before committing - no separate git_add needed."""
 
     def apply(
         self,
@@ -299,12 +299,13 @@ class GitCommitTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         all_changes: bool = True,
     ) -> str:
         """
-        Stage and commit changes.
+        Stage and commit changes. This tool automatically stages files before committing,
+        so you don't need a separate git_add step.
 
         :param message: Commit message
         :param repo_path: Path to the repository (default: first repo in workspace)
-        :param files: Optional list of specific files to stage and commit
-        :param all_changes: If True and no files specified, stage all changes (default: True)
+        :param files: Optional list of specific files to stage and commit (if not provided, stages ALL changes)
+        :param all_changes: If True and no files specified, stage all changes with 'git add -A' (default: True)
         :return: JSON result with commit information
         """
         path = repo_path or _get_default_repo_path()

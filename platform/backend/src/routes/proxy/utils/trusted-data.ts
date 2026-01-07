@@ -1,7 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
-import type { CommonMessage, ToolResultUpdates } from "@/types";
+import type { CommonMessage, GlobalToolPolicy, ToolResultUpdates } from "@/types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**
@@ -28,6 +28,7 @@ export async function evaluateIfContextIsTrusted(
     options: string[];
     answer: string;
   }) => void,
+  globalToolPolicy?: GlobalToolPolicy,
 ): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
@@ -109,6 +110,7 @@ export async function evaluateIfContextIsTrusted(
       toolName,
       toolOutput: toolResult,
     })),
+    globalToolPolicy,
   );
 
   logger.debug(

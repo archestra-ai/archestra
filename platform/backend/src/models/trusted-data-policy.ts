@@ -3,7 +3,11 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
-import type { AutonomyPolicyOperator, TrustedData } from "@/types";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  TrustedData,
+} from "@/types";
 
 /**
  * Check if a policy is a default policy (applies to all results)
@@ -272,6 +276,7 @@ class TrustedDataPolicyModel {
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
+    globalToolPolicy?: GlobalToolPolicy,
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -279,9 +284,11 @@ class TrustedDataPolicyModel {
     reason: string;
   }> {
     // Use bulk evaluation for single tool
-    const results = await TrustedDataPolicyModel.evaluateBulk(agentId, [
-      { toolName, toolOutput },
-    ]);
+    const results = await TrustedDataPolicyModel.evaluateBulk(
+      agentId,
+      [{ toolName, toolOutput }],
+      globalToolPolicy,
+    );
     return (
       results.get("0") || {
         isTrusted: false,
@@ -303,6 +310,7 @@ class TrustedDataPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
     }>,
+    globalToolPolicy?: GlobalToolPolicy,
   ): Promise<
     Map<
       string,
@@ -323,6 +331,19 @@ class TrustedDataPolicyModel {
         reason: string;
       }
     >();
+
+    // If global tool policy is permissive, trust all results
+    if (globalToolPolicy === "permissive") {
+      for (let i = 0; i < toolCalls.length; i++) {
+        results.set(i.toString(), {
+          isTrusted: true,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: "Global tool policy is permissive",
+        });
+      }
+      return results;
+    }
 
     // Handle Archestra MCP server tools
     for (let i = 0; i < toolCalls.length; i++) {

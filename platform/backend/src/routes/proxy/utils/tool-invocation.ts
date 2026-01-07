@@ -1,6 +1,7 @@
 import { isArchestraMcpServerTool } from "@shared";
 import logger from "@/logging";
 import { ToolInvocationPolicyModel } from "@/models";
+import type { GlobalToolPolicy } from "@/types";
 
 /**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,
@@ -20,6 +21,7 @@ export const evaluatePolicies = async (
   agentId: string,
   contextIsTrusted: boolean,
   enabledToolNames?: Set<string>,
+  globalToolPolicy?: GlobalToolPolicy,
 ): Promise<null | [string, string]> => {
   logger.debug(
     { agentId, toolCallCount: toolCalls.length, contextIsTrusted },
@@ -90,6 +92,7 @@ export const evaluatePolicies = async (
       agentId,
       parsedToolCalls,
       contextIsTrusted,
+      globalToolPolicy,
     );
 
   logger.debug(

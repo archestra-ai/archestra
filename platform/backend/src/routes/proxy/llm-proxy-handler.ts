@@ -20,6 +20,7 @@ import {
   AgentModel,
   InteractionModel,
   LimitValidationService,
+  OrganizationModel,
   TokenPriceModel,
 } from "@/models";
 import {
@@ -106,6 +107,10 @@ export async function handleLLMProxy<
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
   );
+
+  // Fetch organization's global tool policy
+  const organization = await OrganizationModel.getById(context.organizationId);
+  const globalToolPolicy = organization?.globalToolPolicy;
 
   // Extract API key
   const apiKey = provider.extractApiKey(headers);
@@ -255,6 +260,7 @@ export async function handleLLMProxy<
               );
             }
           : undefined,
+        globalToolPolicy,
       );
 
     // Apply tool result updates
@@ -332,6 +338,7 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
         context.userId,
       );
@@ -348,6 +355,7 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
         context.userId,
       );
@@ -385,6 +393,7 @@ async function handleStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive" | undefined,
   externalAgentId?: string,
   userId?: string,
 ): Promise<FastifyReply> {
@@ -476,6 +485,7 @@ async function handleStreaming<
         agent.id,
         contextIsTrusted,
         enabledToolNames,
+        globalToolPolicy,
       );
 
       logger.info(
@@ -615,6 +625,7 @@ async function handleNonStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive" | undefined,
   externalAgentId?: string,
   userId?: string,
 ): Promise<FastifyReply> {
@@ -661,6 +672,7 @@ async function handleNonStreaming<
       agent.id,
       contextIsTrusted,
       enabledToolNames,
+      globalToolPolicy,
     );
 
     if (toolInvocationRefusal) {

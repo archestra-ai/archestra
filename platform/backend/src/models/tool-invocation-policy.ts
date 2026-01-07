@@ -2,7 +2,7 @@ import { isAgentTool, isArchestraMcpServerTool } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
-import type { ToolInvocation } from "@/types";
+import type { GlobalToolPolicy, ToolInvocation } from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -172,7 +172,13 @@ class ToolInvocationPolicyModel {
       toolInput: Record<string, any>;
     }>,
     isContextTrusted: boolean,
+    globalToolPolicy?: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
+    // If global tool policy is permissive, bypass all policy checks
+    if (globalToolPolicy === "permissive") {
+      return { isAllowed: true, reason: "" };
+    }
+
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
       (tc) =>

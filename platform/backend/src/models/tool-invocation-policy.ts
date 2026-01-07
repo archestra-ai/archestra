@@ -179,10 +179,6 @@ class ToolInvocationPolicyModel {
       { globalToolPolicy },
       "ToolInvocationPolicy.evaluateBatch: global policy",
     );
-    // If global tool policy is permissive, bypass all policy checks
-    if (globalToolPolicy === "permissive") {
-      return { isAllowed: true, reason: "" };
-    }
 
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
@@ -253,7 +249,7 @@ class ToolInvocationPolicyModel {
 
       for (const policy of specificPolicies) {
         // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every((condition) => {
+        const conditionsMatch = policy.conditions.every(function matchesCondition(condition) {
           const argumentValue = get(toolInput, condition.key);
           if (argumentValue === undefined) return false;
 
@@ -321,36 +317,40 @@ class ToolInvocationPolicyModel {
         continue; // Tool is allowed, move to next tool
       }
 
-      // No specific policy matched - fall back to default policy (empty conditions)
-      let defaultAllowsUntrusted = false;
+      if (defaultPolicies.length > 0) {
+        // No specific policy matched - fall back to default policy (empty conditions)
+        let defaultAllowsUntrusted = false;
 
-      for (const policy of defaultPolicies) {
-        if (policy.action === "block_always") {
+        for (const policy of defaultPolicies) {
+          if (policy.action === "block_always") {
+            return {
+              isAllowed: false,
+              reason:
+                policy.reason ||
+                "Tool invocation blocked: context contains untrusted data",
+              toolCallName,
+            };
+          }
+
+          if (policy.action === "allow_when_context_is_untrusted") {
+            defaultAllowsUntrusted = true;
+          }
+        }
+        // Check if tool is allowed when context is untrusted
+        if (!isContextTrusted && !defaultAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason:
-              policy.reason ||
-              "Tool invocation blocked: context contains untrusted data",
+            reason: "Tool invocation blocked: context contains untrusted data",
             toolCallName,
           };
         }
-
-        if (policy.action === "allow_when_context_is_untrusted") {
-          defaultAllowsUntrusted = true;
-        }
-      }
-
-      // Check if tool is allowed when context is untrusted
-      if (!isContextTrusted && !defaultAllowsUntrusted) {
-        return {
-          isAllowed: false,
-          reason: "Tool invocation blocked: context contains untrusted data",
-          toolCallName,
-        };
       }
     }
-
-    return { isAllowed: true, reason: "" };
+    if (globalToolPolicy === "permissive") {
+      return { isAllowed: true, reason: "" };
+    } else {
+      return { isAllowed: false, reason: "Tool invocation blocked: forbidden by default" };
+    }
   }
 }
 

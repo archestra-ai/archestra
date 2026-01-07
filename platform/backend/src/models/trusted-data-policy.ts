@@ -287,7 +287,6 @@ class TrustedDataPolicyModel {
     const results = await TrustedDataPolicyModel.evaluateBulk(
       agentId,
       [{ toolName, toolOutput }],
-      globalToolPolicy,
     );
     return (
       results.get("0") || {
@@ -310,7 +309,6 @@ class TrustedDataPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
     }>,
-    globalToolPolicy: GlobalToolPolicy,
   ): Promise<
     Map<
       string,
@@ -331,19 +329,6 @@ class TrustedDataPolicyModel {
         reason: string;
       }
     >();
-
-    // If global tool policy is permissive, trust all results
-    if (globalToolPolicy === "permissive") {
-      for (let i = 0; i < toolCalls.length; i++) {
-        results.set(i.toString(), {
-          isTrusted: true,
-          isBlocked: false,
-          shouldSanitizeWithDualLlm: false,
-          reason: "Global tool policy is permissive",
-        });
-      }
-      return results;
-    }
 
     // Handle Archestra MCP server tools
     for (let i = 0; i < toolCalls.length; i++) {

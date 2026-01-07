@@ -115,7 +115,6 @@ export async function evaluateIfContextIsTrusted(
       toolName,
       toolOutput: toolResult,
     })),
-    globalToolPolicy,
   );
 
   logger.debug(

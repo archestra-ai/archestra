@@ -48,7 +48,6 @@ describe("TrustedDataPolicyModel", () => {
           { toolName: "tool-3", toolOutput: { value: "data3" } },
           { toolName: "unknown-tool", toolOutput: { value: "data4" } },
         ],
-        "restrictive",
       );
 
       expect(results.size).toBe(4);
@@ -118,7 +117,6 @@ describe("TrustedDataPolicyModel", () => {
           { toolName: "email-tool", toolOutput: { from: "user@spam.com" } },
           { toolName: "file-tool", toolOutput: { path: "/etc/passwd" } },
         ],
-        "restrictive",
       );
 
       // Email with spam.com - blocked (index 0)
@@ -135,7 +133,6 @@ describe("TrustedDataPolicyModel", () => {
       const safeResults = await TrustedDataPolicyModel.evaluateBulk(
         agent.id,
         [{ toolName: "email-tool", toolOutput: { from: "user@safe.com" } }],
-        "restrictive",
       );
 
       const safeEmailResult = safeResults.get("0");
@@ -153,7 +150,6 @@ describe("TrustedDataPolicyModel", () => {
           { toolName: "regular-tool", toolOutput: { data: "test" } },
           { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
         ],
-        "restrictive",
       );
 
       // Archestra tools should be trusted (indices 0 and 2)

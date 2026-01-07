@@ -42,6 +42,8 @@ interface ArchestraPromptInputProps {
   initialApiKeyId?: string | null;
   /** Callback for API key change in initial chat mode (no conversation) */
   onApiKeyChange?: (apiKeyId: string) => void;
+  /** Callback when user switches to a different provider's API key - should switch to first model of that provider */
+  onProviderChange?: (provider: SupportedChatProvider) => void;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Callback for profile change in initial chat mode (no conversation) */
@@ -63,6 +65,7 @@ const PromptInputContent = ({
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
+  onProviderChange,
   textareaRef: externalTextareaRef,
   onProfileChange,
   onCreateConversation,
@@ -125,6 +128,7 @@ const PromptInputContent = ({
               }
               messageCount={messageCount}
               onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
             />
           )}
         </PromptInputTools>
@@ -152,6 +156,7 @@ const ArchestraPromptInput = ({
   currentProvider,
   initialApiKeyId,
   onApiKeyChange,
+  onProviderChange,
   textareaRef,
   onProfileChange,
   onCreateConversation,
@@ -171,6 +176,7 @@ const ArchestraPromptInput = ({
           currentProvider={currentProvider}
           initialApiKeyId={initialApiKeyId}
           onApiKeyChange={onApiKeyChange}
+          onProviderChange={onProviderChange}
           textareaRef={textareaRef}
           onProfileChange={onProfileChange}
           onCreateConversation={onCreateConversation}

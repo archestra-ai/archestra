@@ -224,6 +224,28 @@ export default function ChatPage() {
     [conversation, updateConversationMutation],
   );
 
+  // Handle provider change for existing conversation - switch to first model of new provider
+  const handleProviderChange = useCallback(
+    (provider: SupportedChatProvider) => {
+      const models = modelsByProvider[provider];
+      if (models && models.length > 0) {
+        handleModelChange(models[0].id);
+      }
+    },
+    [modelsByProvider, handleModelChange],
+  );
+
+  // Handle provider change for initial chat - switch to first model of new provider
+  const handleInitialProviderChange = useCallback(
+    (provider: SupportedChatProvider) => {
+      const models = modelsByProvider[provider];
+      if (models && models.length > 0) {
+        setInitialModel(models[0].id);
+      }
+    },
+    [modelsByProvider],
+  );
+
   // Find the specific prompt for this conversation (if any)
   const _conversationPrompt = conversation?.promptId
     ? prompts.find((p) => p.id === conversation.promptId)
@@ -859,6 +881,7 @@ export default function ChatPage() {
                     conversationId={conversationId}
                     currentConversationChatApiKeyId={conversation?.chatApiKeyId}
                     currentProvider={currentProvider}
+                    onProviderChange={handleProviderChange}
                     textareaRef={textareaRef}
                   />
                 ) : (
@@ -876,6 +899,7 @@ export default function ChatPage() {
                     currentProvider={initialProvider}
                     initialApiKeyId={initialApiKeyId}
                     onApiKeyChange={setInitialApiKeyId}
+                    onProviderChange={handleInitialProviderChange}
                     onCreateConversation={() => {
                       // Create conversation when user interacts with tools
                       if (!initialAgentId || !initialModel) return;

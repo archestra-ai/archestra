@@ -55,10 +55,15 @@ export function AssignToolsDialog({
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
   // Fetch currently assigned tools for this agent (use getAllProfileTools to get credentialSourceMcpServerId)
-  const { data: allProfileTools } = useAllProfileTools({});
+  // Use skipPagination to ensure all assigned tools are returned regardless of the default pagination limit
+  // Use agentId filter to fetch only tools for this specific agent (more efficient than fetching all and filtering client-side)
+  const { data: allProfileTools } = useAllProfileTools({
+    skipPagination: true,
+    filters: { agentId: agent.id },
+  });
   const agentToolRelations = useMemo(
-    () => allProfileTools?.data?.filter((at) => at.agent.id === agent.id) || [],
-    [allProfileTools, agent.id],
+    () => allProfileTools?.data || [],
+    [allProfileTools],
   );
 
   // Track selected tools with their credentials, execution source, and agent-tool IDs
@@ -282,6 +287,7 @@ export function AssignToolsDialog({
     setSearchQuery("");
     setOriginFilter("all");
     setShowAssignedOnly(false);
+    setExpandedTools(new Set());
     onOpenChange(false);
   }, [onOpenChange]);
 

@@ -389,78 +389,29 @@ class AgentToolModel {
     return agentTool;
   }
 
-  static async findAll(
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<AgentTool[]> {
-    // Get all agent-tool relationships with joined agent and tool details
-    let query = db
-      .select({
-        ...getTableColumns(schema.agentToolsTable),
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
-        tool: {
-          id: schema.toolsTable.id,
-          name: schema.toolsTable.name,
-          description: schema.toolsTable.description,
-          parameters: schema.toolsTable.parameters,
-          createdAt: schema.toolsTable.createdAt,
-          updatedAt: schema.toolsTable.updatedAt,
-          catalogId: schema.toolsTable.catalogId,
-          mcpServerId: schema.toolsTable.mcpServerId,
-          mcpServerName: schema.mcpServersTable.name,
-          mcpServerCatalogId: schema.mcpServersTable.catalogId,
-        },
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-      )
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .$dynamic();
-
-    // Apply access control filtering for users that are not agent admins if needed
-    if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      query = query.where(
-        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    return query;
-  }
-
   /**
-   * Find all agent-tool relationships with pagination, sorting, and filtering support
+   * Find all agent-tool relationships with pagination, sorting, and filtering support.
+   * When skipPagination is true, returns all matching records without applying limit/offset.
    */
-  static async findAllPaginated(
-    pagination: PaginationQuery,
+  static async findAll(params: {
+    pagination?: PaginationQuery;
     sorting?: {
       sortBy?: AgentToolSortBy;
       sortDirection?: AgentToolSortDirection;
-    },
-    filters?: AgentToolFilters,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<PaginatedResult<AgentTool>> {
+    };
+    filters?: AgentToolFilters;
+    userId?: string;
+    isAgentAdmin?: boolean;
+    skipPagination?: boolean;
+  }): Promise<PaginatedResult<AgentTool>> {
+    const {
+      pagination = { limit: 20, offset: 0 },
+      sorting,
+      filters,
+      userId,
+      isAgentAdmin,
+      skipPagination = false,
+    } = params;
     // Build WHERE conditions
     const whereConditions: SQL[] = [];
 
@@ -561,45 +512,52 @@ class AgentToolModel {
         break;
     }
 
+    // Build the base data query
+    const baseDataQuery = db
+      .select({
+        ...getTableColumns(schema.agentToolsTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        tool: {
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          description: schema.toolsTable.description,
+          parameters: schema.toolsTable.parameters,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
+          mcpServerId: schema.toolsTable.mcpServerId,
+          mcpServerName: schema.mcpServersTable.name,
+          mcpServerCatalogId: schema.mcpServersTable.catalogId,
+        },
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(whereClause)
+      .orderBy(orderByClause)
+      .$dynamic();
+
+    // Apply pagination only if not skipped
+    const dataQuery = skipPagination
+      ? baseDataQuery
+      : baseDataQuery.limit(pagination.limit).offset(pagination.offset);
+
     // Run both queries in parallel
     const [data, [{ total }]] = await Promise.all([
-      db
-        .select({
-          ...getTableColumns(schema.agentToolsTable),
-          agent: {
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-          },
-          tool: {
-            id: schema.toolsTable.id,
-            name: schema.toolsTable.name,
-            description: schema.toolsTable.description,
-            parameters: schema.toolsTable.parameters,
-            createdAt: schema.toolsTable.createdAt,
-            updatedAt: schema.toolsTable.updatedAt,
-            catalogId: schema.toolsTable.catalogId,
-            mcpServerId: schema.toolsTable.mcpServerId,
-            mcpServerName: schema.mcpServersTable.name,
-            mcpServerCatalogId: schema.mcpServersTable.catalogId,
-          },
-        })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.agentsTable,
-          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-        )
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .leftJoin(
-          schema.mcpServersTable,
-          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-        )
-        .where(whereClause)
-        .orderBy(orderByClause)
-        .limit(pagination.limit)
-        .offset(pagination.offset),
+      dataQuery,
       db
         .select({ total: count() })
         .from(schema.agentToolsTable)
@@ -617,6 +575,15 @@ class AgentToolModel {
         )
         .where(whereClause),
     ]);
+
+    // When skipping pagination, return all data with correct metadata
+    // Use Math.max(1, data.length) to avoid division by zero when data is empty
+    if (skipPagination) {
+      return createPaginatedResult(data, data.length, {
+        limit: Math.max(1, data.length),
+        offset: 0,
+      });
+    }
 
     return createPaginatedResult(data, Number(total), pagination);
   }

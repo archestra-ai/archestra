@@ -19,6 +19,7 @@ export function useAllProfileTools({
   pagination,
   sorting,
   filters,
+  skipPagination,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
   pagination?: {
@@ -36,6 +37,7 @@ export function useAllProfileTools({
     credentialSourceMcpServerId?: string;
     mcpServerOwnerId?: string;
   };
+  skipPagination?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -50,6 +52,7 @@ export function useAllProfileTools({
         origin: filters?.origin,
         credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
+        skipPagination,
       },
     ],
     queryFn: async () => {
@@ -64,6 +67,7 @@ export function useAllProfileTools({
           origin: filters?.origin,
           mcpServerOwnerId: filters?.mcpServerOwnerId,
           excludeArchestraTools: true,
+          skipPagination,
         },
       });
       return (

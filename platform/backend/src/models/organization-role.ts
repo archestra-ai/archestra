@@ -296,6 +296,53 @@ class OrganizationRoleModel {
   }
 
   /**
+   * Get a role by name (custom roles) or predefined name
+   */
+  static async getByName(
+    name: string,
+    organizationId: string,
+  ): Promise<OrganizationRole | null> {
+    logger.debug(
+      { name, organizationId },
+      "OrganizationRoleModel.getByName: fetching",
+    );
+
+    // Predefined roles have name equal to identifier
+    if (OrganizationRoleModel.isPredefinedRole(name)) {
+      logger.debug(
+        { name },
+        "OrganizationRoleModel.getByName: predefined role",
+      );
+      return generatePredefinedRole(name, organizationId);
+    }
+
+    const [result] = await db
+      .select({
+        ...getTableColumns(schema.organizationRolesTable),
+        predefined: sql<boolean>`false`,
+      })
+      .from(schema.organizationRolesTable)
+      .where(
+        and(
+          eq(schema.organizationRolesTable.name, name),
+          eq(schema.organizationRolesTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!result) {
+      logger.debug({ name }, "OrganizationRoleModel.getByName: not found");
+      return null;
+    }
+
+    logger.debug({ name }, "OrganizationRoleModel.getByName: completed");
+    return {
+      ...result,
+      permission: JSON.parse(result.permission),
+    };
+  }
+
+  /**
    * Get permissions for a role
    */
   static async getPermissions(

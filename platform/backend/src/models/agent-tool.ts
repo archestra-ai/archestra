@@ -577,9 +577,10 @@ class AgentToolModel {
     ]);
 
     // When skipping pagination, return all data with correct metadata
+    // Use Math.max(1, data.length) to avoid division by zero when data is empty
     if (skipPagination) {
       return createPaginatedResult(data, data.length, {
-        limit: data.length,
+        limit: Math.max(1, data.length),
         offset: 0,
       });
     }

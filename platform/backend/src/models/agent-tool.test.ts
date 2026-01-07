@@ -178,6 +178,29 @@ describe("AgentToolModel.findAll", () => {
       expect(result.data).toHaveLength(3);
       expect(result.pagination.total).toBe(3);
     });
+
+    test("skipPagination with empty results does not cause division by zero", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      // Query for a specific agent with no tools assigned, using skipPagination
+      // This should not produce NaN values in pagination metadata
+      const result = await AgentToolModel.findAll({
+        filters: { agentId: agent.id, excludeArchestraTools: true },
+        skipPagination: true,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+      // These should be valid numbers, not NaN
+      expect(Number.isNaN(result.pagination.totalPages)).toBe(false);
+      expect(Number.isNaN(result.pagination.currentPage)).toBe(false);
+      expect(result.pagination.totalPages).toBe(0);
+      expect(result.pagination.currentPage).toBe(1);
+      expect(result.pagination.hasNext).toBe(false);
+      expect(result.pagination.hasPrev).toBe(false);
+    });
   });
 
   describe("Sorting", () => {

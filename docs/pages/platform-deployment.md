@@ -552,6 +552,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Use this to point to your own proxy or other custom endpoints
   - Note: This is only used when Vertex AI mode is disabled
 
+- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation and trusted data policies are enforced across the LLM proxy.
+
+  - Default: `permissive`
+  - Values: `permissive` or `restrictive`
+  - `permissive`: Bypasses all policy checks and trusts all tool results. Tools work without requiring policies.
+  - `restrictive`: Enforces per-tool policies. Tools without explicit policies are blocked by default.
+
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
   - Default: `false`

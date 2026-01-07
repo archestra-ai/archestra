@@ -45,9 +45,9 @@ custom_tools = [
     "git_push",
     "git_checkout_branch",
     # GitHub tools
-    "git_hub_create_pr",
-    "git_hub_list_prs",
-    "git_hub_get_issue",
+    "github_create_pr",
+    "github_list_prs",
+    "github_get_issue",
 ]
 logger.info(f"Registered {len(custom_tools)} custom tools: {custom_tools}")
 

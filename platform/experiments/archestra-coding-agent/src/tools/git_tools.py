@@ -17,6 +17,46 @@ from serena.tools.tools_base import ToolMarkerDoesNotRequireActiveProject
 DEFAULT_WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/workspace")
 
 
+def _sanitize_path(target_dir: str, base_dir: str = DEFAULT_WORKSPACE_DIR) -> tuple[str, Optional[str]]:
+    """
+    Sanitize and validate a target directory path to prevent path traversal attacks.
+
+    Args:
+        target_dir: The target directory name or relative path
+        base_dir: The base directory that target_dir must stay within
+
+    Returns:
+        Tuple of (sanitized_full_path, error_message)
+        If error_message is not None, the path is invalid
+    """
+    # Reject absolute paths
+    if os.path.isabs(target_dir):
+        return "", f"Absolute paths are not allowed. Use a relative directory name instead of '{target_dir}'"
+
+    # Normalize the base directory
+    base_dir = os.path.abspath(base_dir)
+
+    # Join and normalize the full path
+    full_path = os.path.normpath(os.path.join(base_dir, target_dir))
+
+    # Verify the resolved path is within the base directory
+    # Use os.path.commonpath to check containment
+    try:
+        common = os.path.commonpath([base_dir, full_path])
+        if common != base_dir:
+            return "", f"Path traversal detected. Target must be within {base_dir}"
+    except ValueError:
+        # commonpath raises ValueError if paths are on different drives (Windows)
+        return "", f"Invalid path. Target must be within {base_dir}"
+
+    # Additional check: ensure full_path starts with base_dir
+    # This handles edge cases like base="/workspace" and full="/workspaceevil"
+    if not (full_path == base_dir or full_path.startswith(base_dir + os.sep)):
+        return "", f"Path traversal detected. Target must be within {base_dir}"
+
+    return full_path, None
+
+
 def _run_git_command(
     args: list[str],
     cwd: Optional[str] = None,
@@ -91,7 +131,13 @@ class GitCloneTool(Tool, ToolMarkerDoesNotRequireActiveProject):
                 repo_name = repo_name[:-4]
             target_dir = repo_name
 
-        full_path = os.path.join(DEFAULT_WORKSPACE_DIR, target_dir)
+        # Sanitize and validate the target path to prevent path traversal attacks
+        full_path, error = _sanitize_path(target_dir)
+        if error:
+            return json.dumps({
+                "success": False,
+                "error": error,
+            })
 
         # Check if directory already exists
         if os.path.exists(full_path):

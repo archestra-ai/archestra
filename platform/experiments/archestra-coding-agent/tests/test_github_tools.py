@@ -10,11 +10,27 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-# Mock serena.tools before importing our tools
+# Mock serena modules before importing our tools
 import sys
+
+# Create base classes for mocking - Tool must be a proper base class
+class MockTool:
+    """Mock base class for Serena Tool."""
+    pass
+
+class MockToolMarkerDoesNotRequireActiveProject:
+    """Mock marker class."""
+    pass
+
+mock_tools = MagicMock()
+mock_tools.Tool = MockTool
+
+mock_tools_base = MagicMock()
+mock_tools_base.ToolMarkerDoesNotRequireActiveProject = MockToolMarkerDoesNotRequireActiveProject
+
 sys.modules['serena'] = MagicMock()
-sys.modules['serena.tools'] = MagicMock()
-sys.modules['serena.tools'].Tool = object
+sys.modules['serena.tools'] = mock_tools
+sys.modules['serena.tools.tools_base'] = mock_tools_base
 
 # Mock github module with a proper exception class
 class MockGithubException(Exception):
@@ -29,9 +45,9 @@ sys.modules['github'] = mock_github
 
 # Now import our tools
 from src.tools.github_tools import (
-    GitHubCreatePRTool,
-    GitHubListPRsTool,
-    GitHubGetIssueTool,
+    GithubCreatePrTool,
+    GithubListPrsTool,
+    GithubGetIssueTool,
     _parse_repo_info,
     _get_github_error_message,
 )
@@ -182,8 +198,8 @@ class TestGetGithubErrorMessage:
         assert len(message) > 0
 
 
-class TestGitHubCreatePRTool:
-    """Tests for the GitHubCreatePRTool."""
+class TestGithubCreatePrTool:
+    """Tests for the GithubCreatePrTool."""
 
     @patch('src.tools.github_tools._get_github_client')
     @patch('src.tools.github_tools.GITHUB_AVAILABLE', True)
@@ -203,7 +219,7 @@ class TestGitHubCreatePRTool:
         mock_gh.get_repo.return_value = mock_repo
         mock_client.return_value = mock_gh
 
-        tool = GitHubCreatePRTool()
+        tool = GithubCreatePrTool()
         result = json.loads(tool.apply(
             title="Test PR",
             body="PR description",
@@ -222,7 +238,7 @@ class TestGitHubCreatePRTool:
         """Test PR creation without token."""
         mock_client.return_value = None
 
-        tool = GitHubCreatePRTool()
+        tool = GithubCreatePrTool()
         result = json.loads(tool.apply(
             title="Test PR",
             body="PR description",
@@ -234,8 +250,8 @@ class TestGitHubCreatePRTool:
         assert "GITHUB_TOKEN" in result["error"]
 
 
-class TestGitHubListPRsTool:
-    """Tests for the GitHubListPRsTool."""
+class TestGithubListPrsTool:
+    """Tests for the GithubListPrsTool."""
 
     @patch('src.tools.github_tools._get_github_client')
     @patch('src.tools.github_tools.GITHUB_AVAILABLE', True)
@@ -261,7 +277,7 @@ class TestGitHubListPRsTool:
         mock_gh.get_repo.return_value = mock_repo
         mock_client.return_value = mock_gh
 
-        tool = GitHubListPRsTool()
+        tool = GithubListPrsTool()
         result = json.loads(tool.apply(repo="owner/repo"))
 
         assert result["success"] is True
@@ -269,8 +285,8 @@ class TestGitHubListPRsTool:
         assert result["pull_requests"][0]["number"] == 1
 
 
-class TestGitHubGetIssueTool:
-    """Tests for the GitHubGetIssueTool."""
+class TestGithubGetIssueTool:
+    """Tests for the GithubGetIssueTool."""
 
     @patch('src.tools.github_tools._get_github_client')
     @patch('src.tools.github_tools.GITHUB_AVAILABLE', True)
@@ -301,7 +317,7 @@ class TestGitHubGetIssueTool:
         mock_gh.get_repo.return_value = mock_repo
         mock_client.return_value = mock_gh
 
-        tool = GitHubGetIssueTool()
+        tool = GithubGetIssueTool()
         result = json.loads(tool.apply(
             repo="owner/repo",
             issue_number=123,

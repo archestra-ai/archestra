@@ -13,9 +13,9 @@ from .git_tools import (
     GitCheckoutBranchTool,
 )
 from .github_tools import (
-    GitHubCreatePRTool,
-    GitHubListPRsTool,
-    GitHubGetIssueTool,
+    GithubCreatePrTool,
+    GithubListPrsTool,
+    GithubGetIssueTool,
 )
 
 __all__ = [
@@ -26,9 +26,9 @@ __all__ = [
     "GitCommitTool",
     "GitPushTool",
     "GitCheckoutBranchTool",
-    # GitHub tools
-    "GitHubCreatePRTool",
-    "GitHubListPRsTool",
-    "GitHubGetIssueTool",
+    # GitHub tools (use Titlecase for nicer snake_case conversion)
+    "GithubCreatePrTool",
+    "GithubListPrsTool",
+    "GithubGetIssueTool",
 ]
 

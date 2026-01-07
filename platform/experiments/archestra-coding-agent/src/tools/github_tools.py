@@ -114,7 +114,7 @@ def _parse_repo_info(repo_url: Optional[str] = None) -> tuple[Optional[str], Opt
     return None, None
 
 
-class GitHubCreatePRTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+class GithubCreatePrTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Create a pull request on GitHub."""
 
     def apply(
@@ -190,7 +190,7 @@ class GitHubCreatePRTool(Tool, ToolMarkerDoesNotRequireActiveProject):
             })
 
 
-class GitHubListPRsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+class GithubListPrsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """List pull requests for a repository."""
 
     def apply(
@@ -266,7 +266,7 @@ class GitHubListPRsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
             })
 
 
-class GitHubGetIssueTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+class GithubGetIssueTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Get details of a GitHub issue."""
 
     def apply(

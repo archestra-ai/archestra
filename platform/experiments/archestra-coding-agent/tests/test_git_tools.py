@@ -9,11 +9,27 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock
 
-# Mock serena.tools before importing our tools
+# Mock serena modules before importing our tools
 import sys
+
+# Create base classes for mocking - Tool must be a proper base class
+class MockTool:
+    """Mock base class for Serena Tool."""
+    pass
+
+class MockToolMarkerDoesNotRequireActiveProject:
+    """Mock marker class."""
+    pass
+
+mock_tools = MagicMock()
+mock_tools.Tool = MockTool
+
+mock_tools_base = MagicMock()
+mock_tools_base.ToolMarkerDoesNotRequireActiveProject = MockToolMarkerDoesNotRequireActiveProject
+
 sys.modules['serena'] = MagicMock()
-sys.modules['serena.tools'] = MagicMock()
-sys.modules['serena.tools'].Tool = object
+sys.modules['serena.tools'] = mock_tools
+sys.modules['serena.tools.tools_base'] = mock_tools_base
 
 # Now import our tools
 from src.tools.git_tools import (
@@ -25,8 +41,75 @@ from src.tools.git_tools import (
     GitCheckoutBranchTool,
     _run_git_command,
     _get_default_repo_path,
+    _sanitize_path,
     DEFAULT_WORKSPACE_DIR,
 )
+
+
+class TestSanitizePath:
+    """Tests for the _sanitize_path helper function - path traversal prevention."""
+
+    def test_valid_simple_directory(self):
+        """Test valid simple directory name."""
+        path, error = _sanitize_path("my-repo", "/workspace")
+        assert error is None
+        assert path == "/workspace/my-repo"
+
+    def test_valid_nested_directory(self):
+        """Test valid nested directory path."""
+        path, error = _sanitize_path("org/repo", "/workspace")
+        assert error is None
+        assert path == "/workspace/org/repo"
+
+    def test_reject_absolute_path(self):
+        """Test that absolute paths are rejected."""
+        path, error = _sanitize_path("/tmp/evil", "/workspace")
+        assert error is not None
+        assert "Absolute paths are not allowed" in error
+        assert path == ""
+
+    def test_reject_absolute_path_etc(self):
+        """Test that absolute paths to sensitive locations are rejected."""
+        path, error = _sanitize_path("/etc/passwd", "/workspace")
+        assert error is not None
+        assert "Absolute paths are not allowed" in error
+
+    def test_reject_parent_traversal(self):
+        """Test that ../ traversal is rejected."""
+        path, error = _sanitize_path("../escape", "/workspace")
+        assert error is not None
+        assert "Path traversal detected" in error
+
+    def test_reject_deep_parent_traversal(self):
+        """Test that deep ../ traversal is rejected."""
+        path, error = _sanitize_path("../../etc/passwd", "/workspace")
+        assert error is not None
+        assert "Path traversal detected" in error
+
+    def test_reject_hidden_traversal(self):
+        """Test that hidden traversal (foo/../..) is rejected."""
+        path, error = _sanitize_path("foo/../../etc", "/workspace")
+        assert error is not None
+        assert "Path traversal detected" in error
+
+    def test_reject_workspace_prefix_attack(self):
+        """Test that /workspaceevil doesn't match /workspace."""
+        # This tests the edge case where commonpath might be fooled
+        path, error = _sanitize_path("../workspaceevil", "/workspace")
+        assert error is not None
+        assert "Path traversal detected" in error
+
+    def test_valid_path_with_dots_in_name(self):
+        """Test that dots in directory names are allowed."""
+        path, error = _sanitize_path("my.repo.name", "/workspace")
+        assert error is None
+        assert path == "/workspace/my.repo.name"
+
+    def test_valid_path_with_current_dir(self):
+        """Test that ./ is normalized correctly."""
+        path, error = _sanitize_path("./my-repo", "/workspace")
+        assert error is None
+        assert path == "/workspace/my-repo"
 
 
 class TestRunGitCommand:
@@ -96,6 +179,39 @@ class TestGitCloneTool:
 
         assert result["success"] is False
         assert "already exists" in result["error"]
+
+    def test_clone_rejects_absolute_path(self):
+        """Test clone rejects absolute target_dir paths."""
+        tool = GitCloneTool()
+        result = json.loads(tool.apply(
+            repo_url="https://github.com/owner/repo.git",
+            target_dir="/tmp/evil",
+        ))
+
+        assert result["success"] is False
+        assert "Absolute paths are not allowed" in result["error"]
+
+    def test_clone_rejects_path_traversal(self):
+        """Test clone rejects path traversal attempts."""
+        tool = GitCloneTool()
+        result = json.loads(tool.apply(
+            repo_url="https://github.com/owner/repo.git",
+            target_dir="../escape",
+        ))
+
+        assert result["success"] is False
+        assert "Path traversal detected" in result["error"]
+
+    def test_clone_rejects_deep_path_traversal(self):
+        """Test clone rejects deep path traversal attempts."""
+        tool = GitCloneTool()
+        result = json.loads(tool.apply(
+            repo_url="https://github.com/owner/repo.git",
+            target_dir="../../etc/passwd",
+        ))
+
+        assert result["success"] is False
+        assert "Path traversal detected" in result["error"]
 
 
 class TestGitStatusTool:

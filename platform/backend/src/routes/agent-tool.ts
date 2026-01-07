@@ -42,6 +42,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: AgentToolFilterSchema.extend({
           sortBy: AgentToolSortBySchema.optional(),
           sortDirection: AgentToolSortDirectionSchema.optional(),
+          skipPagination: z.coerce.boolean().optional(),
         }).merge(PaginationQuerySchema),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
@@ -60,6 +61,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           origin,
           mcpServerOwnerId,
           excludeArchestraTools,
+          skipPagination,
         },
         headers,
         user,
@@ -71,19 +73,20 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      const result = await AgentToolModel.findAllPaginated(
-        { limit, offset },
-        { sortBy, sortDirection },
-        {
+      const result = await AgentToolModel.findAll({
+        pagination: { limit, offset },
+        sorting: { sortBy, sortDirection },
+        filters: {
           search,
           agentId,
           origin,
           mcpServerOwnerId,
           excludeArchestraTools,
         },
-        user.id,
+        userId: user.id,
         isAgentAdmin,
-      );
+        skipPagination,
+      });
 
       return reply.send(result);
     },
@@ -433,12 +436,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Get the agent-tool relationship for validation (needed for both credential and execution source)
       let agentToolForValidation:
-        | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
+        | Awaited<ReturnType<typeof AgentToolModel.findAll>>["data"][number]
         | undefined;
 
       if (credentialSourceMcpServerId || executionSourceMcpServerId) {
-        const agentTools = await AgentToolModel.findAll();
-        agentToolForValidation = agentTools.find((at) => at.id === id);
+        const agentTools = await AgentToolModel.findAll({
+          skipPagination: true,
+        });
+        agentToolForValidation = agentTools.data.find((at) => at.id === id);
 
         if (!agentToolForValidation) {
           throw new ApiError(

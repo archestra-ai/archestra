@@ -285,8 +285,17 @@ export async function createAgentServer(
 }
 
 /**
- * Create a fresh transport for a request
- * We use session-based mode as required by the SDK for JSON responses
+ * Create transport with session management
+ * If client provides a session ID, we'll use it; otherwise generate one
+ *
+ *  Note: enableJsonResponse is NOT set, allowing the gateway to support both JSON and SSE (text/event-stream)
+ * responses. This is required for Cursor IDE compatibility, which falls back to SSE transport after
+ * StreamableHTTP fails.
+ *
+ * If we set enableJsonResponse to true, the transport will only support JSON responses
+ *
+ * A "Backwards-compatible server (Streamable HTTP + SSE)" example is mentioned here https://github.com/modelcontextprotocol/typescript-sdk/blob/0a75810b26e24bae6b9cfb41e12ac770aeaa1da4/docs/server.md?plain=1#L55C3-L55C54
+ * and documented here https://github.com/modelcontextprotocol/typescript-sdk/blob/0a75810b26e24bae6b9cfb41e12ac770aeaa1da4/examples/server/src/sseAndStreamableHttpCompatibleServer.ts
  */
 export function createTransport(
   agentId: string,
@@ -295,8 +304,6 @@ export function createTransport(
 ): StreamableHTTPServerTransport {
   logger.info({ agentId, clientSessionId }, "Creating new transport instance");
 
-  // Create transport with session management
-  // If client provides a session ID, we'll use it; otherwise generate one
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => {
       const sessionId =
@@ -307,7 +314,6 @@ export function createTransport(
       );
       return sessionId;
     },
-    enableJsonResponse: true, // Use JSON responses instead of SSE
   });
 
   logger.info({ agentId }, "Transport instance created");

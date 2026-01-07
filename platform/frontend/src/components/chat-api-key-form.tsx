@@ -92,7 +92,7 @@ const PROVIDER_CONFIG: Record<
   },
   perplexity: {
     name: 'Perplexity',
-    icon: '/icons/Perplexity.svg',
+    icon: '/icons/perplexity.png',
     placeholder: 'pplx-...',
     enabled: true,
     consoleUrl: 'https://www.perplexity.ai/settings/api',

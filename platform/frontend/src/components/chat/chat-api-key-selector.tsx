@@ -267,7 +267,7 @@ export function ChatApiKeySelector({
         </PopoverTrigger>
         <PopoverContent className="w-72 p-0" align="start">
           <Command>
-            <CommandInput placeholder="Search API keys..." />
+            <CommandInput placeholder="Search LLM API Keys..." />
             <CommandList>
               <CommandEmpty>No API keys found.</CommandEmpty>
               {/* Group keys by provider (current provider first) */}

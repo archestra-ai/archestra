@@ -13970,6 +13970,85 @@ export type GetPolicyConfigSubagentPromptResponses = {
 
 export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
 
+export type GetAllPromptAgentConnectionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/prompt-agents';
+};
+
+export type GetAllPromptAgentConnectionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAllPromptAgentConnectionsError = GetAllPromptAgentConnectionsErrors[keyof GetAllPromptAgentConnectionsErrors];
+
+export type GetAllPromptAgentConnectionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        promptId: string;
+        agentPromptId: string;
+    }>;
+};
+
+export type GetAllPromptAgentConnectionsResponse = GetAllPromptAgentConnectionsResponses[keyof GetAllPromptAgentConnectionsResponses];
+
 export type GetPromptAgentsData = {
     body?: never;
     path: {
@@ -14848,6 +14927,7 @@ export type GetPromptToolsResponses = {
         description: string | null;
         createdAt: string;
         updatedAt: string;
+        agentPromptId: string;
     }>;
 };
 

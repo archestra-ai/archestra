@@ -180,6 +180,7 @@ export const RouteId = {
   DeleteAgentPrompt: "deleteAgentPrompt",
 
   // Prompt Agent Routes (agent assignment to prompts)
+  GetAllPromptAgentConnections: "getAllPromptAgentConnections",
   GetPromptAgents: "getPromptAgents",
   SyncPromptAgents: "syncPromptAgents",
   DeletePromptAgent: "deletePromptAgent",

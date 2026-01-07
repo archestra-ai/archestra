@@ -32,8 +32,8 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ChatApiKeySelectorProps {
-  /** Conversation ID for persisting selection */
-  conversationId: string;
+  /** Conversation ID for persisting selection (optional for initial chat) */
+  conversationId?: string;
   /** Currently selected model (to filter API keys by provider) */
   currentProvider?: SupportedChatProvider;
   /** Current Conversation Chat API key ID set on the backend */
@@ -42,6 +42,8 @@ interface ChatApiKeySelectorProps {
   disabled?: boolean;
   /** Number of messages in current conversation (for mid-conversation warning) */
   messageCount?: number;
+  /** Callback for initial chat mode when no conversationId is available */
+  onApiKeyChange?: (apiKeyId: string) => void;
 }
 
 const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
@@ -62,6 +64,7 @@ export function ChatApiKeySelector({
   currentConversationChatApiKeyId,
   disabled = false,
   messageCount = 0,
+  onApiKeyChange,
 }: ChatApiKeySelectorProps) {
   const { data: availableKeys = [], isLoading } =
     useAvailableChatApiKeys(currentProvider);
@@ -116,10 +119,14 @@ export function ChatApiKeySelector({
 
     // Auto-select first key if no valid key is selected
     if (!currentKeyValid && keyToSelectValid) {
-      updateConversationMutation.mutate({
-        id: conversationId,
-        chatApiKeyId: keyToSelect.id,
-      });
+      if (conversationId) {
+        updateConversationMutation.mutate({
+          id: conversationId,
+          chatApiKeyId: keyToSelect.id,
+        });
+      } else if (onApiKeyChange) {
+        onApiKeyChange(keyToSelect.id);
+      }
     }
   }, [
     availableKeys,
@@ -128,6 +135,7 @@ export function ChatApiKeySelector({
     conversationId,
     currentProvider,
     keysByScope,
+    onApiKeyChange,
   ]);
 
   const handleSelectKey = (keyId: string) => {
@@ -146,10 +154,14 @@ export function ChatApiKeySelector({
   };
 
   const applyKeyChange = (keyId: string) => {
-    updateConversationMutation.mutate({
-      id: conversationId,
-      chatApiKeyId: keyId,
-    });
+    if (conversationId) {
+      updateConversationMutation.mutate({
+        id: conversationId,
+        chatApiKeyId: keyId,
+      });
+    } else if (onApiKeyChange) {
+      onApiKeyChange(keyId);
+    }
     if (currentProvider) {
       localStorage.setItem(`${LOCAL_STORAGE_KEY}-${currentProvider}`, keyId);
     }

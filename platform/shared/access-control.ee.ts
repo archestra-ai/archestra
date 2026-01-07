@@ -501,6 +501,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeletePrompt]: {
     prompt: ["delete"],
   },
+  [RouteId.GetAllPromptAgentConnections]: {
+    prompt: ["read"],
+  },
   [RouteId.GetPromptAgents]: {
     prompt: ["read"],
   },

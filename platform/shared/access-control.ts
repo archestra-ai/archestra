@@ -250,6 +250,7 @@ export const RouteId = {
   GetRoles: "getRoles",
   CreateRole: "createRole",
   GetRole: "getRole",
+  GetRoleByName: "getRoleByName",
   UpdateRole: "updateRole",
   DeleteRole: "deleteRole",
 
@@ -350,6 +351,13 @@ export const RouteId = {
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
+  GetUser: "getUser",
+
+  // Member Routes (for Terraform RBAC)
+  GetMember: "getMember",
+  AssignMemberRole: "assignMemberRole",
+  RemoveMemberRole: "removeMemberRole",
+  GetMemberRoleAssignment: "getMemberRoleAssignment",
 
   // Token Price Routes
   GetTokenPrices: "getTokenPrices",
@@ -633,11 +641,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetRole]: {
     organization: ["read"],
   },
+  [RouteId.GetRoleByName]: {
+    organization: ["read"],
+  },
   [RouteId.UpdateRole]: {
     organization: ["update"],
   },
   [RouteId.DeleteRole]: {
     organization: ["update"],
+  },
+  // Member Routes (for Terraform RBAC)
+  [RouteId.GetMember]: {
+    organization: ["read"],
+  },
+  [RouteId.AssignMemberRole]: {
+    organization: ["update"],
+  },
+  [RouteId.RemoveMemberRole]: {
+    organization: ["update"],
+  },
+  [RouteId.GetMemberRoleAssignment]: {
+    organization: ["read"],
   },
   [RouteId.GetMcpToolCalls]: {
     mcpToolCall: ["read"],
@@ -761,6 +785,9 @@ export const requiredEndpointPermissionsMap: Partial<
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetUser]: {
+    organization: ["read"],
+  },
   [RouteId.GetTokenPrices]: {
     tokenPrice: ["read"],
   },

@@ -69,8 +69,15 @@ export function useCreateConversation() {
       if (error) throw new Error("Failed to create conversation");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Immediately populate the individual conversation cache to avoid loading state
+      if (newConversation) {
+        queryClient.setQueryData(
+          ["conversation", newConversation.id],
+          newConversation,
+        );
+      }
     },
   });
 }

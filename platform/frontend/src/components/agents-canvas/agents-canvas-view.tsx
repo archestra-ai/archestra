@@ -542,9 +542,7 @@ function AgentsCanvasViewInner() {
   if (prompts.length === 0) {
     return (
       <div className="flex h-[calc(100vh-280px)] items-center justify-center">
-        <p className="text-muted-foreground">
-          No agents yet. Create one to get started.
-        </p>
+        <p className="text-muted-foreground">Create agent</p>
       </div>
     );
   }

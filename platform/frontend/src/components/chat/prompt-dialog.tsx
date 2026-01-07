@@ -156,7 +156,7 @@ export function PromptDialog({
           systemPrompt: trimmedSystemPrompt || undefined,
         });
         promptId = created?.id ?? "";
-        toast.success("Prompt created successfully");
+        toast.success("Agent created successfully");
       }
 
       // Sync agents if any were selected and we have a valid promptId
@@ -233,11 +233,7 @@ export function PromptDialog({
                 onProfileChange={setProfileId}
               />
               {agentId && (
-                <ChatToolsDisplay
-                  agentId={agentId}
-                  promptId={prompt?.id}
-                  readOnly
-                />
+                <ChatToolsDisplay agentId={agentId} readOnly />
               )}
             </div>
           </div>

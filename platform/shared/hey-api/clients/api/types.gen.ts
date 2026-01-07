@@ -14008,6 +14008,15 @@ export type GetAllPromptAgentConnectionsErrors = {
     /**
      * Default Response
      */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: {
             message: string;
@@ -14909,6 +14918,7 @@ export type GetPromptToolsResponses = {
         description: string | null;
         createdAt: string;
         updatedAt: string;
+        agentPromptId: string;
     }>;
 };
 

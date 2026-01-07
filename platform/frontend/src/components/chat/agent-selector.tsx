@@ -103,7 +103,7 @@ export function AgentSelector({
           >
             <Bot className="h-3 w-3 shrink-0 opacity-70" />
             <span className="text-xs font-medium">
-              {currentPrompt?.name || "Free chat"}
+              {currentPrompt?.name || "No agent selected"}
             </span>
             {open ? (
               <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
@@ -119,12 +119,12 @@ export function AgentSelector({
               <CommandEmpty>No agent found.</CommandEmpty>
               <CommandGroup>
                 <CommandItem
-                  value="free-chat"
+                  value="no-agent-selected"
                   onSelect={() =>
-                    handlePromptSelect(null, "Free chat", currentAgentId)
+                    handlePromptSelect(null, "No agent selected", currentAgentId)
                   }
                 >
-                  Free chat
+                  No agent selected
                   <Check
                     className={cn(
                       "ml-auto h-4 w-4",

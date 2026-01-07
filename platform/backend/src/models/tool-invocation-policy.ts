@@ -312,7 +312,9 @@ class ToolInvocationPolicyModel {
         if (policy.action === "block_always") {
           return {
             isAllowed: false,
-            reason: policy.reason || "Policy violation",
+            reason:
+              policy.reason ||
+              "Tool invocation blocked: context contains untrusted data",
             toolCallName,
           };
         }

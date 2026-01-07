@@ -123,12 +123,30 @@ export default function ChatPage() {
   >(null);
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
 
-  // Set default initial agent and model when data loads
+  // Set initial agent from URL param or default when data loads
   useEffect(() => {
-    if (!initialAgentId && allProfiles.length > 0) {
+    if (allProfiles.length === 0) return;
+
+    // Check for agentId in URL query params (e.g., from /agents page "Chat" button)
+    const urlAgentId = searchParams.get("agentId");
+    if (urlAgentId && !initialAgentId) {
+      const matchingProfile = allProfiles.find((p) => p.id === urlAgentId);
+      if (matchingProfile) {
+        setInitialAgentId(urlAgentId);
+        // Find a prompt for this agent if one exists
+        const agentPrompt = prompts.find((p) => p.agentId === urlAgentId);
+        if (agentPrompt) {
+          setInitialPromptId(agentPrompt.id);
+        }
+        return;
+      }
+    }
+
+    // Default to first profile if no initialAgentId set
+    if (!initialAgentId) {
       setInitialAgentId(allProfiles[0].id);
     }
-  }, [allProfiles, initialAgentId]);
+  }, [allProfiles, initialAgentId, searchParams, prompts]);
 
   useEffect(() => {
     if (!initialModel) {
@@ -167,11 +185,19 @@ export default function ChatPage() {
     chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
-  // Sync conversation ID with URL
+  // Sync conversation ID with URL and reset initial state when navigating to base /chat
   useEffect(() => {
     const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
     if (conversationParam !== conversationId) {
       setConversationId(conversationParam || undefined);
+
+      // Reset initial state when navigating to /chat without a conversation
+      // This ensures a fresh state when user clicks "New chat" or navigates back
+      if (!conversationParam) {
+        setInitialPromptId(null);
+        // Reset initialAgentId to trigger re-selection from useEffect
+        setInitialAgentId(null);
+      }
     }
   }, [searchParams, conversationId]);
 
@@ -603,11 +629,16 @@ export default function ChatPage() {
               )}
 
               {/* Single AgentToolsDisplay instance - no remounting */}
-              {/* Use stable promptId that doesn't change during conversation creation */}
-              {(initialPromptId || conversation?.promptId) && (
+              {/* When viewing a conversation, use only its promptId (not initialPromptId fallback) */}
+              {/* When in initial state (no conversation), use initialPromptId */}
+              {(conversationId ? conversation?.promptId : initialPromptId) && (
                 <>
                   <AgentToolsDisplay
-                    promptId={conversation?.promptId ?? initialPromptId}
+                    promptId={
+                      conversationId
+                        ? (conversation?.promptId ?? null)
+                        : initialPromptId
+                    }
                     conversationId={conversationId}
                     onCreateConversation={
                       conversationId
@@ -641,8 +672,9 @@ export default function ChatPage() {
                     size="sm"
                     className="h-7 px-2 gap-1.5 text-xs border-dashed"
                     onClick={() => {
-                      const promptIdToEdit =
-                        conversation?.promptId ?? initialPromptId;
+                      const promptIdToEdit = conversationId
+                        ? conversation?.promptId
+                        : initialPromptId;
                       if (promptIdToEdit) {
                         setEditingPromptId(promptIdToEdit);
                         setIsPromptDialogOpen(true);
@@ -749,7 +781,7 @@ export default function ChatPage() {
                               {selectedPrompt?.name}
                             </span>{" "}
                             {selectedPrompt?.userPrompt
-                              ? "select a prompt or start typing below"
+                              ? "click on a suggested prompt or type a new below"
                               : "start typing below"}
                           </p>
                           {selectedPrompt?.userPrompt && (

@@ -236,9 +236,9 @@ export default {
   },
   llm: {
     /**
-     * Global tool policy controls whether tool invocation and trusted data policies are enforced.
-     * - "permissive": Bypasses all policy checks, trusts all tool results
-     * - "restrictive": Enforces per-tool policies
+     * Global tool policy invocation fallback.
+     * - "permissive": Tools are allowed, unless a specific policy is set for them.
+     * - "restrictive": Tools are forbidden, unless a specific policy is set for them.
      *
      * This is an environment variable (not an organization setting) because LLM proxy routes
      * skip authentication and have no organization context - they're passthrough routes where

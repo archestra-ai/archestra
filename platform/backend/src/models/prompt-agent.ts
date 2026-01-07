@@ -344,31 +344,20 @@ class PromptAgentModel {
       }));
     }
 
-    // For non-admins, filter to only connections where user has access to the profile
-    const filteredResults: Array<{
-      id: string;
-      promptId: string;
-      agentPromptId: string;
-    }> = [];
+    // For non-admins, batch-load accessible agent IDs and filter in memory
+    const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+      userId,
+      false,
+    );
+    const accessibleAgentIdSet = new Set(accessibleAgentIds);
 
-    for (const result of results) {
-      if (result.agentId) {
-        const hasAccess = await AgentTeamModel.userHasAgentAccess(
-          userId,
-          result.agentId,
-          false,
-        );
-        if (hasAccess) {
-          filteredResults.push({
-            id: result.id,
-            promptId: result.promptId,
-            agentPromptId: result.agentPromptId,
-          });
-        }
-      }
-    }
-
-    return filteredResults;
+    return results
+      .filter((r) => r.agentId && accessibleAgentIdSet.has(r.agentId))
+      .map(({ id, promptId, agentPromptId }) => ({
+        id,
+        promptId,
+        agentPromptId,
+      }));
   }
 
   /**

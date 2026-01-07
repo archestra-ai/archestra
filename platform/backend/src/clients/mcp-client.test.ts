@@ -689,6 +689,59 @@ describe("McpClient", () => {
           isError: false,
         });
       });
+
+      test("strips catalogName prefix when mcpServerName includes userId suffix (Issue #1179)", async () => {
+        // This test verifies the fix for Issue #1179:
+        // Local servers have mcpServerName like "n8n-lidar-{userId}" but tools are
+        // created with catalogName prefix like "n8n-lidar__tool_name".
+        // The prefix stripping should fall back to catalogName when mcpServerName doesn't match.
+
+        // Create tool with catalogName prefix (how local server tools are actually created)
+        // Note: The mcpServerId here will have name = "local-streamable-http-server-{userId}"
+        // but the tool name uses the catalog name "local-streamable-http-server"
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__prefix_test_tool",
+          description: "Tool for testing prefix stripping fallback",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        // Mock runtime manager responses
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Mock successful tool call
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Prefix stripping works!" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_prefix_test",
+          name: "local-streamable-http-server__prefix_test_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // The key assertion: verify the tool was called with just the tool name
+        // (prefix stripped using catalogName fallback)
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "prefix_test_tool",
+          arguments: {},
+        });
+
+        expect(result).toMatchObject({
+          id: "call_prefix_test",
+          content: [{ type: "text", text: "Prefix stripping works!" }],
+          isError: false,
+        });
+      });
     });
   });
 });

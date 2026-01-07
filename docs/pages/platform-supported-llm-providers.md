@@ -145,7 +145,6 @@ Archestra supports [Perplexity AI](https://www.perplexity.ai/), which provides A
 | --------------------- | ------------ | ------------------------------------ |
 | `sonar`               | ❌           | Basic web search model               |
 | `sonar-pro`           | ✅           | Advanced search with tool support    |
-| `sonar-reasoning`     | ❌           | Reasoning-focused model              |
 | `sonar-reasoning-pro` | ✅           | Advanced reasoning with tool support |
 | `sonar-deep-research` | ❌           | Deep research model                  |
 

@@ -173,8 +173,8 @@ export class AgentToolAutoPolicyService {
 
     try {
       // Get agent-tool assignment with tool details
-      const agentTools = await AgentToolModel.findAll();
-      const assignment = agentTools.find((at) => at.id === agentToolId);
+      const agentTools = await AgentToolModel.findAll({ skipPagination: true });
+      const assignment = agentTools.data.find((at) => at.id === agentToolId);
 
       if (!assignment) {
         logger.warn(

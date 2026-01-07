@@ -1,3 +1,18 @@
+/**
+ * @deprecated LEGACY ADAPTER - Used only by LLM Proxy v1 routes
+ *
+ * This adapter is used by the legacy v1 OpenAI route handler:
+ * - src/routes/proxy/openai.ts
+ *
+ * The new unified LLM proxy handler (src/routes/proxy/llm-proxy-handler.ts)
+ * is now the default and uses the new adapter system:
+ * - src/routes/proxy/adapterV2/openai.ts
+ *
+ * V2 routes are located at:
+ * - src/routes/proxy/routesv2/openai.ts
+ *
+ * This file should be removed after full migration to v2 routes.
+ */
 import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";

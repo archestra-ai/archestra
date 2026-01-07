@@ -231,6 +231,7 @@ export function InternalMCPCatalog({
       environmentValues: installResult.environmentValues,
       isByosVault: installResult.isByosVault,
       teamId: installResult.teamId ?? undefined,
+      serviceAccount: installResult.serviceAccount,
       dontShowToast: true,
     });
 

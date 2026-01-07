@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.0.10](https://github.com/archestra-ai/archestra/compare/platform-v1.0.9...platform-v1.0.10) (2026-01-06)
+
+
+### Features
+
+* helpful tool policy message in chat ([#1707](https://github.com/archestra-ai/archestra/issues/1707)) ([7f59407](https://github.com/archestra-ai/archestra/commit/7f594072157d998f06969f2173aa738e79116ad0))
+* improve onboarding and connection setup UX ([#1695](https://github.com/archestra-ai/archestra/issues/1695)) ([dea859e](https://github.com/archestra-ai/archestra/commit/dea859e1cf4513caddc7070a388b22f0c874904e))
+* vault for chat api keys ([#1694](https://github.com/archestra-ai/archestra/issues/1694)) ([2e46248](https://github.com/archestra-ai/archestra/commit/2e46248ad440b08c5a684045aa32d770e2134c0d))
+
+
+### Bug Fixes
+
+* hide global version on chat page and show below input ([#1741](https://github.com/archestra-ai/archestra/issues/1741)) ([632b8e7](https://github.com/archestra-ai/archestra/commit/632b8e74a21ec8c0528d0fcbcdf20ce1cb524172))
+* set imagePullPolicy to Never for local Docker images ([#1742](https://github.com/archestra-ai/archestra/issues/1742)) ([a29a489](https://github.com/archestra-ai/archestra/commit/a29a489b94e8e9d4e6380510262ecc4fbd3c81bf)), closes [#1716](https://github.com/archestra-ai/archestra/issues/1716)
+* use completions api in openai chat ([#1745](https://github.com/archestra-ai/archestra/issues/1745)) ([7438214](https://github.com/archestra-ai/archestra/commit/74382140f555bc86340d6d5a73d3c3112fef4961))
+
+
+### Dependencies
+
+* bump @sentry/cli from 2.58.4 to 3.0.0 in /platform ([#1689](https://github.com/archestra-ai/archestra/issues/1689)) ([a2ce65e](https://github.com/archestra-ai/archestra/commit/a2ce65ee76336591ee9dbfa4733b4f4164c53933))
+* bump @types/node from 24.10.4 to 25.0.2 in /platform ([#1690](https://github.com/archestra-ai/archestra/issues/1690)) ([1c5c6f4](https://github.com/archestra-ai/archestra/commit/1c5c6f43bceffc37e5b05b6ff32c15c257c9f3a1))
+* bump the platform-dependencies group across 1 directory with 31 updates ([#1740](https://github.com/archestra-ai/archestra/issues/1740)) ([ebc8056](https://github.com/archestra-ai/archestra/commit/ebc8056933c6f2161e05b849a4983202c6e7f8cd))
+
+
+### Miscellaneous Chores
+
+* `main` -&gt; `dev` ([#1748](https://github.com/archestra-ai/archestra/issues/1748)) ([b16a06d](https://github.com/archestra-ai/archestra/commit/b16a06de14e14d0d72c7bbc7d4c7636d15d8c153))
+* dev to main ([#1859](https://github.com/archestra-ai/archestra/issues/1859)) ([941f759](https://github.com/archestra-ai/archestra/commit/941f75969f56103b0192149875fae39d686610b6))
+* kill orphan processes in dev env ([#1698](https://github.com/archestra-ai/archestra/issues/1698)) ([dfb2514](https://github.com/archestra-ai/archestra/commit/dfb251449b9f773e196dfe6ad9a16b11c6c5a464))
+
 ## [1.0.9](https://github.com/archestra-ai/archestra/compare/platform-v1.0.8...platform-v1.0.9) (2025-12-23)
 
 

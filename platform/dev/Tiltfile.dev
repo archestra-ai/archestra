@@ -78,7 +78,8 @@ else:
   local_resource(
     dev_resource_name,
     # Trap ensures all child processes are killed when Tilt stops, preventing orphaned processes from blocking port 3000
-    serve_cmd='trap "kill -TERM -$$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev & wait $!',
+    # Uses pkill -P to kill by parent PID since child processes may have their own process groups on macOS
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug pnpm dev & wait $!',
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],

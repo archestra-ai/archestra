@@ -131,11 +131,36 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
 };
 
 /**
+ * Parse additional trusted origins from environment variable.
+ * Used to add extra trusted origins beyond the frontend URL (e.g., external IdPs for SSO).
+ *
+ * Format: Comma-separated list of origins (e.g., "http://idp.example.com:8080,https://auth.example.com")
+ * Whitespace around each origin is trimmed.
+ *
+ * @returns Array of additional trusted origins
+ */
+export const getAdditionalTrustedOrigins = (): string[] => {
+  const envValue =
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  return envValue
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+};
+
+/**
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
+ * Also includes any additional trusted origins from ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.
  */
 export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
+  const additionalOrigins = getAdditionalTrustedOrigins();
 
   // Default: allow localhost wildcards for development
   if (origins.length === 0) {
@@ -144,11 +169,12 @@ export const getTrustedOrigins = (): string[] => {
       "https://localhost:*",
       "http://127.0.0.1:*",
       "https://127.0.0.1:*",
+      ...additionalOrigins,
     ];
   }
 
-  // Production: use configured origins
-  return origins;
+  // Production: use configured origins plus additional origins
+  return [...origins, ...additionalOrigins];
 };
 
 /**
@@ -212,18 +238,18 @@ export default {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
-      useV2Routes: process.env.ARCHESTRA_OPENAI_USE_V2_ROUTES === "true",
+      useV2Routes: process.env.ARCHESTRA_OPENAI_USE_V2_ROUTES !== "false",
     },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
-      useV2Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V2_ROUTES === "true",
+      useV2Routes: process.env.ARCHESTRA_ANTHROPIC_USE_V2_ROUTES !== "false",
     },
     gemini: {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
-      useV2Routes: process.env.ARCHESTRA_GEMINI_USE_V2_ROUTES === "true",
+      useV2Routes: process.env.ARCHESTRA_GEMINI_USE_V2_ROUTES !== "false",
       vertexAi: {
         enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
@@ -289,10 +315,6 @@ export default {
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
         "true",
-      mcpK8sServiceAccountName:
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME ||
-        // Default value matches the mcp-k8s-operator service account name from the official helm chart
-        "archestra-platform-mcp-k8s-operator",
     },
   },
   vault: {

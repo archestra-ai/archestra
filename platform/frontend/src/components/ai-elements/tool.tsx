@@ -70,6 +70,8 @@ const getStatusBadge = (
   const labels = {
     "input-streaming": "Pending",
     "input-available": "Running",
+    "approval-requested": "Approval Requested",
+    "approval-responded": "Approval Responded",
     "output-available": "Completed",
     "output-available-dual-llm": "Completed with dual LLM",
     "output-error": "Error",
@@ -79,6 +81,8 @@ const getStatusBadge = (
   const icons = {
     "input-streaming": <CircleIcon className="size-4" />,
     "input-available": <ClockIcon className="size-4 animate-pulse" />,
+    "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
+    "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
     "output-available-dual-llm": (
       <CheckCircleIcon className="size-4 text-green-600" />
@@ -122,7 +126,20 @@ export const ToolHeader = ({
         {getStatusBadge(state)}
       </div>
       {errorText && (
-        <div className="text-destructive text-xs mt-2 text-left">
+        // biome-ignore lint/a11y/useSemanticElements: We need text selection within the button trigger
+        <div
+          className="text-destructive text-xs mt-2 text-left select-text"
+          style={{
+            userSelect: "text",
+            WebkitUserSelect: "text",
+            pointerEvents: "auto",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="button"
+          tabIndex={-1}
+        >
           {errorText}
         </div>
       )}

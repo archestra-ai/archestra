@@ -3,8 +3,11 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -57,8 +60,6 @@ const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_NAME = "bulk_assign_tools_to_profiles";
 const TOOL_GET_MCP_SERVERS_NAME = "get_mcp_servers";
 const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
 const TOOL_GET_PROFILE_NAME = "get_profile";
-const TOOL_TODO_WRITE_NAME = "todo_write";
-const TOOL_ARTIFACT_WRITE_NAME = "artifact_write";
 
 /**
  * Convert a name to a URL-safe slug for tool naming
@@ -94,8 +95,6 @@ const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAM
 const TOOL_GET_MCP_SERVERS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVERS_NAME}`;
 const TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVER_TOOLS_NAME}`;
 const TOOL_GET_PROFILE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_PROFILE_NAME}`;
-const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_TODO_WRITE_NAME}`;
-const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_ARTIFACT_WRITE_NAME}`;
 
 /**
  * Context for the Archestra MCP server
@@ -2422,11 +2421,16 @@ export async function getAgentTools(context: {
   // Filter by user access if user ID is provided
   let accessibleTools = allToolsWithDetails;
   if (userId) {
+    // Check if user has profile admin permission directly (don't trust caller)
+    const isAgentAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "profile",
+      "admin",
+    );
+
     const userAccessibleAgentIds =
-      await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false, // Not admin - check actual access
-      );
+      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
     accessibleTools = allToolsWithDetails.filter((t) =>
       userAccessibleAgentIds.includes(t.profileId),
     );

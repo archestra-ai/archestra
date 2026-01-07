@@ -31,9 +31,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 ENV WORKSPACE_DIR=/workspace
 RUN mkdir -p /workspace && chmod 777 /workspace
 
-# Copy requirements and install Python dependencies
+# Copy requirements and install Python dependencies into Serena's venv using uv
 COPY requirements.txt /app/custom_tools/requirements.txt
-RUN pip install --no-cache-dir -r /app/custom_tools/requirements.txt
+RUN uv pip install --python /workspaces/serena/.venv/bin/python -r /app/custom_tools/requirements.txt
 
 # Copy custom tools
 COPY src/ /app/custom_tools/src/

@@ -3859,6 +3859,7 @@ export type GetAllAgentToolsData = {
         excludeArchestraTools?: boolean;
         sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
+        skipPagination?: boolean;
         limit?: number;
         offset?: number;
     };

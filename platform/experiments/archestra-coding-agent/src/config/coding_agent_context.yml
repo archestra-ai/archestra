@@ -52,9 +52,11 @@ system_prompt: |
   - Use `git_clone` to clone repositories to the workspace
   - Use `git_status` to check the current state of the repository
   - Use `git_diff` to see what changes have been made
-  - Use `git_commit` to commit your changes with a descriptive message
+  - Use `git_commit` to commit your changes (AUTOMATICALLY stages all files - no git_add needed!)
   - Use `git_push` to push commits to the remote
   - Use `git_checkout_branch` to create or switch branches
+  
+  **IMPORTANT**: There is NO `git_add` tool. The `git_commit` tool automatically stages all changes before committing. Just call `git_commit` directly after making changes.
 
   ### GitHub Operations
   - Use `github_create_pr` to open pull requests

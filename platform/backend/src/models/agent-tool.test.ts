@@ -206,62 +206,6 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(resultAsc.data[1].tool.catalogId).toBeNull();
     });
 
-    test("sorts by allowUsageWhenUntrustedDataIsPresent", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      const agent = await makeAgent();
-      const tool1 = await makeTool({ name: "tool-1" });
-      const tool2 = await makeTool({ name: "tool-2" });
-      const tool3 = await makeTool({ name: "tool-3" });
-
-      await makeAgentTool(agent.id, tool1.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
-      });
-      await makeAgentTool(agent.id, tool2.id, {
-        allowUsageWhenUntrustedDataIsPresent: false,
-      });
-      await makeAgentTool(agent.id, tool3.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
-      });
-
-      const resultAsc = await AgentToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        {
-          sortBy: "allowUsageWhenUntrustedDataIsPresent",
-          sortDirection: "asc",
-        },
-        { excludeArchestraTools: true },
-      );
-
-      // false comes before true
-      expect(resultAsc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
-        false,
-      );
-      expect(resultAsc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(true);
-      expect(resultAsc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(true);
-
-      const resultDesc = await AgentToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        {
-          sortBy: "allowUsageWhenUntrustedDataIsPresent",
-          sortDirection: "desc",
-        },
-        { excludeArchestraTools: true },
-      );
-
-      expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
-        true,
-      );
-      expect(resultDesc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(
-        true,
-      );
-      expect(resultDesc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(
-        false,
-      );
-    });
-
     test("sorts by createdAt by default", async ({
       makeAgent,
       makeTool,
@@ -818,7 +762,6 @@ describe("AgentToolModel.findAllPaginated", () => {
         [tool1.id, tool2.id],
         {
           executionSourceMcpServerId: mcpServer.id,
-          allowUsageWhenUntrustedDataIsPresent: true,
         },
       );
 
@@ -842,7 +785,6 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(relevantAssignments).toHaveLength(4);
       relevantAssignments.forEach((assignment) => {
         expect(assignment.executionSourceMcpServerId).toBe(mcpServer.id);
-        expect(assignment.allowUsageWhenUntrustedDataIsPresent).toBe(true);
       });
     });
 

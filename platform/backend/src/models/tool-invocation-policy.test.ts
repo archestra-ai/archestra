@@ -38,21 +38,21 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       const tool1 = await makeTool({ agentId: agent.id, name: "tool-1" });
       const tool2 = await makeTool({ agentId: agent.id, name: "tool-2" });
-      const agentTool1 = await makeAgentTool(agent.id, tool1.id);
-      const agentTool2 = await makeAgentTool(agent.id, tool2.id);
+      await makeAgentTool(agent.id, tool1.id);
+      await makeAgentTool(agent.id, tool2.id);
 
-      // Block both tools
-      await makeToolPolicy(agentTool1.id, {
-        argumentName: "email",
-        operator: "endsWith",
-        value: "@evil.com",
+      // Block both tools with specific conditions
+      await makeToolPolicy(tool1.id, {
+        conditions: [
+          { key: "email", operator: "endsWith", value: "@evil.com" },
+        ],
         action: "block_always",
         reason: "Tool 1 blocked",
       });
-      await makeToolPolicy(agentTool2.id, {
-        argumentName: "email",
-        operator: "endsWith",
-        value: "@evil.com",
+      await makeToolPolicy(tool2.id, {
+        conditions: [
+          { key: "email", operator: "endsWith", value: "@evil.com" },
+        ],
         action: "block_always",
         reason: "Tool 2 blocked",
       });
@@ -100,12 +100,10 @@ describe("ToolInvocationPolicyModel", () => {
       await ToolModel.assignArchestraToolsToAgent(agent.id);
 
       const tool = await makeTool({ agentId: agent.id, name: "regular-tool" });
-      const agentTool = await makeAgentTool(agent.id, tool.id);
+      await makeAgentTool(agent.id, tool.id);
 
-      await makeToolPolicy(agentTool.id, {
-        argumentName: "action",
-        operator: "equal",
-        value: "delete",
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "action", operator: "equal", value: "delete" }],
         action: "block_always",
         reason: "Delete blocked",
       });
@@ -139,23 +137,27 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toBe("");
     });
 
-    test("fetches security config for tools without policies", async ({
+    test("allows tool with allow_when_context_is_untrusted default policy", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
+      makeToolPolicy,
     }) => {
       const agent = await makeAgent();
 
-      // Create tool with allowUsageWhenUntrustedDataIsPresent = true
       const tool = await makeTool({
         agentId: agent.id,
         name: "permissive-tool",
       });
-      await makeAgentTool(agent.id, tool.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+      await makeAgentTool(agent.id, tool.id);
+
+      // Create default policy (empty conditions) that allows untrusted context
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+        reason: "Tool allows untrusted data",
       });
 
-      // No policies, but tool allows untrusted data
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "permissive-tool", toolInput: { arg: "value" } }],
@@ -173,9 +175,8 @@ describe("ToolInvocationPolicyModel", () => {
     }) => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "strict-tool" });
-      await makeAgentTool(agent.id, tool.id, {
-        allowUsageWhenUntrustedDataIsPresent: false,
-      });
+      await makeAgentTool(agent.id, tool.id);
+      // No policies, so blocked in untrusted context by default
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
@@ -196,14 +197,11 @@ describe("ToolInvocationPolicyModel", () => {
     }) => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "guarded-tool" });
-      const agentTool = await makeAgentTool(agent.id, tool.id, {
-        allowUsageWhenUntrustedDataIsPresent: false,
-      });
+      await makeAgentTool(agent.id, tool.id);
 
-      await makeToolPolicy(agentTool.id, {
-        argumentName: "path",
-        operator: "startsWith",
-        value: "/safe/",
+      // Specific policy that allows certain paths in untrusted context
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "path", operator: "startsWith", value: "/safe/" }],
         action: "allow_when_context_is_untrusted",
         reason: "Safe path allowed",
       });
@@ -223,7 +221,7 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toBe("");
     });
 
-    test("block_always takes precedence over allowUsageWhenUntrustedDataIsPresent", async ({
+    test("block_always takes precedence in policy evaluation", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
@@ -231,14 +229,18 @@ describe("ToolInvocationPolicyModel", () => {
     }) => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "email-tool" });
-      const agentTool = await makeAgentTool(agent.id, tool.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+      await makeAgentTool(agent.id, tool.id);
+
+      // Default allow policy
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+        reason: "Default allow",
       });
 
-      await makeToolPolicy(agentTool.id, {
-        argumentName: "body",
-        operator: "contains",
-        value: "malicious",
+      // Specific block policy
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "body", operator: "contains", value: "malicious" }],
         action: "block_always",
         reason: "Malicious content blocked",
       });
@@ -267,21 +269,25 @@ describe("ToolInvocationPolicyModel", () => {
     }) => {
       const agent = await makeAgent();
 
-      // Tool 1: allowed
+      // Tool 1: allowed with default policy
       const tool1 = await makeTool({ agentId: agent.id, name: "allowed-tool" });
-      await makeAgentTool(agent.id, tool1.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+      await makeAgentTool(agent.id, tool1.id);
+      await makeToolPolicy(tool1.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+        reason: "Default allow",
       });
 
-      // Tool 2: will be blocked by policy
+      // Tool 2: will be blocked by specific policy
       const tool2 = await makeTool({ agentId: agent.id, name: "blocked-tool" });
-      const agentTool2 = await makeAgentTool(agent.id, tool2.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+      await makeAgentTool(agent.id, tool2.id);
+      await makeToolPolicy(tool2.id, {
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+        reason: "Default allow",
       });
-      await makeToolPolicy(agentTool2.id, {
-        argumentName: "dangerous",
-        operator: "equal",
-        value: "true",
+      await makeToolPolicy(tool2.id, {
+        conditions: [{ key: "dangerous", operator: "equal", value: "true" }],
         action: "block_always",
         reason: "Dangerous operation blocked",
       });
@@ -291,13 +297,9 @@ describe("ToolInvocationPolicyModel", () => {
         agentId: agent.id,
         name: "another-blocked",
       });
-      const agentTool3 = await makeAgentTool(agent.id, tool3.id, {
-        allowUsageWhenUntrustedDataIsPresent: false,
-      });
-      await makeToolPolicy(agentTool3.id, {
-        argumentName: "bad",
-        operator: "equal",
-        value: "yes",
+      await makeAgentTool(agent.id, tool3.id);
+      await makeToolPolicy(tool3.id, {
+        conditions: [{ key: "bad", operator: "equal", value: "yes" }],
         action: "block_always",
         reason: "Bad operation",
       });
@@ -326,12 +328,10 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "status",
-          operator: "equal",
-          value: "active",
+        await makeToolPolicy(tool.id, {
+          conditions: [{ key: "status", operator: "equal", value: "active" }],
           action: "block_always",
           reason: "Active status blocked",
         });
@@ -359,12 +359,12 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "env",
-          operator: "notEqual",
-          value: "production",
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "env", operator: "notEqual", value: "production" },
+          ],
           action: "block_always",
           reason: "Non-production blocked",
         });
@@ -392,12 +392,12 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "message",
-          operator: "contains",
-          value: "secret",
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "message", operator: "contains", value: "secret" },
+          ],
           action: "block_always",
           reason: "Secret content blocked",
         });
@@ -435,12 +435,12 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "message",
-          operator: "notContains",
-          value: "approved",
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "message", operator: "notContains", value: "approved" },
+          ],
           action: "block_always",
           reason: "Unapproved content blocked",
         });
@@ -478,12 +478,10 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "path",
-          operator: "startsWith",
-          value: "/tmp/",
+        await makeToolPolicy(tool.id, {
+          conditions: [{ key: "path", operator: "startsWith", value: "/tmp/" }],
           action: "block_always",
           reason: "Temp paths blocked",
         });
@@ -516,12 +514,10 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "file",
-          operator: "endsWith",
-          value: ".exe",
+        await makeToolPolicy(tool.id, {
+          conditions: [{ key: "file", operator: "endsWith", value: ".exe" }],
           action: "block_always",
           reason: "Executable files blocked",
         });
@@ -549,12 +545,16 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "email",
-          operator: "regex",
-          value: "^[a-zA-Z0-9._%+-]+@example\\.com$",
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            {
+              key: "email",
+              operator: "regex",
+              value: "^[a-zA-Z0-9._%+-]+@example\\.com$",
+            },
+          ],
           action: "block_always",
           reason: "Example.com emails blocked",
         });
@@ -594,12 +594,12 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "user.email",
-          operator: "endsWith",
-          value: "@blocked.com",
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "user.email", operator: "endsWith", value: "@blocked.com" },
+          ],
           action: "block_always",
           reason: "Blocked domain",
         });
@@ -633,7 +633,7 @@ describe("ToolInvocationPolicyModel", () => {
     });
 
     describe("missing arguments", () => {
-      test("returns error for missing argument with allow policy", async ({
+      test("condition does not match when argument is missing", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -641,16 +641,17 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "required",
-          operator: "equal",
-          value: "yes",
+        // A specific policy that requires an argument
+        await makeToolPolicy(tool.id, {
+          conditions: [{ key: "required", operator: "equal", value: "yes" }],
           action: "allow_when_context_is_untrusted",
           reason: "Required argument",
         });
 
+        // Since the condition doesn't match (missing argument), the specific policy doesn't apply
+        // Fall back to default behavior - blocked in untrusted context
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
@@ -658,10 +659,10 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("Missing required argument: required");
+        expect(result.reason).toContain("context contains untrusted data");
       });
 
-      test("continues evaluation for missing argument with block policy", async ({
+      test("block policy does not apply when argument is missing", async ({
         makeAgent,
         makeTool,
         makeAgentTool,
@@ -669,12 +670,10 @@ describe("ToolInvocationPolicyModel", () => {
       }) => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
-        const agentTool = await makeAgentTool(agent.id, tool.id);
+        await makeAgentTool(agent.id, tool.id);
 
-        await makeToolPolicy(agentTool.id, {
-          argumentName: "optional",
-          operator: "equal",
-          value: "bad",
+        await makeToolPolicy(tool.id, {
+          conditions: [{ key: "optional", operator: "equal", value: "bad" }],
           action: "block_always",
           reason: "Bad value",
         });
@@ -687,6 +686,90 @@ describe("ToolInvocationPolicyModel", () => {
 
         expect(result.isAllowed).toBe(true);
         expect(result.reason).toBe("");
+      });
+    });
+
+    describe("specific vs default policy precedence", () => {
+      test("specific policy takes precedence over default policy", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        // Default policy: block in untrusted context
+        await makeToolPolicy(tool.id, {
+          conditions: [],
+          action: "block_always",
+          reason: "Default block",
+        });
+
+        // Specific policy: allow safe paths
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "path", operator: "startsWith", value: "/safe/" },
+          ],
+          action: "allow_when_context_is_untrusted",
+          reason: "Safe path allowed",
+        });
+
+        // Specific policy matches - should be allowed even though default blocks
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "test-tool",
+              toolInput: { path: "/safe/file.txt" },
+            },
+          ],
+          false, // untrusted context
+        );
+
+        expect(result.isAllowed).toBe(true);
+      });
+
+      test("falls back to default policy when specific policy does not match", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
+        await makeAgentTool(agent.id, tool.id);
+
+        // Default policy: allow in untrusted context
+        await makeToolPolicy(tool.id, {
+          conditions: [],
+          action: "allow_when_context_is_untrusted",
+          reason: "Default allow",
+        });
+
+        // Specific policy: block dangerous paths
+        await makeToolPolicy(tool.id, {
+          conditions: [
+            { key: "path", operator: "startsWith", value: "/danger/" },
+          ],
+          action: "block_always",
+          reason: "Dangerous path blocked",
+        });
+
+        // Specific policy doesn't match, fall back to default allow
+        const result = await ToolInvocationPolicyModel.evaluateBatch(
+          agent.id,
+          [
+            {
+              toolCallName: "test-tool",
+              toolInput: { path: "/normal/file.txt" },
+            },
+          ],
+          false, // untrusted context
+        );
+
+        expect(result.isAllowed).toBe(true);
       });
     });
   });

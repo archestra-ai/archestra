@@ -14,6 +14,8 @@ const config: KnipConfig = {
     "tw-animate-css",
     // PostCSS is a dependency of @tailwindcss/postcss
     "postcss",
+    // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
+    "elkjs",
   ],
   ignoreBinaries: [
     // biome is in root package.json

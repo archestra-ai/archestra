@@ -2,6 +2,27 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+// Helper to determine if a tab is active
+// Sort tabs by href length descending so we match the most specific first
+function isTabActive(
+  pathname: string,
+  tabHref: string,
+  allTabs: { href: string }[],
+) {
+  // Sort tabs by href length (longest first)
+  const sortedTabs = [...allTabs].sort((a, b) => b.href.length - a.href.length);
+
+  // Find the first tab that matches
+  for (const tab of sortedTabs) {
+    if (pathname === tab.href || pathname.startsWith(`${tab.href}/`)) {
+      return tab.href === tabHref;
+    }
+  }
+
+  // Fallback to includes for backwards compatibility
+  return pathname.includes(tabHref);
+}
+
 export function PageLayout({
   title,
   description,
@@ -33,23 +54,24 @@ export function PageLayout({
           </div>
           {tabs.length > 0 && (
             <div className="flex gap-4 mb-0">
-              {tabs.map((tab) => (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={cn(
-                    "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                    pathname.includes(tab.href)
-                      ? "text-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {tab.label}
-                  {pathname.includes(tab.href) && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                  )}
-                </Link>
-              ))}
+              {tabs.map((tab) => {
+                const isActive = isTabActive(pathname, tab.href, tabs);
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={cn(
+                      "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
+                      isActive ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {tab.label}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           )}
           {!tabs.length && <div className="mb-8" />}

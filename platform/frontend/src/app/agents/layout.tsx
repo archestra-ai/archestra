@@ -20,7 +20,6 @@ import { usePrompt } from "@/lib/prompts.query";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
-
 export default function AgentsLayout({
   children,
 }: {

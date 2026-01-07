@@ -50,9 +50,8 @@ export function AgentToolsDisplay({
   const prevConversationId = useRef<string | undefined>(undefined);
 
   // Fetch enabled tools for the conversation
-  const { data: enabledToolsData } = useConversationEnabledTools(
-    conversationId,
-  );
+  const { data: enabledToolsData } =
+    useConversationEnabledTools(conversationId);
 
   // Mutation for updating enabled tools
   const updateEnabledTools = useUpdateConversationEnabledTools();
@@ -100,15 +99,8 @@ export function AgentToolsDisplay({
   const handleToggle = (toolId: string) => {
     const isCurrentlyEnabled = isToolEnabled(toolId);
 
-    console.log("[AgentToolsDisplay] handleToggle", {
-      toolId,
-      isCurrentlyEnabled,
-      conversationId,
-    });
-
     if (!conversationId) {
       // No conversation yet - set pending action and create conversation
-      console.log("[AgentToolsDisplay] Setting pending action (no conversation)");
       setPendingAction({
         type: "toggle",
         toolId,
@@ -134,14 +126,6 @@ export function AgentToolsDisplay({
 
   // Apply pending action when conversation is created
   useEffect(() => {
-    console.log("[AgentToolsDisplay] useEffect", {
-      pendingAction,
-      conversationId,
-      prevConversationId: prevConversationId.current,
-      hasEnabledToolsData: !!enabledToolsData,
-      enabledToolIds,
-    });
-
     // Detect when conversationId changes from undefined to defined
     if (
       pendingAction &&
@@ -157,12 +141,6 @@ export function AgentToolsDisplay({
       } else {
         newEnabledToolIds = [...new Set([...enabledToolIds, toolId])];
       }
-
-      console.log("[AgentToolsDisplay] Applying pending action", {
-        toolId,
-        shouldDisable,
-        newEnabledToolIds,
-      });
 
       updateEnabledTools.mutate(
         {
@@ -185,7 +163,13 @@ export function AgentToolsDisplay({
     }
     // If there IS a pending action but conditions aren't met yet,
     // DON'T update prevConversationId - keep it undefined so we can retry
-  }, [conversationId, pendingAction, enabledToolsData, enabledToolIds, updateEnabledTools]);
+  }, [
+    conversationId,
+    pendingAction,
+    enabledToolsData,
+    enabledToolIds,
+    updateEnabledTools,
+  ]);
 
   if (isLoading || agentToolsWithNames.length === 0) {
     return null;

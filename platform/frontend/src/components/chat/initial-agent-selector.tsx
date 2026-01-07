@@ -16,8 +16,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { usePrompts } from "@/lib/prompts.query";
+import { cn } from "@/lib/utils";
 
 interface InitialAgentSelectorProps {
   currentPromptId: string | null;
@@ -85,9 +85,7 @@ export function InitialAgentSelector({
                 <CommandItem
                   key={prompt.id}
                   value={prompt.name}
-                  onSelect={() =>
-                    handlePromptSelect(prompt.id, prompt.agentId)
-                  }
+                  onSelect={() => handlePromptSelect(prompt.id, prompt.agentId)}
                 >
                   {prompt.name}
                   <Check

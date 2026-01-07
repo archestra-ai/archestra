@@ -27,19 +27,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { useCreateConversation } from "@/lib/chat.query";
 import { usePrompts } from "@/lib/prompts.query";
+import { cn } from "@/lib/utils";
 
 interface AgentSelectorProps {
-  conversationId: string;
   currentPromptId: string | null;
   currentAgentId: string;
   currentModel: string;
 }
 
 export function AgentSelector({
-  conversationId,
   currentPromptId,
   currentAgentId,
   currentModel,
@@ -121,7 +119,11 @@ export function AgentSelector({
                 <CommandItem
                   value="no-agent-selected"
                   onSelect={() =>
-                    handlePromptSelect(null, "No agent selected", currentAgentId)
+                    handlePromptSelect(
+                      null,
+                      "No agent selected",
+                      currentAgentId,
+                    )
                   }
                 >
                   No agent selected

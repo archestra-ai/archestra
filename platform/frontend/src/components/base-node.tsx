@@ -17,7 +17,6 @@ export function BaseNode({ className, ...props }: ComponentProps<"div">) {
         "[.react-flow\\_\\_node.selected_&]:shadow-lg",
         className,
       )}
-      tabIndex={0}
       {...props}
     />
   );

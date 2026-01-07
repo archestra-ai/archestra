@@ -15,17 +15,17 @@ import {
 import { toast } from "sonner";
 import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
+import { Response } from "@/components/ai-elements/response";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { Message, MessageContent } from "@/components/ai-elements/message";
-import { Response } from "@/components/ai-elements/response";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -114,7 +114,6 @@ export default function ChatPage() {
   const [initialPromptId, setInitialPromptId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-
 
   // Prompt edit dialog state
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
@@ -226,7 +225,7 @@ export default function ChatPage() {
   );
 
   // Find the specific prompt for this conversation (if any)
-  const conversationPrompt = conversation?.promptId
+  const _conversationPrompt = conversation?.promptId
     ? prompts.find((p) => p.id === conversation.promptId)
     : undefined;
 
@@ -589,7 +588,6 @@ export default function ChatPage() {
               {/* Agent/Profile selector */}
               {conversationId ? (
                 <AgentSelector
-                  conversationId={conversationId}
                   currentPromptId={conversation?.promptId ?? null}
                   currentAgentId={conversation?.agentId ?? ""}
                   currentModel={conversation?.selectedModel ?? ""}
@@ -767,9 +765,14 @@ export default function ChatPage() {
                               }}
                               className="w-full text-left cursor-pointer hover:opacity-80 transition-opacity"
                             >
-                              <Message from="assistant" className="max-w-none justify-center">
+                              <Message
+                                from="assistant"
+                                className="max-w-none justify-center"
+                              >
                                 <MessageContent className="max-w-none text-center">
-                                  <Response>{selectedPrompt.userPrompt}</Response>
+                                  <Response>
+                                    {selectedPrompt.userPrompt}
+                                  </Response>
                                 </MessageContent>
                               </Message>
                             </button>
@@ -778,7 +781,10 @@ export default function ChatPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                handleInitialPromptChange(null, allProfiles[0]?.id ?? "")
+                                handleInitialPromptChange(
+                                  null,
+                                  allProfiles[0]?.id ?? "",
+                                )
                               }
                               className="underline hover:text-foreground"
                             >
@@ -805,7 +811,10 @@ export default function ChatPage() {
                               size="sm"
                               className="h-8 px-3 text-sm"
                               onClick={() =>
-                                handleInitialPromptChange(prompt.id, prompt.agentId)
+                                handleInitialPromptChange(
+                                  prompt.id,
+                                  prompt.agentId,
+                                )
                               }
                             >
                               {prompt.name}

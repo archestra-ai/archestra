@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -232,9 +231,7 @@ export function PromptDialog({
                 currentAgentId={agentId}
                 onProfileChange={setProfileId}
               />
-              {agentId && (
-                <ChatToolsDisplay agentId={agentId} readOnly />
-              )}
+              {agentId && <ChatToolsDisplay agentId={agentId} readOnly />}
             </div>
           </div>
           <div className="space-y-2">

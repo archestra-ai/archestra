@@ -304,7 +304,7 @@ class PromptAgentModel {
     };
   }
 
-/**
+  /**
    * Get all prompt-agent connections for an organization
    * Used for canvas visualization of agent relationships
    */

@@ -11,6 +11,7 @@ import subprocess
 from typing import Optional
 
 from serena.tools import Tool
+from serena.tools.tools_base import ToolMarkerDoesNotRequireActiveProject
 
 # Default workspace directory for cloned repositories
 DEFAULT_WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/workspace")
@@ -63,7 +64,7 @@ def _run_git_command(
         }
 
 
-class GitCloneTool(Tool):
+class GitCloneTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Clone a GitHub repository to the workspace."""
 
     def apply(
@@ -136,7 +137,7 @@ class GitCloneTool(Tool):
             })
 
 
-class GitStatusTool(Tool):
+class GitStatusTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Get the current git status of a repository."""
 
     def apply(self, repo_path: Optional[str] = None) -> str:
@@ -194,7 +195,7 @@ class GitStatusTool(Tool):
             })
 
 
-class GitDiffTool(Tool):
+class GitDiffTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Show uncommitted changes in a repository."""
 
     def apply(
@@ -241,7 +242,7 @@ class GitDiffTool(Tool):
             })
 
 
-class GitCommitTool(Tool):
+class GitCommitTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Stage and commit changes in a repository."""
 
     def apply(
@@ -314,7 +315,7 @@ class GitCommitTool(Tool):
             })
 
 
-class GitPushTool(Tool):
+class GitPushTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Push commits to the remote repository."""
 
     def apply(
@@ -382,7 +383,7 @@ class GitPushTool(Tool):
             })
 
 
-class GitCheckoutBranchTool(Tool):
+class GitCheckoutBranchTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Create or switch to a branch."""
 
     def apply(

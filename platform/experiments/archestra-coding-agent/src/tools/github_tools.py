@@ -11,6 +11,7 @@ import re
 from typing import Optional
 
 from serena.tools import Tool
+from serena.tools.tools_base import ToolMarkerDoesNotRequireActiveProject
 
 # Try to import PyGithub, but provide a fallback error message
 try:
@@ -113,7 +114,7 @@ def _parse_repo_info(repo_url: Optional[str] = None) -> tuple[Optional[str], Opt
     return None, None
 
 
-class GitHubCreatePRTool(Tool):
+class GitHubCreatePRTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Create a pull request on GitHub."""
 
     def apply(
@@ -189,7 +190,7 @@ class GitHubCreatePRTool(Tool):
             })
 
 
-class GitHubListPRsTool(Tool):
+class GitHubListPRsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """List pull requests for a repository."""
 
     def apply(
@@ -265,7 +266,7 @@ class GitHubListPRsTool(Tool):
             })
 
 
-class GitHubGetIssueTool(Tool):
+class GitHubGetIssueTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """Get details of a GitHub issue."""
 
     def apply(

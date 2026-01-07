@@ -1,6 +1,7 @@
-# Neo4j and Qdrant for LightRAG integration
+# Neo4j and Qdrant for LightRAG (local development)
 # Start with: tilt trigger lightrag-storage
-# These services provide graph and vector storage for LightRAG MCP server
+# Neo4j: http://localhost:7474 (browser), bolt://localhost:7687
+# Qdrant: http://localhost:6333 (API)
 
 services:
   neo4j:
@@ -42,34 +43,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  # Seed Neo4j with example knowledge graph data
-  neo4j-seed:
-    image: neo4j:5-community
-    container_name: archestra-neo4j-seed
-    depends_on:
-      neo4j:
-        condition: service_healthy
-    volumes:
-      - ./lightrag-seed:/seed:ro
-    networks:
-      - archestra-lightrag
-    entrypoint: ["/bin/bash", "/seed/neo4j-seed.sh"]
-    restart: "no"
-
-  # Seed Qdrant with example vector data
-  qdrant-seed:
-    image: python:3.11-slim
-    container_name: archestra-qdrant-seed
-    depends_on:
-      qdrant:
-        condition: service_healthy
-    volumes:
-      - ./lightrag-seed:/seed:ro
-    networks:
-      - archestra-lightrag
-    command: ["python", "/seed/qdrant-seed.py"]
-    restart: "no"
 
 volumes:
   neo4j-data:

@@ -41,18 +41,40 @@ local_resource(
 # Start with: tilt trigger lightrag-storage
 # Neo4j: http://localhost:7474 (browser), bolt://localhost:7687, user: neo4j, password: password123
 # Qdrant: http://localhost:6333 (API), grpc://localhost:6334
-# LightRAG MCP server env vars:
-#   LIGHTRAG_NEO4J_URI=bolt://localhost:7687
-#   LIGHTRAG_NEO4J_USERNAME=neo4j
-#   LIGHTRAG_NEO4J_PASSWORD=password123
-#   LIGHTRAG_QDRANT_URL=http://localhost:6333
 local_resource(
   'lightrag-storage',
-  serve_cmd='docker compose -f docker-compose.lightrag-storage.yml up',
+  serve_cmd='docker compose -f lightrag/docker-compose.storage.yml up',
   serve_dir='.',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False
+)
+
+# LightRAG API Server (manual trigger)
+# Start with: tilt trigger lightrag-server
+# API & Web UI: http://localhost:9621
+# Connects to Neo4j (graph) + Qdrant (vector), local KV storage (persistent volume)
+# Required .env: LIGHTRAG_NEO4J_URI, LIGHTRAG_NEO4J_PASSWORD, LIGHTRAG_QDRANT_URL, OPENAI_API_KEY
+local_resource(
+  'lightrag-server',
+  serve_cmd='docker compose -f lightrag/docker-compose.yml up',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+# LightRAG seed data (manual trigger, one-shot)
+# Start with: tilt trigger lightrag-seed
+# Requires lightrag-server to be running
+local_resource(
+  'lightrag-seed',
+  cmd='node lightrag/seed_via_api.mjs',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['lightrag-server']
 )
 
 # HashiCorp Vault in Docker (manual trigger)

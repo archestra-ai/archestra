@@ -106,19 +106,13 @@ export function ChatApiKeySelector({
     return grouped;
   }, [availableKeys]);
 
-  // Get providers in order (current provider first if exists)
+  // Get providers in stable order (alphabetical)
   const orderedProviders = useMemo(() => {
     const providers = Object.keys(
       keysByProviderAndScope,
     ) as SupportedChatProvider[];
-    if (currentProvider && providers.includes(currentProvider)) {
-      return [
-        currentProvider,
-        ...providers.filter((p) => p !== currentProvider),
-      ];
-    }
-    return providers;
-  }, [keysByProviderAndScope, currentProvider]);
+    return providers.sort();
+  }, [keysByProviderAndScope]);
 
   // For backward compatibility: get flat list of keys by scope (for auto-select)
   const keysByScope = useMemo(() => {

@@ -94,30 +94,6 @@ export async function getOrgTokenForProfile(
 }
 
 /**
- * Parse response based on content type
- */
-async function parseResponse(response: APIResponse): Promise<any> {
-  const contentType = response.headers()["content-type"] || "";
-  
-  // If it's SSE, we need to parse the event stream
-  if (contentType.includes("text/event-stream")) {
-    const text = await response.text();
-    // SSE format: "data: {json}\n\n"
-    const lines = text.split("\n");
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const jsonStr = line.slice(6); // Remove "data: " prefix
-        return JSON.parse(jsonStr);
-      }
-    }
-    throw new Error(`No data found in SSE response: ${text}`);
-  }
-  
-  // Otherwise assume JSON
-  return response.json();
-}
-
-/**
  * Initialize MCP session and return session ID
  *
  * @param profileId - If provided, uses new auth pattern: /v1/mcp/{profileId}
@@ -205,7 +181,7 @@ export async function callMcpTool(
     },
   });
 
-  const callResult = await parseResponse(callToolResponse);
+  const callResult = await callToolResponse.json();
 
   if (callResult.error) {
     throw new Error(
@@ -286,7 +262,7 @@ export async function listMcpTools(
     },
   });
 
-  const listResult = await parseResponse(listToolsResponse);
+  const listResult = await listToolsResponse.json();
 
   if (listResult.error) {
     throw new Error(

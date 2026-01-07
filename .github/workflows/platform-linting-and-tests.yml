@@ -347,6 +347,12 @@ jobs:
       # NOTE: This step is skipped for PRs from forks because GitHub doesn't expose
       # repository secrets to workflows triggered by fork PRs (for security reasons).
       # Docker Scout requires Docker Hub authentication to run.
+
+      - name: Generate Checksums
+        working-directory: ./frontend/dist
+        run: |
+          find . -type f -exec sha256sum {} \; > checksums.sha256
+          cat checksums.sha256
       - name: Docker Scout
         if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2

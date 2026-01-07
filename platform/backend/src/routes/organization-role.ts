@@ -34,6 +34,24 @@ const generateRoleIdentifier = (title: string): string => {
     .replace(/^_+|_+$/g, ""); // Remove leading/trailing underscores
 };
 
+/**
+ * Flattens permission object into an array of `resource:action` strings
+ */
+const flattenPermissions = (permission: z.infer<typeof PermissionsSchema>) => {
+  const flat: string[] = [];
+  for (const [resource, actions] of Object.entries(permission)) {
+    for (const action of actions) {
+      flat.push(`${resource}:${action}`);
+    }
+  }
+  return flat;
+};
+
+const RoleResponseSchema = SelectOrganizationRoleSchema.extend({
+  description: z.string().nullable(),
+  permissions: z.array(z.string()),
+});
+
 const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/roles",
@@ -42,17 +60,55 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetRoles,
         description: "Get all roles in the organization",
         tags: ["Roles"],
-        response: constructResponseSchema(
-          z.array(SelectOrganizationRoleSchema),
-        ),
+        response: constructResponseSchema(z.array(RoleResponseSchema)),
       },
     },
     async ({ organizationId }, reply) => {
       // Get all roles including predefined ones
-      return reply.send(await OrganizationRoleModel.getAll(organizationId));
+      const roles = await OrganizationRoleModel.getAll(organizationId);
+
+      return reply.send(
+        roles.map((role) => ({
+          ...role,
+          description: null,
+          permissions: flattenPermissions(role.permission),
+        })),
+      );
     },
   );
+  fastify.get(
+    "/api/roles/by-name/:name",
+    {
+      schema: {
+        operationId: RouteId.GetRoleByName,
+        description: "Get a specific role by name",
+        tags: ["Roles"],
+        params: z.object({
+          name: CreateUpdateRoleNameSchema,
+        }),
+        response: constructResponseSchema(RoleResponseSchema),
+      },
+    },
+    async ({ params: { name }, organizationId }, reply) => {
+      // Try predefined (name equals identifier) then custom by name
+      const byIdentifier = await OrganizationRoleModel.getByIdentifier(
+        name,
+        organizationId,
+      );
 
+      const role = byIdentifier || (await OrganizationRoleModel.getByName(name, organizationId));
+
+      if (!role) {
+        throw new ApiError(404, "Role not found");
+      }
+
+      return reply.send({
+        ...role,
+        description: null,
+        permissions: flattenPermissions(role.permission),
+      });
+    },
+  );
   fastify.post(
     "/api/roles",
     {
@@ -63,8 +119,9 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: CreateUpdateRoleNameSchema,
           permission: PermissionsSchema,
+          description: z.string().nullable().optional(),
         }),
-        response: constructResponseSchema(SelectOrganizationRoleSchema),
+        response: constructResponseSchema(RoleResponseSchema),
       },
     },
     async (request, reply) => {
@@ -123,6 +180,8 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...result.roleData,
           updatedAt: result.roleData.updatedAt || result.roleData.createdAt,
           predefined: false,
+          description: null,
+          permissions: flattenPermissions(result.roleData.permission),
         });
       } catch (error) {
         const err = error as {
@@ -150,7 +209,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
-        response: constructResponseSchema(SelectOrganizationRoleSchema),
+        response: constructResponseSchema(RoleResponseSchema),
       },
     },
     async ({ params: { roleId }, organizationId }, reply) => {
@@ -163,7 +222,11 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Role not found");
       }
 
-      return reply.send(result);
+      return reply.send({
+        ...result,
+        description: null,
+        permissions: flattenPermissions(result.permission),
+      });
     },
   );
 
@@ -180,8 +243,9 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
           permission: PermissionsSchema.optional(),
+          description: z.string().nullable().optional(),
         }),
-        response: constructResponseSchema(SelectOrganizationRoleSchema),
+        response: constructResponseSchema(RoleResponseSchema),
       },
     },
     async (
@@ -247,11 +311,15 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Role updated but data not returned");
       }
 
-      return reply.send({
+      const enriched = {
         ...result.roleData,
         updatedAt: result.roleData.updatedAt || new Date(),
         predefined: false,
-      });
+        description: null,
+        permissions: flattenPermissions(result.roleData.permission),
+      };
+
+      return reply.send(enriched);
     },
   );
 
@@ -269,7 +337,6 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { roleId }, organizationId, headers }, reply) => {
-      // Check if role exists first
       const role = await OrganizationRoleModel.getById(roleId, organizationId);
       if (!role) {
         throw new ApiError(404, "Role not found");

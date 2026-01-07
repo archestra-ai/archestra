@@ -99,6 +99,7 @@ export class Authnz {
       url.startsWith("/v1/openai") ||
       url.startsWith("/v1/anthropic") ||
       url.startsWith("/v1/gemini") ||
+      url.startsWith("/v1/perplexity") ||
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||

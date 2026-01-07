@@ -20,11 +20,11 @@ from .lightrag_manager import (
 )
 
 
-# Configure logging
+# Configure logging to stderr (stdout is reserved for MCP JSON-RPC messages)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=[logging.StreamHandler(sys.stderr)],
 )
 logger = logging.getLogger(__name__)
 

@@ -25,7 +25,7 @@ describe("OrganizationModel", () => {
       const appearance = await OrganizationModel.getPublicAppearance();
 
       expect(appearance).toEqual({
-        theme: "modern-minimal",
+        theme: "cosmic-night",
         customFont: "lato",
         logo: null,
       });

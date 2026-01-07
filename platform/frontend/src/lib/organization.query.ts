@@ -282,10 +282,7 @@ export function useUpdateOrganization(
     },
     onSuccess: (updatedOrganization) => {
       // Update organization details cache
-      queryClient.setQueryData(
-        organizationKeys.details(),
-        updatedOrganization,
-      );
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       // Update appearance cache immediately with the new values
       queryClient.setQueryData(appearanceKeys.public(), {
         theme: updatedOrganization.theme,

@@ -720,7 +720,6 @@ export type {
   GetPromptVersionsResponse,
   GetPromptVersionsResponses,
   GetPublicSsoProvidersData,
-  GetPublicSsoProvidersError,
   GetPublicSsoProvidersErrors,
   GetPublicSsoProvidersResponse,
   GetPublicSsoProvidersResponses,

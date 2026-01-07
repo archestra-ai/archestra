@@ -273,6 +273,69 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success: true });
     },
   );
+
+  // Bulk operations for default policies
+  fastify.post(
+    "/api/tool-invocation/bulk-default",
+    {
+      schema: {
+        operationId: RouteId.BulkUpsertDefaultCallPolicy,
+        description:
+          "Bulk upsert default tool invocation policies (empty conditions) for multiple tools",
+        tags: ["Tool Invocation Policies"],
+        body: z.object({
+          toolIds: z.array(UuidIdSchema),
+          action: z.enum(["allow_when_context_is_untrusted", "block_always"]),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            updated: z.number(),
+            created: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ body }, reply) => {
+      const result = await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
+        body.toolIds,
+        body.action,
+      );
+      return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/trusted-data-policies/bulk-default",
+    {
+      schema: {
+        operationId: RouteId.BulkUpsertDefaultResultPolicy,
+        description:
+          "Bulk upsert default trusted data policies (empty conditions) for multiple tools",
+        tags: ["Trusted Data Policies"],
+        body: z.object({
+          toolIds: z.array(UuidIdSchema),
+          action: z.enum([
+            "mark_as_trusted",
+            "block_always",
+            "sanitize_with_dual_llm",
+          ]),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            updated: z.number(),
+            created: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ body }, reply) => {
+      const result = await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
+        body.toolIds,
+        body.action,
+      );
+      return reply.send(result);
+    },
+  );
 };
 
 export default autonomyPolicyRoutes;

@@ -6,7 +6,6 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ToolResultTreatment } from "@/types";
 import agentsTable from "./agent";
 import mcpServerTable from "./mcp-server";
 import toolsTable from "./tool";
@@ -21,15 +20,6 @@ const agentToolsTable = pgTable(
     toolId: uuid("tool_id")
       .notNull()
       .references(() => toolsTable.id, { onDelete: "cascade" }),
-    allowUsageWhenUntrustedDataIsPresent: boolean(
-      "allow_usage_when_untrusted_data_is_present",
-    )
-      .notNull()
-      .default(false),
-    toolResultTreatment: text("tool_result_treatment")
-      .$type<ToolResultTreatment>()
-      .notNull()
-      .default("untrusted"),
     responseModifierTemplate: text("response_modifier_template"),
     credentialSourceMcpServerId: uuid(
       "credential_source_mcp_server_id",

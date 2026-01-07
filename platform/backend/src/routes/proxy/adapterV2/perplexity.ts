@@ -803,6 +803,7 @@ export const perplexityAdapterFactory: LLMProvider<
         const stream = await openaiClient.chat.completions.create({
             ...request,
             stream: true,
+            stream_options: { include_usage: true },
         });
 
         return {

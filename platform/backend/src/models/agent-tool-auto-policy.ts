@@ -4,6 +4,8 @@ import { policyConfigSubagent } from "@/subagents";
 import AgentToolModel from "./agent-tool";
 import ChatApiKeyModel from "./chat-api-key";
 import McpServerModel from "./mcp-server";
+import ToolInvocationPolicyModel from "./tool-invocation-policy";
+import TrustedDataPolicyModel from "./trusted-data-policy";
 
 type PolicyConfig = {
   allowUsageWhenUntrustedDataIsPresent: boolean;
@@ -210,18 +212,39 @@ export class AgentToolAutoPolicyService {
         organizationId,
       );
 
-      // Update agent-tool with new configuration including reasoning
+      const toolId = assignment.tool.id;
+
+      // Create/upsert call policy (tool invocation policy)
+      const callPolicyAction = policyConfig.allowUsageWhenUntrustedDataIsPresent
+        ? "allow_when_context_is_untrusted"
+        : "block_always";
+      await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        callPolicyAction,
+      );
+
+      // Create/upsert result policy (trusted data policy)
+      const resultPolicyActionMap = {
+        trusted: "mark_as_trusted",
+        untrusted: "block_always",
+        sanitize_with_dual_llm: "sanitize_with_dual_llm",
+      } as const;
+      const resultPolicyAction =
+        resultPolicyActionMap[policyConfig.toolResultTreatment];
+      await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        resultPolicyAction,
+      );
+
+      // Update agent-tool with timestamps and reasoning for tracking
       await AgentToolModel.update(agentToolId, {
-        allowUsageWhenUntrustedDataIsPresent:
-          policyConfig.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: policyConfig.toolResultTreatment,
         policiesAutoConfiguredAt: new Date(),
         policiesAutoConfiguredReasoning: policyConfig.reasoning,
       });
 
       logger.info(
-        { agentToolId, policyConfig },
-        "configurePoliciesForAgentTool: policies updated successfully",
+        { agentToolId, toolId, policyConfig },
+        "configurePoliciesForAgentTool: policies created successfully",
       );
 
       return {

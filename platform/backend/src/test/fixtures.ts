@@ -224,37 +224,28 @@ async function makeAgentTool(
   overrides: Partial<
     Pick<
       AgentTool,
-      | "allowUsageWhenUntrustedDataIsPresent"
-      | "toolResultTreatment"
-      | "credentialSourceMcpServerId"
-      | "executionSourceMcpServerId"
+      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
     >
   > = {},
 ) {
-  return await AgentToolModel.create(agentId, toolId, {
-    allowUsageWhenUntrustedDataIsPresent: false,
-    toolResultTreatment: "untrusted" as const,
-    ...overrides,
-  });
+  return await AgentToolModel.create(agentId, toolId, overrides);
 }
 
 /**
  * Creates a test tool invocation policy using the ToolInvocationPolicy model
  */
 async function makeToolPolicy(
-  agentToolId: string,
+  toolId: string,
   overrides: Partial<
     Pick<
       ToolInvocation.ToolInvocationPolicy,
-      "argumentName" | "operator" | "value" | "action" | "reason"
+      "conditions" | "action" | "reason"
     >
   > = {},
 ): Promise<ToolInvocation.ToolInvocationPolicy> {
   return await ToolInvocationPolicyModel.create({
-    agentToolId,
-    argumentName: "test-arg",
-    operator: "equal",
-    value: "test-value",
+    toolId,
+    conditions: [{ key: "test-arg", operator: "equal", value: "test-value" }],
     action: "block_always",
     reason: "Test policy reason",
     ...overrides,
@@ -266,22 +257,18 @@ async function makeToolPolicy(
  * Returns the created policy
  */
 async function makeTrustedDataPolicy(
-  agentToolId: string,
+  toolId: string,
   overrides: Partial<
-    Pick<
-      TrustedData.TrustedDataPolicy,
-      "description" | "attributePath" | "operator" | "value" | "action"
-    >
+    Pick<TrustedData.TrustedDataPolicy, "description" | "conditions" | "action">
   > = {},
 ): Promise<TrustedData.TrustedDataPolicy> {
   return await TrustedDataPolicyModel.create({
-    agentToolId,
-    description: "Test trusted data policy",
-    attributePath: "test.path",
-    operator: "equal",
-    value: "test-value",
-    action: "mark_as_trusted",
-    ...overrides,
+    toolId,
+    description: overrides.description ?? "Test trusted data policy",
+    conditions: overrides.conditions ?? [
+      { key: "test.path", operator: "equal", value: "test-value" },
+    ],
+    action: overrides.action ?? "mark_as_trusted",
   });
 }
 

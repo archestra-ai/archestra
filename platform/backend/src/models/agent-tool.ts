@@ -34,8 +34,6 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -155,8 +153,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
-          | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
@@ -221,8 +217,6 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -235,8 +229,6 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
-      allowUsageWhenUntrustedDataIsPresent?: boolean;
-      toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
       responseModifierTemplate?: string | null;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
@@ -311,8 +303,6 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
-          | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
@@ -378,8 +368,6 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -399,35 +387,6 @@ class AgentToolModel {
       .where(eq(schema.agentToolsTable.id, id))
       .returning();
     return agentTool;
-  }
-
-  static async bulkUpdateSameValue(
-    ids: string[],
-    field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-    value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
-    clearAutoConfigured = false,
-  ): Promise<number> {
-    if (ids.length === 0) {
-      return 0;
-    }
-
-    const updateData: Record<string, unknown> = {
-      [field]: value,
-      updatedAt: new Date(),
-    };
-
-    // Clear auto-configured timestamp and reasoning if requested (manual policy change)
-    if (clearAutoConfigured) {
-      updateData.policiesAutoConfiguredAt = null;
-      updateData.policiesAutoConfiguredReasoning = null;
-    }
-
-    const result = await db
-      .update(schema.agentToolsTable)
-      .set(updateData)
-      .where(inArray(schema.agentToolsTable.id, ids));
-
-    return result.rowCount ?? 0;
   }
 
   static async findAll(
@@ -597,11 +556,6 @@ class AgentToolModel {
           sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
         );
         break;
-      case "allowUsageWhenUntrustedDataIsPresent":
-        orderByClause = direction(
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        );
-        break;
       default:
         orderByClause = direction(schema.agentToolsTable.createdAt);
         break;
@@ -665,92 +619,6 @@ class AgentToolModel {
     ]);
 
     return createPaginatedResult(data, Number(total), pagination);
-  }
-
-  static async getSecurityConfig(
-    agentId: string,
-    toolName: string,
-  ): Promise<{
-    allowUsageWhenUntrustedDataIsPresent: boolean;
-    toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-  } | null> {
-    const [agentTool] = await db
-      .select({
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agentId),
-          eq(schema.toolsTable.name, toolName),
-        ),
-      );
-
-    return agentTool || null;
-  }
-
-  /**
-   * Batch fetch security configs for multiple tools at once.
-   * Returns a Map of toolName -> security config.
-   */
-  static async getSecurityConfigBatch(
-    agentId: string,
-    toolNames: string[],
-  ): Promise<
-    Map<
-      string,
-      {
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-      }
-    >
-  > {
-    if (toolNames.length === 0) {
-      return new Map();
-    }
-
-    const agentTools = await db
-      .select({
-        toolName: schema.toolsTable.name,
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agentId),
-          inArray(schema.toolsTable.name, toolNames),
-        ),
-      );
-
-    const result = new Map<
-      string,
-      {
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-      }
-    >();
-
-    for (const tool of agentTools) {
-      result.set(tool.toolName, {
-        allowUsageWhenUntrustedDataIsPresent:
-          tool.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: tool.toolResultTreatment,
-      });
-    }
-
-    return result;
   }
 
   /**

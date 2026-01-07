@@ -297,6 +297,9 @@ export function createTransport(
 
   // Create transport with session management
   // If client provides a session ID, we'll use it; otherwise generate one
+  // Note: enableJsonResponse is NOT set, allowing the gateway to support both
+  // JSON and SSE (text/event-stream) responses. This is required for Cursor IDE
+  // compatibility, which falls back to SSE transport after StreamableHTTP fails.
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => {
       const sessionId =
@@ -307,7 +310,6 @@ export function createTransport(
       );
       return sessionId;
     },
-    enableJsonResponse: true, // Use JSON responses instead of SSE
   });
 
   logger.info({ agentId }, "Transport instance created");

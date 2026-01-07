@@ -156,6 +156,11 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Schema for prompt tools with agentPromptId mapping
+  const PromptToolWithAgentSchema = SelectToolSchema.extend({
+    agentPromptId: z.string().uuid(),
+  });
+
   fastify.get(
     "/api/prompts/:id/tools",
     {
@@ -167,7 +172,7 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.array(SelectToolSchema)),
+        response: constructResponseSchema(z.array(PromptToolWithAgentSchema)),
       },
     },
     async ({ params: { id }, organizationId, user, headers }, reply) => {
@@ -195,9 +200,13 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const userAccessibleAgentIds =
         await AgentTeamModel.getUserAccessibleAgentIds(user.id, isAgentAdmin);
 
+      // Return tools with agentPromptId for mapping
       const accessibleTools = allToolsWithDetails
         .filter((t) => userAccessibleAgentIds.includes(t.profileId))
-        .map((t) => t.tool);
+        .map((t) => ({
+          ...t.tool,
+          agentPromptId: t.agentPromptId,
+        }));
 
       return reply.send(accessibleTools);
     },

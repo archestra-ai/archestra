@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.11](https://github.com/archestra-ai/archestra/compare/platform-v1.0.10...platform-v1.0.11) (2026-01-07)
+
+
+### Bug Fixes
+
+* show aggregated number of tools from all mcp servers ([#1828](https://github.com/archestra-ai/archestra/issues/1828)) ([21ae992](https://github.com/archestra-ai/archestra/commit/21ae9926146d266324e9d534b7d65d19e4bacf9d))
+
+
+### Dependencies
+
+* address `CVE-2025-15284` ([#1869](https://github.com/archestra-ai/archestra/issues/1869)) ([bb3a4aa](https://github.com/archestra-ai/archestra/commit/bb3a4aa2e3d36b955a920d3c2bb544d82ada3bde))
+* address CVE-2026-0621 ([dc193e5](https://github.com/archestra-ai/archestra/commit/dc193e5cc7dc394a239251b6e7bf2988ec1b1aa7))
+* address CVE-2026-0621 ([#1898](https://github.com/archestra-ai/archestra/issues/1898)) ([9b95312](https://github.com/archestra-ai/archestra/commit/9b95312123dda9e433ff1f1503312dfabf43e908))
+* bump the platform-dependencies group across 1 directory with 10 updates ([#1868](https://github.com/archestra-ai/archestra/issues/1868)) ([02f03fa](https://github.com/archestra-ai/archestra/commit/02f03fa89ab5e3c5a747ef7c68350b8f562edb48))
+* bump vercel AI packages ([#1858](https://github.com/archestra-ai/archestra/issues/1858)) ([0b711dd](https://github.com/archestra-ai/archestra/commit/0b711dd263b224baf5a66e8e22c75ab6834ee6a6))
+
+
+### Miscellaneous Chores
+
+* address linting issue ([c5595b3](https://github.com/archestra-ai/archestra/commit/c5595b3675158315557469c18d1467375791bb23))
+* dev -&gt; main ([#1870](https://github.com/archestra-ai/archestra/issues/1870)) ([00ec97f](https://github.com/archestra-ai/archestra/commit/00ec97fbe785f64d997177eff921037d3a9faacf))
+
 ## [1.0.10](https://github.com/archestra-ai/archestra/compare/platform-v1.0.9...platform-v1.0.10) (2026-01-06)
 
 

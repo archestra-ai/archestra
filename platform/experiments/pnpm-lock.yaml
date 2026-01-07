@@ -6,6 +6,7 @@ settings:
 
 overrides:
   jws: 4.0.1
+  '@modelcontextprotocol/sdk': ^1.25.2
 
 importers:
 
@@ -366,7 +367,7 @@ packages:
     resolution: {integrity: sha512-3MRcgczBFbUat1wIlZoLJ0vCCfXgm7Qxjh59cZi2X08RgWLtm9hKOspzp7TOg1TV2e26/MLxR2GR5yD5GmBV2w==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.20.1
+      '@modelcontextprotocol/sdk': ^1.25.2
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true

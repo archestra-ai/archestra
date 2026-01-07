@@ -3,7 +3,7 @@
 import { providerDisplayNames } from "@shared";
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/chat-api-key-form";
 import {
@@ -81,6 +81,8 @@ export function ChatApiKeySelector({
   const updateConversationMutation = useUpdateConversation();
   const [pendingKeyId, setPendingKeyId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  // Track if we've already auto-selected to prevent infinite loops
+  const hasAutoSelectedRef = useRef(false);
 
   // Group keys by provider, then by scope within each provider
   const keysByProviderAndScope = useMemo(() => {
@@ -134,11 +136,20 @@ export function ChatApiKeySelector({
     return availableKeys.find((k) => k.id === currentConversationChatApiKeyId);
   }, [availableKeys, currentConversationChatApiKeyId]);
 
+  // Reset auto-select flag when conversation context changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to reset when conversationId changes
+  useEffect(() => {
+    hasAutoSelectedRef.current = false;
+  }, [conversationId]);
+
   // Auto-select first key when no key is selected or current key is invalid
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
   useEffect(() => {
     // Skip if loading or no keys available
     if (isLoading || availableKeys.length === 0) return;
+
+    // Skip if we've already auto-selected to prevent infinite loops
+    if (hasAutoSelectedRef.current) return;
 
     // Check if current key is valid
     const currentKeyValid =
@@ -160,6 +171,9 @@ export function ChatApiKeySelector({
 
     // Auto-select first key if no valid key is selected
     if (!currentKeyValid && keyToSelectValid) {
+      // Mark as auto-selected BEFORE calling callbacks to prevent loops
+      hasAutoSelectedRef.current = true;
+
       if (conversationId) {
         updateConversationMutation.mutate({
           id: conversationId,

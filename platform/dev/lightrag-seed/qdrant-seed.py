@@ -2,12 +2,15 @@
 """Seed Qdrant with example vector data for LightRAG demo."""
 
 import json
+import os
 import random
+import ssl
 import time
 import urllib.request
 import urllib.error
 
-QDRANT_URL = "http://qdrant:6333"
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
 EMBEDDING_DIM = 3072  # text-embedding-3-large dimension
 
 # LightRAG collection names
@@ -51,6 +54,73 @@ EXAMPLE_ENTITIES = [
     },
 ]
 
+# Example relationships between entities
+EXAMPLE_RELATIONSHIPS = [
+    {
+        "id": "rel_sarah_ceo",
+        "source": "Sarah Chen",
+        "target": "Acme Corporation",
+        "relationship": "CEO_OF",
+        "description": "Sarah Chen serves as the Chief Executive Officer of Acme Corporation",
+    },
+    {
+        "id": "rel_sarah_founded",
+        "source": "Sarah Chen",
+        "target": "Acme Corporation",
+        "relationship": "CO_FOUNDED",
+        "description": "Sarah Chen co-founded Acme Corporation in 2015 in San Francisco",
+    },
+    {
+        "id": "rel_michael_cto",
+        "source": "Michael Rodriguez",
+        "target": "Acme Corporation",
+        "relationship": "CTO_OF",
+        "description": "Michael Rodriguez serves as the Chief Technology Officer of Acme Corporation",
+    },
+    {
+        "id": "rel_michael_founded",
+        "source": "Michael Rodriguez",
+        "target": "Acme Corporation",
+        "relationship": "CO_FOUNDED",
+        "description": "Michael Rodriguez co-founded Acme Corporation in 2015 with Sarah Chen",
+    },
+    {
+        "id": "rel_emily_leads",
+        "source": "Dr. Emily Watson",
+        "target": "Project Aurora",
+        "relationship": "LEADS",
+        "description": "Dr. Emily Watson leads Project Aurora as the principal research scientist",
+    },
+    {
+        "id": "rel_emily_works",
+        "source": "Dr. Emily Watson",
+        "target": "Acme Corporation",
+        "relationship": "WORKS_AT",
+        "description": "Dr. Emily Watson works at Acme Corporation as a research scientist",
+    },
+    {
+        "id": "rel_aurora_belongs",
+        "source": "Project Aurora",
+        "target": "Acme Corporation",
+        "relationship": "BELONGS_TO",
+        "description": "Project Aurora is a research initiative belonging to Acme Corporation",
+    },
+    {
+        "id": "rel_acmeai_product",
+        "source": "AcmeAI",
+        "target": "Acme Corporation",
+        "relationship": "PRODUCT_OF",
+        "description": "AcmeAI is the flagship product developed by Acme Corporation",
+    },
+    {
+        "id": "rel_michael_leads_eng",
+        "source": "Michael Rodriguez",
+        "target": "AcmeAI",
+        "relationship": "LEADS_DEVELOPMENT",
+        "description": "Michael Rodriguez leads the engineering team developing AcmeAI",
+    },
+]
+
 EXAMPLE_CHUNKS = [
     {
         "id": "chunk_1",
@@ -88,16 +158,29 @@ def generate_mock_embedding(text: str, dim: int = EMBEDDING_DIM) -> list[float]:
 
 def http_request(method: str, url: str, data: dict = None) -> dict:
     """Make HTTP request to Qdrant."""
+    headers = {"Content-Type": "application/json"}
+    if QDRANT_API_KEY:
+        headers["api-key"] = QDRANT_API_KEY
     req = urllib.request.Request(
         url,
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     if data:
         req.data = json.dumps(data).encode("utf-8")
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        ssl_context = None
+        if url.startswith("https"):
+            try:
+                import certifi
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                # Fallback if certifi not installed (less secure)
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=10, context=ssl_context) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8") if e.fp else ""
@@ -199,6 +282,36 @@ def seed_chunks():
         print(f"  Added {len(points)} chunk vectors")
 
 
+def seed_relationships():
+    """Seed relationship vectors."""
+    print("Seeding relationships...")
+    points = []
+    for i, rel in enumerate(EXAMPLE_RELATIONSHIPS):
+        # Embed the relationship description for semantic search
+        text = f"{rel['source']} {rel['relationship']} {rel['target']}: {rel['description']}"
+        points.append({
+            "id": i + 1,
+            "vector": generate_mock_embedding(text),
+            "payload": {
+                "src_id": rel["source"],
+                "tgt_id": rel["target"],
+                "relationship": rel["relationship"],
+                "description": rel["description"],
+                "source_id": "example_seed",
+            },
+        })
+
+    result = http_request(
+        "PUT",
+        f"{QDRANT_URL}/collections/lightrag_vdb_relationships/points",
+        {"points": points},
+    )
+    if "error" in result:
+        print(f"  Failed: {result}")
+    else:
+        print(f"  Added {len(points)} relationship vectors")
+
+
 def main():
     """Main seeding function."""
     print("=" * 50)
@@ -215,6 +328,7 @@ def main():
 
     print("\nSeeding data...")
     seed_entities()
+    seed_relationships()
     seed_chunks()
 
     print("\n" + "=" * 50)

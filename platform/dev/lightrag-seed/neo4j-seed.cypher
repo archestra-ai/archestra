@@ -126,6 +126,148 @@ CREATE (azure:TECHNOLOGY {
   source_id: "example_seed"
 })
 
+// Create Cartoon Animal entities
+CREATE (zippy:CARTOON_CHARACTER {
+  name: "Zippy the Squirrel",
+  description: "Hyperactive red squirrel who hoards gadgets instead of acorns. Loves coffee and inventing contraptions that usually explode.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Squirrel",
+  source_id: "example_seed"
+})
+
+CREATE (grumbles:CARTOON_CHARACTER {
+  name: "Grumbles the Badger",
+  description: "Perpetually grumpy old badger who secretly has a heart of gold. Runs a repair shop in the forest.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Badger",
+  source_id: "example_seed"
+})
+
+CREATE (mango:CARTOON_CHARACTER {
+  name: "Mango the Parrot",
+  description: "Flamboyant tropical parrot who speaks in riddles and runs a detective agency from a treehouse.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Parrot",
+  source_id: "example_seed"
+})
+
+CREATE (chester:CARTOON_CHARACTER {
+  name: "Chester McWhiskers",
+  description: "Sophisticated orange tabby cat with a monocle who fancies himself a gentleman thief but keeps getting caught.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Cat",
+  source_id: "example_seed"
+})
+
+CREATE (nibbles:CARTOON_CHARACTER {
+  name: "Nibbles",
+  description: "Tiny but fierce hamster who dreams of being a knight. Rides around on a remote-controlled car.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Hamster",
+  source_id: "example_seed"
+})
+
+CREATE (thunderhoof:CARTOON_CHARACTER {
+  name: "Thunderhoof",
+  description: "Dramatic llama who believes he's a superhero. His power is spitting with incredible accuracy.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Llama",
+  source_id: "example_seed"
+})
+
+CREATE (professor:CARTOON_CHARACTER {
+  name: "Professor Shellsworth",
+  description: "Elderly tortoise scientist who invents time machines but always forgets where he left them.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Tortoise",
+  source_id: "example_seed"
+})
+
+CREATE (bandit:CARTOON_CHARACTER {
+  name: "Bandit",
+  description: "Mischievous raccoon who runs a black market for shiny objects. Actually quite philosophical.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Raccoon",
+  source_id: "example_seed"
+})
+
+CREATE (bubbles:CARTOON_CHARACTER {
+  name: "Bubbles the Axolotl",
+  description: "Eternally cheerful pink axolotl who runs an underwater bakery. Her cupcakes cause temporary floating.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Axolotl",
+  source_id: "example_seed"
+})
+
+CREATE (captain:CARTOON_CHARACTER {
+  name: "Captain Whiskerface",
+  description: "Retired pirate otter who now runs a boat rental service. Tells wildly exaggerated tales of his adventures.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Otter",
+  source_id: "example_seed"
+})
+
+CREATE (boris:CARTOON_CHARACTER {
+  name: "Boris the Moose",
+  description: "Gentle giant moose who works as a librarian. Accidentally destroys things due to his size but everyone forgives him.",
+  entity_type: "CARTOON_CHARACTER",
+  species: "Moose",
+  source_id: "example_seed"
+})
+
+// Create Cartoon Show entities
+CREATE (forestchaos:SHOW {
+  name: "Forest Chaos",
+  description: "Animated comedy series about woodland creatures causing mayhem in Pinecone Valley",
+  entity_type: "SHOW",
+  source_id: "example_seed"
+})
+
+CREATE (detectivemango:SHOW {
+  name: "Detective Mango Mysteries",
+  description: "Animated mystery series following a parrot detective solving crimes in the jungle",
+  entity_type: "SHOW",
+  source_id: "example_seed"
+})
+
+CREATE (underwatercafe:SHOW {
+  name: "The Underwater Cafe",
+  description: "Slice-of-life animated series set in a cozy cafe at the bottom of a lake",
+  entity_type: "SHOW",
+  source_id: "example_seed"
+})
+
+CREATE (heroesofnowhere:SHOW {
+  name: "Heroes of Nowhere",
+  description: "Action-comedy about misfit animals who accidentally become superheroes",
+  entity_type: "SHOW",
+  source_id: "example_seed"
+})
+
+// Create cartoon relationships
+CREATE (zippy)-[:BEST_FRIENDS_WITH {weight: 1.0, source_id: "example_seed"}]->(grumbles)
+CREATE (zippy)-[:ANNOYS {weight: 0.9, source_id: "example_seed"}]->(grumbles)
+CREATE (chester)-[:RIVALS_WITH {weight: 0.9, source_id: "example_seed"}]->(mango)
+CREATE (mango)-[:INVESTIGATES {weight: 1.0, source_id: "example_seed"}]->(chester)
+CREATE (nibbles)-[:SIDEKICK_OF {weight: 1.0, source_id: "example_seed"}]->(thunderhoof)
+CREATE (professor)-[:MENTORS {weight: 0.9, source_id: "example_seed"}]->(zippy)
+CREATE (bandit)-[:TRADES_WITH {weight: 0.8, source_id: "example_seed"}]->(chester)
+CREATE (bubbles)-[:BEST_FRIENDS_WITH {weight: 1.0, source_id: "example_seed"}]->(captain)
+CREATE (boris)-[:PROTECTS {weight: 0.9, source_id: "example_seed"}]->(nibbles)
+CREATE (professor)-[:CUSTOMER_OF {weight: 0.9, source_id: "example_seed"}]->(acme)
+
+CREATE (zippy)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(forestchaos)
+CREATE (grumbles)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(forestchaos)
+CREATE (nibbles)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(forestchaos)
+CREATE (boris)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(forestchaos)
+CREATE (mango)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(detectivemango)
+CREATE (chester)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(detectivemango)
+CREATE (bubbles)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(underwatercafe)
+CREATE (captain)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(underwatercafe)
+CREATE (thunderhoof)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(heroesofnowhere)
+CREATE (bandit)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(heroesofnowhere)
+CREATE (professor)-[:STARS_IN {weight: 1.0, source_id: "example_seed"}]->(heroesofnowhere)
+
 // Create relationships
 CREATE (sarah)-[:FOUNDED {weight: 1.0, source_id: "example_seed"}]->(acme)
 CREATE (michael)-[:FOUNDED {weight: 1.0, source_id: "example_seed"}]->(acme)

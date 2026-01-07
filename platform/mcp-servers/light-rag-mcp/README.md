@@ -179,7 +179,6 @@ Install as a local MCP server in Archestra:
 2. Add a new **Local Server**
 3. Configure:
    - **Docker Image**: `archestra/light-rag-mcp:latest`
-   - **Transport**: `streamable-http`
    - **Port**: `8080`
    - **Path**: `/mcp`
 4. Set environment variables for your LLM provider and storage

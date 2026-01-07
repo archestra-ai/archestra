@@ -288,14 +288,6 @@ export function ChatApiKeySelector({
                       <div className="flex items-center gap-2">
                         <ProviderIcon src={PROVIDER_CONFIG[provider]?.icon} />
                         <span>{providerDisplayNames[provider]}</span>
-                        {provider === currentProvider && (
-                          <Badge
-                            variant="secondary"
-                            className="ml-auto text-[10px] px-1.5 py-0"
-                          >
-                            Current
-                          </Badge>
-                        )}
                       </div>
                     }
                   >

@@ -202,13 +202,17 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
-  // Filter to only chat-compatible models that support tools (exclude vision models)
+  // Filter to only chat-compatible "command" models that (currently) support tools.
+  // Note: We exclude vision models based on the model name because Cohere vision models are
+  // understood not to support tools at this time.
+  // TODO: If Cohere adds tool support to vision models or exposes explicit capability flags,
+  //       revisit this filter to use capability-based checks instead of name-based exclusion.
   return data.models
     .filter(
       (model) =>
         model.name.toLowerCase().includes("command") &&
         model.endpoints?.includes("chat") &&
-        !model.name.toLowerCase().includes("vision"), // Vision models don't support tools
+        !model.name.toLowerCase().includes("vision"),
     )
     .map((model) => ({
       id: model.name,

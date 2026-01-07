@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "global_tool_policy" varchar DEFAULT 'permissive' NOT NULL;

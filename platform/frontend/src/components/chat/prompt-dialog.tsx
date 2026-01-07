@@ -62,7 +62,7 @@ export function PromptDialog({
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
     return allPrompts
-      .filter((p) => p.id !== prompt?.id && p.isActive)
+      .filter((p) => p.id !== prompt?.id)
       .map((p) => {
         const profile = allProfiles.find((prof) => prof.id === p.agentId);
         return {

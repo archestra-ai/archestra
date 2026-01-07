@@ -1,12 +1,22 @@
 import {
-  boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
+
+/**
+ * Represents a historical version of a prompt stored in the history JSONB array
+ */
+export interface PromptHistoryEntry {
+  version: number;
+  userPrompt: string | null;
+  systemPrompt: string | null;
+  createdAt: string; // ISO timestamp
+}
 
 const promptsTable = pgTable("prompts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -18,8 +28,7 @@ const promptsTable = pgTable("prompts", {
   userPrompt: text("user_prompt"),
   systemPrompt: text("system_prompt"),
   version: integer("version").notNull().default(1),
-  parentPromptId: uuid("parent_prompt_id"),
-  isActive: boolean("is_active").notNull().default(true),
+  history: jsonb("history").$type<PromptHistoryEntry[]>().notNull().default([]),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

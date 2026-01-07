@@ -1011,7 +1011,7 @@ export const updatePrompt = <ThrowOnError extends boolean = false>(options: Opti
 });
 
 /**
- * Get all versions of a prompt
+ * Get all versions of a prompt (current + history)
  */
 export const getPromptVersions = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionsData, ThrowOnError>) => (options.client ?? client).get<GetPromptVersionsResponses, GetPromptVersionsErrors, ThrowOnError>({ url: '/api/prompts/{id}/versions', ...options });
 

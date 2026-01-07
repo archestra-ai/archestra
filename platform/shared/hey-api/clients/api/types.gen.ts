@@ -14473,8 +14473,9 @@ export type GetPromptsResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -14489,8 +14490,6 @@ export type CreatePromptData = {
         userPrompt?: string | null;
         systemPrompt?: string | null;
         version?: number;
-        parentPromptId?: string | null;
-        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -14568,8 +14567,9 @@ export type CreatePromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14736,8 +14736,9 @@ export type GetPromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14830,8 +14831,9 @@ export type UpdatePromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14911,19 +14913,28 @@ export type GetPromptVersionsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
-        createdAt: string;
-        updatedAt: string;
-    }>;
+    200: {
+        current: {
+            id: string;
+            organizationId: string;
+            name: string;
+            agentId: string;
+            userPrompt: string | null;
+            systemPrompt: string | null;
+            version: number;
+            history: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown>;
+            createdAt: string;
+            updatedAt: string;
+        };
+        history: Array<{
+            version: number;
+            userPrompt: string | null;
+            systemPrompt: string | null;
+            createdAt: string;
+        }>;
+    };
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
@@ -15033,7 +15044,7 @@ export type GetPromptToolsResponse = GetPromptToolsResponses[keyof GetPromptTool
 
 export type RollbackPromptData = {
     body: {
-        versionId: string;
+        version: number;
     };
     path: {
         id: string;
@@ -15113,8 +15124,9 @@ export type RollbackPromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };

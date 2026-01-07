@@ -1,7 +1,7 @@
 "use client";
 
 import { Bot } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -14,27 +14,30 @@ import {
   usePromptTools,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
+import {
+  addPendingAction,
+  applyPendingActions,
+  getPendingActions,
+  type PendingToolAction,
+} from "@/lib/pending-tool-state";
 import { usePrompts } from "@/lib/prompts.query";
 import { cn } from "@/lib/utils";
 
-// Pending action to apply after conversation is created
-type PendingAgentAction = {
-  type: "toggle";
-  toolId: string;
-  shouldDisable: boolean;
-};
-
 interface AgentToolsDisplayProps {
+  agentId: string;
   promptId: string | null;
   conversationId?: string;
-  /** Called when user toggles an agent in initial state (no conversation) */
-  onCreateConversation?: () => void;
 }
 
+/**
+ * Display agent delegation tools with ability to toggle them.
+ * When no conversation exists, pending actions are stored in localStorage
+ * and applied when the conversation is created via first message.
+ */
 export function AgentToolsDisplay({
+  agentId,
   promptId,
   conversationId,
-  onCreateConversation,
 }: AgentToolsDisplayProps) {
   // Always fetch prompt tools - they exist regardless of conversation
   const { data: promptTools = [], isLoading } = usePromptTools(
@@ -43,11 +46,20 @@ export function AgentToolsDisplay({
 
   const { data: allPrompts = [] } = usePrompts();
 
-  // Track pending action to apply after conversation is created
-  const [pendingAction, setPendingAction] = useState<PendingAgentAction | null>(
-    null,
-  );
-  const prevConversationId = useRef<string | undefined>(undefined);
+  // Local pending actions for display (synced with localStorage)
+  const [localPendingActions, setLocalPendingActions] = useState<
+    PendingToolAction[]
+  >([]);
+
+  // Load pending actions from localStorage on mount and when context changes
+  useEffect(() => {
+    if (!conversationId) {
+      const actions = getPendingActions(agentId, promptId);
+      setLocalPendingActions(actions);
+    } else {
+      setLocalPendingActions([]);
+    }
+  }, [agentId, promptId, conversationId]);
 
   // Fetch enabled tools for the conversation
   const { data: enabledToolsData } =
@@ -58,6 +70,7 @@ export function AgentToolsDisplay({
 
   // Derived values
   const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
+  const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
 
   // Map promptTools to their display names
   const agentToolsWithNames = useMemo(() => {
@@ -74,24 +87,38 @@ export function AgentToolsDisplay({
   }, [promptTools, allPrompts]);
 
   // Default: all agent tools are enabled (matches backend behavior)
-  const defaultEnabledAgentToolIds = promptTools.map((t) => t.id);
+  const defaultEnabledAgentToolIds = useMemo(
+    () => promptTools.map((t) => t.id),
+    [promptTools],
+  );
 
-  // Check if conversation has custom tool selection
-  const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
-
-  // Current enabled tool IDs:
-  // - If custom selection exists, use it
-  // - Otherwise use default (all agents enabled) - this is stable like ChatToolsDisplay
-  const currentEnabledToolIds = hasCustomSelection
-    ? enabledToolIds
-    : defaultEnabledAgentToolIds;
-
-  // Check if a tool is enabled (considering pending action for visual feedback)
-  const isToolEnabled = (toolId: string) => {
-    // If we have a pending action for this tool, show the pending state
-    if (pendingAction?.toolId === toolId) {
-      return !pendingAction.shouldDisable;
+  // Compute current enabled tool IDs:
+  // - If conversation exists with custom selection, use it
+  // - If no conversation, apply pending actions to defaults
+  const currentEnabledToolIds = useMemo(() => {
+    if (conversationId && hasCustomSelection) {
+      return enabledToolIds;
     }
+
+    // Start with defaults (all agent tools enabled)
+    const baseIds = defaultEnabledAgentToolIds;
+
+    // If no conversation, apply pending actions for display
+    if (!conversationId && localPendingActions.length > 0) {
+      return applyPendingActions(baseIds, localPendingActions);
+    }
+
+    return baseIds;
+  }, [
+    conversationId,
+    hasCustomSelection,
+    enabledToolIds,
+    defaultEnabledAgentToolIds,
+    localPendingActions,
+  ]);
+
+  // Check if a tool is enabled
+  const isToolEnabled = (toolId: string) => {
     return currentEnabledToolIds.includes(toolId);
   };
 
@@ -100,13 +127,12 @@ export function AgentToolsDisplay({
     const isCurrentlyEnabled = isToolEnabled(toolId);
 
     if (!conversationId) {
-      // No conversation yet - set pending action and create conversation
-      setPendingAction({
-        type: "toggle",
-        toolId,
-        shouldDisable: isCurrentlyEnabled,
-      });
-      onCreateConversation?.();
+      // No conversation yet - store in localStorage
+      const action: PendingToolAction = isCurrentlyEnabled
+        ? { type: "disable", toolId }
+        : { type: "enable", toolId };
+      addPendingAction(action, agentId, promptId);
+      setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
 
@@ -123,53 +149,6 @@ export function AgentToolsDisplay({
       toolIds: newEnabledToolIds,
     });
   };
-
-  // Apply pending action when conversation is created
-  useEffect(() => {
-    // Detect when conversationId changes from undefined to defined
-    if (
-      pendingAction &&
-      conversationId &&
-      prevConversationId.current === undefined &&
-      enabledToolsData
-    ) {
-      const { toolId, shouldDisable } = pendingAction;
-
-      let newEnabledToolIds: string[];
-      if (shouldDisable) {
-        newEnabledToolIds = enabledToolIds.filter((id) => id !== toolId);
-      } else {
-        newEnabledToolIds = [...new Set([...enabledToolIds, toolId])];
-      }
-
-      updateEnabledTools.mutate(
-        {
-          conversationId,
-          toolIds: newEnabledToolIds,
-        },
-        {
-          onSettled: () => {
-            // Clear pending action only after mutation completes and query invalidates
-            setPendingAction(null);
-          },
-        },
-      );
-
-      // Only update prevConversationId AFTER applying pending action
-      prevConversationId.current = conversationId;
-    } else if (!pendingAction) {
-      // No pending action - just track the conversationId
-      prevConversationId.current = conversationId;
-    }
-    // If there IS a pending action but conditions aren't met yet,
-    // DON'T update prevConversationId - keep it undefined so we can retry
-  }, [
-    conversationId,
-    pendingAction,
-    enabledToolsData,
-    enabledToolIds,
-    updateEnabledTools,
-  ]);
 
   if (isLoading || agentToolsWithNames.length === 0) {
     return null;

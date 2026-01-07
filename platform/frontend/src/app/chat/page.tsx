@@ -42,6 +42,7 @@ import {
   useConversation,
   useCreateConversation,
   useUpdateConversation,
+  useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
 import {
   useChatModelsQuery,
@@ -53,6 +54,11 @@ import {
 } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useFeatures } from "@/lib/features.query";
+import {
+  applyPendingActions,
+  clearPendingActions,
+  getPendingActions,
+} from "@/lib/pending-tool-state";
 import { usePrompt, usePrompts } from "@/lib/prompts.query";
 import ArchestraPromptInput from "./prompt-input";
 
@@ -187,9 +193,11 @@ export default function ChatPage() {
 
   // Sync conversation ID with URL and reset initial state when navigating to base /chat
   useEffect(() => {
-    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
+    // Normalize null to undefined for consistent comparison
+    const conversationParam =
+      searchParams.get(CONVERSATION_QUERY_PARAM) ?? undefined;
     if (conversationParam !== conversationId) {
-      setConversationId(conversationParam || undefined);
+      setConversationId(conversationParam);
 
       // Reset initial state when navigating to /chat without a conversation
       // This ensures a fresh state when user clicks "New chat" or navigates back
@@ -313,6 +321,9 @@ export default function ChatPage() {
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
+
+  // Update enabled tools mutation (for applying pending actions)
+  const updateEnabledToolsMutation = useUpdateConversationEnabledTools();
 
   // Persist hide tool calls preference
   const toggleHideToolCalls = useCallback(() => {
@@ -567,6 +578,12 @@ export default function ChatPage() {
       // Store the message to send after conversation is created
       pendingPromptRef.current = message.text;
 
+      // Check if there are pending tool actions to apply
+      const pendingActions = getPendingActions(
+        initialAgentId,
+        initialPromptId ?? null,
+      );
+
       // Create conversation with the selected agent and prompt
       createConversationMutation.mutate(
         {
@@ -576,11 +593,41 @@ export default function ChatPage() {
           chatApiKeyId: initialApiKeyId,
         },
         {
-          onSuccess: (newConversation) => {
+          onSuccess: async (newConversation) => {
             if (newConversation) {
+              // Apply pending tool actions if any
+              if (pendingActions.length > 0) {
+                // Get the default enabled tools from the conversation (backend sets these)
+                // We need to fetch them first to apply our pending actions on top
+                try {
+                  // The backend creates conversation with default enabled tools
+                  // We need to apply pending actions to modify that default
+                  const response = await fetch(
+                    `/api/chat/conversations/${newConversation.id}/enabled-tools`,
+                  );
+                  if (response.ok) {
+                    const data = await response.json();
+                    const baseEnabledToolIds = data.enabledToolIds || [];
+                    const newEnabledToolIds = applyPendingActions(
+                      baseEnabledToolIds,
+                      pendingActions,
+                    );
+
+                    // Update the enabled tools
+                    updateEnabledToolsMutation.mutate({
+                      conversationId: newConversation.id,
+                      toolIds: newEnabledToolIds,
+                    });
+                  }
+                } catch {
+                  // Silently fail - the default tools will be used
+                }
+                // Clear pending actions regardless of success
+                clearPendingActions();
+              }
+
               newlyCreatedConversationRef.current = newConversation.id;
               selectConversation(newConversation.id);
-              toast.success("Conversation created");
             }
           },
         },
@@ -592,6 +639,7 @@ export default function ChatPage() {
       initialModel,
       initialApiKeyId,
       createConversationMutation,
+      updateEnabledToolsMutation,
       selectConversation,
     ],
   );
@@ -650,44 +698,21 @@ export default function ChatPage() {
                 />
               )}
 
-              {/* Single AgentToolsDisplay instance - no remounting */}
-              {/* When viewing a conversation, use only its promptId (not initialPromptId fallback) */}
-              {/* When in initial state (no conversation), use initialPromptId */}
+              {/* Agent tools display - pending actions stored in localStorage until first message */}
               {(conversationId ? conversation?.promptId : initialPromptId) && (
                 <>
                   <AgentToolsDisplay
+                    agentId={
+                      conversationId
+                        ? (conversation?.agentId ?? "")
+                        : (initialAgentId ?? "")
+                    }
                     promptId={
                       conversationId
                         ? (conversation?.promptId ?? null)
                         : initialPromptId
                     }
                     conversationId={conversationId}
-                    onCreateConversation={
-                      conversationId
-                        ? undefined
-                        : () => {
-                            // Create conversation when user toggles an agent
-                            if (!initialAgentId || !initialModel) return;
-                            createConversationMutation.mutate(
-                              {
-                                agentId: initialAgentId,
-                                selectedModel: initialModel,
-                                promptId: initialPromptId ?? undefined,
-                                chatApiKeyId: initialApiKeyId,
-                              },
-                              {
-                                onSuccess: (newConversation) => {
-                                  if (newConversation) {
-                                    newlyCreatedConversationRef.current =
-                                      newConversation.id;
-                                    selectConversation(newConversation.id);
-                                    toast.success("Conversation created");
-                                  }
-                                },
-                              },
-                            );
-                          }
-                    }
                   />
                   <Button
                     variant="outline"
@@ -902,60 +927,77 @@ export default function ChatPage() {
           {activeAgentId && (
             <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-4xl mx-auto space-y-3">
-                {conversationId && conversation?.agent.id ? (
-                  <ArchestraPromptInput
-                    onSubmit={handleSubmit}
-                    status={status}
-                    selectedModel={conversation?.selectedModel ?? ""}
-                    onModelChange={handleModelChange}
-                    messageCount={messages.length}
-                    agentId={conversation.agent.id}
-                    conversationId={conversationId}
-                    currentConversationChatApiKeyId={conversation?.chatApiKeyId}
-                    currentProvider={currentProvider}
-                    onProviderChange={handleProviderChange}
-                    textareaRef={textareaRef}
-                  />
-                ) : (
-                  <ArchestraPromptInput
-                    onSubmit={handleInitialSubmit}
-                    status={
-                      createConversationMutation.isPending
+                <ArchestraPromptInput
+                  onSubmit={
+                    conversationId && conversation?.agent.id
+                      ? handleSubmit
+                      : handleInitialSubmit
+                  }
+                  status={
+                    conversationId && conversation?.agent.id
+                      ? status
+                      : createConversationMutation.isPending
                         ? "submitted"
                         : "ready"
-                    }
-                    selectedModel={initialModel}
-                    onModelChange={setInitialModel}
-                    agentId={activeAgentId}
-                    onProfileChange={setInitialAgentId}
-                    currentProvider={initialProvider}
-                    initialApiKeyId={initialApiKeyId}
-                    onApiKeyChange={setInitialApiKeyId}
-                    onProviderChange={handleInitialProviderChange}
-                    onCreateConversation={() => {
-                      // Create conversation when user interacts with tools
-                      if (!initialAgentId || !initialModel) return;
-                      createConversationMutation.mutate(
-                        {
-                          agentId: initialAgentId,
-                          selectedModel: initialModel,
-                          promptId: initialPromptId ?? undefined,
-                          chatApiKeyId: initialApiKeyId,
-                        },
-                        {
-                          onSuccess: (newConversation) => {
-                            if (newConversation) {
-                              newlyCreatedConversationRef.current =
-                                newConversation.id;
-                              selectConversation(newConversation.id);
-                              toast.success("Conversation created");
-                            }
-                          },
-                        },
-                      );
-                    }}
-                  />
-                )}
+                  }
+                  selectedModel={
+                    conversationId && conversation?.agent.id
+                      ? (conversation?.selectedModel ?? "")
+                      : initialModel
+                  }
+                  onModelChange={
+                    conversationId && conversation?.agent.id
+                      ? handleModelChange
+                      : setInitialModel
+                  }
+                  messageCount={
+                    conversationId && conversation?.agent.id
+                      ? messages.length
+                      : undefined
+                  }
+                  agentId={
+                    conversationId && conversation?.agent.id
+                      ? conversation.agent.id
+                      : activeAgentId
+                  }
+                  conversationId={conversationId}
+                  currentConversationChatApiKeyId={
+                    conversationId && conversation?.agent.id
+                      ? conversation?.chatApiKeyId
+                      : undefined
+                  }
+                  currentProvider={
+                    conversationId && conversation?.agent.id
+                      ? currentProvider
+                      : initialProvider
+                  }
+                  onProviderChange={
+                    conversationId && conversation?.agent.id
+                      ? handleProviderChange
+                      : handleInitialProviderChange
+                  }
+                  textareaRef={textareaRef}
+                  onProfileChange={
+                    conversationId && conversation?.agent.id
+                      ? undefined
+                      : setInitialAgentId
+                  }
+                  initialApiKeyId={
+                    conversationId && conversation?.agent.id
+                      ? undefined
+                      : initialApiKeyId
+                  }
+                  onApiKeyChange={
+                    conversationId && conversation?.agent.id
+                      ? undefined
+                      : setInitialApiKeyId
+                  }
+                  promptId={
+                    conversationId && conversation?.agent.id
+                      ? (conversation?.promptId ?? null)
+                      : initialPromptId
+                  }
+                />
                 <div className="text-center">
                   <Version inline />
                 </div>

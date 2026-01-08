@@ -453,12 +453,8 @@ class TrustedDataPolicyModel {
         isDefaultPolicy(p.conditions || []),
       );
       logger.debug(
-        { specificPolicies },
-        "TrustedDataPolicy.evaluateBulk: specificPolicies",
-      );
-      logger.debug(
-        { defaultPolicies },
-        "TrustedDataPolicy.evaluateBulk: defaultPolicies",
+        { specificPolicies, defaultPolicies },
+        "TrustedDataPolicy.evaluateBulk: specific and default policies",
       );
 
       // First, check specific policies for blocking

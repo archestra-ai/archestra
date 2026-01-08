@@ -235,6 +235,14 @@ function AgentsCanvasViewInner() {
       JSON.stringify([...currentPromptIds].sort()) !==
       JSON.stringify([...prevPromptIds].sort());
 
+    // Check if prompt data changed (e.g., name updated)
+    const prevPromptData = new Map(
+      prevPromptsRef.current.map((p) => [p.id, p.name]),
+    );
+    const promptDataChanged = prompts.some(
+      (p) => prevPromptData.get(p.id) !== p.name,
+    );
+
     // Check if connections changed (delegated agents added/removed)
     const prevConnectionIds = new Set(
       prevConnectionsRef.current.map((c) => `${c.promptId}-${c.agentPromptId}`),
@@ -246,7 +254,12 @@ function AgentsCanvasViewInner() {
       JSON.stringify([...currentConnectionIds].sort()) !==
       JSON.stringify([...prevConnectionIds].sort());
 
-    if (!promptsChanged && !connectionsChanged && isLayoutReady) {
+    if (
+      !promptsChanged &&
+      !promptDataChanged &&
+      !connectionsChanged &&
+      isLayoutReady
+    ) {
       return;
     }
 

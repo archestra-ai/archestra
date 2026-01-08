@@ -6721,7 +6721,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: string | null;
+        selectedProvider?: 'anthropic' | 'openai' | 'gemini';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -7001,7 +7001,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: string | null;
+        selectedProvider?: 'anthropic' | 'openai' | 'gemini';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;

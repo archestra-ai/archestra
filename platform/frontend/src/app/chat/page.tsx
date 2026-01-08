@@ -259,10 +259,15 @@ export default function ChatPage() {
     (model: string) => {
       if (!conversation) return;
 
+      // Find the provider for this model
+      const modelInfo = chatModels.find((m) => m.id === model);
+      const provider = modelInfo?.provider as SupportedChatProvider | undefined;
+
       updateConversationMutation.mutate(
         {
           id: conversation.id,
           selectedModel: model,
+          selectedProvider: provider,
         },
         {
           onError: (error) => {
@@ -273,7 +278,7 @@ export default function ChatPage() {
         },
       );
     },
-    [conversation, updateConversationMutation],
+    [conversation, chatModels, updateConversationMutation],
   );
 
   // Handle provider change for existing conversation - switch to first model of new provider
@@ -602,11 +607,18 @@ export default function ChatPage() {
         initialPromptId ?? null,
       );
 
+      // Find the provider for the initial model
+      const modelInfo = chatModels.find((m) => m.id === initialModel);
+      const selectedProvider = modelInfo?.provider as
+        | SupportedChatProvider
+        | undefined;
+
       // Create conversation with the selected agent and prompt
       createConversationMutation.mutate(
         {
           agentId: initialAgentId,
           selectedModel: initialModel,
+          selectedProvider,
           promptId: initialPromptId ?? undefined,
           chatApiKeyId: initialApiKeyId,
         },
@@ -656,6 +668,7 @@ export default function ChatPage() {
       initialPromptId,
       initialModel,
       initialApiKeyId,
+      chatModels,
       createConversationMutation,
       updateEnabledToolsMutation,
       selectConversation,

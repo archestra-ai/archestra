@@ -38,6 +38,7 @@ import {
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
+  type SupportedChatProvider,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
@@ -187,8 +188,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         systemPrompt = allParts.join("\n\n");
       }
 
-      // Detect provider from model name
-      const provider = detectProviderFromModel(conversation.selectedModel);
+      // Use stored provider if available, otherwise detect from model name for backward compatibility
+      const provider =
+        (conversation.selectedProvider as SupportedChatProvider | null) ??
+        detectProviderFromModel(conversation.selectedModel);
 
       logger.info(
         {
@@ -201,6 +204,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
           model: conversation.selectedModel,
           provider,
+          providerSource: conversation.selectedProvider ? "stored" : "detected",
           promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
@@ -216,6 +220,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         agentId: conversation.agentId,
         model: conversation.selectedModel,
+        provider,
         conversationId,
         externalAgentId,
       });
@@ -473,6 +478,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId: true,
           title: true,
           selectedModel: true,
+          selectedProvider: true,
           chatApiKeyId: true,
         })
           .required({ agentId: true })
@@ -480,6 +486,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             promptId: true,
             title: true,
             selectedModel: true,
+            selectedProvider: true,
             chatApiKeyId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
@@ -487,7 +494,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: { agentId, promptId, title, selectedModel, chatApiKeyId },
+        body: {
+          agentId,
+          promptId,
+          title,
+          selectedModel,
+          selectedProvider,
+          chatApiKeyId,
+        },
         user,
         organizationId,
         headers,
@@ -537,6 +551,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
+          selectedProvider,
           chatApiKeyId,
         }),
       );

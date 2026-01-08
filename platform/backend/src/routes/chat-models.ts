@@ -174,8 +174,49 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
- * Get API key for a provider using resolution priority: personal → team → org_wide → env
+ * Fetch models from OpenRouter API
+ * OpenRouter provides access to many models from different providers
  */
+async function fetchOpenRouterModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.openrouter.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch OpenRouter models",
+    );
+    throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      name: string;
+      created?: number;
+    }>;
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.name,
+    provider: "openrouter" as const,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }));
+}
+
+/**
+   * Get API key for a provider using resolution priority: personal → team → org_wide → env
+   */
 async function getProviderApiKey({
   provider,
   organizationId,
@@ -212,6 +253,8 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "openrouter":
+      return config.chat.openrouter.apiKey || null;
     default:
       return null;
   }
@@ -225,6 +268,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  openrouter: fetchOpenRouterModels,
 };
 
 /**

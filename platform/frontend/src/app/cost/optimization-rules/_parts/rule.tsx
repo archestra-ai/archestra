@@ -49,6 +49,7 @@ const providerDictionary: Record<SupportedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   gemini: "Gemini",
+  openrouter: "OpenRouter",
 };
 
 // Helper to get entity display name
@@ -146,13 +147,13 @@ function ModelSelect({
   const modelsWithCurrent =
     !isAvailable && model
       ? [
-          {
-            model,
-            pricePerMillionInput: "0",
-            pricePerMillionOutput: "0",
-          },
-          ...models,
-        ]
+        {
+          model,
+          pricePerMillionInput: "0",
+          pricePerMillionOutput: "0",
+        },
+        ...models,
+      ]
       : models;
 
   // Check if model has pricing

@@ -261,6 +261,12 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    openrouter: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
+        "https://openrouter.ai/api/v1",
+      useV2Routes: process.env.ARCHESTRA_OPENROUTER_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -280,6 +286,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+    },
+    openrouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_OPENROUTER_BASE_URL ||
+        "https://openrouter.ai/api/v1",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

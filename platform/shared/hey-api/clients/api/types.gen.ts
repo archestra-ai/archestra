@@ -5995,7 +5995,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6015,7 +6015,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -6094,7 +6094,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6110,7 +6110,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'openai' | 'gemini';
+        provider?: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -6182,7 +6182,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6354,7 +6354,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6454,7 +6454,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6470,7 +6470,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'openai' | 'gemini';
+        provider?: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
     };
     url: '/api/chat/models';
 };
@@ -6541,7 +6541,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'openrouter';
         createdAt?: string;
     }>;
 };
@@ -8821,6 +8821,490 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            /**
+             * OpenRouter chat completion request (OpenAI-compatible with extensions)
+             */
+            request: {
+                model: string;
+                messages: Array<{
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'developer';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'system';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        image_url: {
+                            url: string;
+                            detail: 'auto' | 'low' | 'high';
+                        };
+                    } | {
+                        type: 'input_audio';
+                        input_audio: {
+                            data: string;
+                            format: 'wav' | 'mp3';
+                        };
+                    } | {
+                        type: 'file';
+                        file: {
+                            file_data?: string;
+                            file_id?: string;
+                            filename?: string;
+                        };
+                    }>;
+                    role: 'user';
+                    name?: string;
+                } | {
+                    role: 'assistant';
+                    audio?: {
+                        id: string;
+                    } | null;
+                    content?: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }> | Array<{
+                        type: 'refusal';
+                        refusal: string;
+                    }> | null;
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    name?: string;
+                    refusal?: string | null;
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                } | {
+                    role: 'tool';
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    tool_call_id: string;
+                } | {
+                    role: 'function';
+                    content: string | null;
+                    name: string;
+                }>;
+                tools?: Array<{
+                    type: 'function';
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         * JSON Schema object describing the function parameters
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                }>;
+                tool_choice?: 'none' | 'auto' | 'required' | {
+                    type: 'allowed_tools';
+                    allowed_tools: {
+                        mode: 'auto' | 'required';
+                        tools: Array<{
+                            [key: string]: {
+                                type: 'function';
+                                function: {
+                                    name: string;
+                                    description?: string;
+                                    /**
+                                     * JSON Schema object describing the function parameters
+                                     */
+                                    parameters?: {
+                                        [key: string]: unknown;
+                                    };
+                                    strict?: boolean | null;
+                                };
+                            };
+                        }>;
+                    };
+                } | {
+                    type: 'function';
+                    function: {
+                        name: string;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                };
+                temperature?: number | null;
+                max_tokens?: number | null;
+                stream?: boolean | null;
+                /**
+                 * Route preference for model selection
+                 */
+                route?: string;
+                /**
+                 * Request transforms
+                 */
+                transforms?: Array<string>;
+            };
+            /**
+             * OpenRouter chat completion request (OpenAI-compatible with extensions)
+             */
+            processedRequest?: {
+                model: string;
+                messages: Array<{
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'developer';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'system';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        image_url: {
+                            url: string;
+                            detail: 'auto' | 'low' | 'high';
+                        };
+                    } | {
+                        type: 'input_audio';
+                        input_audio: {
+                            data: string;
+                            format: 'wav' | 'mp3';
+                        };
+                    } | {
+                        type: 'file';
+                        file: {
+                            file_data?: string;
+                            file_id?: string;
+                            filename?: string;
+                        };
+                    }>;
+                    role: 'user';
+                    name?: string;
+                } | {
+                    role: 'assistant';
+                    audio?: {
+                        id: string;
+                    } | null;
+                    content?: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }> | Array<{
+                        type: 'refusal';
+                        refusal: string;
+                    }> | null;
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    name?: string;
+                    refusal?: string | null;
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                } | {
+                    role: 'tool';
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    tool_call_id: string;
+                } | {
+                    role: 'function';
+                    content: string | null;
+                    name: string;
+                }>;
+                tools?: Array<{
+                    type: 'function';
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         * JSON Schema object describing the function parameters
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                }>;
+                tool_choice?: 'none' | 'auto' | 'required' | {
+                    type: 'allowed_tools';
+                    allowed_tools: {
+                        mode: 'auto' | 'required';
+                        tools: Array<{
+                            [key: string]: {
+                                type: 'function';
+                                function: {
+                                    name: string;
+                                    description?: string;
+                                    /**
+                                     * JSON Schema object describing the function parameters
+                                     */
+                                    parameters?: {
+                                        [key: string]: unknown;
+                                    };
+                                    strict?: boolean | null;
+                                };
+                            };
+                        }>;
+                    };
+                } | {
+                    type: 'function';
+                    function: {
+                        name: string;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                };
+                temperature?: number | null;
+                max_tokens?: number | null;
+                stream?: boolean | null;
+                /**
+                 * Route preference for model selection
+                 */
+                route?: string;
+                /**
+                 * Request transforms
+                 */
+                transforms?: Array<string>;
+            } | null;
+            /**
+             * OpenRouter chat completion response (OpenAI-compatible)
+             */
+            response: {
+                id: string;
+                choices: Array<{
+                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                    index: number;
+                    logprobs: unknown;
+                    message: {
+                        content: string | null;
+                        refusal?: string | null;
+                        role: 'assistant';
+                        annotations?: Array<unknown>;
+                        audio?: unknown;
+                        function_call?: {
+                            arguments: string;
+                            name: string;
+                        } | null;
+                        tool_calls?: Array<{
+                            id: string;
+                            type: 'function';
+                            function: {
+                                arguments: string;
+                                name: string;
+                            };
+                        } | {
+                            id: string;
+                            type: 'custom';
+                            custom: {
+                                input: string;
+                                name: string;
+                            };
+                        }>;
+                    };
+                }>;
+                created: number;
+                model: string;
+                object: 'chat.completion';
+                system_fingerprint?: string | null;
+                /**
+                 * OpenRouter usage object (OpenAI-compatible)
+                 */
+                usage?: {
+                    completion_tokens: number;
+                    prompt_tokens: number;
+                    total_tokens: number;
+                    completion_tokens_details?: unknown;
+                    prompt_tokens_details?: unknown;
+                };
+            };
+            type: 'openrouter:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            createdAt: string;
         }>;
         pagination: {
             currentPage: number;
@@ -9105,6 +9589,490 @@ export type GetInteractionResponses = {
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        createdAt: string;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        /**
+         * OpenRouter chat completion request (OpenAI-compatible with extensions)
+         */
+        request: {
+            model: string;
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    image_url: {
+                        url: string;
+                        detail: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                refusal?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            tools?: Array<{
+                type: 'function';
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     * JSON Schema object describing the function parameters
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            }>;
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                allowed_tools: {
+                    mode: 'auto' | 'required';
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 * JSON Schema object describing the function parameters
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            stream?: boolean | null;
+            /**
+             * Route preference for model selection
+             */
+            route?: string;
+            /**
+             * Request transforms
+             */
+            transforms?: Array<string>;
+        };
+        /**
+         * OpenRouter chat completion request (OpenAI-compatible with extensions)
+         */
+        processedRequest?: {
+            model: string;
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    image_url: {
+                        url: string;
+                        detail: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                refusal?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            tools?: Array<{
+                type: 'function';
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     * JSON Schema object describing the function parameters
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            }>;
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                allowed_tools: {
+                    mode: 'auto' | 'required';
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 * JSON Schema object describing the function parameters
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            stream?: boolean | null;
+            /**
+             * Route preference for model selection
+             */
+            route?: string;
+            /**
+             * Request transforms
+             */
+            transforms?: Array<string>;
+        } | null;
+        /**
+         * OpenRouter chat completion response (OpenAI-compatible)
+         */
+        response: {
+            id: string;
+            choices: Array<{
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                index: number;
+                logprobs: unknown;
+                message: {
+                    content: string | null;
+                    refusal?: string | null;
+                    role: 'assistant';
+                    annotations?: Array<unknown>;
+                    audio?: unknown;
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                };
+            }>;
+            created: number;
+            model: string;
+            object: 'chat.completion';
+            system_fingerprint?: string | null;
+            /**
+             * OpenRouter usage object (OpenAI-compatible)
+             */
+            usage?: {
+                completion_tokens: number;
+                prompt_tokens: number;
+                total_tokens: number;
+                completion_tokens_details?: unknown;
+                prompt_tokens_details?: unknown;
+            };
+        };
+        type: 'openrouter:chatCompletions';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
@@ -13351,6 +14319,704 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
+export type OpenRouterChatCompletionsWithDefaultAgentData = {
+    /**
+     * OpenRouter chat completion request (OpenAI-compatible with extensions)
+     */
+    body: {
+        model: string;
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                image_url: {
+                    url: string;
+                    detail: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            refusal?: string | null;
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        tools?: Array<{
+            type: 'function';
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 * JSON Schema object describing the function parameters
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        }>;
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            allowed_tools: {
+                mode: 'auto' | 'required';
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             * JSON Schema object describing the function parameters
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        stream?: boolean | null;
+        /**
+         * Route preference for model selection
+         */
+        route?: string;
+        /**
+         * Request transforms
+         */
+        transforms?: Array<string>;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenRouter API key
+         */
+        authorization: string;
+        /**
+         * Site URL for OpenRouter rankings
+         */
+        'http-referer'?: string;
+        /**
+         * Site title for OpenRouter rankings
+         */
+        'x-title'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openrouter/chat/completions';
+};
+
+export type OpenRouterChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type OpenRouterChatCompletionsWithDefaultAgentError = OpenRouterChatCompletionsWithDefaultAgentErrors[keyof OpenRouterChatCompletionsWithDefaultAgentErrors];
+
+export type OpenRouterChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * OpenRouter chat completion response (OpenAI-compatible)
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            index: number;
+            logprobs: unknown;
+            message: {
+                content: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown>;
+                audio?: unknown;
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        system_fingerprint?: string | null;
+        /**
+         * OpenRouter usage object (OpenAI-compatible)
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            completion_tokens_details?: unknown;
+            prompt_tokens_details?: unknown;
+        };
+    };
+};
+
+export type OpenRouterChatCompletionsWithDefaultAgentResponse = OpenRouterChatCompletionsWithDefaultAgentResponses[keyof OpenRouterChatCompletionsWithDefaultAgentResponses];
+
+export type OpenRouterChatCompletionsWithAgentData = {
+    /**
+     * OpenRouter chat completion request (OpenAI-compatible with extensions)
+     */
+    body: {
+        model: string;
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                image_url: {
+                    url: string;
+                    detail: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            refusal?: string | null;
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        tools?: Array<{
+            type: 'function';
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 * JSON Schema object describing the function parameters
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        }>;
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            allowed_tools: {
+                mode: 'auto' | 'required';
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             * JSON Schema object describing the function parameters
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        stream?: boolean | null;
+        /**
+         * Route preference for model selection
+         */
+        route?: string;
+        /**
+         * Request transforms
+         */
+        transforms?: Array<string>;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenRouter API key
+         */
+        authorization: string;
+        /**
+         * Site URL for OpenRouter rankings
+         */
+        'http-referer'?: string;
+        /**
+         * Site title for OpenRouter rankings
+         */
+        'x-title'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openrouter/{agentId}/chat/completions';
+};
+
+export type OpenRouterChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type OpenRouterChatCompletionsWithAgentError = OpenRouterChatCompletionsWithAgentErrors[keyof OpenRouterChatCompletionsWithAgentErrors];
+
+export type OpenRouterChatCompletionsWithAgentResponses = {
+    /**
+     * OpenRouter chat completion response (OpenAI-compatible)
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            index: number;
+            logprobs: unknown;
+            message: {
+                content: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown>;
+                audio?: unknown;
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        system_fingerprint?: string | null;
+        /**
+         * OpenRouter usage object (OpenAI-compatible)
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            completion_tokens_details?: unknown;
+            prompt_tokens_details?: unknown;
+        };
+    };
+};
+
+export type OpenRouterChatCompletionsWithAgentResponse = OpenRouterChatCompletionsWithAgentResponses[keyof OpenRouterChatCompletionsWithAgentResponses];
+
 export type GetOptimizationRulesData = {
     body?: never;
     path?: never;
@@ -13430,7 +15096,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13450,7 +15116,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -13533,7 +15199,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13632,7 +15298,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -13717,7 +15383,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -16932,7 +18598,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16945,7 +18611,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17020,7 +18686,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17184,7 +18850,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17197,7 +18863,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -17274,7 +18940,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

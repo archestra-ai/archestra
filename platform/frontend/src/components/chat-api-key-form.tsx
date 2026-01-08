@@ -90,6 +90,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
   },
+  openrouter: {
+    name: "OpenRouter",
+    icon: "/icons/openrouter.png",
+    placeholder: "sk-or-...",
+    enabled: true,
+    consoleUrl: "https://openrouter.ai/settings/keys",
+    consoleName: "OpenRouter Dashboard",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

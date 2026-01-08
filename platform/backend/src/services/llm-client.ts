@@ -21,6 +21,11 @@ export type LLMModel = Parameters<typeof streamText>[0]["model"];
 export function detectProviderFromModel(model: string): SupportedChatProvider {
   const lowerModel = model.toLowerCase();
 
+  // OpenRouter models use provider/model format (e.g., "openai/gpt-4", "anthropic/claude-3")
+  if (lowerModel.includes("/")) {
+    return "openrouter";
+  }
+
   if (lowerModel.includes("claude")) {
     return "anthropic";
   }
@@ -92,6 +97,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "openrouter" && config.chat.openrouter.apiKey) {
+      providerApiKey = config.chat.openrouter.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -168,6 +176,17 @@ export function createLLMModel(params: {
     });
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  }
+
+  if (provider === "openrouter") {
+    // OpenRouter uses OpenAI-compatible API
+    // URL format: /v1/openrouter/:agentId (SDK appends /chat/completions)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/openrouter/${agentId}`,
+      headers,
+    });
     return client.chat(modelName);
   }
 

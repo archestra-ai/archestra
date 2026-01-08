@@ -103,6 +103,18 @@ class TrustedDataPolicyModel {
   }
 
   /**
+   * Delete all trusted data policies for a specific tool.
+   * Used primarily in tests.
+   */
+  static async deleteByToolId(toolId: string): Promise<number> {
+    const result = await db
+      .delete(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId));
+
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * Bulk upsert default policies (empty conditions) for multiple tools.
    * Updates existing default policies or creates new ones in a single transaction.
    */

@@ -22,6 +22,11 @@ describe("TrustedDataPolicyModel", () => {
       await makeAgentTool(agent.id, tool2.id);
       await makeAgentTool(agent.id, tool3.id);
 
+      // Delete auto-created default policies to set up our own
+      await TrustedDataPolicyModel.deleteByToolId(tool1.id);
+      await TrustedDataPolicyModel.deleteByToolId(tool2.id);
+      await TrustedDataPolicyModel.deleteByToolId(tool3.id);
+
       // Create default policies for different treatments
       await makeTrustedDataPolicy(tool1.id, {
         conditions: [],
@@ -166,6 +171,8 @@ describe("TrustedDataPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ name: "test-tool" });
       await makeAgentTool(agent.id, tool.id);
+      // Delete auto-created default policies to set up our own
+      await TrustedDataPolicyModel.deleteByToolId(tool.id);
       await makeTrustedDataPolicy(tool.id, {
         conditions: [],
         action: "mark_as_trusted",
@@ -283,6 +290,8 @@ describe("TrustedDataPolicyModel", () => {
         );
         if (!trustedTool) throw new Error("Tool not found");
         await AgentToolModel.create(agentId, trustedTool.id, {});
+        // Delete auto-created default policies to set up our own
+        await TrustedDataPolicyModel.deleteByToolId(trustedTool.id);
         await makeTrustedDataPolicy(trustedTool.id, {
           conditions: [],
           action: "mark_as_trusted",
@@ -314,6 +323,8 @@ describe("TrustedDataPolicyModel", () => {
         );
         if (!trustedTool) throw new Error("Tool not found");
         await AgentToolModel.create(agentId, trustedTool.id, {});
+        // Delete auto-created default policies to set up our own
+        await TrustedDataPolicyModel.deleteByToolId(trustedTool.id);
 
         // Create a default trusted policy
         await makeTrustedDataPolicy(trustedTool.id, {

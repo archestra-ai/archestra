@@ -2,9 +2,8 @@
  * NOTE: this is a bit of a PITA/verbose but in order to properly type everything that we are
  * proxing.. this is kinda necessary.
  *
- * the openai ts sdk doesn't expose zod schemas for all of this..
+ * the minimax ts sdk doesn't expose zod schemas for all of this..
  */
-import type OpenAIProvider from "openai";
 import type OpenAIProvider from "minimax";
 import type { z } from "zod";
 import * as OpenAiAPI from "./api";

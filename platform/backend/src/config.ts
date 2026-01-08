@@ -261,6 +261,10 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    cohere: {
+      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
+      useV2Routes: process.env.ARCHESTRA_COHERE_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -280,6 +284,11 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+    },
+    cohere: {
+      apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_COHERE_BASE_URL || "https://api.cohere.ai",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

@@ -366,6 +366,48 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
 }
 
 // =============================================================================
+// Cohere Error Types and Parser
+// =============================================================================
+
+interface ParsedCohereError {
+  message?: string;
+}
+
+/**
+ * Parse Cohere error response body.
+ * Cohere errors have structure: { message: string }
+ *
+ * @see https://docs.cohere.com/reference/errors
+ */
+function parseCohereError(responseBody: string): ParsedCohereError | null {
+  try {
+    const parsed = JSON.parse(responseBody);
+    if (parsed?.message) {
+      return {
+        message: parsed.message,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Map Cohere error to ChatErrorCode.
+ * Cohere uses standard HTTP status codes for error classification.
+ *
+ * @see https://docs.cohere.com/reference/errors
+ */
+function mapCohereErrorToCode(
+  statusCode: number | undefined,
+  _parsedError: ParsedCohereError | null,
+): ChatErrorCode {
+  // Cohere uses standard HTTP status codes
+  return mapStatusCodeToErrorCode(statusCode);
+}
+
+// =============================================================================
 // Provider-Specific Error Mappers
 // =============================================================================
 
@@ -624,7 +666,8 @@ function mapStatusCodeToErrorCode(
 type ParsedProviderError =
   | ParsedOpenAIError
   | ParsedAnthropicError
-  | ParsedGeminiError;
+  | ParsedGeminiError
+  | ParsedCohereError;
 
 type ErrorParser = (responseBody: string) => ParsedProviderError | null;
 type ErrorMapper = (
@@ -665,6 +708,16 @@ function mapGeminiErrorWrapper(
   );
 }
 
+function mapCohereErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapCohereErrorToCode(
+    statusCode,
+    parsedError as ParsedCohereError | null,
+  );
+}
+
 /**
  * Registry of provider-specific error parsers.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
@@ -674,6 +727,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  cohere: parseCohereError,
 };
 
 /**
@@ -685,6 +739,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  cohere: mapCohereErrorWrapper,
 };
 
 // =============================================================================

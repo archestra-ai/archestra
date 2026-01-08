@@ -40,6 +40,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("command") || lowerModel.includes("cohere")) {
+    return "cohere";
+  }
+
   // Default to anthropic for backwards compatibility
   return "anthropic";
 }
@@ -95,6 +99,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "cohere" && config.chat.cohere.apiKey) {
+      providerApiKey = config.chat.cohere.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -171,6 +178,17 @@ export function createLLMModel(params: {
     });
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  }
+
+  if (provider === "cohere") {
+    // Cohere has an OpenAI-compatible API at /compatibility/v1
+    // URL format: /v1/cohere/:agentId (SDK appends /chat/completions)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}/compatibility/v1`,
+      headers,
+    });
     return client.chat(modelName);
   }
 

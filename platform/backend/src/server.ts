@@ -41,6 +41,7 @@ import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,
+  Cohere,
   Gemini,
   OpenAi,
   WebSocketMessageSchema,
@@ -90,6 +91,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
     id: "AnthropicMessagesResponse",
+  });
+  z.globalRegistry.add(Cohere.API.ChatRequestSchema, {
+    id: "CohereChatRequest",
+  });
+  z.globalRegistry.add(Cohere.API.ChatResponseSchema, {
+    id: "CohereChatResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

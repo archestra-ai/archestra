@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
+import { createCohereInteraction } from "./llmProviders/cohere";
 import type {
   DualLlmResult,
   Interaction,
@@ -54,8 +55,8 @@ export function calculateCostSavings(
   // Calculate tokens saved from TOON compression
   const toonTokensSaved =
     input.toonTokensBefore &&
-    input.toonTokensAfter &&
-    input.toonTokensBefore > input.toonTokensAfter
+      input.toonTokensAfter &&
+      input.toonTokensBefore > input.toonTokensAfter
       ? input.toonTokensBefore - input.toonTokensAfter
       : null;
 
@@ -117,7 +118,12 @@ export class DynamicInteraction implements InteractionUtils {
     } else if (this.type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
     }
-    return new GeminiGenerateContentInteraction(interaction);
+    else if (this.type === "cohere:chat") {
+      return createCohereInteraction(interaction);
+    }
+    else {
+      return new GeminiGenerateContentInteraction(interaction);
+    }
   }
 
   isLastMessageToolCall(): boolean {

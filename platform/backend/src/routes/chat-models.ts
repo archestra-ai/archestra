@@ -174,6 +174,54 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Cohere API
+ */
+async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.cohere.baseUrl;
+  const url = `${baseUrl}/v1/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Cohere models",
+    );
+    throw new Error(`Failed to fetch Cohere models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    models: Array<{
+      name: string;
+      endpoints?: string[];
+    }>;
+  };
+
+  // Filter to only chat-compatible "command" models that (currently) support tools.
+  // Note: We exclude vision models based on the model name because Cohere vision models are
+  // understood not to support tools at this time.
+  // TODO: If Cohere adds tool support to vision models or exposes explicit capability flags,
+  //       revisit this filter to use capability-based checks instead of name-based exclusion.
+  return data.models
+    .filter(
+      (model) =>
+        model.name.toLowerCase().includes("command") &&
+        model.endpoints?.includes("chat") &&
+        !model.name.toLowerCase().includes("vision"),
+    )
+    .map((model) => ({
+      id: model.name,
+      displayName: model.name,
+      provider: "cohere" as const,
+    }));
+}
+
+/**
  * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
 async function getProviderApiKey({
@@ -212,6 +260,8 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "cohere":
+      return config.chat.cohere.apiKey || null;
     default:
       return null;
   }
@@ -225,6 +275,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  cohere: fetchCohereModels,
 };
 
 /**
@@ -275,7 +326,7 @@ async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "cohere"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

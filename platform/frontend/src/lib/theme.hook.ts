@@ -81,20 +81,30 @@ export function useOrgTheme() {
   }, [currentUIFont]);
 
   // whenever themeFromBackend is loaded and is different from themeFromLocalStorage, update local storage and UI
+  // Only sync after actual data loads (not during placeholder loading) to prevent flicker
   useEffect(() => {
-    if (themeFromBackend && themeFromBackend !== themeFromLocalStorage) {
+    if (
+      !isLoadingAppearance &&
+      themeFromBackend &&
+      themeFromBackend !== themeFromLocalStorage
+    ) {
       applyThemeInLocalStorage(themeFromBackend);
       setCurrentUITheme(themeFromBackend);
     }
-  }, [themeFromBackend, themeFromLocalStorage]);
+  }, [themeFromBackend, themeFromLocalStorage, isLoadingAppearance]);
 
   // whenever fontFromBackend is loaded and is different from fontFromLocalStorage, update local storage and UI
+  // Only sync after actual data loads (not during placeholder loading) to prevent flicker
   useEffect(() => {
-    if (fontFromBackend && fontFromBackend !== fontFromLocalStorage) {
+    if (
+      !isLoadingAppearance &&
+      fontFromBackend &&
+      fontFromBackend !== fontFromLocalStorage
+    ) {
       applyFontInLocalStorage(fontFromBackend);
       setCurrentUIFont(fontFromBackend);
     }
-  }, [fontFromBackend, fontFromLocalStorage]);
+  }, [fontFromBackend, fontFromLocalStorage, isLoadingAppearance]);
 
   // For auth pages, return limited data (read-only appearance, no update functions)
   if (isAuthPage) {

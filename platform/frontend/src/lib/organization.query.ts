@@ -289,6 +289,8 @@ export function useUpdateOrganization(
         customFont: updatedOrganization.customFont,
         logo: updatedOrganization.logo,
       });
+      // Invalidate features cache since globalToolPolicy comes from organization record
+      queryClient.invalidateQueries({ queryKey: ["features"] });
       toast.success(onSuccessMessage);
     },
     onError: (_error) => {

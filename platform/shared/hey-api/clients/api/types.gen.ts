@@ -14003,6 +14003,85 @@ export type GetOnboardingStatusResponses = {
 
 export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
 
+export type GetPublicAppearanceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type GetPublicAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPublicAppearanceError = GetPublicAppearanceErrors[keyof GetPublicAppearanceErrors];
+
+export type GetPublicAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logo: string | null;
+    };
+};
+
+export type GetPublicAppearanceResponse = GetPublicAppearanceResponses[keyof GetPublicAppearanceResponses];
+
 export type GetPolicyConfigSubagentPromptData = {
     body?: never;
     path?: never;

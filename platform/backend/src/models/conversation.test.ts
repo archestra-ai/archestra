@@ -613,4 +613,163 @@ describe("ConversationModel", () => {
     expect(conv2?.messages[0].parts[0].text).toBe("C2 First");
     expect(conv2?.messages[1].parts[0].text).toBe("C2 Second");
   });
+
+  test("can create a conversation with selectedProvider", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Provider Test Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Provider Test Conversation",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+
+    expect(conversation).toBeDefined();
+    expect(conversation.selectedModel).toBe("gpt-4o");
+    expect(conversation.selectedProvider).toBe("openai");
+  });
+
+  test("selectedProvider is null when not provided", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "No Provider Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "No Provider Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    expect(conversation).toBeDefined();
+    expect(conversation.selectedProvider).toBeNull();
+  });
+
+  test("can update conversation selectedProvider", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Update Provider Agent",
+      teams: [],
+    });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Update Provider Test",
+      selectedModel: "claude-3-haiku-20240307",
+      selectedProvider: "anthropic",
+    });
+
+    const updated = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      {
+        selectedModel: "gemini-2.5-pro",
+        selectedProvider: "gemini",
+      },
+    );
+
+    expect(updated).toBeDefined();
+    expect(updated?.selectedModel).toBe("gemini-2.5-pro");
+    expect(updated?.selectedProvider).toBe("gemini");
+  });
+
+  test("findById returns conversation with selectedProvider", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Find Provider Agent",
+      teams: [],
+    });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Find Provider Test",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(found).toBeDefined();
+    expect(found?.selectedModel).toBe("gpt-4o");
+    expect(found?.selectedProvider).toBe("openai");
+  });
+
+  test("findAll returns conversations with selectedProvider", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Find All Provider Agent",
+      teams: [],
+    });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Anthropic Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+      selectedProvider: "anthropic",
+    });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "OpenAI Conversation",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+
+    const conversations = await ConversationModel.findAll(user.id, org.id);
+
+    expect(conversations).toHaveLength(2);
+    const anthropicConv = conversations.find(
+      (c) => c.title === "Anthropic Conversation",
+    );
+    const openaiConv = conversations.find(
+      (c) => c.title === "OpenAI Conversation",
+    );
+
+    expect(anthropicConv?.selectedProvider).toBe("anthropic");
+    expect(openaiConv?.selectedProvider).toBe("openai");
+  });
 });

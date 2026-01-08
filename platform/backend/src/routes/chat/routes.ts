@@ -192,7 +192,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Use stored provider if available, otherwise detect from model name for backward compatibility
-      // At the momet of migration, all supported providers (anthropic, openai, gemini) serve different modes,
+      // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
       const provider =
         (conversation.selectedProvider as SupportedChatProvider | null) ??
@@ -537,9 +537,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let providerToUse = selectedProvider;
 
       if (!selectedModel) {
-        const smartDefault = await getSmartDefaultModel(user.id, organizationId);
+        // No model specified - use smart defaults for both model and provider
+        const smartDefault = await getSmartDefaultModel(
+          user.id,
+          organizationId,
+        );
         modelToUse = smartDefault.model;
         providerToUse = smartDefault.provider;
+      } else if (!selectedProvider) {
+        // Model specified but no provider - detect provider from model name
+        // This handles older API clients that don't send selectedProvider
+        // It's a rare case which should happen only for a case when backend already has a provider selection logic, but frontend is stale.
+        // In other words, it's a backward compatibility case which should happen only for a very short period of time.
+        providerToUse = detectProviderFromModel(selectedModel);
       }
 
       logger.info(

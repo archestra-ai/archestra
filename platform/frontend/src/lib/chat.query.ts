@@ -144,6 +144,7 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+      toast.success("Conversation deleted");
     },
   });
 }

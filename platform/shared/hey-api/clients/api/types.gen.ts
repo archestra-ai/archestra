@@ -5389,7 +5389,7 @@ export type GetTrustedDataPoliciesResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -5406,7 +5406,7 @@ export type CreateTrustedDataPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;
@@ -5485,7 +5485,7 @@ export type CreateTrustedDataPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -5653,7 +5653,7 @@ export type GetTrustedDataPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -5670,7 +5670,7 @@ export type UpdateTrustedDataPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        action?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
     };
     path: {
         id: string;
@@ -5751,7 +5751,7 @@ export type UpdateTrustedDataPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };

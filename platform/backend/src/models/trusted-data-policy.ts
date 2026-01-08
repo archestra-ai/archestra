@@ -4,6 +4,7 @@ import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
+import logger from '@/logging';
 
 /**
  * Check if a policy is a default policy (applies to all results)
@@ -435,6 +436,14 @@ class TrustedDataPolicyModel {
       const defaultPolicies = actualPolicies.filter((p) =>
         isDefaultPolicy(p.conditions || []),
       );
+      logger.debug(
+        { specificPolicies },
+        "TrustedDataPolicy.evaluateBulk: specificPolicies",
+      );
+      logger.debug(
+        { defaultPolicies },
+        "TrustedDataPolicy.evaluateBulk: defaultPolicies",
+      );
 
       // First, check specific policies for blocking
       let isBlocked = false;
@@ -481,6 +490,13 @@ class TrustedDataPolicyModel {
               shouldSanitizeWithDualLlm: false,
               reason: `Data trusted by policy: ${policy.policyDescription || "Unnamed policy"}`,
             });
+          } else if (policy.action === "mark_as_untrusted") {
+            results.set(i.toString(), {
+              isTrusted: false,
+              isBlocked: false,
+              shouldSanitizeWithDualLlm: false,
+              reason: `Data untrusted by policy: ${policy.policyDescription || "Unnamed policy"}`,
+            });
           } else if (policy.action === "sanitize_with_dual_llm") {
             results.set(i.toString(), {
               isTrusted: false,
@@ -513,6 +529,13 @@ class TrustedDataPolicyModel {
             isBlocked: false,
             shouldSanitizeWithDualLlm: false,
             reason: `Data trusted by default policy: ${defaultPolicy.policyDescription || "Unnamed policy"}`,
+          });
+        } else if (defaultPolicy.action === "mark_as_untrusted") {
+          results.set(i.toString(), {
+            isTrusted: false,
+            isBlocked: false,
+            shouldSanitizeWithDualLlm: false,
+            reason: `Data untrusted by default policy: ${defaultPolicy.policyDescription || "Unnamed policy"}`,
           });
         } else if (defaultPolicy.action === "sanitize_with_dual_llm") {
           results.set(i.toString(), {

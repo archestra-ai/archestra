@@ -14746,6 +14746,7 @@
                         "type": "string",
                         "enum": [
                           "allow_when_context_is_untrusted",
+                          "block_when_context_is_untrusted",
                           "block_always"
                         ]
                       },
@@ -15041,6 +15042,7 @@
                     "type": "string",
                     "enum": [
                       "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
                       "block_always"
                     ]
                   },
@@ -15113,6 +15115,7 @@
                       "type": "string",
                       "enum": [
                         "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
                         "block_always"
                       ]
                     },
@@ -15429,6 +15432,7 @@
                       "type": "string",
                       "enum": [
                         "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
                         "block_always"
                       ]
                     },
@@ -15723,6 +15727,7 @@
                     "type": "string",
                     "enum": [
                       "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
                       "block_always"
                     ]
                   },
@@ -15801,6 +15806,7 @@
                       "type": "string",
                       "enum": [
                         "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
                         "block_always"
                       ]
                     },

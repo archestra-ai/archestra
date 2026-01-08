@@ -133,7 +133,18 @@ export default function ChatPage() {
   useEffect(() => {
     if (allProfiles.length === 0) return;
 
-    // Check for agentId in URL query params (e.g., from /agents page "Chat" button)
+    // Check for promptId in URL query params (e.g., from /agents canvas "Chat" button)
+    const urlPromptId = searchParams.get("promptId");
+    if (urlPromptId && !initialPromptId) {
+      const matchingPrompt = prompts.find((p) => p.id === urlPromptId);
+      if (matchingPrompt) {
+        setInitialPromptId(urlPromptId);
+        setInitialAgentId(matchingPrompt.agentId);
+        return;
+      }
+    }
+
+    // Check for agentId in URL query params (legacy support)
     const urlAgentId = searchParams.get("agentId");
     if (urlAgentId && !initialAgentId) {
       const matchingProfile = allProfiles.find((p) => p.id === urlAgentId);
@@ -152,7 +163,7 @@ export default function ChatPage() {
     if (!initialAgentId) {
       setInitialAgentId(allProfiles[0].id);
     }
-  }, [allProfiles, initialAgentId, searchParams, prompts]);
+  }, [allProfiles, initialAgentId, initialPromptId, searchParams, prompts]);
 
   useEffect(() => {
     if (!initialModel) {
@@ -558,8 +569,12 @@ export default function ChatPage() {
     (promptId: string | null, agentId: string) => {
       setInitialAgentId(agentId);
       setInitialPromptId(promptId);
+      // Clear URL params when going back to agent selection
+      if (promptId === null && searchParams.get("promptId")) {
+        router.replace(pathname, { scroll: false });
+      }
     },
-    [],
+    [router, pathname, searchParams],
   );
 
   // Handle initial submit (when no conversation exists)

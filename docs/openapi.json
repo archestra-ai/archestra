@@ -14746,6 +14746,7 @@
                         "type": "string",
                         "enum": [
                           "allow_when_context_is_untrusted",
+                          "block_when_context_is_untrusted",
                           "block_always"
                         ]
                       },
@@ -15041,6 +15042,7 @@
                     "type": "string",
                     "enum": [
                       "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
                       "block_always"
                     ]
                   },
@@ -15113,6 +15115,7 @@
                       "type": "string",
                       "enum": [
                         "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
                         "block_always"
                       ]
                     },
@@ -15429,6 +15432,7 @@
                       "type": "string",
                       "enum": [
                         "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
                         "block_always"
                       ]
                     },
@@ -15723,6 +15727,7 @@
                     "type": "string",
                     "enum": [
                       "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
                       "block_always"
                     ]
                   },
@@ -15801,6 +15806,7 @@
                       "type": "string",
                       "enum": [
                         "allow_when_context_is_untrusted",
+                        "block_when_context_is_untrusted",
                         "block_always"
                       ]
                     },
@@ -16362,6 +16368,7 @@
                         "enum": [
                           "block_always",
                           "mark_as_trusted",
+                          "mark_as_untrusted",
                           "sanitize_with_dual_llm"
                         ]
                       },
@@ -16658,6 +16665,7 @@
                     "enum": [
                       "block_always",
                       "mark_as_trusted",
+                      "mark_as_untrusted",
                       "sanitize_with_dual_llm"
                     ]
                   }
@@ -16731,6 +16739,7 @@
                       "enum": [
                         "block_always",
                         "mark_as_trusted",
+                        "mark_as_untrusted",
                         "sanitize_with_dual_llm"
                       ]
                     },
@@ -17048,6 +17057,7 @@
                       "enum": [
                         "block_always",
                         "mark_as_trusted",
+                        "mark_as_untrusted",
                         "sanitize_with_dual_llm"
                       ]
                     },
@@ -17343,6 +17353,7 @@
                     "enum": [
                       "block_always",
                       "mark_as_trusted",
+                      "mark_as_untrusted",
                       "sanitize_with_dual_llm"
                     ]
                   }
@@ -17422,6 +17433,7 @@
                       "enum": [
                         "block_always",
                         "mark_as_trusted",
+                        "mark_as_untrusted",
                         "sanitize_with_dual_llm"
                       ]
                     },
@@ -17936,6 +17948,7 @@
                     "type": "string",
                     "enum": [
                       "allow_when_context_is_untrusted",
+                      "block_when_context_is_untrusted",
                       "block_always"
                     ]
                   }
@@ -18211,6 +18224,7 @@
                     "type": "string",
                     "enum": [
                       "mark_as_trusted",
+                      "mark_as_untrusted",
                       "block_always",
                       "sanitize_with_dual_llm"
                     ]

@@ -138,6 +138,14 @@ export const RouteId = {
     "openAiChatCompletionsWithDefaultAgent",
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
 
+  // Proxy Routes - MiniMax
+  MiniMaxChatCompletionsWithDefaultAgent: "miniMaxChatCompletionsWithDefaultAgent",
+  MiniMaxChatCompletionsWithAgent: "miniMaxChatCompletionsWithAgent",
+
+  // Proxy Routes - x.ai
+  XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
+  XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",

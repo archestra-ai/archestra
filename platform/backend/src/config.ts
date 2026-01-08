@@ -240,6 +240,11 @@ export default {
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
       useV2Routes: process.env.ARCHESTRA_OPENAI_USE_V2_ROUTES !== "false",
     },
+    xai: {
+      apiKey: process.env.XAI_API_KEY,
+      baseUrl: process.env.XAI_BASE_URL || "https://api.x.ai/v1",
+      useV2Routes: true,
+    },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",

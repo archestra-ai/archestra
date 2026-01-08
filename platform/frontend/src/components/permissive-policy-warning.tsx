@@ -20,13 +20,17 @@ export function PermissivePolicyWarning() {
     <div className="px-2 pb-2">
       <Alert variant="destructive" className="text-xs">
         <AlertTitle className="text-xs font-semibold">
-          Permissive Policy Enabled
+          Agentic Security Disabled
         </AlertTitle>
         <AlertDescription className="text-xs mt-1 text-orange-600">
-          <p>All tool calls are allowed unless explicitly blocked.</p>
+          <p>
+            For demo purposes, the security engine is disabled. Agents could
+            perform dangerous things without supervision, unless explicitly
+            blocked. Turn it off here.
+          </p>
           <p className="mt-1 inline-flex items-center">
             <Link
-              href="/settings/policy"
+              href="/settings/security"
               className="inline-flex items-center underline"
             >
               <ShieldAlert className="mr-1 flex-shrink-0" size={12} />

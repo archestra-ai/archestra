@@ -183,6 +183,7 @@ jobs:
       # This handles the case where release-please bumps the version in package.json,
       # causing generated files (like docs/openapi.json) to be out of date
       is-release-please-pr: ${{ startsWith(github.head_ref, 'release-please--') }}
+      should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

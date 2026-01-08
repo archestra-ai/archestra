@@ -62,7 +62,7 @@ export function PromptDialog({
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
     return allPrompts
-      .filter((p) => p.id !== prompt?.id && p.isActive)
+      .filter((p) => p.id !== prompt?.id)
       .map((p) => {
         const profile = allProfiles.find((prof) => prof.id === p.agentId);
         return {
@@ -134,7 +134,7 @@ export function PromptDialog({
       let promptId: string;
 
       if (prompt) {
-        // Update creates a new version with a new ID
+        // Update increments version (ID stays the same with JSONB history)
         const updated = await updatePrompt.mutateAsync({
           id: prompt.id,
           data: {
@@ -144,9 +144,8 @@ export function PromptDialog({
             systemPrompt: trimmedSystemPrompt || undefined,
           },
         });
-        // Use the new version's ID for agent sync
         promptId = updated?.id ?? prompt.id;
-        toast.success("New version created successfully");
+        toast.success("Agent updated successfully");
       } else {
         const created = await createPrompt.mutateAsync({
           name: trimmedName,
@@ -174,7 +173,7 @@ export function PromptDialog({
 
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to save prompt");
+      toast.error("Failed to save Agent");
     }
   }, [
     name,

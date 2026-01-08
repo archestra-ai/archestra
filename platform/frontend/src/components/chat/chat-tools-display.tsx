@@ -5,7 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { Loader2, Plus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -19,36 +19,38 @@ import {
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
+import {
+  addPendingAction,
+  applyPendingActions,
+  getPendingActions,
+  type PendingToolAction,
+} from "@/lib/pending-tool-state";
 import { Button } from "../ui/button";
 
 interface ChatToolsDisplayProps {
   agentId: string;
+  promptId?: string | null;
   /** Required for enable/disable functionality. Optional for read-only display. */
   conversationId?: string;
   className?: string;
   /** When true, hides enable/disable buttons and shows all tools as enabled */
   readOnly?: boolean;
-  /** Called when user tries to interact with tools in initial state (no conversation) */
-  onCreateConversation?: () => void;
 }
 
 /**
  * Display tools enabled for a chat conversation with ability to disable them.
  * Use this component for chat-level tool management (enable/disable).
  * For profile-level tool assignment, use McpToolsDisplay instead.
+ *
+ * When no conversation exists, pending actions are stored in localStorage
+ * and applied when the conversation is created via first message.
  */
-type PendingToolAction =
-  | { type: "enable"; toolId: string }
-  | { type: "disable"; toolId: string }
-  | { type: "enableAll"; toolIds: string[] }
-  | { type: "disableAll"; toolIds: string[] };
-
 export function ChatToolsDisplay({
   agentId,
+  promptId,
   conversationId,
   className,
   readOnly = false,
-  onCreateConversation,
 }: ChatToolsDisplayProps) {
   const { data: profileTools = [], isLoading } =
     useProfileToolsWithIds(agentId);
@@ -57,14 +59,20 @@ export function ChatToolsDisplay({
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
   const tooltipContentRef = useRef<HTMLDivElement | null>(null);
 
-  // Track pending action to apply after conversation is created
-  const [pendingAction, setPendingAction] = useState<PendingToolAction | null>(
-    null,
-  );
-  const prevConversationId = useRef<string | undefined>(undefined);
+  // Local pending actions for display (synced with localStorage)
+  const [localPendingActions, setLocalPendingActions] = useState<
+    PendingToolAction[]
+  >([]);
 
-  // Remember last known enabled state to prevent flicker during conversationId changes
-  const lastKnownEnabledToolIdsRef = useRef<string[] | null>(null);
+  // Load pending actions from localStorage on mount and when context changes
+  useEffect(() => {
+    if (!conversationId) {
+      const actions = getPendingActions(agentId, promptId ?? null);
+      setLocalPendingActions(actions);
+    } else {
+      setLocalPendingActions([]);
+    }
+  }, [agentId, promptId, conversationId]);
 
   // Handle click outside to close tooltips
   useEffect(() => {
@@ -101,101 +109,53 @@ export function ChatToolsDisplay({
   const enabledToolIds = enabledToolsData?.enabledToolIds ?? [];
   const hasCustomSelection = enabledToolsData?.hasCustomSelection ?? false;
 
-  // Update last known state when we have real data
-  if (enabledToolsData && enabledToolIds.length > 0) {
-    lastKnownEnabledToolIdsRef.current = enabledToolIds;
-  }
-
   // Mutation for updating enabled tools
   const updateEnabledTools = useUpdateConversationEnabledTools();
-
-  // Get the current list of enabled tools
-  const _allToolIds = profileTools.map((t) => t.id);
-
-  // Apply pending action when conversation is created
-  useEffect(() => {
-    // Detect when conversationId changes from undefined to defined
-    // Wait for enabledToolsData to get the full list including agent tools
-    if (
-      pendingAction &&
-      conversationId &&
-      prevConversationId.current === undefined &&
-      enabledToolsData
-    ) {
-      // Use enabledToolIds as base - this includes agent tools from the conversation
-      let newEnabledToolIds: string[];
-      switch (pendingAction.type) {
-        case "enable":
-          newEnabledToolIds = [
-            ...new Set([...enabledToolIds, pendingAction.toolId]),
-          ];
-          break;
-        case "disable":
-          newEnabledToolIds = enabledToolIds.filter(
-            (id) => id !== pendingAction.toolId,
-          );
-          break;
-        case "enableAll":
-          newEnabledToolIds = [
-            ...new Set([...enabledToolIds, ...pendingAction.toolIds]),
-          ];
-          break;
-        case "disableAll":
-          newEnabledToolIds = enabledToolIds.filter(
-            (id) => !pendingAction.toolIds.includes(id),
-          );
-          break;
-      }
-
-      updateEnabledTools.mutate(
-        {
-          conversationId,
-          toolIds: newEnabledToolIds,
-        },
-        {
-          onSettled: () => {
-            // Clear pending action only after mutation completes and query invalidates
-            setPendingAction(null);
-          },
-        },
-      );
-
-      // Only update prevConversationId AFTER applying pending action
-      prevConversationId.current = conversationId;
-    } else if (!pendingAction) {
-      // No pending action - just track the conversationId
-      prevConversationId.current = conversationId;
-    }
-    // If there IS a pending action but conditions aren't met yet,
-    // DON'T update prevConversationId - keep it undefined so we can retry
-  }, [
-    conversationId,
-    pendingAction,
-    enabledToolsData,
-    enabledToolIds,
-    updateEnabledTools,
-  ]);
 
   // Default enabled tools logic (matches backend ConversationModel.create):
   // - Disable all Archestra tools (archestra__*) by default
   // - Except archestra__todo_write and archestra__artifact_write which stay enabled
   // - All other tools (non-Archestra, agent delegation) remain enabled
-  const defaultEnabledToolIds = profileTools
-    .filter(
-      (tool) =>
-        !tool.name.startsWith("archestra__") ||
-        tool.name === "archestra__todo_write" ||
-        tool.name === "archestra__artifact_write",
-    )
-    .map((t) => t.id);
+  const defaultEnabledToolIds = useMemo(
+    () =>
+      profileTools
+        .filter(
+          (tool) =>
+            !tool.name.startsWith("archestra__") ||
+            tool.name === "archestra__todo_write" ||
+            tool.name === "archestra__artifact_write",
+        )
+        .map((t) => t.id),
+    [profileTools],
+  );
 
-  // Use enabled tools from conversation if custom selection exists,
-  // otherwise use the default (which matches what backend sets on conversation creation)
-  const currentEnabledToolIds =
-    readOnly || !hasCustomSelection ? defaultEnabledToolIds : enabledToolIds;
+  // Compute current enabled tools:
+  // - If conversation exists with custom selection, use that
+  // - If conversation exists without custom selection, use defaults
+  // - If no conversation, apply pending actions to defaults
+  const currentEnabledToolIds = useMemo(() => {
+    if (conversationId && hasCustomSelection) {
+      return enabledToolIds;
+    }
+
+    // Start with defaults
+    const baseIds = defaultEnabledToolIds;
+
+    // If no conversation, apply pending actions for display
+    if (!conversationId && localPendingActions.length > 0) {
+      return applyPendingActions(baseIds, localPendingActions);
+    }
+
+    return baseIds;
+  }, [
+    conversationId,
+    hasCustomSelection,
+    enabledToolIds,
+    defaultEnabledToolIds,
+    localPendingActions,
+  ]);
 
   // Create enabled tool IDs set for quick lookup
-  // Use currentEnabledToolIds to handle both custom and default states
   const enabledToolIdsSet = new Set(currentEnabledToolIds);
 
   // Use only profile tools (agent tools are displayed separately in the header)
@@ -231,8 +191,10 @@ export function ChatToolsDisplay({
   const handleEnableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     if (!conversationId) {
-      setPendingAction({ type: "enable", toolId });
-      onCreateConversation?.();
+      // Store in localStorage and update local state
+      const action: PendingToolAction = { type: "enable", toolId };
+      addPendingAction(action, agentId, promptId ?? null);
+      setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
     const newEnabledToolIds = [...currentEnabledToolIds, toolId];
@@ -246,8 +208,10 @@ export function ChatToolsDisplay({
   const handleDisableTool = (toolId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     if (!conversationId) {
-      setPendingAction({ type: "disable", toolId });
-      onCreateConversation?.();
+      // Store in localStorage and update local state
+      const action: PendingToolAction = { type: "disable", toolId };
+      addPendingAction(action, agentId, promptId ?? null);
+      setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
     const newEnabledToolIds = currentEnabledToolIds.filter(
@@ -263,8 +227,10 @@ export function ChatToolsDisplay({
   const handleDisableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
     if (!conversationId) {
-      setPendingAction({ type: "disableAll", toolIds });
-      onCreateConversation?.();
+      // Store in localStorage and update local state
+      const action: PendingToolAction = { type: "disableAll", toolIds };
+      addPendingAction(action, agentId, promptId ?? null);
+      setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
     const newEnabledToolIds = currentEnabledToolIds.filter(
@@ -280,8 +246,10 @@ export function ChatToolsDisplay({
   const handleEnableAll = (toolIds: string[], event: React.MouseEvent) => {
     event.stopPropagation();
     if (!conversationId) {
-      setPendingAction({ type: "enableAll", toolIds });
-      onCreateConversation?.();
+      // Store in localStorage and update local state
+      const action: PendingToolAction = { type: "enableAll", toolIds };
+      addPendingAction(action, agentId, promptId ?? null);
+      setLocalPendingActions((prev) => [...prev, action]);
       return;
     }
     const newEnabledToolIds = [

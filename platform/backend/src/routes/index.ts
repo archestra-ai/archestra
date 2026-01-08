@@ -5,6 +5,8 @@ import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
+import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
+
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -43,6 +45,10 @@ export const geminiProxyRoutes = config.llm.gemini.useV2Routes
 export const openAiProxyRoutes = config.llm.openai.useV2Routes
   ? openAiProxyRoutesV2
   : openAiProxyRoutesV1;
+
+// MiniMax proxy routes - V2 only (new provider)
+export const minimaxProxyRoutes = minimaxProxyRoutesV2;
+
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

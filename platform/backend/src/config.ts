@@ -261,6 +261,13 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    minimax: {
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL ||
+        "https://api.minimax.chat/v1",
+      useV2Routes: process.env.ARCHESTRA_MINIMAX_USE_V2_ROUTES !== "false",
+    },
+
   },
   chat: {
     openai: {
@@ -280,6 +287,12 @@ export default {
       baseUrl:
         process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
+    },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_MINIMAX_BASE_URL ||
+        "https://api.minimax.chat/v1",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

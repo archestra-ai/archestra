@@ -43,6 +43,7 @@ import {
   ApiError,
   Gemini,
   OpenAi,
+  Perplexity,
   WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -53,7 +54,7 @@ import * as routes from "./routes";
 const eeRoutes =
   config.enterpriseLicenseActivated || config.codegenMode
     ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-      await import("./routes/index.ee")
+    await import("./routes/index.ee")
     : ({} as Record<string, never>);
 
 const {
@@ -90,6 +91,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
     id: "AnthropicMessagesResponse",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionRequestSchema, {
+    id: "PerplexityChatCompletionRequest",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatCompletionResponseSchema, {
+    id: "PerplexityChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
@@ -295,7 +302,7 @@ const startMetricsServer = async () => {
   });
   metricsServer.log.info(
     `Metrics server started on port ${observability.metrics.port}${
-      metricsSecret ? " (with authentication)" : " (no authentication)"
+    metricsSecret ? " (with authentication)" : " (no authentication)"
     }`,
   );
 };
@@ -325,8 +332,7 @@ const startMcpServerRuntime = async (
       });
     } catch (error) {
       fastify.log.error(
-        `Failed to import MCP Server Runtime: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"
         }`,
       );
       // Continue server startup even if MCP runtime fails

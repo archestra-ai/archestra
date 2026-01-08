@@ -1,51 +1,51 @@
-"use client";
+'use client';
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
-import { Building2, CheckCircle2, User, Users } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import type { UseFormReturn } from "react-hook-form";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { type archestraApiTypes, E2eTestId } from '@shared';
+import { Building2, CheckCircle2, User, Users } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { useFeatureFlag } from "@/lib/features.hook";
-import { useTeams } from "@/lib/team.query";
+} from '@/components/ui/select';
+import { useFeatureFlag } from '@/lib/features.hook';
+import { useTeams } from '@/lib/team.query';
 
 const ExternalSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/external-secret-selector.ee"),
+    import('@/components/external-secret-selector.ee')
 );
 const InlineVaultSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/inline-vault-secret-selector.ee"),
+    import('@/components/inline-vault-secret-selector.ee')
 );
 
 const WithPermissions = lazy(() =>
   // biome-ignore lint/style/noRestrictedImports: dynamic import
-  import("./roles/with-permissions.ee").then((mod) => ({
+  import('./roles/with-permissions.ee').then((mod) => ({
     default: mod.WithPermissions,
-  })),
+  }))
 );
 
 // Reuse types from generated API types
-type CreateChatApiKeyBody = archestraApiTypes.CreateChatApiKeyData["body"];
+type CreateChatApiKeyBody = archestraApiTypes.CreateChatApiKeyData['body'];
 
 // Form values type - combines create/update fields
 export type ChatApiKeyFormValues = {
   name: string;
-  provider: CreateChatApiKeyBody["provider"];
+  provider: CreateChatApiKeyBody['provider'];
   apiKey: string | null;
-  scope: NonNullable<CreateChatApiKeyBody["scope"]>;
+  scope: NonNullable<CreateChatApiKeyBody['scope']>;
   teamId: string | null;
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
@@ -53,10 +53,10 @@ export type ChatApiKeyFormValues = {
 
 // Response type for existing keys
 export type ChatApiKeyResponse =
-  archestraApiTypes.GetChatApiKeysResponses["200"][number];
+  archestraApiTypes.GetChatApiKeysResponses['200'][number];
 
 const PROVIDER_CONFIG: Record<
-  CreateChatApiKeyBody["provider"],
+  CreateChatApiKeyBody['provider'],
   {
     name: string;
     icon: string;
@@ -67,34 +67,42 @@ const PROVIDER_CONFIG: Record<
   }
 > = {
   anthropic: {
-    name: "Anthropic",
-    icon: "/icons/anthropic.png",
-    placeholder: "sk-ant-...",
+    name: 'Anthropic',
+    icon: '/icons/anthropic.png',
+    placeholder: 'sk-ant-...',
     enabled: true,
-    consoleUrl: "https://console.anthropic.com/settings/keys",
-    consoleName: "Anthropic Console",
+    consoleUrl: 'https://console.anthropic.com/settings/keys',
+    consoleName: 'Anthropic Console',
   },
   openai: {
-    name: "OpenAI",
-    icon: "/icons/openai.png",
-    placeholder: "sk-...",
+    name: 'OpenAI',
+    icon: '/icons/openai.png',
+    placeholder: 'sk-...',
     enabled: true,
-    consoleUrl: "https://platform.openai.com/api-keys",
-    consoleName: "OpenAI Platform",
+    consoleUrl: 'https://platform.openai.com/api-keys',
+    consoleName: 'OpenAI Platform',
   },
   gemini: {
-    name: "Gemini",
-    icon: "/icons/gemini.png",
-    placeholder: "AIza...",
+    name: 'Gemini',
+    icon: '/icons/gemini.png',
+    placeholder: 'AIza...',
     enabled: true,
-    consoleUrl: "https://aistudio.google.com/app/apikey",
-    consoleName: "Google AI Studio",
+    consoleUrl: 'https://aistudio.google.com/app/apikey',
+    consoleName: 'Google AI Studio',
+  },
+  perplexity: {
+    name: 'Perplexity',
+    icon: '/icons/perplexity.png',
+    placeholder: 'pplx-...',
+    enabled: true,
+    consoleUrl: 'https://www.perplexity.ai/settings/api',
+    consoleName: 'Perplexity Settings',
   },
 } as const;
 
 export { PROVIDER_CONFIG };
 
-export const PLACEHOLDER_KEY = "••••••••••••••••";
+export const PLACEHOLDER_KEY = '••••••••••••••••';
 
 interface ChatApiKeyFormProps {
   /**
@@ -102,7 +110,7 @@ interface ChatApiKeyFormProps {
    * - "full": Shows all fields including name (for settings page dialog)
    * - "compact": Hides name field, auto-generates name (for onboarding)
    */
-  mode?: "full" | "compact";
+  mode?: 'full' | 'compact';
   /**
    * Whether to show the console link for getting API keys
    */
@@ -133,27 +141,27 @@ interface ChatApiKeyFormProps {
  * Parent handles mutations and submission.
  */
 export function ChatApiKeyForm({
-  mode = "full",
+  mode = 'full',
   showConsoleLink = true,
   existingKey,
   existingKeys,
   form,
   isPending = false,
 }: ChatApiKeyFormProps) {
-  const byosEnabled = useFeatureFlag("byosEnabled");
+  const byosEnabled = useFeatureFlag('byosEnabled');
   const isEditMode = Boolean(existingKey);
 
   // Data fetching for team selector
   const { data: teams = [] } = useTeams();
 
   // Watch form values
-  const provider = form.watch("provider");
-  const apiKey = form.watch("apiKey");
-  const scope = form.watch("scope");
-  const teamId = form.watch("teamId");
+  const provider = form.watch('provider');
+  const apiKey = form.watch('apiKey');
+  const scope = form.watch('scope');
+  const teamId = form.watch('teamId');
 
   // Check if API key has been changed from placeholder
-  const hasApiKeyChanged = apiKey !== PLACEHOLDER_KEY && apiKey !== "";
+  const hasApiKeyChanged = apiKey !== PLACEHOLDER_KEY && apiKey !== '';
 
   const providerConfig = PROVIDER_CONFIG[provider];
 
@@ -175,9 +183,9 @@ export function ChatApiKeyForm({
 
     return {
       // Personal: disabled if user already has one for this provider
-      personal: keysForProvider.some((k) => k.scope === "personal"),
+      personal: keysForProvider.some((k) => k.scope === 'personal'),
       // Org-wide: disabled if org already has one for this provider
-      org_wide: keysForProvider.some((k) => k.scope === "org_wide"),
+      org_wide: keysForProvider.some((k) => k.scope === 'org_wide'),
       // Team: we'll handle individual teams separately
       team: false,
     };
@@ -195,9 +203,9 @@ export function ChatApiKeyForm({
     return new Set(
       otherKeys
         .filter(
-          (k) => k.provider === provider && k.scope === "team" && k.teamId,
+          (k) => k.provider === provider && k.scope === 'team' && k.teamId
         )
-        .map((k) => k.teamId as string),
+        .map((k) => k.teamId as string)
     );
   }, [existingKeys, provider, existingKey]);
 
@@ -220,55 +228,55 @@ export function ChatApiKeyForm({
     prevProviderRef.current = provider;
 
     const currentScopeDisabled =
-      (scope === "personal" && disabledScopes.personal) ||
-      (scope === "org_wide" && disabledScopes.org_wide) ||
-      (scope === "team" && isTeamScopeDisabled);
+      (scope === 'personal' && disabledScopes.personal) ||
+      (scope === 'org_wide' && disabledScopes.org_wide) ||
+      (scope === 'team' && isTeamScopeDisabled);
 
     // Re-evaluate scope selection when provider changes or current scope becomes disabled
     if (providerChanged || currentScopeDisabled) {
       // Find first non-disabled scope
       if (!disabledScopes.personal) {
-        form.setValue("scope", "personal");
+        form.setValue('scope', 'personal');
       } else if (!isTeamScopeDisabled) {
-        form.setValue("scope", "team");
+        form.setValue('scope', 'team');
       } else if (!disabledScopes.org_wide) {
-        form.setValue("scope", "org_wide");
+        form.setValue('scope', 'org_wide');
       }
     }
   }, [provider, disabledScopes, isTeamScopeDisabled, scope, form, isEditMode]);
 
   // Clear teamId when switching to team scope if current selection is invalid
   useEffect(() => {
-    if (scope === "team" && teamId && usedTeamIds.has(teamId)) {
-      form.setValue("teamId", "");
+    if (scope === 'team' && teamId && usedTeamIds.has(teamId)) {
+      form.setValue('teamId', '');
     }
   }, [scope, teamId, usedTeamIds, form]);
 
   // Clean vault secret values when changing scope
   useEffect(() => {
-    if (scope !== "team") {
-      form.setValue("vaultSecretPath", null);
-      form.setValue("vaultSecretKey", null);
+    if (scope !== 'team') {
+      form.setValue('vaultSecretPath', null);
+      form.setValue('vaultSecretKey', null);
     }
   }, [scope, form]);
 
   const vaultSecretSelector =
-    scope === "team" ? (
+    scope === 'team' ? (
       <InlineVaultSecretSelector
         teamId={teamId}
-        selectedSecretPath={form.getValues("vaultSecretPath")}
-        selectedSecretKey={form.getValues("vaultSecretKey")}
-        onSecretPathChange={(v) => form.setValue("vaultSecretPath", v)}
-        onSecretKeyChange={(v) => form.setValue("vaultSecretKey", v)}
+        selectedSecretPath={form.getValues('vaultSecretPath')}
+        selectedSecretKey={form.getValues('vaultSecretKey')}
+        onSecretPathChange={(v) => form.setValue('vaultSecretPath', v)}
+        onSecretKeyChange={(v) => form.setValue('vaultSecretKey', v)}
       />
     ) : (
       <ExternalSecretSelector
         selectedTeamId={teamId}
-        selectedSecretPath={form.getValues("vaultSecretPath")}
-        selectedSecretKey={form.getValues("vaultSecretKey")}
-        onTeamChange={(v) => form.setValue("teamId", v)}
-        onSecretChange={(v) => form.setValue("vaultSecretPath", v)}
-        onSecretKeyChange={(v) => form.setValue("vaultSecretKey", v)}
+        selectedSecretPath={form.getValues('vaultSecretPath')}
+        selectedSecretKey={form.getValues('vaultSecretKey')}
+        onTeamChange={(v) => form.setValue('teamId', v)}
+        onSecretChange={(v) => form.setValue('vaultSecretPath', v)}
+        onSecretKeyChange={(v) => form.setValue('vaultSecretKey', v)}
       />
     );
 
@@ -276,14 +284,14 @@ export function ChatApiKeyForm({
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
         {/* Name field - only in full mode */}
-        {mode === "full" && (
+        {mode === 'full' && (
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-name">Name</Label>
             <Input
               id="chat-api-key-name"
               placeholder={`My ${providerConfig.name} Key`}
               disabled={isPending}
-              {...form.register("name")}
+              {...form.register('name')}
             />
           </div>
         )}
@@ -293,7 +301,7 @@ export function ChatApiKeyForm({
           <Select
             value={provider}
             onValueChange={(v) =>
-              form.setValue("provider", v as CreateChatApiKeyBody["provider"])
+              form.setValue('provider', v as CreateChatApiKeyBody['provider'])
             }
             disabled={isEditMode || isPending}
           >
@@ -331,11 +339,11 @@ export function ChatApiKeyForm({
             value={scope}
             onValueChange={(v) => {
               form.setValue(
-                "scope",
-                v as NonNullable<CreateChatApiKeyBody["scope"]>,
+                'scope',
+                v as NonNullable<CreateChatApiKeyBody['scope']>
               );
-              if (v !== "team") {
-                form.setValue("teamId", "");
+              if (v !== 'team') {
+                form.setValue('teamId', '');
               }
             }}
             disabled={isPending}
@@ -348,7 +356,7 @@ export function ChatApiKeyForm({
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4" />
                   <span>
-                    Personal{disabledScopes.personal && " (already exists)"}
+                    Personal{disabledScopes.personal && ' (already exists)'}
                   </span>
                 </div>
               </SelectItem>
@@ -364,15 +372,15 @@ export function ChatApiKeyForm({
                 </div>
               </SelectItem>
               <WithPermissions
-                permissions={{ team: ["admin"] }}
+                permissions={{ team: ['admin'] }}
                 noPermissionHandle="hide"
               >
                 <SelectItem value="org_wide" disabled={disabledScopes.org_wide}>
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
                     <span>
-                      Whole Organization{" "}
-                      {disabledScopes.org_wide ? " (already exists)" : ""}
+                      Whole Organization{' '}
+                      {disabledScopes.org_wide ? ' (already exists)' : ''}
                     </span>
                   </div>
                 </SelectItem>
@@ -382,12 +390,12 @@ export function ChatApiKeyForm({
         </div>
 
         {/* Team selector - only when scope is team */}
-        {scope === "team" && (
+        {scope === 'team' && (
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-team">Team</Label>
             <Select
               value={teamId ?? undefined}
-              onValueChange={(v) => form.setValue("teamId", v)}
+              onValueChange={(v) => form.setValue('teamId', v)}
               disabled={isPending}
             >
               <SelectTrigger id="chat-api-key-team">
@@ -422,7 +430,7 @@ export function ChatApiKeyForm({
         ) : (
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-value">
-              API Key{" "}
+              API Key{' '}
               {isEditMode && (
                 <span className="text-muted-foreground font-normal">
                   (leave blank to keep current)
@@ -436,9 +444,9 @@ export function ChatApiKeyForm({
                 placeholder={providerConfig.placeholder}
                 disabled={isPending}
                 className={
-                  showConfiguredStyling ? "border-green-500 pr-10" : ""
+                  showConfiguredStyling ? 'border-green-500 pr-10' : ''
                 }
-                {...form.register("apiKey")}
+                {...form.register('apiKey')}
               />
               {showConfiguredStyling && (
                 <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
@@ -446,7 +454,7 @@ export function ChatApiKeyForm({
             </div>
             {showConsoleLink && (
               <p className="text-xs text-muted-foreground">
-                Get your API key from{" "}
+                Get your API key from{' '}
                 <Link
                   href={providerConfig.consoleUrl}
                   target="_blank"

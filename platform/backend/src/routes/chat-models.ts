@@ -174,6 +174,32 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Perplexity API
+ * Perplexity doesn't have a models endpoint, so we return a hardcoded list
+ */
+async function fetchPerplexityModels(_apiKey: string): Promise<ModelInfo[]> {
+  // Perplexity models are hardcoded as they don't have a public models list endpoint
+  return [
+    { id: "sonar", displayName: "Sonar", provider: "perplexity" as const },
+    {
+      id: "sonar-pro",
+      displayName: "Sonar Pro",
+      provider: "perplexity" as const,
+    },
+    {
+      id: "sonar-reasoning-pro",
+      displayName: "Sonar Reasoning Pro",
+      provider: "perplexity" as const,
+    },
+    {
+      id: "sonar-deep-research",
+      displayName: "Sonar Deep Research",
+      provider: "perplexity" as const,
+    },
+  ];
+}
+
+/**
  * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
 async function getProviderApiKey({
@@ -212,12 +238,13 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "perplexity":
+      return config.chat.perplexity.apiKey || null;
     default:
       return null;
   }
 }
 
-// We need to make sure that every new provider we support has a model fetcher function
 const modelFetchers: Record<
   SupportedProvider,
   (apiKey: string) => Promise<ModelInfo[]>
@@ -225,6 +252,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  perplexity: fetchPerplexityModels,
 };
 
 /**
@@ -275,7 +303,7 @@ async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "perplexity"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

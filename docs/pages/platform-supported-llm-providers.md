@@ -126,3 +126,29 @@ With this configuration, Application Default Credentials (ADC) will automaticall
 
 For non-GKE environments or when Workload Identity isn't available, set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file.
 
+## Perplexity AI
+
+Archestra supports [Perplexity AI](https://www.perplexity.ai/), which provides AI-powered search and chat capabilities.
+
+### Supported Perplexity APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Perplexity Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/perplexity/{agent-id}`
+- **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Available Models
+
+| Model                 | Tool Support | Description                          |
+| --------------------- | ------------ | ------------------------------------ |
+| `sonar`               | ❌           | Basic web search model               |
+| `sonar-pro`           | ✅           | Advanced search with tool support    |
+| `sonar-reasoning-pro` | ✅           | Advanced reasoning with tool support |
+| `sonar-deep-research` | ❌           | Deep research model                  |
+
+### Important Notes
+
+- **Tool Support**: Only `sonar-pro` and `sonar-reasoning-pro` support function calling (tool use). For other models, tools are automatically stripped from requests.
+- **API Key**: Get your API key from [Perplexity Settings](https://www.perplexity.ai/settings/api).

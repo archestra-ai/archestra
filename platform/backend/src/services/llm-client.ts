@@ -40,6 +40,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("sonar")) {
+    return "perplexity";
+  }
+
   // Default to anthropic for backwards compatibility
   return "anthropic";
 }
@@ -95,6 +99,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "perplexity" && config.chat.perplexity.apiKey) {
+      providerApiKey = config.chat.perplexity.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -171,6 +178,17 @@ export function createLLMModel(params: {
     });
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  }
+
+  if (provider === "perplexity") {
+    // URL format: /v1/perplexity/:agentId (SDK appends /chat/completions)
+    // Use OpenAI SDK since Perplexity is OpenAI-compatible
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/perplexity/${agentId}`,
+      headers,
+    });
     return client.chat(modelName);
   }
 

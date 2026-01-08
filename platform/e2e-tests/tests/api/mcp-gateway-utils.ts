@@ -1,12 +1,37 @@
 /**
  * Shared MCP Gateway utilities for E2E tests
  */
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, APIResponse } from "@playwright/test";
 import {
   API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
 } from "../../consts";
+
+/**
+ * Parse response based on content type.
+ * Handles both JSON and SSE (Server-Sent Events) responses.
+ */
+export async function parseResponse(response: APIResponse): Promise<unknown> {
+  const contentType = response.headers()["content-type"] || "";
+
+  // If it's SSE, we need to parse the event stream
+  if (contentType.includes("text/event-stream")) {
+    const text = await response.text();
+    // SSE format: "event: message\ndata: {json}\n\n"
+    const lines = text.split("\n");
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const jsonStr = line.slice(6); // Remove "data: " prefix
+        return JSON.parse(jsonStr);
+      }
+    }
+    throw new Error(`No data found in SSE response: ${text}`);
+  }
+
+  // Otherwise assume JSON
+  return response.json();
+}
 
 /**
  * Create MCP gateway request headers

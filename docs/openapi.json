@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra Platform API",
-    "version": "1.0.10"
+    "version": "1.0.11"
   },
   "components": {
     "schemas": {
@@ -11437,8 +11437,7 @@
                 "name",
                 "agent",
                 "origin",
-                "createdAt",
-                "allowUsageWhenUntrustedDataIsPresent"
+                "createdAt"
               ]
             },
             "in": "query",
@@ -11455,6 +11454,14 @@
             },
             "in": "query",
             "name": "sortDirection",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "skipPagination",
             "required": false
           },
           {
@@ -11497,17 +11504,6 @@
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "allowUsageWhenUntrustedDataIsPresent": {
-                            "type": "boolean"
-                          },
-                          "toolResultTreatment": {
-                            "type": "string",
-                            "enum": [
-                              "trusted",
-                              "sanitize_with_dual_llm",
-                              "untrusted"
-                            ]
                           },
                           "responseModifierTemplate": {
                             "nullable": true,
@@ -11629,8 +11625,6 @@
                         },
                         "required": [
                           "id",
-                          "allowUsageWhenUntrustedDataIsPresent",
-                          "toolResultTreatment",
                           "responseModifierTemplate",
                           "credentialSourceMcpServerId",
                           "executionSourceMcpServerId",
@@ -12810,297 +12804,6 @@
         }
       }
     },
-    "/api/agent-tools/bulk-update": {
-      "post": {
-        "operationId": "bulkUpdateAgentTools",
-        "tags": [
-          "Agent Tools"
-        ],
-        "description": "Update multiple agent tools with the same value in bulk",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "ids": {
-                    "minItems": 1,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-                    }
-                  },
-                  "field": {
-                    "type": "string",
-                    "enum": [
-                      "allowUsageWhenUntrustedDataIsPresent",
-                      "toolResultTreatment"
-                    ]
-                  },
-                  "value": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "trusted",
-                          "sanitize_with_dual_llm",
-                          "untrusted"
-                        ]
-                      }
-                    ]
-                  },
-                  "clearAutoConfigured": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "ids",
-                  "field",
-                  "value"
-                ]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "updatedCount": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "updatedCount"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/agent-tools/auto-configure-policies": {
       "post": {
         "operationId": "autoConfigureAgentToolPolicies",
@@ -13159,9 +12862,6 @@
                           "config": {
                             "type": "object",
                             "properties": {
-                              "allowUsageWhenUntrustedDataIsPresent": {
-                                "type": "boolean"
-                              },
                               "toolResultTreatment": {
                                 "type": "string",
                                 "enum": [
@@ -13175,7 +12875,6 @@
                               }
                             },
                             "required": [
-                              "allowUsageWhenUntrustedDataIsPresent",
                               "toolResultTreatment",
                               "reasoning"
                             ],
@@ -13741,17 +13440,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "allowUsageWhenUntrustedDataIsPresent": {
-                    "type": "boolean"
-                  },
-                  "toolResultTreatment": {
-                    "type": "string",
-                    "enum": [
-                      "trusted",
-                      "sanitize_with_dual_llm",
-                      "untrusted"
-                    ]
-                  },
                   "responseModifierTemplate": {
                     "nullable": true,
                     "type": "string"
@@ -13814,17 +13502,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "allowUsageWhenUntrustedDataIsPresent": {
-                      "type": "boolean"
-                    },
-                    "toolResultTreatment": {
-                      "type": "string",
-                      "enum": [
-                        "trusted",
-                        "sanitize_with_dual_llm",
-                        "untrusted"
-                      ]
-                    },
                     "responseModifierTemplate": {
                       "nullable": true,
                       "type": "string"
@@ -13867,9 +13544,6 @@
                       "format": "date-time"
                     }
                   },
-                  "required": [
-                    "toolResultTreatment"
-                  ],
                   "additionalProperties": false
                 }
               }
@@ -15031,28 +14705,42 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
-                      "agentToolId": {
+                      "toolId": {
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
-                      "argumentName": {
-                        "type": "string"
-                      },
-                      "operator": {
-                        "type": "string",
-                        "enum": [
-                          "equal",
-                          "notEqual",
-                          "contains",
-                          "notContains",
-                          "startsWith",
-                          "endsWith",
-                          "regex"
-                        ]
-                      },
-                      "value": {
-                        "type": "string"
+                      "conditions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string",
+                              "enum": [
+                                "equal",
+                                "notEqual",
+                                "contains",
+                                "notContains",
+                                "startsWith",
+                                "endsWith",
+                                "regex"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "operator",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
                       "action": {
                         "type": "string",
@@ -15076,10 +14764,8 @@
                     },
                     "required": [
                       "id",
-                      "agentToolId",
-                      "argumentName",
-                      "operator",
-                      "value",
+                      "toolId",
+                      "conditions",
                       "action",
                       "reason",
                       "createdAt",
@@ -15315,28 +15001,41 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agentToolId": {
+                  "toolId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "argumentName": {
-                    "type": "string"
-                  },
-                  "operator": {
-                    "type": "string",
-                    "enum": [
-                      "equal",
-                      "notEqual",
-                      "contains",
-                      "notContains",
-                      "startsWith",
-                      "endsWith",
-                      "regex"
-                    ]
-                  },
-                  "value": {
-                    "type": "string"
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equal",
+                            "notEqual",
+                            "contains",
+                            "notContains",
+                            "startsWith",
+                            "endsWith",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "operator",
+                        "value"
+                      ]
+                    }
                   },
                   "action": {
                     "type": "string",
@@ -15351,10 +15050,8 @@
                   }
                 },
                 "required": [
-                  "agentToolId",
-                  "argumentName",
-                  "operator",
-                  "value",
+                  "toolId",
+                  "conditions",
                   "action"
                 ]
               }
@@ -15375,28 +15072,42 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "agentToolId": {
+                    "toolId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "argumentName": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string",
-                      "enum": [
-                        "equal",
-                        "notEqual",
-                        "contains",
-                        "notContains",
-                        "startsWith",
-                        "endsWith",
-                        "regex"
-                      ]
-                    },
-                    "value": {
-                      "type": "string"
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "equal",
+                              "notEqual",
+                              "contains",
+                              "notContains",
+                              "startsWith",
+                              "endsWith",
+                              "regex"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "operator",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "action": {
                       "type": "string",
@@ -15420,10 +15131,8 @@
                   },
                   "required": [
                     "id",
-                    "agentToolId",
-                    "argumentName",
-                    "operator",
-                    "value",
+                    "toolId",
+                    "conditions",
                     "action",
                     "reason",
                     "createdAt",
@@ -15679,28 +15388,42 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "agentToolId": {
+                    "toolId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "argumentName": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string",
-                      "enum": [
-                        "equal",
-                        "notEqual",
-                        "contains",
-                        "notContains",
-                        "startsWith",
-                        "endsWith",
-                        "regex"
-                      ]
-                    },
-                    "value": {
-                      "type": "string"
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "equal",
+                              "notEqual",
+                              "contains",
+                              "notContains",
+                              "startsWith",
+                              "endsWith",
+                              "regex"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "operator",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "action": {
                       "type": "string",
@@ -15724,10 +15447,8 @@
                   },
                   "required": [
                     "id",
-                    "agentToolId",
-                    "argumentName",
-                    "operator",
-                    "value",
+                    "toolId",
+                    "conditions",
                     "action",
                     "reason",
                     "createdAt",
@@ -15962,28 +15683,41 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agentToolId": {
+                  "toolId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "argumentName": {
-                    "type": "string"
-                  },
-                  "operator": {
-                    "type": "string",
-                    "enum": [
-                      "equal",
-                      "notEqual",
-                      "contains",
-                      "notContains",
-                      "startsWith",
-                      "endsWith",
-                      "regex"
-                    ]
-                  },
-                  "value": {
-                    "type": "string"
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equal",
+                            "notEqual",
+                            "contains",
+                            "notContains",
+                            "startsWith",
+                            "endsWith",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "operator",
+                        "value"
+                      ]
+                    }
                   },
                   "action": {
                     "type": "string",
@@ -16026,28 +15760,42 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "agentToolId": {
+                    "toolId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "argumentName": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string",
-                      "enum": [
-                        "equal",
-                        "notEqual",
-                        "contains",
-                        "notContains",
-                        "startsWith",
-                        "endsWith",
-                        "regex"
-                      ]
-                    },
-                    "value": {
-                      "type": "string"
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "equal",
+                              "notEqual",
+                              "contains",
+                              "notContains",
+                              "startsWith",
+                              "endsWith",
+                              "regex"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "operator",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "action": {
                       "type": "string",
@@ -16071,10 +15819,8 @@
                   },
                   "required": [
                     "id",
-                    "agentToolId",
-                    "argumentName",
-                    "operator",
-                    "value",
+                    "toolId",
+                    "conditions",
                     "action",
                     "reason",
                     "createdAt",
@@ -16570,31 +16316,46 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
-                      "agentToolId": {
+                      "toolId": {
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
                       "description": {
+                        "nullable": true,
                         "type": "string"
                       },
-                      "attributePath": {
-                        "type": "string"
-                      },
-                      "operator": {
-                        "type": "string",
-                        "enum": [
-                          "equal",
-                          "notEqual",
-                          "contains",
-                          "notContains",
-                          "startsWith",
-                          "endsWith",
-                          "regex"
-                        ]
-                      },
-                      "value": {
-                        "type": "string"
+                      "conditions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string",
+                              "enum": [
+                                "equal",
+                                "notEqual",
+                                "contains",
+                                "notContains",
+                                "startsWith",
+                                "endsWith",
+                                "regex"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "operator",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
                       "action": {
                         "type": "string",
@@ -16615,11 +16376,9 @@
                     },
                     "required": [
                       "id",
-                      "agentToolId",
+                      "toolId",
                       "description",
-                      "attributePath",
-                      "operator",
-                      "value",
+                      "conditions",
                       "action",
                       "createdAt",
                       "updatedAt"
@@ -16854,31 +16613,45 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agentToolId": {
+                  "toolId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "description": {
+                    "nullable": true,
                     "type": "string"
                   },
-                  "attributePath": {
-                    "type": "string"
-                  },
-                  "operator": {
-                    "type": "string",
-                    "enum": [
-                      "equal",
-                      "notEqual",
-                      "contains",
-                      "notContains",
-                      "startsWith",
-                      "endsWith",
-                      "regex"
-                    ]
-                  },
-                  "value": {
-                    "type": "string"
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equal",
+                            "notEqual",
+                            "contains",
+                            "notContains",
+                            "startsWith",
+                            "endsWith",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "operator",
+                        "value"
+                      ]
+                    }
                   },
                   "action": {
                     "type": "string",
@@ -16890,11 +16663,8 @@
                   }
                 },
                 "required": [
-                  "agentToolId",
-                  "description",
-                  "attributePath",
-                  "operator",
-                  "value",
+                  "toolId",
+                  "conditions",
                   "action"
                 ]
               }
@@ -16915,31 +16685,46 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "agentToolId": {
+                    "toolId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "description": {
+                      "nullable": true,
                       "type": "string"
                     },
-                    "attributePath": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string",
-                      "enum": [
-                        "equal",
-                        "notEqual",
-                        "contains",
-                        "notContains",
-                        "startsWith",
-                        "endsWith",
-                        "regex"
-                      ]
-                    },
-                    "value": {
-                      "type": "string"
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "equal",
+                              "notEqual",
+                              "contains",
+                              "notContains",
+                              "startsWith",
+                              "endsWith",
+                              "regex"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "operator",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "action": {
                       "type": "string",
@@ -16960,11 +16745,9 @@
                   },
                   "required": [
                     "id",
-                    "agentToolId",
+                    "toolId",
                     "description",
-                    "attributePath",
-                    "operator",
-                    "value",
+                    "conditions",
                     "action",
                     "createdAt",
                     "updatedAt"
@@ -17219,31 +17002,46 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "agentToolId": {
+                    "toolId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "description": {
+                      "nullable": true,
                       "type": "string"
                     },
-                    "attributePath": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string",
-                      "enum": [
-                        "equal",
-                        "notEqual",
-                        "contains",
-                        "notContains",
-                        "startsWith",
-                        "endsWith",
-                        "regex"
-                      ]
-                    },
-                    "value": {
-                      "type": "string"
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "equal",
+                              "notEqual",
+                              "contains",
+                              "notContains",
+                              "startsWith",
+                              "endsWith",
+                              "regex"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "operator",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "action": {
                       "type": "string",
@@ -17264,11 +17062,9 @@
                   },
                   "required": [
                     "id",
-                    "agentToolId",
+                    "toolId",
                     "description",
-                    "attributePath",
-                    "operator",
-                    "value",
+                    "conditions",
                     "action",
                     "createdAt",
                     "updatedAt"
@@ -17502,31 +17298,45 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agentToolId": {
+                  "toolId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "description": {
+                    "nullable": true,
                     "type": "string"
                   },
-                  "attributePath": {
-                    "type": "string"
-                  },
-                  "operator": {
-                    "type": "string",
-                    "enum": [
-                      "equal",
-                      "notEqual",
-                      "contains",
-                      "notContains",
-                      "startsWith",
-                      "endsWith",
-                      "regex"
-                    ]
-                  },
-                  "value": {
-                    "type": "string"
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equal",
+                            "notEqual",
+                            "contains",
+                            "notContains",
+                            "startsWith",
+                            "endsWith",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "operator",
+                        "value"
+                      ]
+                    }
                   },
                   "action": {
                     "type": "string",
@@ -17566,31 +17376,46 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "agentToolId": {
+                    "toolId": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "description": {
+                      "nullable": true,
                       "type": "string"
                     },
-                    "attributePath": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string",
-                      "enum": [
-                        "equal",
-                        "notEqual",
-                        "contains",
-                        "notContains",
-                        "startsWith",
-                        "endsWith",
-                        "regex"
-                      ]
-                    },
-                    "value": {
-                      "type": "string"
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "equal",
+                              "notEqual",
+                              "contains",
+                              "notContains",
+                              "startsWith",
+                              "endsWith",
+                              "regex"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "operator",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "action": {
                       "type": "string",
@@ -17611,11 +17436,9 @@
                   },
                   "required": [
                     "id",
-                    "agentToolId",
+                    "toolId",
                     "description",
-                    "attributePath",
-                    "operator",
-                    "value",
+                    "conditions",
                     "action",
                     "createdAt",
                     "updatedAt"
@@ -17869,6 +17692,557 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tool-invocation/bulk-default": {
+      "post": {
+        "operationId": "bulkUpsertDefaultCallPolicy",
+        "tags": [
+          "Tool Invocation Policies"
+        ],
+        "description": "Bulk upsert default tool invocation policies (empty conditions) for multiple tools",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    }
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "allow_when_context_is_untrusted",
+                      "block_always"
+                    ]
+                  }
+                },
+                "required": [
+                  "toolIds",
+                  "action"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "number"
+                    },
+                    "created": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "updated",
+                    "created"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trusted-data-policies/bulk-default": {
+      "post": {
+        "operationId": "bulkUpsertDefaultResultPolicy",
+        "tags": [
+          "Trusted Data Policies"
+        ],
+        "description": "Bulk upsert default trusted data policies (empty conditions) for multiple tools",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    }
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "mark_as_trusted",
+                      "block_always",
+                      "sanitize_with_dual_llm"
+                    ]
+                  }
+                },
+                "required": [
+                  "toolIds",
+                  "action"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "number"
+                    },
+                    "created": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "updated",
+                    "created"
                   ],
                   "additionalProperties": false
                 }
@@ -20601,6 +20975,10 @@
                       "selectedModel": {
                         "type": "string"
                       },
+                      "selectedProvider": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "hasCustomToolSelection": {
                         "type": "boolean"
                       },
@@ -20679,6 +21057,7 @@
                       "chatApiKeyId",
                       "title",
                       "selectedModel",
+                      "selectedProvider",
                       "hasCustomToolSelection",
                       "todoList",
                       "artifact",
@@ -20935,6 +21314,15 @@
                   "selectedModel": {
                     "type": "string"
                   },
+                  "selectedProvider": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "gemini"
+                    ]
+                  },
                   "chatApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -20991,6 +21379,10 @@
                       "type": "string"
                     },
                     "selectedModel": {
+                      "type": "string"
+                    },
+                    "selectedProvider": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "hasCustomToolSelection": {
@@ -21071,6 +21463,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -21359,6 +21752,10 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -21437,6 +21834,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -21681,6 +22079,15 @@
                   "selectedModel": {
                     "type": "string"
                   },
+                  "selectedProvider": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "gemini"
+                    ]
+                  },
                   "chatApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -21754,6 +22161,10 @@
                       "type": "string"
                     },
                     "selectedModel": {
+                      "type": "string"
+                    },
+                    "selectedProvider": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "hasCustomToolSelection": {
@@ -21834,6 +22245,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -22652,6 +23064,10 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -22730,6 +23146,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -23046,6 +23463,10 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -23124,6 +23545,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -26487,13 +26909,21 @@
                     },
                     "geminiVertexAiEnabled": {
                       "type": "boolean"
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
                     }
                   },
                   "required": [
                     "orchestrator-k8s-runtime",
                     "byosEnabled",
                     "byosVaultKvVersion",
-                    "geminiVertexAiEnabled"
+                    "geminiVertexAiEnabled",
+                    "globalToolPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -46030,6 +46460,13 @@
                     },
                     "autoConfigureNewTools": {
                       "type": "boolean"
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
                     }
                   },
                   "required": [
@@ -46045,7 +46482,8 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "autoConfigureNewTools"
+                    "autoConfigureNewTools",
+                    "globalToolPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -46345,6 +46783,13 @@
                       "team"
                     ]
                   },
+                  "globalToolPolicy": {
+                    "type": "string",
+                    "enum": [
+                      "permissive",
+                      "restrictive"
+                    ]
+                  },
                   "logo": {
                     "nullable": true,
                     "type": "string"
@@ -46469,6 +46914,13 @@
                     },
                     "autoConfigureNewTools": {
                       "type": "boolean"
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
                     }
                   },
                   "required": [
@@ -46484,7 +46936,8 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "autoConfigureNewTools"
+                    "autoConfigureNewTools",
+                    "globalToolPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -46972,6 +47425,263 @@
                     "promptTemplate"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt-agents": {
+      "get": {
+        "operationId": "getAllPromptAgentConnections",
+        "tags": [
+          "Prompt Agents"
+        ],
+        "description": "Get all prompt-agent connections for the organization (for canvas visualization)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "promptId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "agentPromptId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "promptId",
+                      "agentPromptId"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }
@@ -48077,14 +48787,37 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
-                      "parentPromptId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "isActive": {
-                        "type": "boolean"
+                      "history": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
                       },
                       "createdAt": {
                         "type": "string",
@@ -48103,8 +48836,7 @@
                       "userPrompt",
                       "systemPrompt",
                       "version",
-                      "parentPromptId",
-                      "isActive",
+                      "history",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -48358,15 +49090,6 @@
                     "type": "integer",
                     "minimum": -2147483648,
                     "maximum": 2147483647
-                  },
-                  "parentPromptId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "isActive": {
-                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -48415,14 +49138,37 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "parentPromptId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "isActive": {
-                      "type": "boolean"
+                    "history": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -48441,8 +49187,7 @@
                     "userPrompt",
                     "systemPrompt",
                     "version",
-                    "parentPromptId",
-                    "isActive",
+                    "history",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -48720,14 +49465,37 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "parentPromptId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "isActive": {
-                      "type": "boolean"
+                    "history": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -48746,8 +49514,7 @@
                     "userPrompt",
                     "systemPrompt",
                     "version",
-                    "parentPromptId",
-                    "isActive",
+                    "history",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -49050,14 +49817,37 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "parentPromptId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "isActive": {
-                      "type": "boolean"
+                    "history": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -49076,8 +49866,7 @@
                     "userPrompt",
                     "systemPrompt",
                     "version",
-                    "parentPromptId",
-                    "isActive",
+                    "history",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -49555,7 +50344,7 @@
         "tags": [
           "Prompts"
         ],
-        "description": "Get all versions of a prompt",
+        "description": "Get all versions of a prompt (current + history)",
         "parameters": [
           {
             "schema": {
@@ -49574,72 +50363,130 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "organizationId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "agentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "userPrompt": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "systemPrompt": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "history": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {
+                              "type": "array",
+                              "items": {}
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
                       },
-                      "organizationId": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "agentId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "userPrompt": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "systemPrompt": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "version": {
-                        "type": "integer",
-                        "minimum": -2147483648,
-                        "maximum": 2147483647
-                      },
-                      "parentPromptId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "isActive": {
-                        "type": "boolean"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      }
+                      "required": [
+                        "id",
+                        "organizationId",
+                        "name",
+                        "agentId",
+                        "userPrompt",
+                        "systemPrompt",
+                        "version",
+                        "history",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
                     },
-                    "required": [
-                      "id",
-                      "organizationId",
-                      "name",
-                      "agentId",
-                      "userPrompt",
-                      "systemPrompt",
-                      "version",
-                      "parentPromptId",
-                      "isActive",
-                      "createdAt",
-                      "updatedAt"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number"
+                          },
+                          "userPrompt": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "systemPrompt": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "userPrompt",
+                          "systemPrompt",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "history"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -49938,6 +50785,11 @@
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "agentPromptId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
                     "required": [
@@ -49949,7 +50801,8 @@
                       "name",
                       "description",
                       "createdAt",
-                      "updatedAt"
+                      "updatedAt",
+                      "agentPromptId"
                     ],
                     "additionalProperties": false
                   }
@@ -50183,14 +51036,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "versionId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  "version": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
-                  "versionId"
+                  "version"
                 ]
               }
             }
@@ -50246,14 +51099,37 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "parentPromptId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "isActive": {
-                      "type": "boolean"
+                    "history": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -50272,8 +51148,7 @@
                     "userPrompt",
                     "systemPrompt",
                     "version",
-                    "parentPromptId",
-                    "isActive",
+                    "history",
                     "createdAt",
                     "updatedAt"
                   ],

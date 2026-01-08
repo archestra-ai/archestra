@@ -112,7 +112,8 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    if (this.type === "openai:chatCompletions") {
+    if (this.type === "openai:chatCompletions" || this.type === "xai:chatCompletions") {
+      // x.ai Grok uses OpenAI-compatible API format
       return new OpenAiChatCompletionInteraction(interaction);
     } else if (this.type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);

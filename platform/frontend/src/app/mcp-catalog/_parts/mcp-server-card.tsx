@@ -278,13 +278,11 @@ export function McpServerCard({
                     </DropdownMenuItem>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    {variant !== "local"
-                      ? "Only available for local MCP servers"
-                      : "Restarts all running instances of this MCP server."}
-                  </p>
-                </TooltipContent>
+                {variant !== "local" && (
+                  <TooltipContent>
+                    <p>Only available for local MCP servers</p>
+                  </TooltipContent>
+                )}
               </Tooltip>
             </TooltipProvider>
           </WithPermissions>
@@ -451,15 +449,11 @@ export function McpServerCard({
                 </PermissionButton>
               </div>
             </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {!canCreateNewInstallation
-                  ? "All connect options exhausted (personal and all teams)"
-                  : requiresAuth
-                    ? "Provide your credentials to connect this server"
-                    : "Install this server to your organization"}
-              </p>
-            </TooltipContent>
+            {!canCreateNewInstallation && (
+              <TooltipContent side="bottom">
+                <p>All connect options exhausted (personal and all teams)</p>
+              </TooltipContent>
+            )}
           </Tooltip>
         </TooltipProvider>
       )}
@@ -519,15 +513,15 @@ export function McpServerCard({
                 </PermissionButton>
               </div>
             </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {!isLocalMcpEnabled
-                  ? LOCAL_MCP_DISABLED_MESSAGE
-                  : !canCreateNewInstallation
-                    ? "All connect options exhausted (personal and all teams)"
-                    : "Provide your credentials to connect this server"}
-              </p>
-            </TooltipContent>
+            {(!isLocalMcpEnabled || !canCreateNewInstallation) && (
+              <TooltipContent side="bottom">
+                <p>
+                  {!isLocalMcpEnabled
+                    ? LOCAL_MCP_DISABLED_MESSAGE
+                    : "All connect options exhausted (personal and all teams)"}
+                </p>
+              </TooltipContent>
+            )}
           </Tooltip>
         </TooltipProvider>
       )}

@@ -26,6 +26,7 @@ export const appearanceKeys = {
  * Hook to fetch public appearance settings.
  * Used on login/auth pages where the user is not yet authenticated.
  * Returns theme, customFont, and logo without requiring authentication.
+ * On API failure, returns undefined (treated as not loaded) to preserve localStorage values.
  */
 export function usePublicAppearance(enabled = true) {
   return useQuery({
@@ -34,8 +35,9 @@ export function usePublicAppearance(enabled = true) {
       const { data, error } = await archestraApiSdk.getPublicAppearance();
 
       if (error || !data) {
-        // Return defaults if fetch fails
-        return DEFAULT_APPEARANCE;
+        // Return undefined on API failure so sync effects don't overwrite localStorage
+        // This allows localStorage values to persist during temporary API outages
+        return undefined;
       }
 
       return data;
@@ -44,6 +46,6 @@ export function usePublicAppearance(enabled = true) {
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     retry: false, // Don't retry on failure, just use defaults
     throwOnError: false,
-    placeholderData: DEFAULT_APPEARANCE,
+    placeholderData: DEFAULT_APPEARANCE, // Use default as placeholder while loading
   });
 }

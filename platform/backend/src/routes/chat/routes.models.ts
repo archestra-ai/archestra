@@ -179,6 +179,11 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
+ *
+ * Note: Vertex AI returns models in a different format than Google AI Studio:
+ * - Model names are "publishers/google/models/xxx" not "models/xxx"
+ * - No supportedActions or displayName fields available
+ * - We filter by model name pattern to get chat-capable Gemini models
  */
 export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   logger.debug(
@@ -196,19 +201,41 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
 
   const models: ModelInfo[] = [];
 
+  // Patterns to exclude non-chat models
+  const excludePatterns = ["embedding", "imagen", "text-bison", "code-bison"];
+
   for await (const model of pager) {
-    // Filter to only models that support generateContent (chat)
-    // The SDK returns supportedActions array with strings like "generateContent"
-    const supportedMethods = model.supportedActions ?? [];
-    if (supportedMethods.includes("generateContent")) {
-      // Model name is in format "models/gemini-2.5-flash", extract just the model ID
-      const modelId = (model.name ?? "").replace("models/", "");
-      models.push({
-        id: modelId,
-        displayName: model.displayName ?? modelId,
-        provider: "gemini" as const,
-      });
+    const modelName = model.name ?? "";
+
+    // Only include Gemini models that are chat-capable
+    // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
+    if (!modelName.includes("gemini")) {
+      continue;
     }
+
+    // Exclude embedding and other non-chat models
+    const isExcluded = excludePatterns.some((pattern) =>
+      modelName.toLowerCase().includes(pattern),
+    );
+    if (isExcluded) {
+      continue;
+    }
+
+    // Extract model ID from "publishers/google/models/gemini-xxx" format
+    const modelId = modelName.replace("publishers/google/models/", "");
+
+    // Generate a readable display name from the model ID
+    // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
+    const displayName = modelId
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+    models.push({
+      id: modelId,
+      displayName,
+      provider: "gemini" as const,
+    });
   }
 
   logger.debug(

@@ -2,7 +2,10 @@ import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
-import { fetchGeminiModels, fetchGeminiModelsViaVertexAi } from "./chat-models";
+import {
+  fetchGeminiModels,
+  fetchGeminiModelsViaVertexAi,
+} from "./routes.models";
 
 // Mock fetch globally for testing API calls
 const mockFetch = vi.fn();
@@ -145,27 +148,33 @@ describe("chat-models", () => {
   });
 
   describe("fetchGeminiModelsViaVertexAi", () => {
-    test("fetches models using Google GenAI SDK with Vertex AI", async () => {
-      // Mock the SDK's models.list() method
+    test("fetches Gemini models using Vertex AI SDK format", async () => {
+      // Vertex AI returns models in "publishers/google/models/xxx" format
+      // without supportedActions or displayName fields
       const mockModels: Array<{
         name: string;
-        displayName: string;
-        supportedActions: string[];
+        version: string;
+        tunedModelInfo: Record<string, unknown>;
       }> = [
         {
-          name: "models/gemini-2.5-pro",
-          displayName: "Gemini 2.5 Pro",
-          supportedActions: ["generateContent", "countTokens"],
+          name: "publishers/google/models/gemini-2.5-pro",
+          version: "default",
+          tunedModelInfo: {},
         },
         {
-          name: "models/gemini-2.5-flash",
-          displayName: "Gemini 2.5 Flash",
-          supportedActions: ["generateContent"],
+          name: "publishers/google/models/gemini-2.5-flash",
+          version: "default",
+          tunedModelInfo: {},
         },
         {
-          name: "models/embedding-001",
-          displayName: "Embedding Model",
-          supportedActions: ["embedContent"],
+          name: "publishers/google/models/gemini-embedding-001",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/imageclassification-efficientnet",
+          version: "001",
+          tunedModelInfo: {},
         },
       ];
 
@@ -188,6 +197,9 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
+      // Should include gemini-2.5-pro and gemini-2.5-flash
+      // Should exclude gemini-embedding-001 (embedding model)
+      // Should exclude imageclassification-efficientnet (non-gemini)
       expect(models).toHaveLength(2);
       expect(models).toEqual([
         {
@@ -212,22 +224,27 @@ describe("chat-models", () => {
       });
     });
 
-    test("handles models with missing name or displayName", async () => {
+    test("excludes non-chat models by pattern", async () => {
       const mockModels = [
         {
-          name: "models/gemini-complete",
-          displayName: "Complete Model",
-          supportedActions: ["generateContent"],
+          name: "publishers/google/models/gemini-2.0-flash-001",
+          version: "default",
+          tunedModelInfo: {},
         },
         {
-          name: undefined,
-          displayName: "No Name Model",
-          supportedActions: ["generateContent"],
+          name: "publishers/google/models/gemini-embedding-001",
+          version: "default",
+          tunedModelInfo: {},
         },
         {
-          name: "models/no-display",
-          displayName: undefined,
-          supportedActions: ["generateContent"],
+          name: "publishers/google/models/imagen-3.0",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/text-bison-001",
+          version: "default",
+          tunedModelInfo: {},
         },
       ];
 
@@ -249,34 +266,18 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
-      expect(models).toHaveLength(3);
-      // First model has both name and displayName
-      expect(models[0]).toEqual({
-        id: "gemini-complete",
-        displayName: "Complete Model",
-        provider: "gemini",
-      });
-      // Second model has no name - should have empty id and use displayName
-      expect(models[1].id).toBe("");
-      // Third model has no displayName - should use id as displayName
-      expect(models[2]).toEqual({
-        id: "no-display",
-        displayName: "no-display",
-        provider: "gemini",
-      });
+      // Only gemini-2.0-flash-001 should be included
+      // embedding, imagen, and text-bison should be excluded
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe("gemini-2.0-flash-001");
     });
 
-    test("handles models with missing supportedActions", async () => {
+    test("generates display name from model ID", async () => {
       const mockModels = [
         {
-          name: "models/gemini-with-actions",
-          displayName: "With Actions",
-          supportedActions: ["generateContent"],
-        },
-        {
-          name: "models/gemini-no-actions",
-          displayName: "No Actions",
-          // No supportedActions field
+          name: "publishers/google/models/gemini-2.5-flash-lite-preview-09-2025",
+          version: "default",
+          tunedModelInfo: {},
         },
       ];
 
@@ -298,9 +299,10 @@ describe("chat-models", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
-      // Only the model with generateContent action should be included
       expect(models).toHaveLength(1);
-      expect(models[0].id).toBe("gemini-with-actions");
+      expect(models[0].displayName).toBe(
+        "Gemini 2.5 Flash Lite Preview 09 2025",
+      );
     });
 
     test("returns empty array when SDK returns no models", async () => {

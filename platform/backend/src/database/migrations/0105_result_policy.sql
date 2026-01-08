@@ -112,7 +112,7 @@ BEGIN
       CASE at."tool_result_treatment"
         WHEN 'trusted' THEN 'mark_as_trusted'
         WHEN 'sanitize_with_dual_llm' THEN 'sanitize_with_dual_llm'
-        ELSE 'block_always'
+        ELSE 'mark_as_untrusted'
       END
     FROM "agent_tools" at
     WHERE at."tool_id" IS NOT NULL

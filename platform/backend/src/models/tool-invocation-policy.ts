@@ -100,12 +100,27 @@ class ToolInvocationPolicyModel {
   }
 
   /**
+   * Delete all tool invocation policies for a specific tool.
+   * Used primarily in tests.
+   */
+  static async deleteByToolId(toolId: string): Promise<number> {
+    const result = await db
+      .delete(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId));
+
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * Bulk upsert default policies (empty conditions) for multiple tools.
    * Updates existing default policies or creates new ones in a single transaction.
    */
   static async bulkUpsertDefaultPolicy(
     toolIds: string[],
-    action: "allow_when_context_is_untrusted" | "block_always",
+    action:
+      | "allow_when_context_is_untrusted"
+      | "block_when_context_is_untrusted"
+      | "block_always",
   ): Promise<{ updated: number; created: number }> {
     if (toolIds.length === 0) {
       return { updated: 0, created: 0 };
@@ -300,6 +315,20 @@ class ToolInvocationPolicyModel {
           };
         }
 
+        if (policy.action === "block_when_context_is_untrusted") {
+          // Allow when context is trusted, block when untrusted
+          if (!isContextTrusted) {
+            return {
+              isAllowed: false,
+              reason:
+                "Tool invocation blocked: context contains untrusted data",
+              toolCallName,
+            };
+          }
+          // Context is trusted, tool is allowed - continue to next tool
+          continue;
+        }
+
         if (policy.action === "allow_when_context_is_untrusted") {
           specificAllowsUntrusted = true;
         }
@@ -330,6 +359,20 @@ class ToolInvocationPolicyModel {
                 "Tool invocation blocked: context contains untrusted data",
               toolCallName,
             };
+          }
+
+          if (policy.action === "block_when_context_is_untrusted") {
+            // Allow when context is trusted, block when untrusted
+            if (!isContextTrusted) {
+              return {
+                isAllowed: false,
+                reason:
+                  "Tool invocation blocked: context contains untrusted data",
+                toolCallName,
+              };
+            }
+            // Context is trusted, tool is allowed
+            continue;
           }
 
           if (policy.action === "allow_when_context_is_untrusted") {

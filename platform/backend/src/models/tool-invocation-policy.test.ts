@@ -155,6 +155,8 @@ describe("ToolInvocationPolicyModel", () => {
         name: "permissive-tool",
       });
       await makeAgentTool(agent.id, tool.id);
+      // Delete auto-created default policies to set up our own
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
       // Create default policy (empty conditions) that allows untrusted context
       await makeToolPolicy(tool.id, {
@@ -182,7 +184,8 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "strict-tool" });
       await makeAgentTool(agent.id, tool.id);
-      // No policies - falls back to globalToolPolicy
+      // Delete auto-created default policies to test global policy fallback
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
@@ -205,7 +208,8 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "lenient-tool" });
       await makeAgentTool(agent.id, tool.id);
-      // No policies - falls back to globalToolPolicy
+      // Delete auto-created default policies to test global policy fallback
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
@@ -690,6 +694,8 @@ describe("ToolInvocationPolicyModel", () => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to test global policy fallback
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
         // A specific policy that requires an argument
         await makeToolPolicy(tool.id, {
@@ -793,6 +799,8 @@ describe("ToolInvocationPolicyModel", () => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to set up our own
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
         // Default policy: allow in untrusted context
         await makeToolPolicy(tool.id, {

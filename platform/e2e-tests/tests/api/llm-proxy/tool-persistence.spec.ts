@@ -252,17 +252,35 @@ const zhipuaiConfig: ToolPersistenceTestConfig = {
 
 const cohereConfig: ToolPersistenceTestConfig = {
   providerName: "Cohere",
-
   endpoint: (agentId) => `/v1/cohere/${agentId}/chat`,
-
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
     "Content-Type": "application/json",
   }),
-
   buildRequest: (content, tools) => ({
     model: "command-r-plus-08-2024",
     messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
+const openRouterConfig: ToolPersistenceTestConfig = {
+  providerName: "OpenRouter",
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+  buildRequest: (content, tools) => ({
+    model: "openai/gpt-3.5-turbo",
+    messages: [{ role: "user", content }],
     tools: tools.map((t) => ({
       type: "function",
       function: {
@@ -288,6 +306,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  openRouterConfig,
 ];
 
 for (const config of testConfigs) {

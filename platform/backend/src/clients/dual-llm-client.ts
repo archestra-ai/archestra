@@ -1237,6 +1237,11 @@ const dualLlmClientFactories: Record<SupportedProvider, DualLlmClientFactory> =
         config.llm.bedrock.baseUrl,
       );
     },
+    openrouter: (apiKey) => {
+      if (!apiKey) throw new Error("API key required for OpenRouter dual LLM");
+      // Re-use OpenAI client since OpenRouter is OpenAI-compatible
+      return new OpenAiDualLlmClient(apiKey);
+    },
   };
 
 /**

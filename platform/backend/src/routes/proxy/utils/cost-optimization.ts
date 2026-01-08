@@ -14,6 +14,7 @@ import type {
   Gemini,
   Mistral,
   OpenAi,
+  OpenRouter,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -25,6 +26,7 @@ type ProviderMessages = {
   gemini: Gemini.Types.GenerateContentRequest["contents"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
+  openrouter: OpenRouter.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];

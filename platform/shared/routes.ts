@@ -178,6 +178,7 @@ export const RouteId = {
   OllamaChatCompletionsWithDefaultAgent:
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+
   // Proxy Routes - Zhipu AI
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
@@ -193,6 +194,10 @@ export const RouteId = {
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
+  // Proxy Routes - OpenRouter
+  OpenRouterChatCompletionsWithDefaultAgent:
+    "openRouterChatCompletionsWithDefaultAgent",
+  OpenRouterChatCompletionsWithAgent: "openRouterChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",

@@ -1111,6 +1111,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   vllm: parseVllmError,
   ollama: parseOllamaError,
   zhipuai: parseZhipuaiError,
+  openrouter: parseOpenAIError,
 };
 
 /**
@@ -1129,6 +1130,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
   zhipuai: mapZhipuaiErrorWrapper,
+  openrouter: mapOpenAIErrorWrapper,
 };
 
 // =============================================================================

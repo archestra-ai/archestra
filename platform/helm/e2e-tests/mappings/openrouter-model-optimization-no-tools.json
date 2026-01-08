@@ -1,0 +1,49 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "openrouter-model-optimization-tools"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.model",
+          "equalTo": "e2e-test-openrouter-baseline"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-openrouter-baseline-no-tools",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-openrouter-baseline",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Response from baseline model without tools.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 10,
+        "total_tokens": 60
+      }
+    }
+  }
+}

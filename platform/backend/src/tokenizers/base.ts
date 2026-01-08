@@ -4,6 +4,7 @@ import type {
   Gemini,
   Ollama,
   OpenAi,
+  OpenRouter,
   Vllm,
   Zhipuai,
 } from "@/types";
@@ -15,7 +16,8 @@ export type ProviderMessage =
   | Gemini.Types.GenerateContentRequest["contents"][number]
   | Vllm.Types.ChatCompletionsRequest["messages"][number]
   | Ollama.Types.ChatCompletionsRequest["messages"][number]
-  | Zhipuai.Types.ChatCompletionsRequest["messages"][number];
+  | Zhipuai.Types.ChatCompletionsRequest["messages"][number]
+  | OpenRouter.Types.ChatCompletionsRequest["messages"][number];
 
 /**
  * Base interface for tokenizers

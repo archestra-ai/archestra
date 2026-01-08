@@ -38,6 +38,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   anthropic: getAnthropicUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
+  openrouter: getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };
@@ -479,7 +480,14 @@ export function getObservableFetch(
             model,
             externalAgentId,
           );
+        } else {
+          // If no extractor found but provider is in registry as null/undefined, it means we don't extract here (e.g. Gemini, Bedrock)
+          // or if missing, it's an error.
+          // Since we check `extractor` above, if we reach here it means extractor was falsy.
+          // For providers like Gemini/Bedrock mapped to null, this is expected behavior (no-op).
+          // But if it's truly unknown/missing from registry, that might be an issue, though `key in record` check would be better.
         }
+
       } catch (_parseError) {
         logger.error("Error parsing LLM response JSON for tokens");
       }

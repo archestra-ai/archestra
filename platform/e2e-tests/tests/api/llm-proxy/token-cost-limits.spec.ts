@@ -246,6 +246,7 @@ const zhipuaiConfig: TokenCostLimitTestConfig = {
   },
 };
 
+
 const cohereConfig: TokenCostLimitTestConfig = {
   providerName: "Cohere",
 
@@ -273,6 +274,32 @@ const cohereConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const openRouterConfig: TokenCostLimitTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (profileId) => `/v1/openrouter/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-openrouter-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-openrouter-cost-limit",
+
+  // Using same pricing as others for test consistency
+  tokenPrice: {
+    provider: "openrouter",
+    model: "test-openrouter-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -287,6 +314,7 @@ const testConfigs: TokenCostLimitTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  openRouterConfig,
 ];
 
 for (const config of testConfigs) {
@@ -323,7 +351,7 @@ for (const config of testConfigs) {
       // Create fresh token price with exact values for our test
       const tokenPriceResponse = await createTokenPrice(
         request,
-        config.tokenPrice,
+        config.tokenPrice as any,
       );
       const tokenPrice = await tokenPriceResponse.json();
       tokenPriceId = tokenPrice.id;
@@ -444,7 +472,7 @@ for (const config of testConfigs) {
       // 0. Create token price for the model
       const tokenPriceResponse = await createTokenPrice(
         request,
-        config.tokenPrice,
+        config.tokenPrice as any,
       );
       if (tokenPriceResponse.ok()) {
         const tokenPrice = await tokenPriceResponse.json();

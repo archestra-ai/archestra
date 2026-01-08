@@ -144,13 +144,13 @@ function ModelSelect({
   const modelsWithCurrent =
     !isAvailable && model
       ? [
-          {
-            model,
-            pricePerMillionInput: "0",
-            pricePerMillionOutput: "0",
-          },
-          ...models,
-        ]
+        {
+          model,
+          pricePerMillionInput: "0",
+          pricePerMillionOutput: "0",
+        },
+        ...models,
+      ]
       : models;
 
   // Check if model has pricing

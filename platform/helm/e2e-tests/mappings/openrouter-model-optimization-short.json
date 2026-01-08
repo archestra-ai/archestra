@@ -1,0 +1,49 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "openrouter-model-optimization"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": {
+          "expression": "$.model",
+          "equalTo": "e2e-test-openrouter-optimized"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-openrouter-optimized",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "e2e-test-openrouter-optimized",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Response from optimized model.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 10,
+        "total_tokens": 60
+      }
+    }
+  }
+}

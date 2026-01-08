@@ -771,6 +771,40 @@ const zhipuaiConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const openRouterConfig: ToolInvocationTestConfig = {
+  providerName: "OpenRouter",
+
+  endpoint: (agentId) => `/v1/openrouter/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "openai/gpt-3.5-turbo",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content",
+
+  assertToolCallBlocked: openaiConfig.assertToolCallBlocked,
+
+  assertToolCallsPresent: openaiConfig.assertToolCallsPresent,
+
+  assertToolArgument: openaiConfig.assertToolArgument,
+
+  findInteractionByContent: openaiConfig.findInteractionByContent,
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -785,6 +819,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   vllmConfig,
   ollamaConfig,
   zhipuaiConfig,
+  openRouterConfig,
 ];
 
 for (const config of testConfigs) {

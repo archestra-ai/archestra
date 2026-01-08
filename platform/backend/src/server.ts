@@ -67,6 +67,7 @@ import {
   Ollama,
   OpenAi,
   Vllm,
+  OpenRouter,
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -153,6 +154,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionResponseSchema, {
     id: "ZhipuaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(OpenRouter.API.ChatCompletionRequestSchema, {
+    id: "OpenRouterChatCompletionRequest",
+  });
+  z.globalRegistry.add(OpenRouter.API.ChatCompletionResponseSchema, {
+    id: "OpenRouterChatCompletionResponse",
   });
 }
 

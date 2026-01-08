@@ -102,6 +102,11 @@ async function getSmartDefaultModel(
             return { model: "gpt-4o", provider: "openai" };
           case "cohere":
             return { model: "command-r-08-2024", provider: "cohere" };
+          case "openrouter":
+            return {
+              model: "anthropic/claude-3-haiku",
+              provider: "openrouter",
+            };
         }
       }
     }
@@ -119,6 +124,9 @@ async function getSmartDefaultModel(
   }
   if (config.chat.cohere?.apiKey) {
     return { model: "command-r-08-2024", provider: "cohere" };
+  }
+  if (config.chat.openrouter.apiKey) {
+    return { model: "anthropic/claude-3-haiku", provider: "openrouter" };
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key

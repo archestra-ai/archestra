@@ -1,10 +1,7 @@
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
-import type {
-  ChatCompletionCreateParamsNonStreaming,
-  ChatCompletionCreateParamsStreaming,
-} from "openai/resources/chat/completions/completions";
+import type { Stream } from "openai/streaming";
 import config from "@/config";
 import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
@@ -21,69 +18,45 @@ import type {
   LLMRequestAdapter,
   LLMResponseAdapter,
   LLMStreamAdapter,
-  OpenAi,
+  OpenRouter,
   StreamAccumulatorState,
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { estimateMessagesSize } from "@/utils/message-size";
-import {
-  estimateToolResultContentLength,
-  previewToolResultContent,
-} from "@/utils/tool-result-preview";
 import { MockOpenAIClient } from "../mock-openai-client";
+import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import {
+  convertMcpImageBlocksToOpenAi,
+  stripImageBlocksFromContent,
+} from "./openai";
 import {
   doesModelSupportImages,
   hasImageContent,
-  isImageTooLarge,
-  isMcpImageBlock,
 } from "../utils/mcp-image";
-import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
-// TYPE ALIASES
+// TYPE ALIASES (reusing OpenAI types since OpenRouter is OpenAI-compatible)
 // =============================================================================
 
-type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
-type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
-type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
-type OpenAiHeaders = OpenAi.Types.ChatCompletionsHeaders;
-type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
-
-type OpenAiToolResultImageBlock = {
-  type: "image_url";
-  image_url: {
-    url: string;
-    detail?: "auto" | "low" | "high";
-  };
-};
-
-type OpenAiToolResultTextBlock = {
-  type: "text";
-  text: string;
-};
-
-type OpenAiToolResultContentBlock =
-  | OpenAiToolResultImageBlock
-  | OpenAiToolResultTextBlock;
-
-type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
+type OpenRouterRequest = OpenRouter.Types.ChatCompletionsRequest;
+type OpenRouterResponse = OpenRouter.Types.ChatCompletionsResponse;
+type OpenRouterMessages = OpenRouter.Types.ChatCompletionsRequest["messages"];
+type OpenRouterHeaders = OpenRouter.Types.ChatCompletionsHeaders;
+type OpenRouterStreamChunk = OpenRouter.Types.ChatCompletionChunk;
 
 // =============================================================================
 // REQUEST ADAPTER
 // =============================================================================
 
-// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export class OpenAIRequestAdapter
-  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
+class OpenRouterRequestAdapter
+  implements LLMRequestAdapter<OpenRouterRequest, OpenRouterMessages>
 {
-  readonly provider = "openai" as const;
-  private request: OpenAiRequest;
+  readonly provider = "openrouter" as const;
+  private request: OpenRouterRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  constructor(request: OpenAiRequest) {
+  constructor(request: OpenRouterRequest) {
     this.request = request;
   }
 
@@ -156,11 +129,11 @@ export class OpenAIRequestAdapter
     return (this.request.tools?.length ?? 0) > 0;
   }
 
-  getProviderMessages(): OpenAiMessages {
+  getProviderMessages(): OpenRouterMessages {
     return this.request.messages;
   }
 
-  getOriginalRequest(): OpenAiRequest {
+  getOriginalRequest(): OpenRouterRequest {
     return this.request;
   }
 
@@ -190,199 +163,41 @@ export class OpenAIRequestAdapter
     return stats;
   }
 
-  convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
+  convertToolResultContent(messages: OpenRouterMessages): OpenRouterMessages {
     const model = this.getModel();
     const modelSupportsImages = doesModelSupportImages(model);
-    let toolMessagesWithImages = 0;
-    let strippedImageCount = 0;
 
-    // First, analyze all tool messages to understand what we're dealing with
-    for (const message of messages) {
-      if (message.role === "tool") {
-        const contentLength = estimateToolResultContentLength(message.content);
-        const contentSizeKB = Math.round(contentLength.length / 1024);
-        const contentPatternSample = previewToolResultContent(
-          message.content,
-          2000,
-        );
-        const contentPreview = contentPatternSample.slice(0, 200);
+    return messages.map((message) => {
+      if (message.role !== "tool") return message;
+      
+      if (!hasImageContent(message.content)) return message;
 
-        // Check for base64 patterns in preview to avoid full serialization.
-        const hasBase64 =
-          contentPatternSample.includes("data:image") ||
-          contentPatternSample.includes('"type":"image"') ||
-          contentPatternSample.includes('"data":"');
-
-        // Find tool name from previous assistant message
-        const toolName = this.findToolNameInMessages(
-          messages,
-          message.tool_call_id,
-        );
-
-        logger.info(
-          {
-            toolCallId: message.tool_call_id,
-            toolName,
-            contentSizeKB,
-            hasBase64,
-            contentLengthEstimated: contentLength.isEstimated,
-            isArray: Array.isArray(message.content),
-            contentPreview,
-          },
-          "[OpenAIAdapter] Analyzing tool result content",
-        );
-
-        // If it's an array, analyze each item
-        if (Array.isArray(message.content)) {
-          for (const [idx, item] of message.content.entries()) {
-            if (typeof item === "object" && item !== null) {
-              const itemType = (item as Record<string, unknown>).type;
-              const itemLength = estimateToolResultContentLength(item);
-              logger.info(
-                {
-                  toolCallId: message.tool_call_id,
-                  itemIndex: idx,
-                  itemType,
-                  itemSizeKB: Math.round(itemLength.length / 1024),
-                  itemLengthEstimated: itemLength.isEstimated,
-                  isMcpImage: isMcpImageBlock(item),
-                },
-                "[OpenAIAdapter] Tool result array item",
-              );
-            }
-          }
-        }
-      }
-    }
-
-    const result = messages.map((message) => {
-      if (message.role !== "tool") {
-        return message;
-      }
-
-      // Check if this tool message contains images
-      if (!hasImageContent(message.content)) {
-        return message;
-      }
-
-      // If model doesn't support images, strip image blocks from content
       if (!modelSupportsImages) {
-        strippedImageCount++;
-        const strippedContent = stripImageBlocksFromContent(message.content);
         return {
           ...message,
-          content: strippedContent,
+          content: stripImageBlocksFromContent(message.content),
         };
       }
 
-      // Model supports images - convert MCP image blocks to OpenAI format
-      const convertedContent = convertMcpImageBlocksToOpenAi(message.content);
-      if (!convertedContent) {
-        return message;
-      }
-
-      toolMessagesWithImages++;
+      const converted = convertMcpImageBlocksToOpenAi(message.content);
+      if (!converted) return message;
+      
       return {
         ...message,
-        content: convertedContent,
+        content: converted,
       };
     });
-
-    if (toolMessagesWithImages > 0 || strippedImageCount > 0) {
-      logger.info(
-        {
-          model,
-          modelSupportsImages,
-          totalMessages: messages.length,
-          toolMessagesWithImages,
-          strippedImageCount,
-        },
-        "[OpenAIAdapter] Processed tool messages with image content",
-      );
-    }
-
-    return result;
   }
-
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): OpenAiRequest {
+  toProviderRequest(): OpenRouterRequest {
     let messages = this.request.messages;
 
     if (Object.keys(this.toolResultUpdates).length > 0) {
       messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
-
-    if (config.features.browserStreamingEnabled) {
-      messages = this.convertToolResultContent(messages);
-      const sizeBeforeStrip = estimateMessagesSize(messages);
-      messages = stripBrowserToolsResults(messages);
-      const sizeAfterStrip = estimateMessagesSize(messages);
-
-      if (sizeBeforeStrip.length !== sizeAfterStrip.length) {
-        logger.info(
-          {
-            sizeBeforeKB: Math.round(sizeBeforeStrip.length / 1024),
-            sizeAfterKB: Math.round(sizeAfterStrip.length / 1024),
-            savedKB: Math.round(
-              (sizeBeforeStrip.length - sizeAfterStrip.length) / 1024,
-            ),
-            sizeEstimateReliable:
-              !sizeBeforeStrip.isEstimated && !sizeAfterStrip.isEstimated,
-          },
-          "[OpenAIAdapter] Stripped browser tool results",
-        );
-      }
-    }
-
-    // Calculate approximate request size for debugging
-    const requestSize = estimateMessagesSize(messages);
-    const requestSizeKB = Math.round(requestSize.length / 1024);
-    const estimatedTokens = Math.round(requestSize.length / 4);
-    let imageCount = 0;
-    let totalImageBase64Length = 0;
-
-    for (const msg of messages) {
-      if (Array.isArray(msg.content)) {
-        for (const part of msg.content) {
-          if (
-            typeof part === "object" &&
-            part !== null &&
-            "type" in part &&
-            part.type === "image_url" &&
-            "image_url" in part &&
-            part.image_url &&
-            typeof part.image_url === "object" &&
-            "url" in part.image_url
-          ) {
-            imageCount++;
-            const imageUrl = part.image_url.url;
-            if (typeof imageUrl === "string" && imageUrl.startsWith("data:")) {
-              const base64Part = imageUrl.split(",")[1];
-              if (base64Part) {
-                totalImageBase64Length += base64Part.length;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    logger.info(
-      {
-        model: this.getModel(),
-        messageCount: messages.length,
-        requestSizeKB,
-        estimatedTokens,
-        sizeEstimateReliable: !requestSize.isEstimated,
-        hasToolResultUpdates: Object.keys(this.toolResultUpdates).length > 0,
-        imageCount,
-        totalImageBase64KB: Math.round((totalImageBase64Length * 3) / 4 / 1024),
-      },
-      "[OpenAIAdapter] Building provider request",
-    );
 
     return {
       ...this.request,
@@ -392,11 +207,11 @@ export class OpenAIRequestAdapter
   }
 
   // ---------------------------------------------------------------------------
-  // Private Helpers (copied from utils/adapters/openai.ts)
+  // Private Helpers
   // ---------------------------------------------------------------------------
 
   private findToolNameInMessages(
-    messages: OpenAiMessages,
+    messages: OpenRouterMessages,
     toolCallId: string,
   ): string | null {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -418,10 +233,10 @@ export class OpenAIRequestAdapter
     return null;
   }
 
-  private toCommonFormat(messages: OpenAiMessages): CommonMessage[] {
+  private toCommonFormat(messages: OpenRouterMessages): CommonMessage[] {
     logger.debug(
       { messageCount: messages.length },
-      "[OpenAIAdapter] toCommonFormat: starting conversion",
+      "[OpenRouterAdapter] toCommonFormat: starting conversion",
     );
     const commonMessages: CommonMessage[] = [];
 
@@ -440,7 +255,7 @@ export class OpenAIRequestAdapter
         if (toolName) {
           logger.debug(
             { toolCallId: message.tool_call_id, toolName },
-            "[OpenAIAdapter] toCommonFormat: found tool message",
+            "[OpenRouterAdapter] toCommonFormat: found tool message",
           );
           let toolResult: unknown;
           if (typeof message.content === "string") {
@@ -469,23 +284,23 @@ export class OpenAIRequestAdapter
 
     logger.debug(
       { inputCount: messages.length, outputCount: commonMessages.length },
-      "[OpenAIAdapter] toCommonFormat: conversion complete",
+      "[OpenRouterAdapter] toCommonFormat: conversion complete",
     );
     return commonMessages;
   }
 
   private applyUpdates(
-    messages: OpenAiMessages,
+    messages: OpenRouterMessages,
     updates: Record<string, string>,
-  ): OpenAiMessages {
+  ): OpenRouterMessages {
     const updateCount = Object.keys(updates).length;
     logger.debug(
       { messageCount: messages.length, updateCount },
-      "[OpenAIAdapter] applyUpdates: starting",
+      "[OpenRouterAdapter] applyUpdates: starting",
     );
 
     if (updateCount === 0) {
-      logger.debug("[OpenAIAdapter] applyUpdates: no updates to apply");
+      logger.debug("[OpenRouterAdapter] applyUpdates: no updates to apply");
       return messages;
     }
 
@@ -495,7 +310,7 @@ export class OpenAIRequestAdapter
         appliedCount++;
         logger.debug(
           { toolCallId: message.tool_call_id },
-          "[OpenAIAdapter] applyUpdates: applying update to tool message",
+          "[OpenRouterAdapter] applyUpdates: applying update to tool message",
         );
         return {
           ...message,
@@ -507,148 +322,23 @@ export class OpenAIRequestAdapter
 
     logger.debug(
       { updateCount, appliedCount },
-      "[OpenAIAdapter] applyUpdates: complete",
+      "[OpenRouterAdapter] applyUpdates: complete",
     );
     return result;
   }
-}
-
-// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export function convertMcpImageBlocksToOpenAi(
-  content: unknown,
-): OpenAiToolResultContent | null {
-  if (!Array.isArray(content)) {
-    return null;
-  }
-
-  if (!hasImageContent(content)) {
-    return null;
-  }
-
-  const openAiContent: OpenAiToolResultContentBlock[] = [];
-  const imageTooLargePlaceholder = "[Image omitted due to size]";
-
-  for (const item of content) {
-    if (typeof item !== "object" || item === null) continue;
-    const candidate = item as Record<string, unknown>;
-
-    if (isMcpImageBlock(item)) {
-      const mimeType = item.mimeType ?? "image/png";
-      const base64Length = typeof item.data === "string" ? item.data.length : 0;
-      const estimatedSizeKB = Math.round((base64Length * 3) / 4 / 1024);
-      const shouldStripImage = isImageTooLarge(item);
-
-      if (shouldStripImage) {
-        logger.info(
-          {
-            mimeType,
-            base64Length,
-            estimatedSizeKB,
-          },
-          "[OpenAIAdapter] Stripping MCP image block due to size limit",
-        );
-        openAiContent.push({
-          type: "text",
-          text: imageTooLargePlaceholder,
-        });
-        continue;
-      }
-
-      logger.info(
-        {
-          mimeType,
-          base64Length,
-          estimatedSizeKB,
-          // Estimate tokens: base64 chars / 4 (rough estimate for text tokens)
-          // But for images, OpenAI uses tile-based calculation
-          estimatedBase64Tokens: Math.round(base64Length / 4),
-        },
-        "[OpenAIAdapter] Converting MCP image block to OpenAI format",
-      );
-
-      openAiContent.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${mimeType};base64,${item.data}`,
-        },
-      });
-    } else if (candidate.type === "text" && "text" in candidate) {
-      openAiContent.push({
-        type: "text",
-        text:
-          typeof candidate.text === "string"
-            ? candidate.text
-            : JSON.stringify(candidate),
-      });
-    }
-  }
-
-  logger.info(
-    {
-      totalBlocks: openAiContent.length,
-      imageBlocks: openAiContent.filter((b) => b.type === "image_url").length,
-      textBlocks: openAiContent.filter((b) => b.type === "text").length,
-    },
-    "[OpenAIAdapter] Converted MCP content to OpenAI format",
-  );
-
-  return openAiContent.length > 0 ? openAiContent : null;
-}
-
-/**
- * Strip image blocks from MCP content when model doesn't support images.
- * Keeps text blocks and replaces image blocks with a placeholder message.
- * Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
- */
-export function stripImageBlocksFromContent(content: unknown): string {
-  if (!Array.isArray(content)) {
-    return typeof content === "string" ? content : JSON.stringify(content);
-  }
-
-  const textParts: string[] = [];
-  let imageCount = 0;
-
-  for (const item of content) {
-    if (typeof item !== "object" || item === null) continue;
-    const candidate = item as Record<string, unknown>;
-
-    if (isMcpImageBlock(item)) {
-      imageCount++;
-    } else if (candidate.type === "text" && "text" in candidate) {
-      textParts.push(
-        typeof candidate.text === "string"
-          ? candidate.text
-          : JSON.stringify(candidate.text),
-      );
-    }
-  }
-
-  // Add placeholder for stripped images
-  if (imageCount > 0) {
-    textParts.push(
-      `[${imageCount} image(s) removed - model does not support image inputs]`,
-    );
-    logger.info(
-      { imageCount },
-      "[OpenAIAdapter] Stripped images from tool result (model does not support images)",
-    );
-  }
-
-  return textParts.join("\n");
 }
 
 // =============================================================================
 // RESPONSE ADAPTER
 // =============================================================================
 
-// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export class OpenAIResponseAdapter
-  implements LLMResponseAdapter<OpenAiResponse>
+class OpenRouterResponseAdapter
+  implements LLMResponseAdapter<OpenRouterResponse>
 {
-  readonly provider = "openai" as const;
-  private response: OpenAiResponse;
+  readonly provider = "openrouter" as const;
+  private response: OpenRouterResponse;
 
-  constructor(response: OpenAiResponse) {
+  constructor(response: OpenRouterResponse) {
     this.response = response;
   }
 
@@ -707,21 +397,20 @@ export class OpenAIResponseAdapter
   }
 
   getUsage(): UsageView {
-    if (!this.response.usage) {
-      return { inputTokens: 0, outputTokens: 0 };
-    }
-    const { input, output } = getUsageTokens(this.response.usage);
-    return { inputTokens: input, outputTokens: output };
+    return {
+      inputTokens: this.response.usage?.prompt_tokens ?? 0,
+      outputTokens: this.response.usage?.completion_tokens ?? 0,
+    };
   }
 
-  getOriginalResponse(): OpenAiResponse {
+  getOriginalResponse(): OpenRouterResponse {
     return this.response;
   }
 
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
-  ): OpenAiResponse {
+  ): OpenRouterResponse {
     return {
       ...this.response,
       choices: [
@@ -743,11 +432,10 @@ export class OpenAIResponseAdapter
 // STREAM ADAPTER
 // =============================================================================
 
-// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export class OpenAIStreamAdapter
-  implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
+class OpenRouterStreamAdapter
+  implements LLMStreamAdapter<OpenRouterStreamChunk, OpenRouterResponse>
 {
-  readonly provider = "openai" as const;
+  readonly provider = "openrouter" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
 
@@ -767,7 +455,7 @@ export class OpenAIStreamAdapter
     };
   }
 
-  processChunk(chunk: OpenAiStreamChunk): ChunkProcessingResult {
+  processChunk(chunk: OpenRouterStreamChunk): ChunkProcessingResult {
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
@@ -779,8 +467,7 @@ export class OpenAIStreamAdapter
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
 
-    // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
-    // when stream_options.include_usage is true
+    // Handle usage first - OpenRouter sends usage in a final chunk with empty choices[]
     if (chunk.usage) {
       this.state.usage = {
         inputTokens: chunk.usage.prompt_tokens ?? 0,
@@ -790,7 +477,7 @@ export class OpenAIStreamAdapter
 
     const choice = chunk.choices[0];
     if (!choice) {
-      // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
+      // If we have usage, this is the final chunk
       return {
         sseData: null,
         isToolCallChunk: false,
@@ -840,14 +527,11 @@ export class OpenAIStreamAdapter
     }
 
     // Handle finish reason
-    // Note: Don't set isFinal here - OpenAI sends the usage chunk AFTER the finish_reason chunk
-    // when stream_options.include_usage is true (which we always set in executeStream)
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
     }
 
-    // Only mark as final after we've received usage data (which comes in a separate chunk
-    // after the finish_reason chunk when include_usage is enabled)
+    // Only mark as final after we've received usage data
     if (this.state.usage !== null) {
       isFinal = true;
     }
@@ -864,7 +548,7 @@ export class OpenAIStreamAdapter
   }
 
   formatTextDeltaSSE(text: string): string {
-    const chunk: OpenAiStreamChunk = {
+    const chunk: OpenRouterStreamChunk = {
       id: this.state.responseId,
       object: "chat.completion.chunk",
       created: Math.floor(Date.now() / 1000),
@@ -889,7 +573,7 @@ export class OpenAIStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
-    const chunk: OpenAiStreamChunk = {
+    const chunk: OpenRouterStreamChunk = {
       id: this.state.responseId || `chatcmpl-${Date.now()}`,
       object: "chat.completion.chunk",
       created: Math.floor(Date.now() / 1000),
@@ -909,7 +593,7 @@ export class OpenAIStreamAdapter
   }
 
   formatEndSSE(): string {
-    const finalChunk: OpenAiStreamChunk = {
+    const finalChunk: OpenRouterStreamChunk = {
       id: this.state.responseId,
       object: "chat.completion.chunk",
       created: Math.floor(Date.now() / 1000),
@@ -926,7 +610,7 @@ export class OpenAIStreamAdapter
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
-  toProviderResponse(): OpenAiResponse {
+  toProviderResponse(): OpenRouterResponse {
     const toolCalls =
       this.state.toolCalls.length > 0
         ? this.state.toolCalls.map((tc) => ({
@@ -955,7 +639,7 @@ export class OpenAIStreamAdapter
           },
           logprobs: null,
           finish_reason:
-            (this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop",
+            (this.state.stopReason as OpenRouter.Types.FinishReason) ?? "stop",
         },
       ],
       usage: {
@@ -970,17 +654,17 @@ export class OpenAIStreamAdapter
 }
 
 // =============================================================================
-// TOON COMPRESSION (copied from utils/adapters/openai.ts)
+// TOON COMPRESSION
 // =============================================================================
 
-// Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
-export async function convertToolResultsToToon(
-  messages: OpenAiMessages,
+async function convertToolResultsToToon(
+  messages: OpenRouterMessages,
   model: string,
 ): Promise<{
-  messages: OpenAiMessages;
+  messages: OpenRouterMessages;
   stats: ToolCompressionStats;
 }> {
+  // Use openai tokenizer since OpenRouter uses OpenAI-compatible format
   const tokenizer = getTokenizer("openai");
   let toolResultCount = 0;
   let totalTokensBefore = 0;
@@ -992,7 +676,7 @@ export async function convertToolResultsToToon(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
-          provider: "openai",
+          provider: "openrouter",
         },
         "convertToolResultsToToon: tool message found",
       );
@@ -1011,56 +695,27 @@ export async function convertToolResultsToToon(
             { role: "user", content: compressed },
           ]);
 
+          totalTokensBefore += tokensBefore;
+          totalTokensAfter += tokensAfter;
           toolResultCount++;
 
-          // Always count tokens
-          totalTokensBefore += tokensBefore;
-
-          // Only apply compression if it actually saves tokens
-          if (tokensAfter < tokensBefore) {
-            totalTokensAfter += tokensAfter;
-
-            logger.info(
-              {
-                toolCallId: message.tool_call_id,
-                beforeLength: noncompressed.length,
-                afterLength: compressed.length,
-                tokensBefore,
-                tokensAfter,
-                toonPreview: compressed.substring(0, 150),
-                provider: "openai",
-              },
-              "convertToolResultsToToon: compressed",
-            );
-            logger.debug(
-              {
-                toolCallId: message.tool_call_id,
-                before: noncompressed,
-                after: compressed,
-                provider: "openai",
-                supposedToBeJson: parsed,
-              },
-              "convertToolResultsToToon: before/after",
-            );
-
-            return {
-              ...message,
-              content: compressed,
-            };
-          }
-
-          // Compression not applied - count non-compressed tokens to track total tokens anyway
-          totalTokensAfter += tokensBefore;
           logger.info(
             {
               toolCallId: message.tool_call_id,
+              beforeLength: noncompressed.length,
+              afterLength: compressed.length,
               tokensBefore,
               tokensAfter,
-              provider: "openai",
+              toonPreview: compressed.substring(0, 150),
+              provider: "openrouter",
             },
-            "Skipping TOON compression - compressed output has more tokens",
+            "convertToolResultsToToon: compressed",
           );
-          return message;
+
+          return {
+            ...message,
+            content: compressed,
+          };
         } catch {
           logger.info(
             {
@@ -1085,24 +740,25 @@ export async function convertToolResultsToToon(
     "convertToolResultsToToon completed",
   );
 
-  // Calculate cost savings (always a number, 0 if no savings)
-  let toonCostSavings = 0;
-  const tokensSaved = totalTokensBefore - totalTokensAfter;
-  if (tokensSaved > 0) {
-    const tokenPrice = await TokenPriceModel.findByModel(model);
-    if (tokenPrice) {
-      const inputPricePerToken =
-        Number(tokenPrice.pricePerMillionInput) / 1000000;
-      toonCostSavings = tokensSaved * inputPricePerToken;
+  let toonCostSavings: number | null = null;
+  if (toolResultCount > 0) {
+    const tokensSaved = totalTokensBefore - totalTokensAfter;
+    if (tokensSaved > 0) {
+      const tokenPrice = await TokenPriceModel.findByModel(model);
+      if (tokenPrice) {
+        const inputPricePerToken =
+          Number(tokenPrice.pricePerMillionInput) / 1000000;
+        toonCostSavings = tokensSaved * inputPricePerToken;
+      }
     }
   }
 
   return {
     messages: result,
     stats: {
-      tokensBefore: totalTokensBefore,
-      tokensAfter: totalTokensAfter,
-      costSavings: toonCostSavings,
+      tokensBefore: toolResultCount > 0 ? totalTokensBefore : 0,
+      tokensAfter: toolResultCount > 0 ? totalTokensAfter : 0,
+      costSavings: toonCostSavings ?? 0,
       wasEffective: totalTokensAfter < totalTokensBefore,
       hadToolResults: toolResultCount > 0,
     },
@@ -1113,45 +769,37 @@ export async function convertToolResultsToToon(
 // ADAPTER FACTORY
 // =============================================================================
 
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: OpenAi.Types.Usage) {
-  return {
-    input: usage.prompt_tokens,
-    output: usage.completion_tokens,
-  };
-}
-
-export const openaiAdapterFactory: LLMProvider<
-  OpenAiRequest,
-  OpenAiResponse,
-  OpenAiMessages,
-  OpenAiStreamChunk,
-  OpenAiHeaders
+export const openrouterAdapterFactory: LLMProvider<
+  OpenRouterRequest,
+  OpenRouterResponse,
+  OpenRouterMessages,
+  OpenRouterStreamChunk,
+  OpenRouterHeaders
 > = {
-  provider: "openai",
-  interactionType: "openai:chatCompletions",
+  provider: "openrouter",
+  interactionType: "openrouter:chatCompletions",
 
   createRequestAdapter(
-    request: OpenAiRequest,
-  ): LLMRequestAdapter<OpenAiRequest, OpenAiMessages> {
-    return new OpenAIRequestAdapter(request);
+    request: OpenRouterRequest,
+  ): LLMRequestAdapter<OpenRouterRequest, OpenRouterMessages> {
+    return new OpenRouterRequestAdapter(request);
   },
 
   createResponseAdapter(
-    response: OpenAiResponse,
-  ): LLMResponseAdapter<OpenAiResponse> {
-    return new OpenAIResponseAdapter(response);
+    response: OpenRouterResponse,
+  ): LLMResponseAdapter<OpenRouterResponse> {
+    return new OpenRouterResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
-    return new OpenAIStreamAdapter();
+  createStreamAdapter(): LLMStreamAdapter<
+    OpenRouterStreamChunk,
+    OpenRouterResponse
+  > {
+    return new OpenRouterStreamAdapter();
   },
 
-  extractApiKey(headers: OpenAiHeaders): string | undefined {
-    // OpenAI uses Bearer token format
+  extractApiKey(headers: OpenRouterHeaders): string | undefined {
+    // OpenRouter uses Bearer token format like OpenAI
     // Strip "Bearer " prefix if present since the OpenAI SDK adds it back
     const auth = headers.authorization;
     if (auth?.startsWith("Bearer ")) {
@@ -1161,11 +809,11 @@ export const openaiAdapterFactory: LLMProvider<
   },
 
   getBaseUrl(): string | undefined {
-    return config.llm.openai.baseUrl;
+    return config.llm.openrouter.baseUrl;
   },
 
   getSpanName(): string {
-    return "openai.chat.completions";
+    return "openrouter.chat.completions";
   },
 
   createClient(
@@ -1178,56 +826,58 @@ export const openaiAdapterFactory: LLMProvider<
 
     // Use observable fetch for request duration metrics if agent is provided
     const customFetch = options?.agent
-      ? getObservableFetch("openai", options.agent, options.externalAgentId)
+      ? getObservableFetch("openrouter", options.agent, options.externalAgentId)
       : undefined;
 
+    // OpenRouter uses OpenAI SDK with custom base URL
     return new OpenAIProvider({
       apiKey,
-      baseURL: options?.baseUrl,
+      baseURL: options?.baseUrl ?? config.llm.openrouter.baseUrl,
       fetch: customFetch,
+      defaultHeaders: {
+        // OpenRouter recommends setting these for app attribution
+        "HTTP-Referer": "https://archestra.ai",
+        "X-Title": "Archestra Platform",
+      },
     });
   },
 
   async execute(
     client: unknown,
-    request: OpenAiRequest,
-  ): Promise<OpenAiResponse> {
-    const openaiClient = client as OpenAIProvider;
-    const openaiRequest = {
-      ...request,
+    request: OpenRouterRequest,
+  ): Promise<OpenRouterResponse> {
+    const openrouterClient = client as OpenAIProvider;
+    return openrouterClient.chat.completions.create({
+      ...(request as any),
       stream: false,
-    } as unknown as ChatCompletionCreateParamsNonStreaming;
-    return openaiClient.chat.completions.create(
-      openaiRequest,
-    ) as Promise<OpenAiResponse>;
+    }) as Promise<OpenRouterResponse>;
   },
 
   async executeStream(
     client: unknown,
-    request: OpenAiRequest,
-  ): Promise<AsyncIterable<OpenAiStreamChunk>> {
-    const openaiClient = client as OpenAIProvider;
-    const openaiRequest = {
-      ...request,
+    request: OpenRouterRequest,
+  ): Promise<AsyncIterable<OpenRouterStreamChunk>> {
+    const openrouterClient = client as OpenAIProvider;
+    const stream = (await openrouterClient.chat.completions.create({
+      ...(request as any),
       stream: true,
       stream_options: { include_usage: true },
-    } as unknown as ChatCompletionCreateParamsStreaming;
-    const stream = await openaiClient.chat.completions.create(openaiRequest);
+    })) as unknown as Stream<OpenRouterStreamChunk>;
 
     return {
       [Symbol.asyncIterator]: async function* () {
         for await (const chunk of stream) {
-          yield chunk as OpenAiStreamChunk;
+          yield chunk as OpenRouterStreamChunk;
         }
       },
     };
   },
 
   extractErrorMessage(error: unknown): string {
-    // OpenAI SDK error structure
-    const openaiMessage = get(error, "error.message");
-    if (typeof openaiMessage === "string") {
-      return openaiMessage;
+    // OpenRouter uses OpenAI-compatible error structure
+    const openrouterMessage = get(error, "error.message");
+    if (typeof openrouterMessage === "string") {
+      return openrouterMessage;
     }
 
     if (error instanceof Error) {

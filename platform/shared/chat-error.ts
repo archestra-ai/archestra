@@ -104,7 +104,26 @@ export const OllamaErrorTypes = {
   NOT_FOUND: "not_found_error",
   SERVER_ERROR: "server_error",
   SERVICE_UNAVAILABLE: "service_unavailable",
-  // Ollama-specific error codes
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+};
+
+/**
+ * OpenRouter API error types (OpenAI-compatible API)
+ * @see https://openrouter.ai/docs/errors
+ */
+export const OpenRouterErrorTypes = {
+  // OpenRouter uses OpenAI-compatible error format
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  PERMISSION_DENIED: "insufficient_quota",
+  NOT_FOUND: "not_found_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  // OpenRouter-specific
+  INSUFFICIENT_CREDITS: "insufficient_credits",
   MODEL_NOT_FOUND: "model_not_found",
   CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
 } as const;

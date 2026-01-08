@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/v1/models",
+    "headers": {
+      "Authorization": {
+        "contains": "openrouter-models"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "data": [
+        {
+          "id": "anthropic/claude-3-haiku",
+          "name": "Claude 3 Haiku",
+          "created": 1699000000
+        },
+        {
+          "id": "anthropic/claude-3-sonnet",
+          "name": "Claude 3 Sonnet",
+          "created": 1699000000
+        },
+        {
+          "id": "openai/gpt-4o",
+          "name": "GPT-4o",
+          "created": 1699000000
+        },
+        {
+          "id": "google/gemini-pro",
+          "name": "Gemini Pro",
+          "created": 1699000000
+        }
+      ]
+    }
+  }
+}

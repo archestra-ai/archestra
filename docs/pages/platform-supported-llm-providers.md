@@ -308,3 +308,19 @@ https://bedrock-runtime.{region}.amazonaws.com
 Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
 
 For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).
+
+## OpenRouter
+
+### Supported OpenRouter APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### OpenRouter Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/openrouter/{agent-id}`
+- **Authentication**: Pass your OpenRouter API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- **OpenAI Compatibility**: Archestra's OpenRouter integration leverages its OpenAI-compatible API.
+- **Model Support**: You can use any model supported by OpenRouter by specifying the model ID (e.g., `anthropic/claude-3-opus`, `google/gemini-pro-1.5`).

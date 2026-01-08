@@ -45,13 +45,13 @@ import {
 import { mapProviderError } from "./errors";
 
 /**
- * Get a smart default model based on available API keys for the user.
+ * Get a smart default model and provider based on available API keys for the user.
  * Priority: personal key > team key > org-wide key > env var > fallback
  */
 async function getSmartDefaultModel(
   userId: string,
   organizationId: string,
-): Promise<string> {
+): Promise<{ model: string; provider: SupportedChatProvider }> {
   // Get user's team IDs for resolution
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
@@ -77,11 +77,11 @@ async function getSmartDefaultModel(
         // Found a valid API key for this provider - return appropriate default model
         switch (provider) {
           case "anthropic":
-            return "claude-opus-4-1-20250805";
+            return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
           case "gemini":
-            return "gemini-2.5-pro";
+            return { model: "gemini-2.5-pro", provider: "gemini" };
           case "openai":
-            return "gpt-4o";
+            return { model: "gpt-4o", provider: "openai" };
         }
       }
     }
@@ -89,22 +89,25 @@ async function getSmartDefaultModel(
 
   // Check environment variables as fallback
   if (config.chat.anthropic.apiKey) {
-    return "claude-opus-4-1-20250805";
+    return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
   }
   if (config.chat.openai.apiKey) {
-    return "gpt-4o";
+    return { model: "gpt-4o", provider: "openai" };
   }
   if (config.chat.gemini.apiKey) {
-    return "gemini-2.5-pro";
+    return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
-    return "gemini-2.5-pro";
+    return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 
-  // Ultimate fallback - use configured default
-  return config.chat.defaultModel;
+  // Ultimate fallback - use configured defaults
+  return {
+    model: config.chat.defaultModel,
+    provider: config.chat.defaultProvider,
+  };
 }
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -189,6 +192,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Use stored provider if available, otherwise detect from model name for backward compatibility
+      // At the momet of migration, all supported providers (anthropic, openai, gemini) serve different modes,
+      // so we can safely use detectProviderFromModel for them.
       const provider =
         (conversation.selectedProvider as SupportedChatProvider | null) ??
         detectProviderFromModel(conversation.selectedModel);
@@ -526,16 +531,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
-      // Determine smart default model if none specified
-      const modelToUse =
-        selectedModel || (await getSmartDefaultModel(user.id, organizationId));
+      // Determine model and provider to use
+      // If frontend provides both, use them; otherwise use smart defaults
+      let modelToUse = selectedModel;
+      let providerToUse = selectedProvider;
+
+      if (!selectedModel) {
+        const smartDefault = await getSmartDefaultModel(user.id, organizationId);
+        modelToUse = smartDefault.model;
+        providerToUse = smartDefault.provider;
+      }
 
       logger.info(
         {
           agentId,
           organizationId,
           selectedModel,
+          selectedProvider,
           modelToUse,
+          providerToUse,
           chatApiKeyId,
           wasSmartDefault: !selectedModel,
         },
@@ -551,7 +565,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
-          selectedProvider,
+          selectedProvider: providerToUse,
           chatApiKeyId,
         }),
       );

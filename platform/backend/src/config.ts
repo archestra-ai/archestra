@@ -289,6 +289,11 @@ export default {
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+    defaultProvider:
+      (process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER as
+        | "anthropic"
+        | "openai"
+        | "gemini") || "anthropic",
   },
   features: {
     /**

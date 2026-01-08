@@ -3,10 +3,7 @@ import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, PromptModel } from "@/models";
-import {
-  createLLMModelForAgent,
-  detectProviderFromModel,
-} from "@/services/llm-client";
+import { createLLMModelForAgent } from "@/services/llm-client";
 
 export interface A2AExecuteParams {
   promptId: string;
@@ -47,9 +44,9 @@ export async function executeA2AMessage(
     throw new Error(`Agent not found for prompt ${promptId}`);
   }
 
-  // Use default model from config and detect its provider
+  // Use default model and provider from config
   const selectedModel = config.chat.defaultModel;
-  const provider = detectProviderFromModel(selectedModel);
+  const provider = config.chat.defaultProvider;
 
   // Build system prompt from prompt's systemPrompt and userPrompt fields
   let systemPrompt: string | undefined;

@@ -307,7 +307,7 @@ export function useResultPolicyMutation() {
       // Map treatment to action
       const actionMap = {
         trusted: "mark_as_trusted",
-        untrusted: "block_always",
+        untrusted: "mark_as_untrusted",
         sanitize_with_dual_llm: "sanitize_with_dual_llm",
       } as const;
       const action = actionMap[treatment];
@@ -374,7 +374,7 @@ export function useBulkResultPolicyMutation() {
     }) => {
       const actionMap = {
         trusted: "mark_as_trusted",
-        untrusted: "block_always",
+        untrusted: "mark_as_untrusted",
         sanitize_with_dual_llm: "sanitize_with_dual_llm",
       } as const;
       const action = actionMap[treatment];

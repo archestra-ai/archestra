@@ -10,7 +10,10 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
+import {
+  createGoogleGenAIClient,
+  isVertexAiEnabled,
+} from "@/routes/proxy/utils/gemini-client";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { constructResponseSchema, SupportedChatProviderSchema } from "@/types";
 
@@ -131,9 +134,9 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
- * Fetch models from Gemini API
+ * Fetch models from Gemini API (Google AI Studio - API key mode)
  */
-async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
+export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.gemini.baseUrl;
   const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
 
@@ -171,6 +174,49 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
         provider: "gemini" as const,
       };
     });
+}
+
+/**
+ * Fetch models from Gemini API via Vertex AI SDK
+ * Uses Application Default Credentials (ADC) for authentication
+ */
+export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
+  logger.debug(
+    {
+      project: config.llm.gemini.vertexAi.project,
+      location: config.llm.gemini.vertexAi.location,
+    },
+    "Fetching Gemini models via Vertex AI SDK",
+  );
+
+  // Create a client without API key (uses ADC for Vertex AI)
+  const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
+
+  const pager = await ai.models.list({ config: { pageSize: 100 } });
+
+  const models: ModelInfo[] = [];
+
+  for await (const model of pager) {
+    // Filter to only models that support generateContent (chat)
+    // The SDK returns supportedActions array with strings like "generateContent"
+    const supportedMethods = model.supportedActions ?? [];
+    if (supportedMethods.includes("generateContent")) {
+      // Model name is in format "models/gemini-2.5-flash", extract just the model ID
+      const modelId = (model.name ?? "").replace("models/", "");
+      models.push({
+        id: modelId,
+        displayName: model.displayName ?? modelId,
+        provider: "gemini" as const,
+      });
+    }
+  }
+
+  logger.debug(
+    { modelCount: models.length },
+    "Fetched Gemini models via Vertex AI SDK",
+  );
+
+  return models;
 }
 
 /**
@@ -241,7 +287,7 @@ export async function testProviderApiKey(
 /**
  * Fetch models for a single provider
  */
-async function fetchModelsForProvider({
+export async function fetchModelsForProvider({
   provider,
   organizationId,
   userId,
@@ -256,8 +302,10 @@ async function fetchModelsForProvider({
     userId,
   });
 
-  // For Gemini with Vertex AI, we might not have an API key
-  if (!apiKey && !(provider === "gemini" && isVertexAiEnabled())) {
+  const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
+
+  // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
+  if (!apiKey && !vertexAiEnabled) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -265,8 +313,10 @@ async function fetchModelsForProvider({
     return [];
   }
 
-  const cacheKey =
-    `${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const;
+  // Cache key for Vertex AI doesn't include API key since it uses ADC
+  const cacheKey = vertexAiEnabled
+    ? (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-vertexai` as const)
+    : (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const);
   const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
 
   if (cachedModels) {
@@ -280,11 +330,11 @@ async function fetchModelsForProvider({
         models = await modelFetchers[provider](apiKey);
       }
     } else if (provider === "gemini") {
-      if (!apiKey) {
-        logger.debug(
-          "Gemini Vertex AI mode enabled but no API key for model listing",
-        );
-      } else {
+      if (vertexAiEnabled) {
+        // Use Vertex AI SDK for model listing (uses ADC for authentication)
+        models = await fetchGeminiModelsViaVertexAi();
+      } else if (apiKey) {
+        // Use standard Gemini API with API key
         models = await modelFetchers[provider](apiKey);
       }
     }

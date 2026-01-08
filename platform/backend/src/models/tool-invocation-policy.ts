@@ -344,16 +344,21 @@ class ToolInvocationPolicyModel {
             toolCallName,
           };
         }
+        continue; // Tool is allowed by default policy, skip global policy check
+      }
+
+      // No policies exist - fall back to global policy
+      if (!isContextTrusted && globalToolPolicy !== "permissive") {
+        return {
+          isAllowed: false,
+          reason:
+            "Tool invocation blocked: forbidden in untrusted context by default",
+          toolCallName,
+        };
       }
     }
-    if (globalToolPolicy === "permissive") {
-      return { isAllowed: true, reason: "" };
-    } else {
-      return {
-        isAllowed: false,
-        reason: "Tool invocation blocked: forbidden by default",
-      };
-    }
+
+    return { isAllowed: true, reason: "" };
   }
 }
 

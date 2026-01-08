@@ -192,7 +192,9 @@ describe("ToolInvocationPolicyModel", () => {
       );
 
       expect(result.isAllowed).toBe(false);
-      expect(result.reason).toContain("forbidden by default");
+      expect(result.reason).toContain(
+        "forbidden in untrusted context by default",
+      );
     });
 
     test("allows tool when no policies exist and globalToolPolicy is permissive", async ({
@@ -706,7 +708,9 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("forbidden by default");
+        expect(result.reason).toContain(
+          "forbidden in untrusted context by default",
+        );
       });
 
       test("block policy does not apply when argument is missing", async ({

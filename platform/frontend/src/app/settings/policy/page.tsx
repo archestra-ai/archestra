@@ -62,13 +62,11 @@ export default function AutoPolicySettingsPage() {
             <CardTitle>Global Tool Policy</CardTitle>
           </div>
           <CardDescription>
-            {organization?.globalToolPolicy === "restrictive"
-              ? "With restrictive policy, tools are forbidden unless a specific policy allows them"
-              : "With permissive policy, tools are allowed unless a specific policy blocks them"}
+            Default behavior for tools without specific policies configured
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div>
             <Select
               value={organization?.globalToolPolicy ?? "permissive"}
               onValueChange={handleGlobalToolPolicyChange}
@@ -82,6 +80,11 @@ export default function AutoPolicySettingsPage() {
                 <SelectItem value="restrictive">Restrictive</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-sm text-muted-foreground mt-2">
+              {organization?.globalToolPolicy === "restrictive"
+                ? "With restrictive policy, tools are forbidden unless a specific policy allows them"
+                : "With permissive policy, tools are allowed unless a specific policy blocks them"}
+            </p>
           </div>
         </CardContent>
       </Card>

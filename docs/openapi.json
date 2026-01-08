@@ -21316,7 +21316,12 @@
                   },
                   "selectedProvider": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "gemini"
+                    ]
                   },
                   "chatApiKeyId": {
                     "nullable": true,
@@ -22076,7 +22081,12 @@
                   },
                   "selectedProvider": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "gemini"
+                    ]
                   },
                   "chatApiKeyId": {
                     "nullable": true,

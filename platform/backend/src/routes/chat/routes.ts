@@ -38,19 +38,20 @@ import {
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
+  type SupportedChatProvider,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
 import { mapProviderError } from "./errors";
 
 /**
- * Get a smart default model based on available API keys for the user.
+ * Get a smart default model and provider based on available API keys for the user.
  * Priority: personal key > team key > org-wide key > env var > fallback
  */
 async function getSmartDefaultModel(
   userId: string,
   organizationId: string,
-): Promise<string> {
+): Promise<{ model: string; provider: SupportedChatProvider }> {
   // Get user's team IDs for resolution
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
@@ -76,11 +77,11 @@ async function getSmartDefaultModel(
         // Found a valid API key for this provider - return appropriate default model
         switch (provider) {
           case "anthropic":
-            return "claude-opus-4-1-20250805";
+            return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
           case "gemini":
-            return "gemini-2.5-pro";
+            return { model: "gemini-2.5-pro", provider: "gemini" };
           case "openai":
-            return "gpt-4o";
+            return { model: "gpt-4o", provider: "openai" };
         }
       }
     }
@@ -88,22 +89,25 @@ async function getSmartDefaultModel(
 
   // Check environment variables as fallback
   if (config.chat.anthropic.apiKey) {
-    return "claude-opus-4-1-20250805";
+    return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
   }
   if (config.chat.openai.apiKey) {
-    return "gpt-4o";
+    return { model: "gpt-4o", provider: "openai" };
   }
   if (config.chat.gemini.apiKey) {
-    return "gemini-2.5-pro";
+    return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
-    return "gemini-2.5-pro";
+    return { model: "gemini-2.5-pro", provider: "gemini" };
   }
 
-  // Ultimate fallback - use configured default
-  return config.chat.defaultModel;
+  // Ultimate fallback - use configured defaults
+  return {
+    model: config.chat.defaultModel,
+    provider: config.chat.defaultProvider,
+  };
 }
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -187,8 +191,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         systemPrompt = allParts.join("\n\n");
       }
 
-      // Detect provider from model name
-      const provider = detectProviderFromModel(conversation.selectedModel);
+      // Use stored provider if available, otherwise detect from model name for backward compatibility
+      // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
+      // so we can safely use detectProviderFromModel for them.
+      const provider =
+        (conversation.selectedProvider as SupportedChatProvider | null) ??
+        detectProviderFromModel(conversation.selectedModel);
 
       logger.info(
         {
@@ -201,6 +209,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
           model: conversation.selectedModel,
           provider,
+          providerSource: conversation.selectedProvider ? "stored" : "detected",
           promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
@@ -216,6 +225,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         agentId: conversation.agentId,
         model: conversation.selectedModel,
+        provider,
         conversationId,
         externalAgentId,
       });
@@ -473,6 +483,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId: true,
           title: true,
           selectedModel: true,
+          selectedProvider: true,
           chatApiKeyId: true,
         })
           .required({ agentId: true })
@@ -480,6 +491,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             promptId: true,
             title: true,
             selectedModel: true,
+            selectedProvider: true,
             chatApiKeyId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
@@ -487,7 +499,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: { agentId, promptId, title, selectedModel, chatApiKeyId },
+        body: {
+          agentId,
+          promptId,
+          title,
+          selectedModel,
+          selectedProvider,
+          chatApiKeyId,
+        },
         user,
         organizationId,
         headers,
@@ -512,16 +531,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
-      // Determine smart default model if none specified
-      const modelToUse =
-        selectedModel || (await getSmartDefaultModel(user.id, organizationId));
+      // Determine model and provider to use
+      // If frontend provides both, use them; otherwise use smart defaults
+      let modelToUse = selectedModel;
+      let providerToUse = selectedProvider;
+
+      if (!selectedModel) {
+        // No model specified - use smart defaults for both model and provider
+        const smartDefault = await getSmartDefaultModel(
+          user.id,
+          organizationId,
+        );
+        modelToUse = smartDefault.model;
+        providerToUse = smartDefault.provider;
+      } else if (!selectedProvider) {
+        // Model specified but no provider - detect provider from model name
+        // This handles older API clients that don't send selectedProvider
+        // It's a rare case which should happen only for a case when backend already has a provider selection logic, but frontend is stale.
+        // In other words, it's a backward compatibility case which should happen only for a very short period of time.
+        providerToUse = detectProviderFromModel(selectedModel);
+      }
 
       logger.info(
         {
           agentId,
           organizationId,
           selectedModel,
+          selectedProvider,
           modelToUse,
+          providerToUse,
           chatApiKeyId,
           wasSmartDefault: !selectedModel,
         },
@@ -537,6 +575,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
+          selectedProvider: providerToUse,
           chatApiKeyId,
         }),
       );

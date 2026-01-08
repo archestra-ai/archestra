@@ -20975,6 +20975,10 @@
                       "selectedModel": {
                         "type": "string"
                       },
+                      "selectedProvider": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "hasCustomToolSelection": {
                         "type": "boolean"
                       },
@@ -21053,6 +21057,7 @@
                       "chatApiKeyId",
                       "title",
                       "selectedModel",
+                      "selectedProvider",
                       "hasCustomToolSelection",
                       "todoList",
                       "artifact",
@@ -21309,6 +21314,15 @@
                   "selectedModel": {
                     "type": "string"
                   },
+                  "selectedProvider": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "gemini"
+                    ]
+                  },
                   "chatApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -21365,6 +21379,10 @@
                       "type": "string"
                     },
                     "selectedModel": {
+                      "type": "string"
+                    },
+                    "selectedProvider": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "hasCustomToolSelection": {
@@ -21445,6 +21463,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -21733,6 +21752,10 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -21811,6 +21834,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -22055,6 +22079,15 @@
                   "selectedModel": {
                     "type": "string"
                   },
+                  "selectedProvider": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "gemini"
+                    ]
+                  },
                   "chatApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -22128,6 +22161,10 @@
                       "type": "string"
                     },
                     "selectedModel": {
+                      "type": "string"
+                    },
+                    "selectedProvider": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "hasCustomToolSelection": {
@@ -22208,6 +22245,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -23026,6 +23064,10 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -23104,6 +23146,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -23420,6 +23463,10 @@
                     "selectedModel": {
                       "type": "string"
                     },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -23498,6 +23545,7 @@
                     "chatApiKeyId",
                     "title",
                     "selectedModel",
+                    "selectedProvider",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",

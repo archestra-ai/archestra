@@ -336,7 +336,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // Create agent-tool relationship
       await AgentToolModel.create(agentId, trustedToolId, {});
 
-      // Create default trusted policy
+      // Delete auto-created default policy and create trusted policy
+      await TrustedDataPolicyModel.deleteByToolId(trustedToolId);
       await TrustedDataPolicyModel.create({
         toolId: trustedToolId,
         conditions: [],

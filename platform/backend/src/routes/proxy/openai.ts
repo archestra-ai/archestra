@@ -214,6 +214,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[OpenAIProxy] Limit check passed");
 
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
       // Persist non-MCP tools declared by client for tracking
       logger.debug(
         { toolCount: tools?.length || 0 },
@@ -581,6 +585,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
 
           // If there are tool calls, evaluate policies and stream the result
@@ -888,6 +893,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgentId,
             contextIsTrusted,
             enabledToolNames,
+            globalToolPolicy,
           );
 
         if (toolInvocationRefusal) {

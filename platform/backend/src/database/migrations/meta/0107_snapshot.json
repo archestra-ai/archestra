@@ -1,5 +1,5 @@
 {
-  "id": "8b40f1ad-4db4-4ab4-b603-addb9bad0c92",
+  "id": "2f5d2c92-5607-49c4-8a1f-ae401e912c91",
   "prevId": "639f5918-0f5e-4b7f-89b2-9d0464fda588",
   "version": "7",
   "dialect": "postgresql",
@@ -966,12 +966,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'gpt-4o'"
-        },
-        "selected_provider": {
-          "name": "selected_provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "has_custom_tool_selection": {
           "name": "has_custom_tool_selection",
@@ -2816,6 +2810,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "global_tool_policy": {
+          "name": "global_tool_policy",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'permissive'"
         }
       },
       "indexes": {},

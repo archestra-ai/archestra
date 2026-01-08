@@ -8337,6 +8337,7 @@ export type GetFeaturesResponses = {
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
         geminiVertexAiEnabled: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 
@@ -13818,6 +13819,7 @@ export type GetOrganizationResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 
@@ -13829,6 +13831,7 @@ export type UpdateOrganizationData = {
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
         compressionScope?: 'organization' | 'team';
+        globalToolPolicy?: 'permissive' | 'restrictive';
         logo?: string | null;
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
@@ -13916,6 +13919,7 @@ export type UpdateOrganizationResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 

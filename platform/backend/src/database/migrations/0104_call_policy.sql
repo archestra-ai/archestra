@@ -49,7 +49,7 @@ SELECT DISTINCT ON (at."tool_id")
   '[]'::jsonb,
   CASE
     WHEN at."allow_usage_when_untrusted_data_is_present" THEN 'allow_when_context_is_untrusted'
-    ELSE 'block_always'
+    ELSE 'block_when_context_is_untrusted'
   END
 FROM "agent_tools" at
 WHERE at."allow_usage_when_untrusted_data_is_present" IS NOT NULL

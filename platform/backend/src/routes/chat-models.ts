@@ -130,6 +130,7 @@ export function mapOpenAiModelToModelInfo(
   let provider: SupportedProvider = "openai";
   // but if it's an orlando model (we identify that by missing owned_by property)
   if (!("owned_by" in model)) {
+    // then we need to determine the provider based on the model id (falling back to default openai)
     if (model.id.startsWith("claude-")) {
       provider = "anthropic";
     } else if (model.id.startsWith("gemini-")) {

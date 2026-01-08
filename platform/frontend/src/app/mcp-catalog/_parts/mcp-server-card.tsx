@@ -48,8 +48,6 @@ import { McpToolsDialog } from "./mcp-tools-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
-const a: number = "a"; // force a type error and CI fail
-
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 

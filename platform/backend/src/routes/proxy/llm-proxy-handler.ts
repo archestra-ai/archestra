@@ -318,6 +318,10 @@ export async function handleLLMProxy<
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
 
+    // Get global tool policy from organization (with fallback)
+    const globalToolPolicy =
+      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -332,6 +336,7 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
         context.userId,
       );
@@ -348,6 +353,7 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
         context.userId,
       );
@@ -385,6 +391,7 @@ async function handleStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
 ): Promise<FastifyReply> {
@@ -476,6 +483,7 @@ async function handleStreaming<
         agent.id,
         contextIsTrusted,
         enabledToolNames,
+        globalToolPolicy,
       );
 
       logger.info(
@@ -615,6 +623,7 @@ async function handleNonStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
 ): Promise<FastifyReply> {
@@ -661,6 +670,7 @@ async function handleNonStreaming<
       agent.id,
       contextIsTrusted,
       enabledToolNames,
+      globalToolPolicy,
     );
 
     if (toolInvocationRefusal) {

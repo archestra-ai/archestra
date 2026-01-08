@@ -26861,13 +26861,21 @@
                     },
                     "geminiVertexAiEnabled": {
                       "type": "boolean"
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
                     }
                   },
                   "required": [
                     "orchestrator-k8s-runtime",
                     "byosEnabled",
                     "byosVaultKvVersion",
-                    "geminiVertexAiEnabled"
+                    "geminiVertexAiEnabled",
+                    "globalToolPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -46404,6 +46412,13 @@
                     },
                     "autoConfigureNewTools": {
                       "type": "boolean"
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
                     }
                   },
                   "required": [
@@ -46419,7 +46434,8 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "autoConfigureNewTools"
+                    "autoConfigureNewTools",
+                    "globalToolPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -46719,6 +46735,13 @@
                       "team"
                     ]
                   },
+                  "globalToolPolicy": {
+                    "type": "string",
+                    "enum": [
+                      "permissive",
+                      "restrictive"
+                    ]
+                  },
                   "logo": {
                     "nullable": true,
                     "type": "string"
@@ -46843,6 +46866,13 @@
                     },
                     "autoConfigureNewTools": {
                       "type": "boolean"
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
                     }
                   },
                   "required": [
@@ -46858,7 +46888,8 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "autoConfigureNewTools"
+                    "autoConfigureNewTools",
+                    "globalToolPolicy"
                   ],
                   "additionalProperties": false
                 }

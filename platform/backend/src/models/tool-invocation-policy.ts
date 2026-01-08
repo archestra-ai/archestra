@@ -2,7 +2,8 @@ import { isAgentTool, isArchestraMcpServerTool } from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
-import type { ToolInvocation } from "@/types";
+import logger from "@/logging";
+import type { GlobalToolPolicy, ToolInvocation } from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -172,7 +173,13 @@ class ToolInvocationPolicyModel {
       toolInput: Record<string, any>;
     }>,
     isContextTrusted: boolean,
+    globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
+    logger.debug(
+      { globalToolPolicy },
+      "ToolInvocationPolicy.evaluateBatch: global policy",
+    );
+
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
       (tc) =>
@@ -208,6 +215,11 @@ class ToolInvocationPolicyModel {
       .select()
       .from(schema.toolInvocationPoliciesTable)
       .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+
+    logger.debug(
+      { allPolicies },
+      "ToolInvocationPolicy.evaluateBatch: evaluating policies",
+    );
 
     // Group policies by tool ID
     const policiesByToolId = new Map<
@@ -305,30 +317,42 @@ class ToolInvocationPolicyModel {
         continue; // Tool is allowed, move to next tool
       }
 
-      // No specific policy matched - fall back to default policy (empty conditions)
-      let defaultAllowsUntrusted = false;
+      if (defaultPolicies.length > 0) {
+        // No specific policy matched - fall back to default policy (empty conditions)
+        let defaultAllowsUntrusted = false;
 
-      for (const policy of defaultPolicies) {
-        if (policy.action === "block_always") {
+        for (const policy of defaultPolicies) {
+          if (policy.action === "block_always") {
+            return {
+              isAllowed: false,
+              reason:
+                policy.reason ||
+                "Tool invocation blocked: context contains untrusted data",
+              toolCallName,
+            };
+          }
+
+          if (policy.action === "allow_when_context_is_untrusted") {
+            defaultAllowsUntrusted = true;
+          }
+        }
+        // Check if tool is allowed when context is untrusted
+        if (!isContextTrusted && !defaultAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason:
-              policy.reason ||
-              "Tool invocation blocked: context contains untrusted data",
+            reason: "Tool invocation blocked: context contains untrusted data",
             toolCallName,
           };
         }
-
-        if (policy.action === "allow_when_context_is_untrusted") {
-          defaultAllowsUntrusted = true;
-        }
+        continue; // Tool is allowed by default policy, skip global policy check
       }
 
-      // Check if tool is allowed when context is untrusted
-      if (!isContextTrusted && !defaultAllowsUntrusted) {
+      // No policies exist - fall back to global policy
+      if (!isContextTrusted && globalToolPolicy !== "permissive") {
         return {
           isAllowed: false,
-          reason: "Tool invocation blocked: context contains untrusted data",
+          reason:
+            "Tool invocation blocked: forbidden in untrusted context by default",
           toolCallName,
         };
       }

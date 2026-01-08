@@ -181,6 +181,53 @@ describe("Authnz", () => {
       }
     });
 
+    test("should skip auth for GET requests to public appearance endpoint", async () => {
+      const publicAppearanceUrl = "/api/organization/appearance";
+
+      const mockRequest = {
+        url: publicAppearanceUrl,
+        method: "GET",
+        headers: {},
+      } as FastifyRequest;
+
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(mockRequest, mockReply);
+
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
+    test("should NOT skip auth for non-GET requests to public appearance endpoint", async () => {
+      const nonGetMethods = ["POST", "PUT", "DELETE", "PATCH"];
+
+      for (const method of nonGetMethods) {
+        const mockRequest = {
+          url: "/api/organization/appearance",
+          method,
+          headers: {},
+          routeOptions: {
+            schema: {
+              operationId: "AppearanceOperation",
+            },
+          },
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        // Should throw ApiError for unauthenticated non-GET requests
+        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+          "Unauthenticated",
+        );
+      }
+    });
+
     test("should NOT skip auth for GET requests to individual SSO provider endpoints", async () => {
       const individualProviderUrls = [
         "/api/sso-providers/some-id",

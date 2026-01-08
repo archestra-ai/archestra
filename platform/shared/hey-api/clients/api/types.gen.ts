@@ -5762,7 +5762,7 @@ export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[k
 export type BulkUpsertDefaultCallPolicyData = {
     body: {
         toolIds: Array<string>;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
     };
     path?: never;
     query?: never;
@@ -5843,7 +5843,7 @@ export type BulkUpsertDefaultCallPolicyResponse = BulkUpsertDefaultCallPolicyRes
 export type BulkUpsertDefaultResultPolicyData = {
     body: {
         toolIds: Array<string>;
-        action: 'mark_as_trusted' | 'block_always' | 'sanitize_with_dual_llm';
+        action: 'mark_as_trusted' | 'mark_as_untrusted' | 'block_always' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;

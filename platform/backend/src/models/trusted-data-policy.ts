@@ -3,8 +3,8 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
+import logger from "@/logging";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
-import logger from '@/logging';
 
 /**
  * Check if a policy is a default policy (applies to all results)
@@ -108,7 +108,11 @@ class TrustedDataPolicyModel {
    */
   static async bulkUpsertDefaultPolicy(
     toolIds: string[],
-    action: "mark_as_trusted" | "block_always" | "sanitize_with_dual_llm",
+    action:
+      | "mark_as_trusted"
+      | "mark_as_untrusted"
+      | "block_always"
+      | "sanitize_with_dual_llm",
   ): Promise<{ updated: number; created: number }> {
     if (toolIds.length === 0) {
       return { updated: 0, created: 0 };

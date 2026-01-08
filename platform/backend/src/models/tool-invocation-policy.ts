@@ -105,7 +105,10 @@ class ToolInvocationPolicyModel {
    */
   static async bulkUpsertDefaultPolicy(
     toolIds: string[],
-    action: "allow_when_context_is_untrusted" | "block_always",
+    action:
+      | "allow_when_context_is_untrusted"
+      | "block_when_context_is_untrusted"
+      | "block_always",
   ): Promise<{ updated: number; created: number }> {
     if (toolIds.length === 0) {
       return { updated: 0, created: 0 };
@@ -305,7 +308,8 @@ class ToolInvocationPolicyModel {
           if (!isContextTrusted) {
             return {
               isAllowed: false,
-              reason: "Tool invocation blocked: context contains untrusted data",
+              reason:
+                "Tool invocation blocked: context contains untrusted data",
               toolCallName,
             };
           }
@@ -350,7 +354,8 @@ class ToolInvocationPolicyModel {
             if (!isContextTrusted) {
               return {
                 isAllowed: false,
-                reason: "Tool invocation blocked: context contains untrusted data",
+                reason:
+                  "Tool invocation blocked: context contains untrusted data",
                 toolCallName,
               };
             }

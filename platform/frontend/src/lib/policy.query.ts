@@ -92,7 +92,10 @@ export function useToolInvocationPolicyUpdateMutation() {
         argumentName?: string;
         operator?: string;
         value?: string;
-        action?: "allow_when_context_is_untrusted" | "block_always";
+        action?:
+          | "allow_when_context_is_untrusted"
+          | "block_when_context_is_untrusted"
+          | "block_always";
         reason?: string | null;
       } & Record<string, unknown>,
     ) => {
@@ -179,7 +182,11 @@ export function useToolResultPoliciesUpdateMutation() {
         attributePath?: string;
         operator?: string;
         value?: string;
-        action?: "mark_as_trusted" | "block_always" | "sanitize_with_dual_llm";
+        action?:
+          | "mark_as_trusted"
+          | "mark_as_untrusted"
+          | "block_always"
+          | "sanitize_with_dual_llm";
       } & Record<string, unknown>,
     ) => {
       const { id, attributePath, operator, value, action, ...rest } =

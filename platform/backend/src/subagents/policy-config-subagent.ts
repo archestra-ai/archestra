@@ -129,7 +129,7 @@ Examples:
     // Create Anthropic client with observable fetch for tracing/metrics
     const anthropic = createAnthropic({
       apiKey: anthropicApiKey,
-      baseURL: `${config.chat.anthropic.baseUrl}/v1`,
+      baseURL: `${config.llm.anthropic.baseUrl}/v1`,
       fetch: getObservableFetch(
         "anthropic",
         PolicyConfigSubagent.VIRTUAL_AGENT,

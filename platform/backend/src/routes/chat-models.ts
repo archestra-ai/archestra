@@ -37,7 +37,7 @@ export interface ModelInfo {
  * Fetch models from Anthropic API
  */
 async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.anthropic.baseUrl;
+  const baseUrl = config.llm.anthropic.baseUrl;
   const url = `${baseUrl}/v1/models?limit=100`;
 
   const response = await fetch(url, {
@@ -77,7 +77,7 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from OpenAI API
  */
 async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.openai.baseUrl;
+  const baseUrl = config.llm.openai.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -134,7 +134,7 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from Gemini API
  */
 async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.gemini.baseUrl;
+  const baseUrl = config.llm.gemini.baseUrl;
   const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
 
   const response = await fetch(url);

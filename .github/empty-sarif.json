@@ -5,7 +5,7 @@
     {
       "tool": {
         "driver": {
-          "name": "Docker Scout (skipped)",
+          "name": "Docker Scout",
           "informationUri": "https://docs.docker.com/scout/",
           "version": "0.0.0"
         }

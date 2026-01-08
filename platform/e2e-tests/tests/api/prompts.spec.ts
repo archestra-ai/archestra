@@ -31,7 +31,6 @@ test.describe("Prompts API", () => {
     expect(originalPrompt.agentId).toBe(agent.id);
     expect(originalPrompt.systemPrompt).toBe("You are a helpful assistant.");
     expect(originalPrompt.version).toBe(1);
-    expect(originalPrompt.isActive).toBe(true);
 
     // Step 3: Get all prompts and verify this prompt is returned
     const allPromptsResponse = await makeApiRequest({
@@ -46,7 +45,7 @@ test.describe("Prompts API", () => {
     expect(foundPrompt).toBeDefined();
     expect(foundPrompt.agentId).toBe(agent.id);
 
-    // Step 4: Update the prompt (this should create a new version)
+    // Step 4: Update the prompt (with JSONB versioning, ID stays the same)
     const updatePromptResponse = await makeApiRequest({
       request,
       method: "patch",
@@ -57,25 +56,15 @@ test.describe("Prompts API", () => {
     });
     const updatedPrompt = await updatePromptResponse.json();
 
-    // Verify a new version was created
-    expect(updatedPrompt.id).not.toBe(originalPrompt.id);
+    // Verify version was incremented (ID stays the same with JSONB history)
+    expect(updatedPrompt.id).toBe(originalPrompt.id);
     expect(updatedPrompt.version).toBe(2);
     expect(updatedPrompt.systemPrompt).toBe(
       "You are an updated helpful assistant.",
     );
     expect(updatedPrompt.agentId).toBe(agent.id);
-    expect(updatedPrompt.isActive).toBe(true);
 
-    // Step 5: Verify the original prompt is now inactive
-    const originalPromptResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/prompts/${originalPrompt.id}`,
-    });
-    const originalPromptAfterUpdate = await originalPromptResponse.json();
-    expect(originalPromptAfterUpdate.isActive).toBe(false);
-
-    // Step 6: Verify the new version is returned when fetching all prompts
+    // Step 5: Verify the prompt is returned when fetching all prompts
     const allPromptsAfterUpdateResponse = await makeApiRequest({
       request,
       method: "get",
@@ -88,21 +77,6 @@ test.describe("Prompts API", () => {
     expect(foundUpdatedPrompt).toBeDefined();
     expect(foundUpdatedPrompt.version).toBe(2);
     expect(foundUpdatedPrompt.agentId).toBe(agent.id);
-
-    // Step 7: Verify version history
-    const versionsResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/prompts/${originalPrompt.id}/versions`,
-    });
-    const versions = await versionsResponse.json();
-    expect(versions.length).toBe(2);
-    const version2 = versions.find((v: { version: number }) => v.version === 2);
-    const version1 = versions.find((v: { version: number }) => v.version === 1);
-    expect(version2).toBeDefined();
-    expect(version2.isActive).toBe(true);
-    expect(version1).toBeDefined();
-    expect(version1.isActive).toBe(false);
 
     // Cleanup
     await makeApiRequest({
@@ -282,7 +256,6 @@ test.describe("Prompts API", () => {
     expect(prompt.systemPrompt).toBe("Test system content");
     expect(prompt.userPrompt).toBe("Test user content");
     expect(prompt.version).toBe(1);
-    expect(prompt.isActive).toBe(true);
 
     // Verify we can retrieve it
     const getResponse = await makeApiRequest({

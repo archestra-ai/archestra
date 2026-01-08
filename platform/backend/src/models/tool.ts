@@ -10,6 +10,8 @@ import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import ToolInvocationPolicyModel from "./tool-invocation-policy";
+import TrustedDataPolicyModel from "./trusted-data-policy";
 
 class ToolModel {
   /**
@@ -131,7 +133,33 @@ class ToolModel {
       return existingTool;
     }
 
+    // Create default policies for new tools
+    await ToolModel.createDefaultPolicies(createdTool.id);
+
     return createdTool;
+  }
+
+  /**
+   * Create default policies for a newly created tool:
+   * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
+   * - Default result policy: mark_as_untrusted (empty conditions)
+   */
+  static async createDefaultPolicies(toolId: string): Promise<void> {
+    // Create default invocation policy
+    await ToolInvocationPolicyModel.create({
+      toolId,
+      conditions: [],
+      action: "block_when_context_is_untrusted",
+      reason: null,
+    });
+
+    // Create default result policy
+    await TrustedDataPolicyModel.create({
+      toolId,
+      conditions: [],
+      action: "mark_as_untrusted",
+      description: null,
+    });
   }
 
   static async findById(
@@ -390,6 +418,11 @@ class ToolModel {
         .values(toolsToInsert)
         .onConflictDoNothing()
         .returning();
+
+      // Create default policies for newly inserted tools
+      for (const tool of insertedTools) {
+        await ToolModel.createDefaultPolicies(tool.id);
+      }
 
       // If some tools weren't inserted due to conflict, fetch them
       if (insertedTools.length < toolsToInsert.length) {
@@ -823,6 +856,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
+      // Create default policies for newly inserted tools
+      for (const tool of insertedTools) {
+        await ToolModel.createDefaultPolicies(tool.id);
+      }
+
       // If some tools weren't inserted due to conflict, fetch them
       if (insertedTools.length < toolsToInsert.length) {
         const insertedNames = new Set(insertedTools.map((t) => t.name));
@@ -971,12 +1009,7 @@ class ToolModel {
         schema.agentsTable,
         eq(schema.promptsTable.agentId, schema.agentsTable.id),
       )
-      .where(
-        and(
-          eq(schema.promptAgentsTable.promptId, promptId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      );
+      .where(eq(schema.promptAgentsTable.promptId, promptId));
 
     return results;
   }

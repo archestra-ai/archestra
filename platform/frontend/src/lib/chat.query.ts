@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type SupportedProvider } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -58,19 +58,36 @@ export function useCreateConversation() {
       agentId,
       promptId,
       selectedModel,
+      selectedProvider,
+      chatApiKeyId,
     }: {
       agentId: string;
       promptId?: string;
       selectedModel?: string;
+      selectedProvider?: SupportedProvider;
+      chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId, promptId, selectedModel },
+        body: {
+          agentId,
+          promptId,
+          selectedModel,
+          selectedProvider,
+          chatApiKeyId: chatApiKeyId ?? undefined,
+        },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Immediately populate the individual conversation cache to avoid loading state
+      if (newConversation) {
+        queryClient.setQueryData(
+          ["conversation", newConversation.id],
+          newConversation,
+        );
+      }
     },
   });
 }
@@ -83,18 +100,20 @@ export function useUpdateConversation() {
       id,
       title,
       selectedModel,
+      selectedProvider,
       chatApiKeyId,
       agentId,
     }: {
       id: string;
       title?: string | null;
       selectedModel?: string;
+      selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
       agentId?: string;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel, chatApiKeyId, agentId },
+        body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;
@@ -130,6 +149,7 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+      toast.success("Conversation deleted");
     },
   });
 }

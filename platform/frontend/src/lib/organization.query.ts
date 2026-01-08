@@ -281,6 +281,7 @@ export function useUpdateOrganization(
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+      queryClient.invalidateQueries({ queryKey: ["features"] });
       toast.success(onSuccessMessage);
     },
     onError: (_error) => {

@@ -529,6 +529,13 @@ The following environment variables can be used to configure Archestra Platform:
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+
+  - Default: None
+  - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
+  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
+  - Required when configuring SSO with external identity providers hosted on different domains
+
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
   - Default: `https://api.openai.com/v1`
@@ -544,6 +551,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints
   - Note: This is only used when Vertex AI mode is disabled
+
+- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
+
+  - Default: `permissive`
+  - Values: `permissive` or `restrictive`
+  - `permissive`: Tools are allowed, unless a specific policy is set for them.
+  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 

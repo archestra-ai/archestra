@@ -221,6 +221,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[GeminiProxy] Limit check passed");
 
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
       // Persist tools if present (for tracking - clients handle tool execution via MCP Gateway)
       await utils.tools.persistTools(
         (tools || [])
@@ -546,6 +550,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   resolvedAgentId,
                   contextIsTrusted,
                   enabledToolNames,
+                  globalToolPolicy,
                 );
             }
 
@@ -827,6 +832,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
           }
         }

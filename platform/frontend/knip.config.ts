@@ -1,14 +1,7 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-  entry: [
-    "src/app/**/*.{ts,tsx}",
-    "src/instrumentation.ts",
-    "src/instrumentation-client.ts",
-    "next.config.ts",
-    "postcss.config.mjs",
-    "sentry.*.config.ts",
-  ],
+  entry: ["src/app/**/*.{ts,tsx}", "sentry.*.config.ts"],
   project: ["src/**/*.{ts,tsx}"],
   ignore: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
   ignoreDependencies: [
@@ -21,6 +14,8 @@ const config: KnipConfig = {
     "tw-animate-css",
     // PostCSS is a dependency of @tailwindcss/postcss
     "postcss",
+    // Used via dynamic import in use-layout-nodes.ts (Knip doesn't detect the pattern)
+    "elkjs",
   ],
   ignoreBinaries: [
     // biome is in root package.json

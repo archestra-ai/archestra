@@ -1,11 +1,24 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertPrompt, Prompt, UpdatePrompt } from "@/types";
+import type { PromptHistoryEntry } from "@/database/schemas/prompt";
+import type {
+  InsertPrompt,
+  Prompt,
+  PromptVersionsResponse,
+  UpdatePrompt,
+} from "@/types";
 import ToolModel from "./tool";
 
 /**
- * Model for managing prompts with versioning support
+ * Model for managing prompts with JSONB history versioning
  * Provides CRUD operations and version management
+ *
+ * Versioning approach:
+ * - Each prompt has a stable ID (never changes)
+ * - Current content stored in regular columns
+ * - Previous versions stored in `history` JSONB array
+ * - Update pushes current to history, then updates in-place
+ * - Rollback copies from history to current (increments version)
  */
 class PromptModel {
   /**
@@ -24,8 +37,7 @@ class PromptModel {
         userPrompt: input.userPrompt || null,
         systemPrompt: input.systemPrompt || null,
         version: 1,
-        parentPromptId: null,
-        isActive: true,
+        history: [],
       })
       .returning();
 
@@ -33,32 +45,26 @@ class PromptModel {
   }
 
   /**
-   * Find all active prompts for an organization (latest versions only)
+   * Find all prompts for an organization
    */
   static async findByOrganizationId(organizationId: string): Promise<Prompt[]> {
     const prompts = await db
       .select()
       .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, organizationId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      )
+      .where(eq(schema.promptsTable.organizationId, organizationId))
       .orderBy(desc(schema.promptsTable.createdAt));
 
     return prompts;
   }
 
   /**
-   * Find all active prompts for an organization filtered by accessible agent IDs
+   * Find all prompts for an organization filtered by accessible agent IDs
    * Returns only prompts assigned to agents the user has access to
    */
   static async findByOrganizationIdAndAccessibleAgents(
     organizationId: string,
     accessibleAgentIds: string[],
   ): Promise<Prompt[]> {
-    // Return empty if no accessible agents
     if (accessibleAgentIds.length === 0) {
       return [];
     }
@@ -69,7 +75,6 @@ class PromptModel {
       .where(
         and(
           eq(schema.promptsTable.organizationId, organizationId),
-          eq(schema.promptsTable.isActive, true),
           inArray(schema.promptsTable.agentId, accessibleAgentIds),
         ),
       )
@@ -79,18 +84,13 @@ class PromptModel {
   }
 
   /**
-   * Find all active prompts for a specific agent (latest versions only)
+   * Find all prompts for a specific agent
    */
   static async findByAgentId(agentId: string): Promise<Prompt[]> {
     const prompts = await db
       .select()
       .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.agentId, agentId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      )
+      .where(eq(schema.promptsTable.agentId, agentId))
       .orderBy(desc(schema.promptsTable.createdAt));
 
     return prompts;
@@ -132,222 +132,109 @@ class PromptModel {
   }
 
   /**
-   * Get all versions of a prompt
+   * Get all versions of a prompt (current + history)
    */
-  static async findVersions(promptId: string): Promise<Prompt[]> {
-    const currentPrompt = await PromptModel.findById(promptId);
-    if (!currentPrompt) {
-      return [];
+  static async findVersions(
+    promptId: string,
+  ): Promise<PromptVersionsResponse | null> {
+    const prompt = await PromptModel.findById(promptId);
+    if (!prompt) {
+      return null;
     }
 
-    // Get all versions (same name and agent)
-    const versions = await db
-      .select()
-      .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, currentPrompt.organizationId),
-          eq(schema.promptsTable.name, currentPrompt.name),
-          eq(schema.promptsTable.agentId, currentPrompt.agentId),
-        ),
-      )
-      .orderBy(desc(schema.promptsTable.version));
-
-    return versions;
+    return {
+      current: prompt,
+      history: prompt.history,
+    };
   }
 
   /**
-   * Update a prompt - creates a new version
-   * Finds the most recent version (by version number) and creates a new version with incremented version number
-   * Deactivates the currently active version
-   * If name is changed, updates all versions to use the new name
+   * Update a prompt - creates a new version by pushing current to history
+   * The prompt ID stays the same (no FK migration needed)
    */
   static async update(id: string, input: UpdatePrompt): Promise<Prompt | null> {
-    // Find the prompt by ID to get the prompt family (name, agentId, organizationId)
-    const promptById = await PromptModel.findById(id);
-    if (!promptById) {
+    const prompt = await PromptModel.findById(id);
+    if (!prompt) {
       return null;
     }
 
-    // Determine the name to use (new name if provided, otherwise keep current)
-    const newName = input.name ?? promptById.name;
-    const oldName = promptById.name;
-    const nameChanged = input.name !== undefined && input.name !== oldName;
+    // Handle name change - sync tool names
+    const newName = input.name ?? prompt.name;
+    const nameChanged = input.name !== undefined && input.name !== prompt.name;
 
-    // Determine the agentId to use (new agentId if provided, otherwise keep current)
-    const newAgentId = input.agentId || promptById.agentId;
-    const oldAgentId = promptById.agentId;
-    const agentChanged =
-      input.agentId !== undefined && input.agentId !== oldAgentId;
-
-    // If name or agentId is being changed, update all versions to use the new values
-    if (nameChanged || agentChanged) {
-      const updateValues: { name?: string; agentId?: string } = {};
-      if (nameChanged) updateValues.name = newName;
-      if (agentChanged) updateValues.agentId = newAgentId;
-
-      await db
-        .update(schema.promptsTable)
-        .set(updateValues)
-        .where(
-          and(
-            eq(schema.promptsTable.organizationId, promptById.organizationId),
-            eq(schema.promptsTable.name, oldName),
-            eq(schema.promptsTable.agentId, oldAgentId),
-          ),
-        );
-
-      // Sync tool names if the prompt was renamed
-      // This updates all agent delegation tools that point to any version of this prompt
-      if (nameChanged) {
-        // Get all version IDs for this prompt family
-        const versions = await db
-          .select({ id: schema.promptsTable.id })
-          .from(schema.promptsTable)
-          .where(
-            and(
-              eq(schema.promptsTable.organizationId, promptById.organizationId),
-              eq(schema.promptsTable.name, newName),
-              eq(schema.promptsTable.agentId, newAgentId),
-            ),
-          );
-        const versionIds = versions.map((v) => v.id);
-        await ToolModel.syncAgentDelegationToolNames(versionIds, newName);
-      }
+    if (nameChanged) {
+      await ToolModel.syncAgentDelegationToolNames([id], newName);
     }
 
-    // Find the MOST RECENT version (highest version number) for this prompt family
-    // This ensures we always increment from the latest version number,
-    // regardless of which version is active
-    // Use the new name and agentId for finding versions
-    const [latestVersion] = await db
-      .select()
-      .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, promptById.organizationId),
-          eq(schema.promptsTable.name, newName),
-          eq(schema.promptsTable.agentId, newAgentId),
-        ),
-      )
-      .orderBy(desc(schema.promptsTable.version))
-      .limit(1);
+    // Create history entry from current state
+    const historyEntry: PromptHistoryEntry = {
+      version: prompt.version,
+      userPrompt: prompt.userPrompt,
+      systemPrompt: prompt.systemPrompt,
+      createdAt: prompt.createdAt.toISOString(),
+    };
 
-    if (!latestVersion) {
-      return null;
-    }
-
-    // Find the currently active version BEFORE we deactivate it
-    // We need this to migrate prompt_agents relationships
-    const [activeVersion] = await db
-      .select()
-      .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, promptById.organizationId),
-          eq(schema.promptsTable.name, newName),
-          eq(schema.promptsTable.agentId, newAgentId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      )
-      .limit(1);
-
-    // Deactivate the currently active version (if any)
-    await db
+    // Update in-place with new version
+    const [updated] = await db
       .update(schema.promptsTable)
-      .set({ isActive: false })
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, promptById.organizationId),
-          eq(schema.promptsTable.name, newName),
-          eq(schema.promptsTable.agentId, newAgentId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      );
-
-    // Create new version
-    // Use the input values, falling back to latest version's values
-    const [newVersion] = await db
-      .insert(schema.promptsTable)
-      .values({
-        organizationId: latestVersion.organizationId,
+      .set({
         name: newName,
-        agentId: newAgentId,
-        userPrompt: input.userPrompt ?? latestVersion.userPrompt,
-        systemPrompt: input.systemPrompt ?? latestVersion.systemPrompt,
-        version: latestVersion.version + 1,
-        parentPromptId: latestVersion.id,
-        isActive: true,
+        agentId: input.agentId ?? prompt.agentId,
+        userPrompt: input.userPrompt ?? prompt.userPrompt,
+        systemPrompt: input.systemPrompt ?? prompt.systemPrompt,
+        version: prompt.version + 1,
+        history: sql`${schema.promptsTable.history} || ${JSON.stringify([historyEntry])}::jsonb`,
       })
+      .where(eq(schema.promptsTable.id, id))
       .returning();
 
-    // Migrate prompt_agents relationships from old active version to new version
-    // This ensures delegation relationships follow the active version
-    if (activeVersion) {
-      // Update relationships where this prompt is the PARENT (has agents assigned)
-      await db
-        .update(schema.promptAgentsTable)
-        .set({ promptId: newVersion.id })
-        .where(eq(schema.promptAgentsTable.promptId, activeVersion.id));
-
-      // Update relationships where this prompt is the CHILD (is assigned as agent)
-      await db
-        .update(schema.promptAgentsTable)
-        .set({ agentPromptId: newVersion.id })
-        .where(eq(schema.promptAgentsTable.agentPromptId, activeVersion.id));
-    }
-
-    return newVersion;
+    return updated || null;
   }
 
   /**
-   * Rollback to a specific version
-   * Deactivates all versions and activates the target version
+   * Rollback to a specific version number
+   * Copies content from history entry to current fields and increments version
    */
   static async rollback(
     id: string,
-    targetVersionId: string,
+    targetVersion: number,
   ): Promise<Prompt | null> {
-    const currentPrompt = await PromptModel.findById(id);
-    const targetPrompt = await PromptModel.findById(targetVersionId);
-
-    if (!currentPrompt || !targetPrompt) {
+    const prompt = await PromptModel.findById(id);
+    if (!prompt) {
       return null;
     }
 
-    // Verify target version belongs to same prompt family
-    if (
-      currentPrompt.name !== targetPrompt.name ||
-      currentPrompt.agentId !== targetPrompt.agentId ||
-      currentPrompt.organizationId !== targetPrompt.organizationId
-    ) {
+    // Find the target version in history
+    const targetEntry = prompt.history.find((h) => h.version === targetVersion);
+    if (!targetEntry) {
       return null;
     }
 
-    // Deactivate all versions
-    await db
-      .update(schema.promptsTable)
-      .set({ isActive: false })
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, currentPrompt.organizationId),
-          eq(schema.promptsTable.name, currentPrompt.name),
-          eq(schema.promptsTable.agentId, currentPrompt.agentId),
-        ),
-      );
+    // Create history entry from current state before rollback
+    const historyEntry: PromptHistoryEntry = {
+      version: prompt.version,
+      userPrompt: prompt.userPrompt,
+      systemPrompt: prompt.systemPrompt,
+      createdAt: prompt.createdAt.toISOString(),
+    };
 
-    // Activate target version
-    const [activated] = await db
+    // Rollback by copying target content to current and incrementing version
+    const [updated] = await db
       .update(schema.promptsTable)
-      .set({ isActive: true })
-      .where(eq(schema.promptsTable.id, targetVersionId))
+      .set({
+        userPrompt: targetEntry.userPrompt,
+        systemPrompt: targetEntry.systemPrompt,
+        version: prompt.version + 1,
+        history: sql`${schema.promptsTable.history} || ${JSON.stringify([historyEntry])}::jsonb`,
+      })
+      .where(eq(schema.promptsTable.id, id))
       .returning();
 
-    return activated || null;
+    return updated || null;
   }
 
   /**
-   * Delete a prompt (and all its versions)
+   * Delete a prompt
    */
   static async delete(id: string): Promise<boolean> {
     const prompt = await PromptModel.findById(id);
@@ -355,16 +242,7 @@ class PromptModel {
       return false;
     }
 
-    // Get all versions
-    const versions = await PromptModel.findVersions(id);
-    const versionIds = versions.map((v) => v.id);
-
-    // Delete all versions
-    for (const versionId of versionIds) {
-      await db
-        .delete(schema.promptsTable)
-        .where(eq(schema.promptsTable.id, versionId));
-    }
+    await db.delete(schema.promptsTable).where(eq(schema.promptsTable.id, id));
 
     return true;
   }

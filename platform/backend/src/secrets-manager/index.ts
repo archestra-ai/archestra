@@ -411,6 +411,7 @@ export async function getSecretValueForLlmProviderApiKey(
     secret?.secret?.apiKey ??
     secret?.secret?.anthropicApiKey ??
     secret?.secret?.geminiApiKey ??
-    secret?.secret?.openaiApiKey
+    secret?.secret?.openaiApiKey ??
+    secret?.secret?.minimaxApiKey
   );
 }

@@ -7,12 +7,14 @@ export const SupportedProvidersSchema = z.enum([
   "openai",
   "gemini",
   "anthropic",
+  "minimax",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
   "gemini:generateContent",
   "anthropic:messages",
+  "minimax:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -25,4 +27,5 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   gemini: "Gemini",
+  minimax: "MiniMax",
 };

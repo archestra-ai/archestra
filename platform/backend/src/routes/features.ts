@@ -3,8 +3,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { OrganizationModel } from "@/models";
 import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
+import type { GlobalToolPolicy } from "@/types";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -33,15 +35,21 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async (_request, reply) =>
-      reply.send({
+    async (_request, reply) => {
+      // Get global tool policy from first organization (fallback to permissive)
+      const org = await OrganizationModel.getFirst();
+      const globalToolPolicy: GlobalToolPolicy =
+        org?.globalToolPolicy ?? "permissive";
+
+      return reply.send({
         ...config.features,
         "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
         byosEnabled: isByosEnabled(),
         byosVaultKvVersion: getByosVaultKvVersion(),
         geminiVertexAiEnabled: isVertexAiEnabled(),
-        globalToolPolicy: config.llm.globalToolPolicy,
-      }),
+        globalToolPolicy,
+      });
+    },
   );
 };
 

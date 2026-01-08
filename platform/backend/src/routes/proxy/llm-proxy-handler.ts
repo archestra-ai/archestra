@@ -107,8 +107,6 @@ export async function handleLLMProxy<
     `[${providerName}Proxy] Agent resolved`,
   );
 
-  const globalToolPolicy = config.llm.globalToolPolicy;
-
   // Extract API key
   const apiKey = provider.extractApiKey(headers);
 
@@ -319,6 +317,10 @@ export async function handleLLMProxy<
 
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
+
+    // Get global tool policy from organization (with fallback)
+    const globalToolPolicy =
+      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
     if (requestAdapter.isStreaming()) {
       return handleStreaming(

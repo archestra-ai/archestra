@@ -7,6 +7,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  GlobalToolPolicy,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
@@ -40,6 +41,10 @@ const organizationsTable = pgTable("organization", {
   autoConfigureNewTools: boolean("auto_configure_new_tools")
     .notNull()
     .default(false),
+  globalToolPolicy: varchar("global_tool_policy")
+    .$type<GlobalToolPolicy>()
+    .notNull()
+    .default("permissive"),
 });
 
 export default organizationsTable;

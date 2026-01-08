@@ -28,7 +28,7 @@ export default function SettingsLayout({
     { label: "Your Account", href: "/settings/account" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "LLM API Keys", href: "/settings/llm-api-keys" },
-    { label: "Policy Config Subagent", href: "/settings/auto-policy" },
+    { label: "Tool Policy", href: "/settings/policy" },
     ...(userCanReadOrganization
       ? [
           { label: "Members", href: "/settings/members" },

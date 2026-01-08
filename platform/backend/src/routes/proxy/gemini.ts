@@ -17,7 +17,6 @@ import type {
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableGenAI,
@@ -162,8 +161,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "[GeminiProxy] Agent resolved",
     );
 
-    const globalToolPolicy = config.llm.globalToolPolicy;
-
     // Create GoogleGenAI client - supports both Vertex AI (ADC) and API key modes
     const { "x-goog-api-key": geminiApiKey } = headers;
     let genAIClient: GoogleGenAI;
@@ -223,6 +220,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       logger.debug({ resolvedAgentId }, "[GeminiProxy] Limit check passed");
+
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
       // Persist tools if present (for tracking - clients handle tool execution via MCP Gateway)
       await utils.tools.persistTools(

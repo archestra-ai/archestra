@@ -176,8 +176,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "Agent resolved",
     );
 
-    const globalToolPolicy = config.llm.globalToolPolicy;
-
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
       ? (new MockOpenAIClient() as unknown as OpenAIProvider)
@@ -215,6 +213,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       logger.debug({ resolvedAgentId }, "[OpenAIProxy] Limit check passed");
+
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
       // Persist non-MCP tools declared by client for tracking
       logger.debug(

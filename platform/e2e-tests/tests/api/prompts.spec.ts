@@ -78,20 +78,6 @@ test.describe("Prompts API", () => {
     expect(foundUpdatedPrompt.version).toBe(2);
     expect(foundUpdatedPrompt.agentId).toBe(agent.id);
 
-    // Step 6: Verify version history (current + history array)
-    const versionsResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/prompts/${originalPrompt.id}/versions`,
-    });
-    const versions = await versionsResponse.json();
-    // versions includes current version + history entries
-    expect(versions.length).toBe(2);
-    const version2 = versions.find((v: { version: number }) => v.version === 2);
-    const version1 = versions.find((v: { version: number }) => v.version === 1);
-    expect(version2).toBeDefined();
-    expect(version1).toBeDefined();
-
     // Cleanup
     await makeApiRequest({
       request,

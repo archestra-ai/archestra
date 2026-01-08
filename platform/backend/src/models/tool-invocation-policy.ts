@@ -300,6 +300,19 @@ class ToolInvocationPolicyModel {
           };
         }
 
+        if (policy.action === "block_when_context_is_untrusted") {
+          // Allow when context is trusted, block when untrusted
+          if (!isContextTrusted) {
+            return {
+              isAllowed: false,
+              reason: "Tool invocation blocked: context contains untrusted data",
+              toolCallName,
+            };
+          }
+          // Context is trusted, tool is allowed - continue to next tool
+          continue;
+        }
+
         if (policy.action === "allow_when_context_is_untrusted") {
           specificAllowsUntrusted = true;
         }
@@ -330,6 +343,19 @@ class ToolInvocationPolicyModel {
                 "Tool invocation blocked: context contains untrusted data",
               toolCallName,
             };
+          }
+
+          if (policy.action === "block_when_context_is_untrusted") {
+            // Allow when context is trusted, block when untrusted
+            if (!isContextTrusted) {
+              return {
+                isAllowed: false,
+                reason: "Tool invocation blocked: context contains untrusted data",
+                toolCallName,
+              };
+            }
+            // Context is trusted, tool is allowed
+            continue;
           }
 
           if (policy.action === "allow_when_context_is_untrusted") {

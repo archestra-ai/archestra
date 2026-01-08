@@ -255,7 +255,7 @@ export function useCallPolicyMutation() {
 
       const action = allowUsage
         ? "allow_when_context_is_untrusted"
-        : "block_always";
+        : "block_when_context_is_untrusted";
 
       if (defaultPolicy) {
         // Update existing default policy
@@ -348,7 +348,7 @@ export function useBulkCallPolicyMutation() {
     }) => {
       const action = allowUsage
         ? "allow_when_context_is_untrusted"
-        : "block_always";
+        : "block_when_context_is_untrusted";
       const result = await bulkUpsertDefaultCallPolicy({
         body: { toolIds, action },
       });

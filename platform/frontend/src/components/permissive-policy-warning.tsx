@@ -26,7 +26,7 @@ export function PermissivePolicyWarning() {
           <p>
             For demo purposes, the security engine is disabled. Agents could
             perform dangerous things without supervision, unless explicitly
-            blocked. Turn it off here.
+            blocked.
           </p>
           <p className="mt-1 inline-flex items-center">
             <Link
@@ -34,7 +34,7 @@ export function PermissivePolicyWarning() {
               className="inline-flex items-center underline"
             >
               <ShieldAlert className="mr-1 flex-shrink-0" size={12} />
-              Change in Settings
+              Enable security in Settings
             </Link>
           </p>
         </AlertDescription>

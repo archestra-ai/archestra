@@ -5,6 +5,7 @@ import {
   TimeInMs,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -22,7 +23,6 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
-import { uniqBy } from "lodash-es";
 
 /** TTL for caching chat models from provider APIs */
 const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
@@ -107,7 +107,14 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
 
   // Filter to only chat-compatible models
   // Include claude- and gemini- prefixes for Orlando model support (aggregated provider models)
-  const allowedModelPrefixes = ["claude-", "gemini-", "gpt-", "o1-", "o3-", "o4-"];
+  const allowedModelPrefixes = [
+    "claude-",
+    "gemini-",
+    "gpt-",
+    "o1-",
+    "o3-",
+    "o4-",
+  ];
   const excludePatterns = ["-instruct", "-embedding", "-tts", "-whisper"];
 
   return data.data
@@ -434,7 +441,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning chat models",
       );
 
-      return reply.send(uniqBy(models, model => model.id));
+      return reply.send(uniqBy(models, (model) => model.id));
     },
   );
 };

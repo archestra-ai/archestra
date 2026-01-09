@@ -36,6 +36,7 @@ import type {
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpServerModel from "./mcp-server";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -1135,11 +1136,14 @@ class ToolModel {
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments
     let accessibleAgentIds: string[] | undefined;
+    let accessibleMcpServerIds: Set<string> | undefined;
     if (userId && !isAgentAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+      const [agentIds, mcpServers] = await Promise.all([
+        AgentTeamModel.getUserAccessibleAgentIds(userId, false),
+        McpServerModel.findAll(userId, false),
+      ]);
+      accessibleAgentIds = agentIds;
+      accessibleMcpServerIds = new Set(mcpServers.map((s) => s.id));
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, {
@@ -1332,6 +1336,18 @@ class ToolModel {
 
     for (const assignment of assignments) {
       const existing = assignmentsByToolId.get(assignment.toolId) || [];
+
+      // Check if user has access to the credential MCP server
+      // If not accessible, don't include the owner email (frontend will show "Owner outside your team")
+      const credentialServerAccessible =
+        !accessibleMcpServerIds ||
+        !assignment.credentialSourceMcpServerId ||
+        accessibleMcpServerIds.has(assignment.credentialSourceMcpServerId);
+      const executionServerAccessible =
+        !accessibleMcpServerIds ||
+        !assignment.executionSourceMcpServerId ||
+        accessibleMcpServerIds.has(assignment.executionSourceMcpServerId);
+
       existing.push({
         agentToolId: assignment.agentToolId,
         agent: {
@@ -1339,9 +1355,13 @@ class ToolModel {
           name: assignment.agentName,
         },
         credentialSourceMcpServerId: assignment.credentialSourceMcpServerId,
-        credentialOwnerEmail: assignment.credentialOwnerEmail,
+        credentialOwnerEmail: credentialServerAccessible
+          ? assignment.credentialOwnerEmail
+          : null,
         executionSourceMcpServerId: assignment.executionSourceMcpServerId,
-        executionOwnerEmail: assignment.executionOwnerEmail,
+        executionOwnerEmail: executionServerAccessible
+          ? assignment.executionOwnerEmail
+          : null,
         useDynamicTeamCredential: assignment.useDynamicTeamCredential,
         responseModifierTemplate: assignment.responseModifierTemplate,
       });

@@ -23,7 +23,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
 import type { ToolWithAssignmentsData } from "@/lib/tool.query";
 import { isMcpToolByProperties } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
@@ -43,7 +42,6 @@ export function ToolDetailsDialog({
   onOpenChange,
 }: ToolDetailsDialogProps) {
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
-  const { data: mcpServers } = useMcpServers();
   const [assignmentsOpen, setAssignmentsOpen] = useState(true);
 
   if (!tool) return null;
@@ -53,6 +51,7 @@ export function ToolDetailsDialog({
   );
 
   // Helper to get credential display text
+  // Backend returns null for emails when user doesn't have access to the credential's MCP server
   const getCredentialDisplay = (assignment: (typeof tool.assignments)[0]) => {
     if (assignment.useDynamicTeamCredential) {
       return "Team Credential";
@@ -68,17 +67,16 @@ export function ToolDetailsDialog({
       return "—";
     }
 
-    // Check if user has access to the credential server
-    // mcpServers only contains servers the user has team access to
-    const server = mcpServers?.find((s) => s.id === credentialServerId);
+    // Backend returns email if user has access, null if not
+    const email =
+      assignment.credentialOwnerEmail || assignment.executionOwnerEmail;
 
-    if (!server) {
+    if (!email) {
       // Credential server exists but user doesn't have access
       return "Owner outside your team";
     }
 
-    // User has access - show owner email
-    return server.ownerEmail || "—";
+    return email;
   };
 
   return (

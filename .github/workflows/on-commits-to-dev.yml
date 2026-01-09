@@ -119,6 +119,7 @@ jobs:
             --set archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}" \
             --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
             --set archestra.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="true" \
+            --set archestra.env.FEATURES_BROWSER_STREAMING_ENABLED="true" \
             --values .github/values-staging.yaml \
             --wait
 

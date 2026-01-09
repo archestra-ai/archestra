@@ -9,6 +9,7 @@ import {
 import {
   ApiError,
   constructResponseSchema,
+  PublicAppearanceSchema,
   SelectOrganizationSchema,
   UpdateOrganizationSchema,
 } from "@/types";
@@ -81,6 +82,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         hasLlmProxyLogs: interactionCount > 0,
         hasMcpGatewayLogs: mcpToolCallCount > 0,
       });
+    },
+  );
+
+  fastify.get(
+    "/api/organization/appearance",
+    {
+      schema: {
+        operationId: RouteId.GetPublicAppearance,
+        description:
+          "Get public appearance settings (theme, logo, font) for unauthenticated pages",
+        tags: ["Organization"],
+        response: constructResponseSchema(PublicAppearanceSchema),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await OrganizationModel.getPublicAppearance());
     },
   );
 };

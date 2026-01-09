@@ -35,9 +35,8 @@ test.describe("PATCH /api/chat/messages/:id - API Validation", () => {
       ignoreStatusCheck: true,
     });
 
-    // Zod validation errors return 500 in Fastify (not 400)
-    // because they're thrown as regular Error objects before the handler runs
-    expect(response.status()).toBe(500);
+    // Zod validation errors return 400 (Bad Request)
+    expect(response.status()).toBe(400);
   });
 
   test("validates partIndex is a number", async ({
@@ -55,8 +54,8 @@ test.describe("PATCH /api/chat/messages/:id - API Validation", () => {
       ignoreStatusCheck: true,
     });
 
-    // Zod validation errors return 500 in Fastify
-    expect(response.status()).toBe(500);
+    // Zod validation errors return 400 (Bad Request)
+    expect(response.status()).toBe(400);
   });
 
   test("validates partIndex is non-negative", async ({
@@ -74,8 +73,8 @@ test.describe("PATCH /api/chat/messages/:id - API Validation", () => {
       ignoreStatusCheck: true,
     });
 
-    // Zod validation errors return 500 in Fastify
-    expect(response.status()).toBe(500);
+    // Zod validation errors return 400 (Bad Request)
+    expect(response.status()).toBe(400);
   });
 
   test("validates request body schema", async ({ request, makeApiRequest }) => {
@@ -87,8 +86,8 @@ test.describe("PATCH /api/chat/messages/:id - API Validation", () => {
       ignoreStatusCheck: true,
     });
 
-    // Zod validation errors return 500 in Fastify
-    expect(response.status()).toBe(500);
+    // Zod validation errors return 400 (Bad Request)
+    expect(response.status()).toBe(400);
   });
 
   test("validates UUID format in path parameter", async ({
@@ -106,8 +105,8 @@ test.describe("PATCH /api/chat/messages/:id - API Validation", () => {
       ignoreStatusCheck: true,
     });
 
-    // Invalid UUID format in path returns 500 (Zod validation error)
-    expect(response.status()).toBe(500);
+    // Invalid UUID format in path returns 400 (Zod validation error)
+    expect(response.status()).toBe(400);
   });
 });
 

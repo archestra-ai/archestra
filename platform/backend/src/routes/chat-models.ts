@@ -174,7 +174,7 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
- * Fetch models from Cohere API
+ * Fetching the models from Cohere API
  */
 async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.chat.cohere.baseUrl;
@@ -202,11 +202,7 @@ async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
     }>;
   };
 
-  // Filter to only chat-compatible "command" models that (currently) support tools.
-  // Note: We exclude vision models based on the model name because Cohere vision models are
-  // understood not to support tools at this time.
-  // TODO: If Cohere adds tool support to vision models or exposes explicit capability flags,
-  //       revisit this filter to use capability-based checks instead of name-based exclusion.
+ 
   return data.models
     .filter(
       (model) =>

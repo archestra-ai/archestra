@@ -4339,7 +4339,9 @@ export type GetAgentToolsData = {
     path: {
         agentId: string;
     };
-    query?: never;
+    query?: {
+        excludeLlmProxyOrigin?: boolean;
+    };
     url: '/api/agents/{agentId}/tools';
 };
 

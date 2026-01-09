@@ -22,6 +22,7 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
+import { uniqBy } from "lodash-es";
 
 /** TTL for caching chat models from provider APIs */
 const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
@@ -105,14 +106,15 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   };
 
   // Filter to only chat-compatible models
-  const chatModelPrefixes = ["gpt-", "o1-", "o3-", "o4-"];
+  // Include claude- and gemini- prefixes for Orlando model support (aggregated provider models)
+  const allowedModelPrefixes = ["claude-", "gemini-", "gpt-", "o1-", "o3-", "o4-"];
   const excludePatterns = ["-instruct", "-embedding", "-tts", "-whisper"];
 
   return data.data
     .filter((model) => {
       const id = model.id.toLowerCase();
       // Must start with a chat model prefix
-      const hasValidPrefix = chatModelPrefixes.some((prefix) =>
+      const hasValidPrefix = allowedModelPrefixes.some((prefix) =>
         id.startsWith(prefix),
       );
       if (!hasValidPrefix) return false;
@@ -432,7 +434,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning chat models",
       );
 
-      return reply.send(models);
+      return reply.send(uniqBy(models, model => model.id));
     },
   );
 };

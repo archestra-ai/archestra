@@ -83,9 +83,23 @@
           "data": [
             {
               "id": "gpt-4o",
-              "object": "model",
-              "created": 1686935002,
-              "owned_by": "openai"
+              "name": "GPT-4o"
+            },
+            {
+              "id": "gpt-4o-mini",
+              "name": "GPT-4o Mini"
+            },
+            {
+              "id": "claude-3-5-sonnet-20241022",
+              "name": "Claude 3.5 Sonnet"
+            },
+            {
+              "id": "gemini-2.5-flash",
+              "name": "Gemini 2.5 Flash"
+            },
+            {
+              "id": "gemini-2.5-pro",
+              "name": "Gemini 2.5 Pro"
             }
           ]
         }
@@ -132,12 +146,14 @@
             {
               "name": "models/gemini-2.5-pro",
               "displayName": "Gemini 2.5 Pro",
-              "description": "Gemini 2.5 Pro model"
+              "description": "Gemini 2.5 Pro model",
+              "supportedGenerationMethods": ["generateContent", "countTokens"]
             },
             {
               "name": "models/gemini-2.5-flash",
               "displayName": "Gemini 2.5 Flash",
-              "description": "Gemini 2.5 Flash model"
+              "description": "Gemini 2.5 Flash model",
+              "supportedGenerationMethods": ["generateContent", "countTokens"]
             }
           ]
         }

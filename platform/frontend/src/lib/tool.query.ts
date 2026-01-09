@@ -1,16 +1,12 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { archestraApiSdk } from "@shared";
+import { useQuery } from "@tanstack/react-query";
 
 const { getTools } = archestraApiSdk;
 
-export function useTools({
-  initialData,
-}: {
-  initialData?: archestraApiTypes.GetToolsResponses["200"];
-}) {
-  return useSuspenseQuery({
-    queryKey: ["tools"],
+/** Non-suspense version for use in dialogs/portals */
+export function useTools() {
+  return useQuery({
+    queryKey: ["tools-dialog"],
     queryFn: async () => (await getTools()).data ?? null,
-    initialData,
   });
 }

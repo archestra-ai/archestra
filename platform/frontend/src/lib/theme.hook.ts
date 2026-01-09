@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";
 import { usePublicAppearance } from "./appearance.query";
-import { useOrganization, useUpdateOrganization } from "./organization.query";
+import { useUpdateOrganization } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
 const FONT_STORAGE_KEY = "archestra-font";

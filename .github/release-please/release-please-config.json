@@ -85,6 +85,11 @@
           "type": "json",
           "path": "platform/backend/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "platform/helm/archestra/values.yaml",
+          "jsonpath": "$.archestra.imageTag"
         }
       ]
     }

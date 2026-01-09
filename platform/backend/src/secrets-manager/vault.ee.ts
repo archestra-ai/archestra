@@ -222,6 +222,56 @@ export default class VaultSecretManager implements ISecretManager {
   }
 
   /**
+   * Check if an error is a 4xx HTTP error from Vault
+   */
+  private isVault4xxError(error: unknown): boolean {
+    const vaultError = error as { response?: { statusCode?: number } };
+    const statusCode = vaultError.response?.statusCode;
+    return statusCode !== undefined && statusCode >= 400 && statusCode < 500;
+  }
+
+  /**
+   * Execute a Vault operation with automatic token refresh for K8s auth.
+   * If a 4xx error occurs and K8s auth is used, re-authenticate and retry once.
+   */
+  private async executeWithK8sTokenRefresh<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      // Only retry for K8s auth method and 4xx errors
+      if (
+        this.config.authMethod !== "kubernetes" ||
+        !this.isVault4xxError(error)
+      ) {
+        throw error;
+      }
+
+      logger.info(
+        { operationName },
+        "VaultSecretManager: received 4xx error with K8s auth, re-authenticating",
+      );
+
+      // Reset initialization state and re-authenticate
+      this.initialized = false;
+      try {
+        await this.ensureInitialized();
+      } catch (authError) {
+        logger.error(
+          { authError, operationName },
+          "VaultSecretManager: re-authentication failed after 4xx error",
+        );
+        throw authError;
+      }
+
+      // Retry the operation once
+      return await operation();
+    }
+  }
+
+  /**
    * Handle Vault operation errors by logging and throwing user-friendly ApiError
    */
   private handleVaultError(
@@ -337,9 +387,13 @@ export default class VaultSecretManager implements ISecretManager {
 
     const vaultPath = this.getVaultPath(dbRecord.name, dbRecord.id);
     try {
-      await this.client.write(
-        vaultPath,
-        this.buildWritePayload(JSON.stringify(secretValue)),
+      await this.executeWithK8sTokenRefresh(
+        () =>
+          this.client.write(
+            vaultPath,
+            this.buildWritePayload(JSON.stringify(secretValue)),
+          ),
+        "createSecret",
       );
       logger.info(
         { vaultPath, kvVersion: this.config.kvVersion },
@@ -373,7 +427,10 @@ export default class VaultSecretManager implements ISecretManager {
       try {
         // For v2: Delete metadata to permanently remove all versions of the secret
         // For v1: Delete the secret directly (no versioning)
-        await this.client.delete(deletePath);
+        await this.executeWithK8sTokenRefresh(
+          () => this.client.delete(deletePath),
+          "deleteSecret",
+        );
         logger.info(
           { deletePath, kvVersion: this.config.kvVersion },
           `VaultSecretManager.deleteSecret: secret ${this.config.kvVersion === "1" ? "deleted" : "permanently deleted"}`,
@@ -408,7 +465,10 @@ export default class VaultSecretManager implements ISecretManager {
 
     const vaultPath = this.getVaultPath(dbRecord.name, secid);
     try {
-      const vaultResponse = await this.client.read(vaultPath);
+      const vaultResponse = await this.executeWithK8sTokenRefresh(
+        () => this.client.read(vaultPath),
+        "getSecret",
+      );
       const secretValue = JSON.parse(
         this.extractSecretValue(vaultResponse),
       ) as SecretValue;
@@ -447,9 +507,13 @@ export default class VaultSecretManager implements ISecretManager {
 
     const vaultPath = this.getVaultPath(dbRecord.name, secid);
     try {
-      await this.client.write(
-        vaultPath,
-        this.buildWritePayload(JSON.stringify(secretValue)),
+      await this.executeWithK8sTokenRefresh(
+        () =>
+          this.client.write(
+            vaultPath,
+            this.buildWritePayload(JSON.stringify(secretValue)),
+          ),
+        "updateSecret",
       );
       logger.info(
         { vaultPath, kvVersion: this.config.kvVersion },
@@ -476,7 +540,10 @@ export default class VaultSecretManager implements ISecretManager {
     const listBasePath = this.getListBasePath();
 
     try {
-      const result = await this.client.list(listBasePath);
+      const result = await this.executeWithK8sTokenRefresh(
+        () => this.client.list(listBasePath),
+        "checkConnectivity",
+      );
       const keys = (result?.data?.keys as string[] | undefined) ?? [];
       return { secretCount: keys.length };
     } catch (error) {

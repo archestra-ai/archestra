@@ -1,7 +1,14 @@
 archestra:
   # The Docker image to use for the Archestra Platform
   # This image contains both the backend API and frontend
-  image: archestra/platform:latest
+  image: archestra/platform
+
+  # The image tag for the Archestra Platform
+  # This value is automatically updated by release-please during releases
+  # see https://github.com/googleapis/release-please/blob/84a43efcae8dc1028d132377fb387b816113f5cb/docs/customizing.md#updating-arbitrary-yaml-files
+  #
+  # x-release-please-version
+  imageTag: "1.0.13"
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never

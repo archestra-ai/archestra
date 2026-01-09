@@ -50,7 +50,7 @@ export function AssignToolsDialog({
   onOpenChange,
 }: AssignToolsDialogProps) {
   // Fetch all tools and filter for MCP tools (using non-suspense queries for dialog/portal)
-  const { data: allTools, isLoading: isLoadingAllTools } = useTools();
+  const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
   const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
   const { data: internalMcpCatalogItems, isLoading: isLoadingCatalog } =
     useInternalMcpCatalog();

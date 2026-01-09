@@ -53,7 +53,7 @@ import {
   useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 import {
   useBulkCallPolicyMutation,
@@ -127,7 +127,7 @@ export function AssignedToolsTable({
   const { data: resultPolicies } = useToolResultPolicies(
     initialData?.toolResultPolicies,
   );
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalogSuspense({
     initialData: initialData?.internalMcpCatalog,
   });
   const { data: agents } = useProfiles({

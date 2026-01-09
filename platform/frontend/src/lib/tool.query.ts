@@ -7,6 +7,10 @@ type GetToolsWithAssignmentsQueryParams = NonNullable<
   archestraApiTypes.GetToolsWithAssignmentsData["query"]
 >;
 
+// Exported type for tool with assignments data
+export type ToolWithAssignmentsData =
+  archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number];
+
 export function useTools({
   initialData,
 }: {

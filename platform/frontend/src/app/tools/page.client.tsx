@@ -9,13 +9,11 @@ import {
   prefetchToolInvocationPolicies,
   prefetchToolResultPolicies,
 } from "@/lib/policy.query";
+import type { ToolWithAssignmentsData } from "@/lib/tool.query";
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 import type { ToolsInitialData } from "./page";
-
-type ToolWithAssignmentsData =
-  archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number];
 
 export function ToolsClient({
   initialData,

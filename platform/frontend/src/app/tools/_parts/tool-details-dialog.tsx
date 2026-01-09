@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import { ChevronDown, ChevronRight, User } from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
@@ -25,14 +24,12 @@ import {
 } from "@/components/ui/tooltip";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
+import type { ToolWithAssignmentsData } from "@/lib/tool.query";
 import { isMcpToolByProperties } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
 import { ToolCallPolicies } from "./tool-call-policies";
 import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
-
-type ToolWithAssignmentsData =
-  archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number];
 
 interface ToolDetailsDialogProps {
   tool: ToolWithAssignmentsData | null;

@@ -48,7 +48,10 @@ import {
   getAllowUsageFromPolicies,
   getResultTreatmentFromPolicies,
 } from "@/lib/policy.utils";
-import { useToolsWithAssignments } from "@/lib/tool.query";
+import {
+  type ToolWithAssignmentsData,
+  useToolsWithAssignments,
+} from "@/lib/tool.query";
 import { isMcpToolByProperties } from "@/lib/tool.utils";
 import {
   DEFAULT_FILTER_ALL,
@@ -67,8 +70,6 @@ type ToolsSortDirectionValues = NonNullable<
   GetToolsWithAssignmentsQueryParams["sortDirection"]
 > | null;
 
-type ToolWithAssignmentsData =
-  archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number];
 // These fields were moved to policies in the new schema
 // Define the type directly since it's no longer on ProfileToolData
 type ToolResultTreatment = "trusted" | "untrusted" | "sanitize_with_dual_llm";

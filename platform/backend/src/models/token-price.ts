@@ -45,7 +45,7 @@ class TokenPriceModel {
   ): Promise<TokenPrice | null> {
     const [tokenPrice] = await db
       .update(schema.tokenPricesTable)
-      .set({ ...data, updatedAt: new Date() })
+      .set(data)
       .where(eq(schema.tokenPricesTable.id, id))
       .returning();
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.14](https://github.com/archestra-ai/archestra/compare/platform-v1.0.13...platform-v1.0.14) (2026-01-09)
+
+
+### Bug Fixes
+
+* do not show llm-proxy discovered tools in chat ([#1988](https://github.com/archestra-ai/archestra/issues/1988)) ([1e45b66](https://github.com/archestra-ai/archestra/commit/1e45b6677b2e250dde24d4ff7fed3faed5d69a9c))
+
+
+### Code Refactoring
+
+* **tools:** show one row per tool instead of per assignment ([#1987](https://github.com/archestra-ai/archestra/issues/1987)) ([b69bfd9](https://github.com/archestra-ai/archestra/commit/b69bfd9c03a7fad54bfdd7c6d0684aa6735cedf6))
+
 ## [1.0.13](https://github.com/archestra-ai/archestra/compare/platform-v1.0.12...platform-v1.0.13) (2026-01-09)
 
 

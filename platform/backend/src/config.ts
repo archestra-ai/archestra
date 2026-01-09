@@ -261,6 +261,10 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    vllm: {
+      baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL || "http://localhost:8000/v1",
+      useV2Routes: true,
+    },
   },
   chat: {
     openai: {
@@ -271,6 +275,9 @@ export default {
     },
     gemini: {
       apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+    },
+    vllm: {
+      apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

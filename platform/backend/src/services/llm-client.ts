@@ -40,6 +40,10 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("vllm")) {
+    return "vllm";
+  }
+
   // Default to anthropic for backwards compatibility
   return "anthropic";
 }
@@ -78,7 +82,9 @@ export async function resolveProviderApiKey(params: {
       secret?.secret?.apiKey ??
       secret?.secret?.anthropicApiKey ??
       secret?.secret?.geminiApiKey ??
-      secret?.secret?.openaiApiKey;
+      secret?.secret?.geminiApiKey ??
+      secret?.secret?.openaiApiKey ??
+      secret?.secret?.vllmApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
       apiKeySource = resolvedApiKey.scope;
@@ -95,6 +101,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "vllm" && config.chat.vllm.apiKey) {
+      providerApiKey = config.chat.vllm.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -171,6 +180,18 @@ export function createLLMModel(params: {
     });
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
+    // Use .chat() to force Chat Completions API (not Responses API)
+    // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  }
+
+  if (provider === "vllm") {
+    // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/vllm/${agentId}`,
+      headers,
+    });
     return client.chat(modelName);
   }
 

@@ -90,6 +90,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
   },
+  vllm: {
+    name: "vLLM",
+    icon: "/icons/vllm.png", // Assuming an icon exists or will be generic
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "http://localhost:8000/v1", // No real console for vLLM usually
+    consoleName: "vLLM Instance",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

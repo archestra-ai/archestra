@@ -10,9 +10,18 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ChatApiKeyModel, TeamModel } from "@/models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
+import {
+  createGoogleGenAIClient,
+  isVertexAiEnabled,
+} from "@/routes/proxy/utils/gemini-client";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { constructResponseSchema, SupportedChatProviderSchema } from "@/types";
+import {
+  type Anthropic,
+  constructResponseSchema,
+  type Gemini,
+  type OpenAi,
+  SupportedChatProviderSchema,
+} from "@/types";
 
 /** TTL for caching chat models from provider APIs */
 const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
@@ -37,7 +46,7 @@ export interface ModelInfo {
  * Fetch models from Anthropic API
  */
 async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.anthropic.baseUrl;
+  const baseUrl = config.llm.anthropic.baseUrl;
   const url = `${baseUrl}/v1/models?limit=100`;
 
   const response = await fetch(url, {
@@ -57,11 +66,7 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   const data = (await response.json()) as {
-    data: Array<{
-      id: string;
-      display_name: string;
-      created_at?: string;
-    }>;
+    data: Anthropic.Types.Model[];
   };
 
   // All Anthropic models are chat models, no filtering needed
@@ -77,7 +82,7 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
  * Fetch models from OpenAI API
  */
 async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.openai.baseUrl;
+  const baseUrl = config.llm.openai.baseUrl;
   const url = `${baseUrl}/models`;
 
   const response = await fetch(url, {
@@ -96,11 +101,7 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   const data = (await response.json()) as {
-    data: Array<{
-      id: string;
-      created: number;
-      owned_by: string;
-    }>;
+    data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   };
 
   // Filter to only chat-compatible models
@@ -122,19 +123,40 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
       );
       return !hasExcludedPattern;
     })
-    .map((model) => ({
-      id: model.id,
-      displayName: model.id, // OpenAI doesn't provide display names
-      provider: "openai" as const,
-      createdAt: new Date(model.created * 1000).toISOString(),
-    }));
+    .map(mapOpenAiModelToModelInfo);
+}
+
+export function mapOpenAiModelToModelInfo(
+  model: OpenAi.Types.Model | OpenAi.Types.OrlandoModel,
+): ModelInfo {
+  // by default it's openai
+  let provider: SupportedProvider = "openai";
+  // but if it's an orlando model (we identify that by missing owned_by property)
+  if (!("owned_by" in model)) {
+    // then we need to determine the provider based on the model id (falling back to default openai)
+    if (model.id.startsWith("claude-")) {
+      provider = "anthropic";
+    } else if (model.id.startsWith("gemini-")) {
+      provider = "gemini";
+    }
+  }
+
+  return {
+    id: model.id,
+    displayName: "name" in model ? model.name : model.id,
+    provider,
+    createdAt:
+      "created" in model
+        ? new Date(model.created * 1000).toISOString()
+        : undefined,
+  };
 }
 
 /**
- * Fetch models from Gemini API
+ * Fetch models from Gemini API (Google AI Studio - API key mode)
  */
-async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
-  const baseUrl = config.chat.gemini.baseUrl;
+export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.gemini.baseUrl;
   const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
 
   const response = await fetch(url);
@@ -149,11 +171,7 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   const data = (await response.json()) as {
-    models: Array<{
-      name: string;
-      displayName: string;
-      supportedGenerationMethods?: string[];
-    }>;
+    models: Gemini.Types.Model[];
   };
 
   // Filter to only models that support generateContent (chat)
@@ -167,10 +185,80 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
       const modelId = model.name.replace("models/", "");
       return {
         id: modelId,
-        displayName: model.displayName,
+        displayName: model.displayName ?? modelId,
         provider: "gemini" as const,
       };
     });
+}
+
+/**
+ * Fetch models from Gemini API via Vertex AI SDK
+ * Uses Application Default Credentials (ADC) for authentication
+ *
+ * Note: Vertex AI returns models in a different format than Google AI Studio:
+ * - Model names are "publishers/google/models/xxx" not "models/xxx"
+ * - No supportedActions or displayName fields available
+ * - We filter by model name pattern to get chat-capable Gemini models
+ */
+export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
+  logger.debug(
+    {
+      project: config.llm.gemini.vertexAi.project,
+      location: config.llm.gemini.vertexAi.location,
+    },
+    "Fetching Gemini models via Vertex AI SDK",
+  );
+
+  // Create a client without API key (uses ADC for Vertex AI)
+  const ai = createGoogleGenAIClient(undefined, "[ChatModels]");
+
+  const pager = await ai.models.list({ config: { pageSize: 100 } });
+
+  const models: ModelInfo[] = [];
+
+  // Patterns to exclude non-chat models
+  const excludePatterns = ["embedding", "imagen", "text-bison", "code-bison"];
+
+  for await (const model of pager) {
+    const modelName = model.name ?? "";
+
+    // Only include Gemini models that are chat-capable
+    // Vertex AI returns names like "publishers/google/models/gemini-2.0-flash-001"
+    if (!modelName.includes("gemini")) {
+      continue;
+    }
+
+    // Exclude embedding and other non-chat models
+    const isExcluded = excludePatterns.some((pattern) =>
+      modelName.toLowerCase().includes(pattern),
+    );
+    if (isExcluded) {
+      continue;
+    }
+
+    // Extract model ID from "publishers/google/models/gemini-xxx" format
+    const modelId = modelName.replace("publishers/google/models/", "");
+
+    // Generate a readable display name from the model ID
+    // e.g., "gemini-2.0-flash-001" -> "Gemini 2.0 Flash 001"
+    const displayName = modelId
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+    models.push({
+      id: modelId,
+      displayName,
+      provider: "gemini" as const,
+    });
+  }
+
+  logger.debug(
+    { modelCount: models.length },
+    "Fetched Gemini models via Vertex AI SDK",
+  );
+
+  return models;
 }
 
 /**
@@ -241,7 +329,7 @@ export async function testProviderApiKey(
 /**
  * Fetch models for a single provider
  */
-async function fetchModelsForProvider({
+export async function fetchModelsForProvider({
   provider,
   organizationId,
   userId,
@@ -256,8 +344,10 @@ async function fetchModelsForProvider({
     userId,
   });
 
-  // For Gemini with Vertex AI, we might not have an API key
-  if (!apiKey && !(provider === "gemini" && isVertexAiEnabled())) {
+  const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
+
+  // For Gemini with Vertex AI, we don't need an API key - authentication is via ADC
+  if (!apiKey && !vertexAiEnabled) {
     logger.debug(
       { provider, organizationId },
       "No API key available for provider",
@@ -265,8 +355,10 @@ async function fetchModelsForProvider({
     return [];
   }
 
-  const cacheKey =
-    `${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const;
+  // Cache key for Vertex AI doesn't include API key since it uses ADC
+  const cacheKey = vertexAiEnabled
+    ? (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-vertexai` as const)
+    : (`${CacheKey.GetChatModels}-${provider}-${organizationId}-${userId}-${apiKey?.slice(0, 6)}` as const);
   const cachedModels = await cacheManager.get<ModelInfo[]>(cacheKey);
 
   if (cachedModels) {
@@ -280,11 +372,11 @@ async function fetchModelsForProvider({
         models = await modelFetchers[provider](apiKey);
       }
     } else if (provider === "gemini") {
-      if (!apiKey) {
-        logger.debug(
-          "Gemini Vertex AI mode enabled but no API key for model listing",
-        );
-      } else {
+      if (vertexAiEnabled) {
+        // Use Vertex AI SDK for model listing (uses ADC for authentication)
+        models = await fetchGeminiModelsViaVertexAi();
+      } else if (apiKey) {
+        // Use standard Gemini API with API key
         models = await modelFetchers[provider](apiKey);
       }
     }

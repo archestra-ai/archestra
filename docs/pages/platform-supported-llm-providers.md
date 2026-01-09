@@ -124,5 +124,12 @@ With this configuration, Application Default Credentials (ADC) will automaticall
 
 #### Other Environments
 
-For non-GKE environments or when Workload Identity isn't available, set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file.
+For non-GKE environments, Vertex AI supports several authentication methods through [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials):
+
+- **Service account key file**: Set `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` to the path of a service account JSON key file
+- **Local development**: Use `gcloud auth application-default login` to authenticate with your user account
+- **Cloud environments**: Attached service accounts on Compute Engine, Cloud Run, and Cloud Functions are automatically detected
+- **AWS/Azure**: Use workload identity federation to authenticate without service account keys
+
+See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
 

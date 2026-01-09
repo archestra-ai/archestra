@@ -23,6 +23,7 @@ import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  hasZodFastifySchemaValidationErrors,
   jsonSchemaTransform,
   jsonSchemaTransformObject,
   serializerCompiler,
@@ -174,6 +175,22 @@ export const createFastifyInstance = () =>
     .setSerializerCompiler(serializerCompiler)
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, _request, reply) {
+      // Handle Zod validation errors (from fastify-type-provider-zod)
+      if (hasZodFastifySchemaValidationErrors(error)) {
+        const message = error.message || "Validation error";
+        this.log.info(
+          { error: message, statusCode: 400 },
+          "HTTP 400 validation error occurred",
+        );
+
+        return reply.status(400).send({
+          error: {
+            message,
+            type: "api_validation_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type } = error;

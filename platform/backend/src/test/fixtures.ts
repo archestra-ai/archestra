@@ -120,7 +120,7 @@ async function makeOrganization(
       slug: `test-org-${orgId.substring(0, 8)}`,
       createdAt: new Date(),
       limitCleanupInterval: null,
-      theme: "modern-minimal",
+      theme: "cosmic-night",
       customFont: "lato",
       ...overrides,
     })

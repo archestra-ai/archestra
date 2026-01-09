@@ -17,6 +17,9 @@ export type LLMModel = Parameters<typeof streamText>[0]["model"];
 
 /**
  * Detect which provider a model belongs to based on its name
+ * It's a recommended to rely on explicit provider selection whenever possible,
+ * Since same models could be served by different providers.
+ * Currently it exists for backward compatibility.
  */
 export function detectProviderFromModel(model: string): SupportedChatProvider {
   const lowerModel = model.toLowerCase();
@@ -175,13 +178,16 @@ export function createLLMModel(params: {
 }
 
 /**
- * Full helper to resolve API key and create LLM model
+ * Full helper to resolve API key and create LLM model.
+ * Provider must be explicitly passed - callers can use detectProviderFromModel
+ * as a fallback for backward compatibility with existing conversations.
  */
 export async function createLLMModelForAgent(params: {
   organizationId: string;
   userId: string;
   agentId: string;
   model: string;
+  provider: SupportedChatProvider;
   conversationId?: string | null;
   externalAgentId?: string;
 }): Promise<{
@@ -194,11 +200,10 @@ export async function createLLMModelForAgent(params: {
     userId,
     agentId,
     model: modelName,
+    provider,
     conversationId,
     externalAgentId,
   } = params;
-
-  const provider = detectProviderFromModel(modelName);
 
   const { apiKey, source } = await resolveProviderApiKey({
     organizationId,

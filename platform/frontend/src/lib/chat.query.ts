@@ -1,4 +1,8 @@
-import { archestraApiSdk } from "@shared";
+import {
+  archestraApiSdk,
+  isBrowserMcpTool,
+  type SupportedProvider,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -58,11 +62,13 @@ export function useCreateConversation() {
       agentId,
       promptId,
       selectedModel,
+      selectedProvider,
       chatApiKeyId,
     }: {
       agentId: string;
       promptId?: string;
       selectedModel?: string;
+      selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
     }) => {
       const { data, error } = await createChatConversation({
@@ -70,6 +76,7 @@ export function useCreateConversation() {
           agentId,
           promptId,
           selectedModel,
+          selectedProvider,
           chatApiKeyId: chatApiKeyId ?? undefined,
         },
       });
@@ -97,18 +104,20 @@ export function useUpdateConversation() {
       id,
       title,
       selectedModel,
+      selectedProvider,
       chatApiKeyId,
       agentId,
     }: {
       id: string;
       title?: string | null;
       selectedModel?: string;
+      selectedProvider?: SupportedProvider;
       chatApiKeyId?: string | null;
       agentId?: string;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title, selectedModel, chatApiKeyId, agentId },
+        body: { title, selectedModel, selectedProvider, chatApiKeyId, agentId },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;
@@ -309,4 +318,15 @@ export function usePromptTools(promptId: string | undefined) {
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });
+}
+
+export function useHasPlaywrightMcpTools(agentId: string | undefined) {
+  const toolsQuery = useChatProfileMcpTools(agentId);
+
+  return (
+    toolsQuery.data?.some((tool) => {
+      const toolName = tool.name;
+      return typeof toolName === "string" && isBrowserMcpTool(toolName);
+    }) ?? false
+  );
 }

@@ -63,7 +63,7 @@
     "next": "16.1.1",
     "next-runtime-env": "^3.3.0",
     "next-themes": "^0.4.6",
-    "posthog-js": "^1.311.0",
+    "posthog-js": "^1.316.0",
     "react": "19.2.3",
     "react-chartjs-2": "^5.3.1",
     "react-day-picker": "^9.13.0",

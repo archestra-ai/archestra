@@ -1,3 +1,4 @@
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
@@ -17,6 +18,19 @@ function createMockResponse(
       input_tokens: 100,
       output_tokens: 50,
     },
+  };
+}
+
+function createMockRequest(
+  messages: Anthropic.Types.MessagesRequest["messages"],
+  options?: Partial<Anthropic.Types.MessagesRequest>,
+): Anthropic.Types.MessagesRequest {
+  const { max_tokens, ...rest } = options ?? {};
+  return {
+    model: "claude-3-5-sonnet-20241022",
+    messages,
+    max_tokens: max_tokens ?? 1024,
+    ...rest,
   };
 }
 
@@ -102,6 +116,134 @@ describe("AnthropicResponseAdapter", () => {
           arguments: {},
         },
       ]);
+    });
+  });
+});
+
+describe("AnthropicRequestAdapter", () => {
+  describe("toProviderRequest", () => {
+    test("converts MCP image blocks in tool results", () => {
+      const originalBrowserStreaming = config.features.browserStreamingEnabled;
+      config.features.browserStreamingEnabled = true;
+      try {
+        const messages = [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "tool_123",
+                name: "browser_take_screenshot",
+                input: {},
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool_123",
+                content: [
+                  { type: "text", text: "Screenshot captured" },
+                  {
+                    type: "image",
+                    data: "abc123",
+                    mimeType: "image/png",
+                  },
+                ],
+              },
+            ],
+          },
+        ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+        const request = createMockRequest(messages);
+        const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+        const result = adapter.toProviderRequest();
+
+        const userMessage = result.messages.find(
+          (message) => message.role === "user",
+        );
+        const userContent = Array.isArray(userMessage?.content)
+          ? userMessage.content
+          : [];
+        const toolResultBlock = userContent.find(
+          (block) => block.type === "tool_result",
+        ) as { content?: unknown } | undefined;
+
+        expect(toolResultBlock?.content).toEqual([
+          { type: "text", text: "Screenshot captured" },
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: "abc123",
+            },
+          },
+        ]);
+      } finally {
+        config.features.browserStreamingEnabled = originalBrowserStreaming;
+      }
+    });
+
+    test("strips oversized MCP image blocks in tool results", () => {
+      const originalBrowserStreaming = config.features.browserStreamingEnabled;
+      config.features.browserStreamingEnabled = true;
+      try {
+        const largeImageData = "a".repeat(140000);
+        const messages = [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "tool_123",
+                name: "browser_take_screenshot",
+                input: {},
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool_123",
+                content: [
+                  { type: "text", text: "Screenshot captured" },
+                  {
+                    type: "image",
+                    data: largeImageData,
+                    mimeType: "image/png",
+                  },
+                ],
+              },
+            ],
+          },
+        ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+        const request = createMockRequest(messages);
+        const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+        const result = adapter.toProviderRequest();
+
+        const userMessage = result.messages.find(
+          (message) => message.role === "user",
+        );
+        const userContent = Array.isArray(userMessage?.content)
+          ? userMessage.content
+          : [];
+        const toolResultBlock = userContent.find(
+          (block) => block.type === "tool_result",
+        ) as { content?: unknown } | undefined;
+
+        expect(toolResultBlock?.content).toEqual([
+          { type: "text", text: "Screenshot captured" },
+          { type: "text", text: "[Image omitted due to size]" },
+        ]);
+      } finally {
+        config.features.browserStreamingEnabled = originalBrowserStreaming;
+      }
     });
   });
 });

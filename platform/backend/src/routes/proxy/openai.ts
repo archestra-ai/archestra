@@ -399,6 +399,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toonCostSavings = stats.toonCostSavings;
       }
 
+      const openAiSdkMessages =
+        filteredMessages as OpenAIProvider.Chat.Completions.ChatCompletionMessageParam[];
+
       fastify.log.info(
         {
           shouldApplyToonCompression,
@@ -440,7 +443,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
               model,
-              messages: filteredMessages,
+              messages: openAiSdkMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: true,
               stream_options: { include_usage: true },
@@ -855,7 +858,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
               model,
-              messages: filteredMessages,
+              messages: openAiSdkMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,
             });

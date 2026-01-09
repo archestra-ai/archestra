@@ -13942,6 +13942,15 @@
         "parameters": [
           {
             "schema": {
+              "default": false,
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeLlmProxyOrigin",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"

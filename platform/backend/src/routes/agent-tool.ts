@@ -391,17 +391,22 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
+        querystring: z.object({
+          excludeLlmProxyOrigin: z.coerce.boolean().optional().default(false),
+        }),
         response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
-    async ({ params: { agentId } }, reply) => {
+    async ({ params: { agentId }, query }, reply) => {
       // Validate that agent exists
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
         throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
 
-      const tools = await ToolModel.getToolsByAgent(agentId);
+      const tools = query.excludeLlmProxyOrigin
+        ? await ToolModel.getMcpToolsByAgent(agentId)
+        : await ToolModel.getToolsByAgent(agentId);
 
       return reply.send(tools);
     },

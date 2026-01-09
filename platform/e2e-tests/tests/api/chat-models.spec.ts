@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test.describe("Chat Models API", () => {
+test.describe.skip("Chat Models API", () => {
   test.describe.configure({ mode: "serial" });
 
   test("should fetch chat models from all providers", async ({

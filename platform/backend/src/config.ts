@@ -265,6 +265,10 @@ export default {
       baseUrl: process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
       useV2Routes: process.env.ARCHESTRA_MISTRAL_USE_V2_ROUTES !== "false",
     },
+    deepseek: {
+      baseUrl: process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      useV2Routes: true,
+    },
   },
   chat: {
     openai: {
@@ -278,6 +282,9 @@ export default {
     },
     mistral: {
       apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

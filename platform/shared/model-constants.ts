@@ -24,10 +24,14 @@ export type SupportedProviderDiscriminator = z.infer<
   typeof SupportedProvidersDiscriminatorSchema
 >;
 
-export const providerDisplayNames: Record<SupportedProvider, string> = {
+export const providerDisplayNames: Record<
+  z.infer<typeof SupportedProvidersSchema>,
+  string
+> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
-  gemini: "Gemini",
-  mistral: "Mistral",
+  gemini: "Google Gemini",
+  mistral: "Mistral AI",
   cohere: "Cohere",
+  deepseek: "DeepSeek",
 };

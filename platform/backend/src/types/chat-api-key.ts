@@ -11,8 +11,9 @@ import { SecretStorageTypeSchema } from "./mcp-server";
 export const SupportedChatProviderSchema = z.enum([
   "anthropic",
   "openai",
-  "gemini",
+  "openai",
   "mistral",
+  "deepseek",
 ]);
 export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;
 

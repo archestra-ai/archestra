@@ -9,6 +9,7 @@ import type {
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import MistralChatInteraction from "./llmProviders/mistral";
+import DeepSeekChatInteraction from "./llmProviders/deepseek";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -119,6 +120,8 @@ export class DynamicInteraction implements InteractionUtils {
       return new AnthropicMessagesInteraction(interaction);
     } else if (this.type === "mistral:chat") {
       return new MistralChatInteraction(interaction);
+    } else if (this.type === "deepseek:chat") {
+      return new DeepSeekChatInteraction(interaction);
     }
     return new GeminiGenerateContentInteraction(interaction);
   }

@@ -450,7 +450,25 @@ export function getObservableFetch(
             model,
             externalAgentId,
           );
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
         } else if (provider === "mistral") {
+          const { input, output } = utils.adapters.openai.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
+        } else if (provider === "deepseek") {
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );

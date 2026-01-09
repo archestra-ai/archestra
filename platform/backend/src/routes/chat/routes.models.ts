@@ -18,6 +18,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Anthropic,
   constructResponseSchema,
+  type DeepSeek,
   type Gemini,
   type Mistral,
   type OpenAi,
@@ -80,6 +81,40 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from DeepSeek API
+ */
+async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: DeepSeek.Types.Model[];
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "deepseek" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
+  }));
+}
+
+/**
  * Fetch models from Mistral API
  */
 async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
@@ -112,10 +147,6 @@ async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
     createdAt: new Date(model.created * 1000).toISOString(),
   }));
 }
-
-/**
- * Fetch models from OpenAI API
- */
 async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const baseUrl = config.llm.openai.baseUrl;
   const url = `${baseUrl}/models`;
@@ -337,6 +368,8 @@ async function getProviderApiKey({
       return config.chat.gemini.apiKey || null;
     case "mistral":
       return config.chat.mistral.apiKey || null;
+    case "deepseek":
+      return config.chat.deepseek.apiKey || null;
     default:
       return null;
   }
@@ -351,6 +384,7 @@ const modelFetchers: Record<
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
+  deepseek: fetchDeepSeekModels,
 };
 
 /**
@@ -405,9 +439,9 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai", "mistral"].includes(provider)) {
+    if (["anthropic", "openai", "mistral", "deepseek"].includes(provider)) {
       if (apiKey) {
-        models = await modelFetchers[provider as "anthropic" | "openai" | "mistral"](apiKey);
+        models = await modelFetchers[provider as "anthropic" | "openai" | "mistral" | "deepseek"](apiKey);
       }
     } else if (provider === "gemini") {
       if (vertexAiEnabled) {

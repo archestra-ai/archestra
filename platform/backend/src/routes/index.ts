@@ -5,6 +5,7 @@ import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
+import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import xaiRoutes from "./proxy/routesv2/xai";
 
@@ -51,6 +52,9 @@ export const openAiProxyRoutes = config.llm.openai.useV2Routes
 
 // Mistral proxy routes - always use V2 (unified handler)
 export const mistralProxyRoutes = mistralProxyRoutesV2;
+
+// DeepSeek proxy routes - always use V2 (unified handler)
+export const deepseekProxyRoutes = deepseekProxyRoutesV2;
 
 // x.ai proxy routes - always use V2 (unified handler)
 export const xaiProxyRoutes = xaiRoutes;

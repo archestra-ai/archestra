@@ -20,11 +20,11 @@ export const ChatRequestSchema = z.object({
   tool_choice: z.enum(["REQUIRED", "NONE"]).optional(),
   safety_mode: z.enum(["CONTEXTUAL", "STRICT", "OFF"]).optional(),
   response_format: z
-    .object({
-      type: z.enum(["json_object", "text"]),
-      json_schema: z.record(z.unknown()).optional(),
-    })
-    .optional(),
+  .object({
+    type: z.enum(["json_object", "text"]),
+    json_schema: z.record(z.string(), z.unknown()).optional(),
+  })
+  .optional(),
   frequency_penalty: z.number().optional(),
   presence_penalty: z.number().optional(),
   k: z.number().optional(),
@@ -34,9 +34,7 @@ export const ChatRequestSchema = z.object({
   logprobs: z.boolean().optional(),
 });
 
-/**
- * Usage information in Cohere response
- */
+
 export const UsageSchema = z.object({
   billed_units: z
     .object({
@@ -52,9 +50,7 @@ export const UsageSchema = z.object({
     .optional(),
 });
 
-/**
- * Cohere v2 Chat API response schema
- */
+
 export const ChatResponseSchema = z.object({
   id: z.string(),
   message: z.object({
@@ -72,9 +68,7 @@ export const ChatResponseSchema = z.object({
   usage: UsageSchema.optional(),
 });
 
-/**
- * Headers for Cohere API requests
- */
+
 export const ChatHeadersSchema = z
   .object({
     "user-agent": z

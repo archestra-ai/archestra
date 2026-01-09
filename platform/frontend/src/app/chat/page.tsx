@@ -211,8 +211,11 @@ export default function ChatPage() {
   const { data: features, isLoading: isLoadingFeatures } = useFeatures();
   const { data: chatModels = [] } = useChatModelsQuery(conversationId);
   // Vertex AI Gemini mode doesn't require an API key (uses ADC)
+  // vLLM/Ollama may not require an API key either
   const hasAnyApiKey =
-    chatApiKeys.some((k) => k.secretId) || features?.geminiVertexAiEnabled;
+    chatApiKeys.some((k) => k.secretId) ||
+    features?.geminiVertexAiEnabled ||
+    features?.vllmEnabled;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   // Sync conversation ID with URL and reset initial state when navigating to base /chat

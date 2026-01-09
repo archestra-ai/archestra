@@ -20,10 +20,20 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/vllm`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
+  // Skip registration if vLLM is not configured
+  if (!config.llm.vllm.enabled) {
+    logger.info(
+      "[UnifiedProxy] vLLM base URL not configured, skipping vLLM routes",
+    );
+    return;
+  }
+
   logger.info("[UnifiedProxy] Registering unified vLLM routes");
 
+  // Non-null assertion safe here: we've confirmed enabled is true above,
+  // and enabled = Boolean(baseUrl), so baseUrl must be defined
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.vllm.baseUrl,
+    upstream: config.llm.vllm.baseUrl!,
     prefix: API_PREFIX,
     rewritePrefix: "",
     preHandler: (request, _reply, next) => {

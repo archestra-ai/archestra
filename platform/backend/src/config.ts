@@ -264,8 +264,8 @@ export default {
       },
     },
     vllm: {
-      baseUrl:
-        process.env.ARCHESTRA_VLLM_BASE_URL || "http://localhost:8000/v1",
+      enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_VLLM_USE_V2_ROUTES !== "false",
     },
   },

@@ -30544,6 +30544,9 @@
                     "geminiVertexAiEnabled": {
                       "type": "boolean"
                     },
+                    "vllmEnabled": {
+                      "type": "boolean"
+                    },
                     "globalToolPolicy": {
                       "type": "string",
                       "enum": [
@@ -30560,6 +30563,7 @@
                     "byosEnabled",
                     "byosVaultKvVersion",
                     "geminiVertexAiEnabled",
+                    "vllmEnabled",
                     "globalToolPolicy",
                     "browserStreamingEnabled"
                   ],

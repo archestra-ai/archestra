@@ -142,7 +142,12 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Environment Variables
 
-| Variable                      | Required | Description                                                             |
-| ----------------------------- | -------- | ----------------------------------------------------------------------- |
-| `ARCHESTRA_VLLM_BASE_URL`     | No       | vLLM server base URL (default: `http://localhost:8000/v1`)              |
+| Variable                      | Required | Description                                                                    |
+| ----------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_VLLM_BASE_URL`     | Yes      | vLLM server base URL (e.g., `http://localhost:8000/v1` or your vLLM endpoint)  |
 | `ARCHESTRA_CHAT_VLLM_API_KEY` | No       | API key for vLLM server (optional, many deployments don't require auth) |
+
+### Important Notes
+
+- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set. Without it, vLLM won't appear as an option in the platform.
+- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. The `ARCHESTRA_CHAT_VLLM_API_KEY` is only needed if your vLLM deployment has authentication enabled.

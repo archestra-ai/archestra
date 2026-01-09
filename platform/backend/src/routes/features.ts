@@ -29,6 +29,8 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
             byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
             /** Vertex AI Gemini mode - when enabled, no API key needed for Gemini */
             geminiVertexAiEnabled: z.boolean(),
+            /** vLLM mode - when enabled, no API key may be needed (e.g., Ollama) */
+            vllmEnabled: z.boolean(),
             /** Global tool policy - permissive bypasses policy checks, restrictive enforces them */
             globalToolPolicy: z.enum(["permissive", "restrictive"]),
             /** Browser streaming - enables live browser automation via Playwright MCP */
@@ -49,6 +51,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         byosEnabled: isByosEnabled(),
         byosVaultKvVersion: getByosVaultKvVersion(),
         geminiVertexAiEnabled: isVertexAiEnabled(),
+        vllmEnabled: config.llm.vllm.enabled,
         globalToolPolicy,
       });
     },

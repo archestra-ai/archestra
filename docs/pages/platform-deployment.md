@@ -107,7 +107,8 @@ The Helm chart provides extensive configuration options through values. For the 
 
 **Archestra Platform Settings**:
 
-- `archestra.image` - Docker image for the Archestra Platform (contains both backend API and frontend). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
+- `archestra.image` - Docker image repository for the Archestra Platform (default: `archestra/platform`). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
+- `archestra.imageTag` - Image tag for the Archestra Platform. New Helm releases update this value to latest available image tag.
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
 - `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options)

@@ -195,6 +195,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTools]: {
     tool: ["read"],
   },
+  [RouteId.GetToolsWithAssignments]: {
+    tool: ["read"],
+  },
   [RouteId.GetInteractions]: {
     interaction: ["read"],
   },

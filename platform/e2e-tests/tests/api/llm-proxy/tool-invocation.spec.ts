@@ -316,6 +316,79 @@ const geminiConfig: ToolInvocationTestConfig = {
     ),
 };
 
+const cohereConfig: ToolInvocationTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/v2/chat`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "command-r-plus-08-2024",
+    messages: [{ role: "user", content: [{ type: "text", text: content }] }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content[0].text",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.message).toBeDefined();
+
+    const content = response.message.content;
+    expect(content).toBeDefined();
+    expect(content.length).toBeGreaterThan(0);
+
+    const textContent = content.find((c: { type: string }) => c.type === "text");
+    expect(textContent).toBeDefined();
+    expect(textContent.text).toContain("read_file");
+    expect(textContent.text).toContain("denied");
+
+    const toolCalls = response.message.tool_calls || [];
+    expect(toolCalls.length).toBe(0);
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.message).toBeDefined();
+    expect(response.message.tool_calls).toBeDefined();
+
+    const toolCalls = response.message.tool_calls;
+    expect(toolCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = toolCalls.find(
+        (tc: { function: { name: string } }) => tc.function.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const toolCalls = response.message.tool_calls;
+    const toolCall = toolCalls.find(
+      (tc: { function: { name: string } }) => tc.function.name === toolName,
+    );
+    const args = JSON.parse(toolCall.function.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((i) =>
+      i.request?.messages?.some((m: { content?: Array<{ text?: string }> }) =>
+        m.content?.some((c) => c.text?.includes(content)),
+      ),
+    ),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -324,6 +397,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  cohereConfig,
 ];
 
 for (const config of testConfigs) {
@@ -369,21 +443,25 @@ for (const config of testConfigs) {
         );
       }
 
-      // 3. Get the agent-tool relationship ID
+      // 3. Get the tool ID from the agent-tool relationship
       const readFileAgentTool = await waitForAgentTool(
         request,
         agentId,
         "read_file",
       );
-      toolId = readFileAgentTool.id;
+      toolId = readFileAgentTool.tool.id;
 
       // 4. Create a trusted data policy
       const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
-        agentToolId: toolId,
+        toolId,
         description: "Mark messages containing UNTRUSTED_DATA as untrusted",
-        attributePath: config.trustedDataPolicyAttributePath,
-        operator: "contains",
-        value: "UNTRUSTED_DATA",
+        conditions: [
+          {
+            key: config.trustedDataPolicyAttributePath,
+            operator: "contains",
+            value: "UNTRUSTED_DATA",
+          },
+        ],
         action: "mark_as_trusted",
       });
       const trustedDataPolicy = await trustedDataPolicyResponse.json();
@@ -393,10 +471,14 @@ for (const config of testConfigs) {
       const toolInvocationPolicyResponse = await createToolInvocationPolicy(
         request,
         {
-          agentToolId: toolId,
-          argumentPath: "file_path",
-          operator: "contains",
-          value: "/etc/",
+          toolId,
+          conditions: [
+            {
+              key: "file_path",
+              operator: "contains",
+              value: "/etc/",
+            },
+          ],
           action: "block_always",
           reason: "Reading /etc/ files is not allowed for security reasons",
         },

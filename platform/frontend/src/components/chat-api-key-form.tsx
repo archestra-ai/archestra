@@ -90,6 +90,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
   },
+  cohere: {
+    name: "Cohere",
+    icon: "/icons/cohere.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://dashboard.cohere.com/api-keys",
+    consoleName: "Cohere Dashboard",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

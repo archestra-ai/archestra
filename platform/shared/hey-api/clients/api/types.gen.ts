@@ -9652,6 +9652,24 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            request: VllmChatCompletionRequest;
+            processedRequest?: VllmChatCompletionRequest | null;
+            response: VllmChatCompletionResponse;
+            type: 'vllm:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            createdAt: string;
         }>;
         pagination: {
             currentPage: number;
@@ -9936,6 +9954,24 @@ export type GetInteractionResponses = {
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        createdAt: string;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        request: VllmChatCompletionRequest;
+        processedRequest?: VllmChatCompletionRequest | null;
+        response: VllmChatCompletionResponse;
+        type: 'vllm:chatCompletions';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;

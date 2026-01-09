@@ -32064,6 +32064,112 @@
                               "createdAt"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "request": {
+                                "$ref": "#/components/schemas/VllmChatCompletionRequest"
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/VllmChatCompletionRequest"
+                                  }
+                                ]
+                              },
+                              "response": {
+                                "$ref": "#/components/schemas/VllmChatCompletionResponse"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "vllm:chatCompletions"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "userId",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "inputTokens",
+                              "outputTokens",
+                              "baselineCost",
+                              "cost",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       }
@@ -33089,6 +33195,112 @@
                           "type": "string",
                           "enum": [
                             "anthropic:messages"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "userId",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "baselineCost",
+                        "cost",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "request": {
+                          "$ref": "#/components/schemas/VllmChatCompletionRequest"
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/VllmChatCompletionRequest"
+                            }
+                          ]
+                        },
+                        "response": {
+                          "$ref": "#/components/schemas/VllmChatCompletionResponse"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "vllm:chatCompletions"
                           ]
                         },
                         "model": {

@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import type { RouteId } from "@shared";
+import { type RouteId, SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
@@ -93,12 +93,15 @@ export class Authnz {
       );
       return true;
     }
+    // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
+    const isLlmProxyRoute = SupportedProviders.some((provider) =>
+      url.startsWith(`/v1/${provider}`),
+    );
+
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
-      url.startsWith("/v1/openai") ||
-      url.startsWith("/v1/anthropic") ||
-      url.startsWith("/v1/gemini") ||
+      isLlmProxyRoute ||
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||

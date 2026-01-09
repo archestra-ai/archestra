@@ -11,7 +11,7 @@ archestra:
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/v1"
     ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080"
     ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080"
-    # Chat base URLs (for chat API key validation)
+    # Chat API keys (for e2e testing)
     ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
     ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
     ARCHESTRA_CHAT_GEMINI_API_KEY: test-key

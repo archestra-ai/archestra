@@ -28,7 +28,6 @@ export const SUPPORTED_THEMES = [
   // Vibrant & Colorful
   { id: "t3-chat", category: "vibrant" },
   { id: "twitter", category: "vibrant" },
-  { id: "bubblegum", category: "vibrant" },
   { id: "tangerine", category: "vibrant" },
   { id: "quantum-rose", category: "vibrant" },
   { id: "candyland", category: "vibrant" },

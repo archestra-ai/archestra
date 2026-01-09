@@ -126,7 +126,8 @@ tests:
   - it: should configure container with correct image
     documentIndex: 1
     set:
-      archestra.image: archestra/platform:test-version
+      archestra.image: archestra/platform
+      archestra.imageTag: test-version
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image

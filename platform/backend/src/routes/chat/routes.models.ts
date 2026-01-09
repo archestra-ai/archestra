@@ -104,27 +104,11 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const data = (await response.json()) as {
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   };
-
-  // Filter to only chat-compatible models
-  // Include claude- and gemini- prefixes for Orlando model support (aggregated provider models)
-  const allowedModelPrefixes = [
-    "claude-",
-    "gemini-",
-    "gpt-",
-    "o1-",
-    "o3-",
-    "o4-",
-  ];
   const excludePatterns = ["-instruct", "-embedding", "-tts", "-whisper"];
 
   return data.data
     .filter((model) => {
       const id = model.id.toLowerCase();
-      // Must start with a chat model prefix
-      const hasValidPrefix = allowedModelPrefixes.some((prefix) =>
-        id.startsWith(prefix),
-      );
-      if (!hasValidPrefix) return false;
 
       // Must not contain excluded patterns
       const hasExcludedPattern = excludePatterns.some((pattern) =>

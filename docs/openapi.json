@@ -3878,10 +3878,8 @@
           "messages": {
             "type": "array",
             "items": {
-              "description": "A message in the conversation",
               "anyOf": [
                 {
-                  "description": "A developer message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -3892,7 +3890,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -3908,7 +3905,8 @@
                             "required": [
                               "type",
                               "text"
-                            ]
+                            ],
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -3926,10 +3924,10 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "A developer message"
                 },
                 {
-                  "description": "A system message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -3940,7 +3938,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -3956,7 +3953,8 @@
                             "required": [
                               "type",
                               "text"
-                            ]
+                            ],
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -3974,10 +3972,10 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "A system message"
                 },
                 {
-                  "description": "A user message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -3988,10 +3986,8 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A content part in a message",
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4007,10 +4003,10 @@
                                 "required": [
                                   "type",
                                   "text"
-                                ]
+                                ],
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4020,7 +4016,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -4037,16 +4032,17 @@
                                     },
                                     "required": [
                                       "url"
-                                    ]
+                                    ],
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
-                                ]
+                                ],
+                                "description": "An image content part"
                               },
                               {
-                                "description": "An audio content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4056,7 +4052,6 @@
                                     ]
                                   },
                                   "input_audio": {
-                                    "description": "Audio input details",
                                     "type": "object",
                                     "properties": {
                                       "data": {
@@ -4073,16 +4068,17 @@
                                     "required": [
                                       "data",
                                       "format"
-                                    ]
+                                    ],
+                                    "description": "Audio input details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "input_audio"
-                                ]
+                                ],
+                                "description": "An audio content part"
                               },
                               {
-                                "description": "A file content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4092,7 +4088,6 @@
                                     ]
                                   },
                                   "file": {
-                                    "description": "File details",
                                     "type": "object",
                                     "properties": {
                                       "file_data": {
@@ -4104,15 +4099,18 @@
                                       "filename": {
                                         "type": "string"
                                       }
-                                    }
+                                    },
+                                    "description": "File details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "file"
-                                ]
+                                ],
+                                "description": "A file content part"
                               }
-                            ]
+                            ],
+                            "description": "A content part in a message"
                           }
                         }
                       ]
@@ -4130,10 +4128,10 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "A user message"
                 },
                 {
-                  "description": "An assistant message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -4170,7 +4168,6 @@
                             {
                               "type": "array",
                               "items": {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4186,13 +4183,13 @@
                                 "required": [
                                   "type",
                                   "text"
-                                ]
+                                ],
+                                "description": "A text content part"
                               }
                             },
                             {
                               "type": "array",
                               "items": {
-                                "description": "A refusal content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4208,7 +4205,8 @@
                                 "required": [
                                   "type",
                                   "refusal"
-                                ]
+                                ],
+                                "description": "A refusal content part"
                               }
                             }
                           ]
@@ -4256,10 +4254,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -4272,7 +4268,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -4285,17 +4280,18 @@
                                 "required": [
                                   "arguments",
                                   "name"
-                                ]
+                                ],
+                                "description": "Function call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "function"
-                            ]
+                            ],
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -4308,7 +4304,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -4321,16 +4316,19 @@
                                 "required": [
                                   "input",
                                   "name"
-                                ]
+                                ],
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "custom"
-                            ]
+                            ],
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     },
                     "reasoning": {
@@ -4346,10 +4344,10 @@
                   },
                   "required": [
                     "role"
-                  ]
+                  ],
+                  "description": "An assistant message"
                 },
                 {
-                  "description": "A tool result message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -4368,7 +4366,6 @@
                           "items": {
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4384,10 +4381,10 @@
                                 "required": [
                                   "type",
                                   "text"
-                                ]
+                                ],
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -4397,7 +4394,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -4414,13 +4410,15 @@
                                     },
                                     "required": [
                                       "url"
-                                    ]
+                                    ],
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
-                                ]
+                                ],
+                                "description": "An image content part"
                               }
                             ]
                           }
@@ -4435,10 +4433,10 @@
                     "role",
                     "content",
                     "tool_call_id"
-                  ]
+                  ],
+                  "description": "A tool result message"
                 },
                 {
-                  "description": "A function result message (deprecated)",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -4465,18 +4463,18 @@
                     "role",
                     "content",
                     "name"
-                  ]
+                  ],
+                  "description": "A function result message (deprecated)"
                 }
-              ]
+              ],
+              "description": "A message in the conversation"
             }
           },
           "tools": {
             "type": "array",
             "items": {
-              "description": "A tool definition",
               "anyOf": [
                 {
-                  "description": "A function tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -4486,7 +4484,6 @@
                       ]
                     },
                     "function": {
-                      "description": "A function definition for tool calling",
                       "type": "object",
                       "properties": {
                         "name": {
@@ -4513,16 +4510,17 @@
                       },
                       "required": [
                         "name"
-                      ]
+                      ],
+                      "description": "A function definition for tool calling"
                     }
                   },
                   "required": [
                     "type",
                     "function"
-                  ]
+                  ],
+                  "description": "A function tool definition"
                 },
                 {
-                  "description": "A custom tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -4535,8 +4533,8 @@
                       "type": "object",
                       "properties": {
                         "name": {
-                          "description": "The name of the custom tool",
-                          "type": "string"
+                          "type": "string",
+                          "description": "The name of the custom tool"
                         },
                         "description": {
                           "description": "Description of the tool",
@@ -4549,11 +4547,11 @@
                               "type": "object",
                               "properties": {
                                 "type": {
-                                  "description": "Unconstrained text format",
                                   "type": "string",
                                   "enum": [
                                     "text"
-                                  ]
+                                  ],
+                                  "description": "Unconstrained text format"
                                 }
                               },
                               "required": [
@@ -4573,16 +4571,16 @@
                                   "type": "object",
                                   "properties": {
                                     "definition": {
-                                      "description": "The grammar definition",
-                                      "type": "string"
+                                      "type": "string",
+                                      "description": "The grammar definition"
                                     },
                                     "syntax": {
-                                      "description": "The syntax of the grammar",
                                       "type": "string",
                                       "enum": [
                                         "lark",
                                         "regex"
-                                      ]
+                                      ],
+                                      "description": "The syntax of the grammar"
                                     }
                                   },
                                   "required": [
@@ -4607,13 +4605,14 @@
                   "required": [
                     "type",
                     "custom"
-                  ]
+                  ],
+                  "description": "A custom tool definition"
                 }
-              ]
+              ],
+              "description": "A tool definition"
             }
           },
           "tool_choice": {
-            "description": "Tool choice option",
             "anyOf": [
               {
                 "type": "string",
@@ -4624,7 +4623,6 @@
                 ]
               },
               {
-                "description": "Allowed tool choice configuration",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -4634,23 +4632,21 @@
                     ]
                   },
                   "allowed_tools": {
-                    "description": "Allowed tools configuration",
                     "type": "object",
                     "properties": {
                       "mode": {
-                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    ",
                         "type": "string",
                         "enum": [
                           "auto",
                           "required"
-                        ]
+                        ],
+                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    "
                       },
                       "tools": {
                         "type": "array",
                         "items": {
                           "type": "object",
                           "additionalProperties": {
-                            "description": "A function tool definition",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -4660,7 +4656,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "A function definition for tool calling",
                                 "type": "object",
                                 "properties": {
                                   "name": {
@@ -4690,13 +4685,15 @@
                                 },
                                 "required": [
                                   "name"
-                                ]
+                                ],
+                                "description": "A function definition for tool calling"
                               }
                             },
                             "required": [
                               "type",
                               "function"
-                            ]
+                            ],
+                            "description": "A function tool definition"
                           }
                         }
                       }
@@ -4704,16 +4701,17 @@
                     "required": [
                       "mode",
                       "tools"
-                    ]
+                    ],
+                    "description": "Allowed tools configuration"
                   }
                 },
                 "required": [
                   "type",
                   "allowed_tools"
-                ]
+                ],
+                "description": "Allowed tool choice configuration"
               },
               {
-                "description": "Named function tool choice",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -4737,10 +4735,10 @@
                 "required": [
                   "type",
                   "function"
-                ]
+                ],
+                "description": "Named function tool choice"
               },
               {
-                "description": "A custom tool definition",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -4753,8 +4751,8 @@
                     "type": "object",
                     "properties": {
                       "name": {
-                        "description": "The name of the custom tool",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The name of the custom tool"
                       },
                       "description": {
                         "description": "Description of the tool",
@@ -4767,11 +4765,11 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "description": "Unconstrained text format",
                                 "type": "string",
                                 "enum": [
                                   "text"
-                                ]
+                                ],
+                                "description": "Unconstrained text format"
                               }
                             },
                             "required": [
@@ -4791,16 +4789,16 @@
                                 "type": "object",
                                 "properties": {
                                   "definition": {
-                                    "description": "The grammar definition",
-                                    "type": "string"
+                                    "type": "string",
+                                    "description": "The grammar definition"
                                   },
                                   "syntax": {
-                                    "description": "The syntax of the grammar",
                                     "type": "string",
                                     "enum": [
                                       "lark",
                                       "regex"
-                                    ]
+                                    ],
+                                    "description": "The syntax of the grammar"
                                   }
                                 },
                                 "required": [
@@ -4825,9 +4823,11 @@
                 "required": [
                   "type",
                   "custom"
-                ]
+                ],
+                "description": "A custom tool definition"
               }
-            ]
+            ],
+            "description": "Tool choice option"
           },
           "temperature": {
             "anyOf": [
@@ -4987,7 +4987,6 @@
           "choices": {
             "type": "array",
             "items": {
-              "description": "A choice in the chat completion response",
               "type": "object",
               "properties": {
                 "finish_reason": {
@@ -5012,7 +5011,6 @@
                   ]
                 },
                 "message": {
-                  "description": "The assistant message in the response",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -5078,10 +5076,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -5094,7 +5090,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -5107,17 +5102,18 @@
                                 "required": [
                                   "arguments",
                                   "name"
-                                ]
+                                ],
+                                "description": "Function call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "function"
-                            ]
+                            ],
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -5130,7 +5126,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -5143,16 +5138,19 @@
                                 "required": [
                                   "input",
                                   "name"
-                                ]
+                                ],
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "custom"
-                            ]
+                            ],
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     },
                     "reasoning": {
@@ -5169,7 +5167,8 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "The assistant message in the response"
                 }
               },
               "required": [
@@ -5177,7 +5176,8 @@
                 "index",
                 "logprobs",
                 "message"
-              ]
+              ],
+              "description": "A choice in the chat completion response"
             }
           },
           "created": {
@@ -5203,7 +5203,6 @@
             ]
           },
           "usage": {
-            "description": "Token usage statistics for the completion",
             "type": "object",
             "properties": {
               "completion_tokens": {
@@ -5222,7 +5221,8 @@
               "completion_tokens",
               "prompt_tokens",
               "total_tokens"
-            ]
+            ],
+            "description": "Token usage statistics for the completion"
           }
         },
         "required": [
@@ -5242,10 +5242,8 @@
           "messages": {
             "type": "array",
             "items": {
-              "description": "A message in the conversation",
               "anyOf": [
                 {
-                  "description": "A developer message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -5256,7 +5254,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -5272,7 +5269,8 @@
                             "required": [
                               "type",
                               "text"
-                            ]
+                            ],
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -5290,10 +5288,10 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "A developer message"
                 },
                 {
-                  "description": "A system message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -5304,7 +5302,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -5320,7 +5317,8 @@
                             "required": [
                               "type",
                               "text"
-                            ]
+                            ],
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -5338,10 +5336,10 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "A system message"
                 },
                 {
-                  "description": "A user message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -5352,10 +5350,8 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A content part in a message",
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5371,10 +5367,10 @@
                                 "required": [
                                   "type",
                                   "text"
-                                ]
+                                ],
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5384,7 +5380,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -5401,16 +5396,17 @@
                                     },
                                     "required": [
                                       "url"
-                                    ]
+                                    ],
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
-                                ]
+                                ],
+                                "description": "An image content part"
                               },
                               {
-                                "description": "An audio content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5420,7 +5416,6 @@
                                     ]
                                   },
                                   "input_audio": {
-                                    "description": "Audio input details",
                                     "type": "object",
                                     "properties": {
                                       "data": {
@@ -5437,16 +5432,17 @@
                                     "required": [
                                       "data",
                                       "format"
-                                    ]
+                                    ],
+                                    "description": "Audio input details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "input_audio"
-                                ]
+                                ],
+                                "description": "An audio content part"
                               },
                               {
-                                "description": "A file content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5456,7 +5452,6 @@
                                     ]
                                   },
                                   "file": {
-                                    "description": "File details",
                                     "type": "object",
                                     "properties": {
                                       "file_data": {
@@ -5468,15 +5463,18 @@
                                       "filename": {
                                         "type": "string"
                                       }
-                                    }
+                                    },
+                                    "description": "File details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "file"
-                                ]
+                                ],
+                                "description": "A file content part"
                               }
-                            ]
+                            ],
+                            "description": "A content part in a message"
                           }
                         }
                       ]
@@ -5494,10 +5492,10 @@
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "A user message"
                 },
                 {
-                  "description": "An assistant message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -5534,7 +5532,6 @@
                             {
                               "type": "array",
                               "items": {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5550,13 +5547,13 @@
                                 "required": [
                                   "type",
                                   "text"
-                                ]
+                                ],
+                                "description": "A text content part"
                               }
                             },
                             {
                               "type": "array",
                               "items": {
-                                "description": "A refusal content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5572,7 +5569,8 @@
                                 "required": [
                                   "type",
                                   "refusal"
-                                ]
+                                ],
+                                "description": "A refusal content part"
                               }
                             }
                           ]
@@ -5620,10 +5618,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -5636,7 +5632,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -5649,17 +5644,18 @@
                                 "required": [
                                   "arguments",
                                   "name"
-                                ]
+                                ],
+                                "description": "Function call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "function"
-                            ]
+                            ],
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -5672,7 +5668,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -5685,25 +5680,28 @@
                                 "required": [
                                   "input",
                                   "name"
-                                ]
+                                ],
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "custom"
-                            ]
+                            ],
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     }
                   },
                   "required": [
                     "role"
-                  ]
+                  ],
+                  "description": "An assistant message"
                 },
                 {
-                  "description": "A tool result message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -5722,7 +5720,6 @@
                           "items": {
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5738,10 +5735,10 @@
                                 "required": [
                                   "type",
                                   "text"
-                                ]
+                                ],
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -5751,7 +5748,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -5768,13 +5764,15 @@
                                     },
                                     "required": [
                                       "url"
-                                    ]
+                                    ],
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
-                                ]
+                                ],
+                                "description": "An image content part"
                               }
                             ]
                           }
@@ -5789,10 +5787,10 @@
                     "role",
                     "content",
                     "tool_call_id"
-                  ]
+                  ],
+                  "description": "A tool result message"
                 },
                 {
-                  "description": "A function result message (deprecated)",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -5819,18 +5817,18 @@
                     "role",
                     "content",
                     "name"
-                  ]
+                  ],
+                  "description": "A function result message (deprecated)"
                 }
-              ]
+              ],
+              "description": "A message in the conversation"
             }
           },
           "tools": {
             "type": "array",
             "items": {
-              "description": "A tool definition",
               "anyOf": [
                 {
-                  "description": "A function tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -5840,7 +5838,6 @@
                       ]
                     },
                     "function": {
-                      "description": "A function definition for tool calling",
                       "type": "object",
                       "properties": {
                         "name": {
@@ -5867,16 +5864,17 @@
                       },
                       "required": [
                         "name"
-                      ]
+                      ],
+                      "description": "A function definition for tool calling"
                     }
                   },
                   "required": [
                     "type",
                     "function"
-                  ]
+                  ],
+                  "description": "A function tool definition"
                 },
                 {
-                  "description": "A custom tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -5889,8 +5887,8 @@
                       "type": "object",
                       "properties": {
                         "name": {
-                          "description": "The name of the custom tool",
-                          "type": "string"
+                          "type": "string",
+                          "description": "The name of the custom tool"
                         },
                         "description": {
                           "description": "Description of the tool",
@@ -5903,11 +5901,11 @@
                               "type": "object",
                               "properties": {
                                 "type": {
-                                  "description": "Unconstrained text format",
                                   "type": "string",
                                   "enum": [
                                     "text"
-                                  ]
+                                  ],
+                                  "description": "Unconstrained text format"
                                 }
                               },
                               "required": [
@@ -5927,16 +5925,16 @@
                                   "type": "object",
                                   "properties": {
                                     "definition": {
-                                      "description": "The grammar definition",
-                                      "type": "string"
+                                      "type": "string",
+                                      "description": "The grammar definition"
                                     },
                                     "syntax": {
-                                      "description": "The syntax of the grammar",
                                       "type": "string",
                                       "enum": [
                                         "lark",
                                         "regex"
-                                      ]
+                                      ],
+                                      "description": "The syntax of the grammar"
                                     }
                                   },
                                   "required": [
@@ -5961,13 +5959,14 @@
                   "required": [
                     "type",
                     "custom"
-                  ]
+                  ],
+                  "description": "A custom tool definition"
                 }
-              ]
+              ],
+              "description": "A tool definition"
             }
           },
           "tool_choice": {
-            "description": "Tool choice option",
             "anyOf": [
               {
                 "type": "string",
@@ -5978,7 +5977,6 @@
                 ]
               },
               {
-                "description": "Allowed tool choice configuration",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -5988,23 +5986,21 @@
                     ]
                   },
                   "allowed_tools": {
-                    "description": "Allowed tools configuration",
                     "type": "object",
                     "properties": {
                       "mode": {
-                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    ",
                         "type": "string",
                         "enum": [
                           "auto",
                           "required"
-                        ]
+                        ],
+                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    "
                       },
                       "tools": {
                         "type": "array",
                         "items": {
                           "type": "object",
                           "additionalProperties": {
-                            "description": "A function tool definition",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -6014,7 +6010,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "A function definition for tool calling",
                                 "type": "object",
                                 "properties": {
                                   "name": {
@@ -6044,13 +6039,15 @@
                                 },
                                 "required": [
                                   "name"
-                                ]
+                                ],
+                                "description": "A function definition for tool calling"
                               }
                             },
                             "required": [
                               "type",
                               "function"
-                            ]
+                            ],
+                            "description": "A function tool definition"
                           }
                         }
                       }
@@ -6058,16 +6055,17 @@
                     "required": [
                       "mode",
                       "tools"
-                    ]
+                    ],
+                    "description": "Allowed tools configuration"
                   }
                 },
                 "required": [
                   "type",
                   "allowed_tools"
-                ]
+                ],
+                "description": "Allowed tool choice configuration"
               },
               {
-                "description": "Named function tool choice",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -6091,10 +6089,10 @@
                 "required": [
                   "type",
                   "function"
-                ]
+                ],
+                "description": "Named function tool choice"
               },
               {
-                "description": "A custom tool definition",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -6107,8 +6105,8 @@
                     "type": "object",
                     "properties": {
                       "name": {
-                        "description": "The name of the custom tool",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The name of the custom tool"
                       },
                       "description": {
                         "description": "Description of the tool",
@@ -6121,11 +6119,11 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "description": "Unconstrained text format",
                                 "type": "string",
                                 "enum": [
                                   "text"
-                                ]
+                                ],
+                                "description": "Unconstrained text format"
                               }
                             },
                             "required": [
@@ -6145,16 +6143,16 @@
                                 "type": "object",
                                 "properties": {
                                   "definition": {
-                                    "description": "The grammar definition",
-                                    "type": "string"
+                                    "type": "string",
+                                    "description": "The grammar definition"
                                   },
                                   "syntax": {
-                                    "description": "The syntax of the grammar",
                                     "type": "string",
                                     "enum": [
                                       "lark",
                                       "regex"
-                                    ]
+                                    ],
+                                    "description": "The syntax of the grammar"
                                   }
                                 },
                                 "required": [
@@ -6179,9 +6177,11 @@
                 "required": [
                   "type",
                   "custom"
-                ]
+                ],
+                "description": "A custom tool definition"
               }
-            ]
+            ],
+            "description": "Tool choice option"
           },
           "temperature": {
             "anyOf": [
@@ -6291,7 +6291,6 @@
           "choices": {
             "type": "array",
             "items": {
-              "description": "A choice in the chat completion response",
               "type": "object",
               "properties": {
                 "finish_reason": {
@@ -6316,7 +6315,6 @@
                   ]
                 },
                 "message": {
-                  "description": "The assistant message in the response",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -6382,10 +6380,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -6398,7 +6394,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -6411,17 +6406,18 @@
                                 "required": [
                                   "arguments",
                                   "name"
-                                ]
+                                ],
+                                "description": "Function call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "function"
-                            ]
+                            ],
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -6434,7 +6430,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -6447,23 +6442,27 @@
                                 "required": [
                                   "input",
                                   "name"
-                                ]
+                                ],
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
                               "id",
                               "type",
                               "custom"
-                            ]
+                            ],
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     }
                   },
                   "required": [
                     "content",
                     "role"
-                  ]
+                  ],
+                  "description": "The assistant message in the response"
                 }
               },
               "required": [
@@ -6471,7 +6470,8 @@
                 "index",
                 "logprobs",
                 "message"
-              ]
+              ],
+              "description": "A choice in the chat completion response"
             }
           },
           "created": {
@@ -6497,7 +6497,6 @@
             ]
           },
           "usage": {
-            "description": "Token usage statistics for the completion",
             "type": "object",
             "properties": {
               "completion_tokens": {
@@ -6516,7 +6515,8 @@
               "completion_tokens",
               "prompt_tokens",
               "total_tokens"
-            ]
+            ],
+            "description": "Token usage statistics for the completion"
           }
         },
         "required": [
@@ -10852,10 +10852,8 @@
           "messages": {
             "type": "array",
             "items": {
-              "description": "A message in the conversation",
               "anyOf": [
                 {
-                  "description": "A developer message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -10866,7 +10864,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -10883,7 +10880,8 @@
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -10902,10 +10900,10 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A developer message"
                 },
                 {
-                  "description": "A system message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -10916,7 +10914,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -10933,7 +10930,8 @@
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -10952,10 +10950,10 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A system message"
                 },
                 {
-                  "description": "A user message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -10966,10 +10964,8 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A content part in a message",
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -10986,10 +10982,10 @@
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -10999,7 +10995,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -11017,17 +11012,18 @@
                                     "required": [
                                       "url"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "An image content part"
                               },
                               {
-                                "description": "An audio content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -11037,7 +11033,6 @@
                                     ]
                                   },
                                   "input_audio": {
-                                    "description": "Audio input details",
                                     "type": "object",
                                     "properties": {
                                       "data": {
@@ -11055,17 +11050,18 @@
                                       "data",
                                       "format"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "Audio input details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "input_audio"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "An audio content part"
                               },
                               {
-                                "description": "A file content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -11075,7 +11071,6 @@
                                     ]
                                   },
                                   "file": {
-                                    "description": "File details",
                                     "type": "object",
                                     "properties": {
                                       "file_data": {
@@ -11088,16 +11083,19 @@
                                         "type": "string"
                                       }
                                     },
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "File details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "file"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A file content part"
                               }
-                            ]
+                            ],
+                            "description": "A content part in a message"
                           }
                         }
                       ]
@@ -11116,10 +11114,10 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A user message"
                 },
                 {
-                  "description": "An assistant message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -11157,7 +11155,6 @@
                             {
                               "type": "array",
                               "items": {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -11174,13 +11171,13 @@
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A text content part"
                               }
                             },
                             {
                               "type": "array",
                               "items": {
-                                "description": "A refusal content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -11197,7 +11194,8 @@
                                   "type",
                                   "refusal"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A refusal content part"
                               }
                             }
                           ]
@@ -11246,10 +11244,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -11262,7 +11258,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -11276,7 +11271,8 @@
                                   "arguments",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Function call details"
                               }
                             },
                             "required": [
@@ -11284,10 +11280,10 @@
                               "type",
                               "function"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -11300,7 +11296,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -11314,7 +11309,8 @@
                                   "input",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
@@ -11322,9 +11318,11 @@
                               "type",
                               "custom"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     },
                     "reasoning": {
@@ -11341,10 +11339,10 @@
                   "required": [
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "An assistant message"
                 },
                 {
-                  "description": "A tool result message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -11363,7 +11361,6 @@
                           "items": {
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -11380,10 +11377,10 @@
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -11393,7 +11390,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -11411,14 +11407,16 @@
                                     "required": [
                                       "url"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "An image content part"
                               }
                             ]
                           }
@@ -11434,10 +11432,10 @@
                     "content",
                     "tool_call_id"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A tool result message"
                 },
                 {
-                  "description": "A function result message (deprecated)",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -11465,18 +11463,18 @@
                     "content",
                     "name"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A function result message (deprecated)"
                 }
-              ]
+              ],
+              "description": "A message in the conversation"
             }
           },
           "tools": {
             "type": "array",
             "items": {
-              "description": "A tool definition",
               "anyOf": [
                 {
-                  "description": "A function tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -11486,7 +11484,6 @@
                       ]
                     },
                     "function": {
-                      "description": "A function definition for tool calling",
                       "type": "object",
                       "properties": {
                         "name": {
@@ -11514,17 +11511,18 @@
                       "required": [
                         "name"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "description": "A function definition for tool calling"
                     }
                   },
                   "required": [
                     "type",
                     "function"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A function tool definition"
                 },
                 {
-                  "description": "A custom tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -11537,8 +11535,8 @@
                       "type": "object",
                       "properties": {
                         "name": {
-                          "description": "The name of the custom tool",
-                          "type": "string"
+                          "type": "string",
+                          "description": "The name of the custom tool"
                         },
                         "description": {
                           "description": "Description of the tool",
@@ -11551,11 +11549,11 @@
                               "type": "object",
                               "properties": {
                                 "type": {
-                                  "description": "Unconstrained text format",
                                   "type": "string",
                                   "enum": [
                                     "text"
-                                  ]
+                                  ],
+                                  "description": "Unconstrained text format"
                                 }
                               },
                               "required": [
@@ -11576,16 +11574,16 @@
                                   "type": "object",
                                   "properties": {
                                     "definition": {
-                                      "description": "The grammar definition",
-                                      "type": "string"
+                                      "type": "string",
+                                      "description": "The grammar definition"
                                     },
                                     "syntax": {
-                                      "description": "The syntax of the grammar",
                                       "type": "string",
                                       "enum": [
                                         "lark",
                                         "regex"
-                                      ]
+                                      ],
+                                      "description": "The syntax of the grammar"
                                     }
                                   },
                                   "required": [
@@ -11614,13 +11612,14 @@
                     "type",
                     "custom"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A custom tool definition"
                 }
-              ]
+              ],
+              "description": "A tool definition"
             }
           },
           "tool_choice": {
-            "description": "Tool choice option",
             "anyOf": [
               {
                 "type": "string",
@@ -11631,7 +11630,6 @@
                 ]
               },
               {
-                "description": "Allowed tool choice configuration",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -11641,23 +11639,21 @@
                     ]
                   },
                   "allowed_tools": {
-                    "description": "Allowed tools configuration",
                     "type": "object",
                     "properties": {
                       "mode": {
-                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    ",
                         "type": "string",
                         "enum": [
                           "auto",
                           "required"
-                        ]
+                        ],
+                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    "
                       },
                       "tools": {
                         "type": "array",
                         "items": {
                           "type": "object",
                           "additionalProperties": {
-                            "description": "A function tool definition",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -11667,7 +11663,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "A function definition for tool calling",
                                 "type": "object",
                                 "properties": {
                                   "name": {
@@ -11698,14 +11693,16 @@
                                 "required": [
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A function definition for tool calling"
                               }
                             },
                             "required": [
                               "type",
                               "function"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A function tool definition"
                           }
                         }
                       }
@@ -11714,17 +11711,18 @@
                       "mode",
                       "tools"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "Allowed tools configuration"
                   }
                 },
                 "required": [
                   "type",
                   "allowed_tools"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Allowed tool choice configuration"
               },
               {
-                "description": "Named function tool choice",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -11750,10 +11748,10 @@
                   "type",
                   "function"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Named function tool choice"
               },
               {
-                "description": "A custom tool definition",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -11766,8 +11764,8 @@
                     "type": "object",
                     "properties": {
                       "name": {
-                        "description": "The name of the custom tool",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The name of the custom tool"
                       },
                       "description": {
                         "description": "Description of the tool",
@@ -11780,11 +11778,11 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "description": "Unconstrained text format",
                                 "type": "string",
                                 "enum": [
                                   "text"
-                                ]
+                                ],
+                                "description": "Unconstrained text format"
                               }
                             },
                             "required": [
@@ -11805,16 +11803,16 @@
                                 "type": "object",
                                 "properties": {
                                   "definition": {
-                                    "description": "The grammar definition",
-                                    "type": "string"
+                                    "type": "string",
+                                    "description": "The grammar definition"
                                   },
                                   "syntax": {
-                                    "description": "The syntax of the grammar",
                                     "type": "string",
                                     "enum": [
                                       "lark",
                                       "regex"
-                                    ]
+                                    ],
+                                    "description": "The syntax of the grammar"
                                   }
                                 },
                                 "required": [
@@ -11843,9 +11841,11 @@
                   "type",
                   "custom"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "A custom tool definition"
               }
-            ]
+            ],
+            "description": "Tool choice option"
           },
           "temperature": {
             "anyOf": [
@@ -12006,7 +12006,6 @@
           "choices": {
             "type": "array",
             "items": {
-              "description": "A choice in the chat completion response",
               "type": "object",
               "properties": {
                 "finish_reason": {
@@ -12031,7 +12030,6 @@
                   ]
                 },
                 "message": {
-                  "description": "The assistant message in the response",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -12098,10 +12096,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -12114,7 +12110,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -12128,7 +12123,8 @@
                                   "arguments",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Function call details"
                               }
                             },
                             "required": [
@@ -12136,10 +12132,10 @@
                               "type",
                               "function"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -12152,7 +12148,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -12166,7 +12161,8 @@
                                   "input",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
@@ -12174,9 +12170,11 @@
                               "type",
                               "custom"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     },
                     "reasoning": {
@@ -12194,7 +12192,8 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "The assistant message in the response"
                 }
               },
               "required": [
@@ -12203,7 +12202,8 @@
                 "logprobs",
                 "message"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "A choice in the chat completion response"
             }
           },
           "created": {
@@ -12229,7 +12229,6 @@
             ]
           },
           "usage": {
-            "description": "Token usage statistics for the completion",
             "type": "object",
             "properties": {
               "completion_tokens": {
@@ -12249,7 +12248,8 @@
               "prompt_tokens",
               "total_tokens"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "Token usage statistics for the completion"
           }
         },
         "required": [
@@ -12270,10 +12270,8 @@
           "messages": {
             "type": "array",
             "items": {
-              "description": "A message in the conversation",
               "anyOf": [
                 {
-                  "description": "A developer message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -12284,7 +12282,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -12301,7 +12298,8 @@
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -12320,10 +12318,10 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A developer message"
                 },
                 {
-                  "description": "A system message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -12334,7 +12332,6 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A text content part",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -12351,7 +12348,8 @@
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A text content part"
                           }
                         }
                       ]
@@ -12370,10 +12368,10 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A system message"
                 },
                 {
-                  "description": "A user message",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -12384,10 +12382,8 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "A content part in a message",
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12404,10 +12400,10 @@
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12417,7 +12413,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -12435,17 +12430,18 @@
                                     "required": [
                                       "url"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "An image content part"
                               },
                               {
-                                "description": "An audio content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12455,7 +12451,6 @@
                                     ]
                                   },
                                   "input_audio": {
-                                    "description": "Audio input details",
                                     "type": "object",
                                     "properties": {
                                       "data": {
@@ -12473,17 +12468,18 @@
                                       "data",
                                       "format"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "Audio input details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "input_audio"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "An audio content part"
                               },
                               {
-                                "description": "A file content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12493,7 +12489,6 @@
                                     ]
                                   },
                                   "file": {
-                                    "description": "File details",
                                     "type": "object",
                                     "properties": {
                                       "file_data": {
@@ -12506,16 +12501,19 @@
                                         "type": "string"
                                       }
                                     },
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "File details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "file"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A file content part"
                               }
-                            ]
+                            ],
+                            "description": "A content part in a message"
                           }
                         }
                       ]
@@ -12534,10 +12532,10 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A user message"
                 },
                 {
-                  "description": "An assistant message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -12575,7 +12573,6 @@
                             {
                               "type": "array",
                               "items": {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12592,13 +12589,13 @@
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A text content part"
                               }
                             },
                             {
                               "type": "array",
                               "items": {
-                                "description": "A refusal content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12615,7 +12612,8 @@
                                   "type",
                                   "refusal"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A refusal content part"
                               }
                             }
                           ]
@@ -12664,10 +12662,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -12680,7 +12676,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -12694,7 +12689,8 @@
                                   "arguments",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Function call details"
                               }
                             },
                             "required": [
@@ -12702,10 +12698,10 @@
                               "type",
                               "function"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -12718,7 +12714,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -12732,7 +12727,8 @@
                                   "input",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
@@ -12740,19 +12736,21 @@
                               "type",
                               "custom"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     }
                   },
                   "required": [
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "An assistant message"
                 },
                 {
-                  "description": "A tool result message",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -12771,7 +12769,6 @@
                           "items": {
                             "anyOf": [
                               {
-                                "description": "A text content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12788,10 +12785,10 @@
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A text content part"
                               },
                               {
-                                "description": "An image content part",
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -12801,7 +12798,6 @@
                                     ]
                                   },
                                   "image_url": {
-                                    "description": "Image URL details",
                                     "type": "object",
                                     "properties": {
                                       "url": {
@@ -12819,14 +12815,16 @@
                                     "required": [
                                       "url"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": false,
+                                    "description": "Image URL details"
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "image_url"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "An image content part"
                               }
                             ]
                           }
@@ -12842,10 +12840,10 @@
                     "content",
                     "tool_call_id"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A tool result message"
                 },
                 {
-                  "description": "A function result message (deprecated)",
                   "type": "object",
                   "properties": {
                     "role": {
@@ -12873,18 +12871,18 @@
                     "content",
                     "name"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A function result message (deprecated)"
                 }
-              ]
+              ],
+              "description": "A message in the conversation"
             }
           },
           "tools": {
             "type": "array",
             "items": {
-              "description": "A tool definition",
               "anyOf": [
                 {
-                  "description": "A function tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -12894,7 +12892,6 @@
                       ]
                     },
                     "function": {
-                      "description": "A function definition for tool calling",
                       "type": "object",
                       "properties": {
                         "name": {
@@ -12922,17 +12919,18 @@
                       "required": [
                         "name"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "description": "A function definition for tool calling"
                     }
                   },
                   "required": [
                     "type",
                     "function"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A function tool definition"
                 },
                 {
-                  "description": "A custom tool definition",
                   "type": "object",
                   "properties": {
                     "type": {
@@ -12945,8 +12943,8 @@
                       "type": "object",
                       "properties": {
                         "name": {
-                          "description": "The name of the custom tool",
-                          "type": "string"
+                          "type": "string",
+                          "description": "The name of the custom tool"
                         },
                         "description": {
                           "description": "Description of the tool",
@@ -12959,11 +12957,11 @@
                               "type": "object",
                               "properties": {
                                 "type": {
-                                  "description": "Unconstrained text format",
                                   "type": "string",
                                   "enum": [
                                     "text"
-                                  ]
+                                  ],
+                                  "description": "Unconstrained text format"
                                 }
                               },
                               "required": [
@@ -12984,16 +12982,16 @@
                                   "type": "object",
                                   "properties": {
                                     "definition": {
-                                      "description": "The grammar definition",
-                                      "type": "string"
+                                      "type": "string",
+                                      "description": "The grammar definition"
                                     },
                                     "syntax": {
-                                      "description": "The syntax of the grammar",
                                       "type": "string",
                                       "enum": [
                                         "lark",
                                         "regex"
-                                      ]
+                                      ],
+                                      "description": "The syntax of the grammar"
                                     }
                                   },
                                   "required": [
@@ -13022,13 +13020,14 @@
                     "type",
                     "custom"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "A custom tool definition"
                 }
-              ]
+              ],
+              "description": "A tool definition"
             }
           },
           "tool_choice": {
-            "description": "Tool choice option",
             "anyOf": [
               {
                 "type": "string",
@@ -13039,7 +13038,6 @@
                 ]
               },
               {
-                "description": "Allowed tool choice configuration",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -13049,23 +13047,21 @@
                     ]
                   },
                   "allowed_tools": {
-                    "description": "Allowed tools configuration",
                     "type": "object",
                     "properties": {
                       "mode": {
-                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    ",
                         "type": "string",
                         "enum": [
                           "auto",
                           "required"
-                        ]
+                        ],
+                        "description": "\n    Constrains the tools available to the model.\n    auto: allows the model to pick from allowed tools or generate a message.\n    required: requires the model to call one or more of the allowed tools.\n    "
                       },
                       "tools": {
                         "type": "array",
                         "items": {
                           "type": "object",
                           "additionalProperties": {
-                            "description": "A function tool definition",
                             "type": "object",
                             "properties": {
                               "type": {
@@ -13075,7 +13071,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "A function definition for tool calling",
                                 "type": "object",
                                 "properties": {
                                   "name": {
@@ -13106,14 +13101,16 @@
                                 "required": [
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "A function definition for tool calling"
                               }
                             },
                             "required": [
                               "type",
                               "function"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A function tool definition"
                           }
                         }
                       }
@@ -13122,17 +13119,18 @@
                       "mode",
                       "tools"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "Allowed tools configuration"
                   }
                 },
                 "required": [
                   "type",
                   "allowed_tools"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Allowed tool choice configuration"
               },
               {
-                "description": "Named function tool choice",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -13158,10 +13156,10 @@
                   "type",
                   "function"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Named function tool choice"
               },
               {
-                "description": "A custom tool definition",
                 "type": "object",
                 "properties": {
                   "type": {
@@ -13174,8 +13172,8 @@
                     "type": "object",
                     "properties": {
                       "name": {
-                        "description": "The name of the custom tool",
-                        "type": "string"
+                        "type": "string",
+                        "description": "The name of the custom tool"
                       },
                       "description": {
                         "description": "Description of the tool",
@@ -13188,11 +13186,11 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "description": "Unconstrained text format",
                                 "type": "string",
                                 "enum": [
                                   "text"
-                                ]
+                                ],
+                                "description": "Unconstrained text format"
                               }
                             },
                             "required": [
@@ -13213,16 +13211,16 @@
                                 "type": "object",
                                 "properties": {
                                   "definition": {
-                                    "description": "The grammar definition",
-                                    "type": "string"
+                                    "type": "string",
+                                    "description": "The grammar definition"
                                   },
                                   "syntax": {
-                                    "description": "The syntax of the grammar",
                                     "type": "string",
                                     "enum": [
                                       "lark",
                                       "regex"
-                                    ]
+                                    ],
+                                    "description": "The syntax of the grammar"
                                   }
                                 },
                                 "required": [
@@ -13251,9 +13249,11 @@
                   "type",
                   "custom"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "A custom tool definition"
               }
-            ]
+            ],
+            "description": "Tool choice option"
           },
           "temperature": {
             "anyOf": [
@@ -13364,7 +13364,6 @@
           "choices": {
             "type": "array",
             "items": {
-              "description": "A choice in the chat completion response",
               "type": "object",
               "properties": {
                 "finish_reason": {
@@ -13389,7 +13388,6 @@
                   ]
                 },
                 "message": {
-                  "description": "The assistant message in the response",
                   "type": "object",
                   "properties": {
                     "content": {
@@ -13456,10 +13454,8 @@
                     "tool_calls": {
                       "type": "array",
                       "items": {
-                        "description": "A tool call in the assistant message",
                         "anyOf": [
                           {
-                            "description": "A function tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -13472,7 +13468,6 @@
                                 ]
                               },
                               "function": {
-                                "description": "Function call details",
                                 "type": "object",
                                 "properties": {
                                   "arguments": {
@@ -13486,7 +13481,8 @@
                                   "arguments",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Function call details"
                               }
                             },
                             "required": [
@@ -13494,10 +13490,10 @@
                               "type",
                               "function"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A function tool call in the message"
                           },
                           {
-                            "description": "A custom tool call in the message",
                             "type": "object",
                             "properties": {
                               "id": {
@@ -13510,7 +13506,6 @@
                                 ]
                               },
                               "custom": {
-                                "description": "Custom tool call details",
                                 "type": "object",
                                 "properties": {
                                   "input": {
@@ -13524,7 +13519,8 @@
                                   "input",
                                   "name"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": false,
+                                "description": "Custom tool call details"
                               }
                             },
                             "required": [
@@ -13532,9 +13528,11 @@
                               "type",
                               "custom"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "A custom tool call in the message"
                           }
-                        ]
+                        ],
+                        "description": "A tool call in the assistant message"
                       }
                     }
                   },
@@ -13542,7 +13540,8 @@
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "description": "The assistant message in the response"
                 }
               },
               "required": [
@@ -13551,7 +13550,8 @@
                 "logprobs",
                 "message"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "A choice in the chat completion response"
             }
           },
           "created": {
@@ -13577,7 +13577,6 @@
             ]
           },
           "usage": {
-            "description": "Token usage statistics for the completion",
             "type": "object",
             "properties": {
               "completion_tokens": {
@@ -13597,7 +13596,8 @@
               "prompt_tokens",
               "total_tokens"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "Token usage statistics for the completion"
           }
         },
         "required": [

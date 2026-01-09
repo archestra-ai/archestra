@@ -261,6 +261,10 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    vllm: {
+      baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL || "http://localhost:8000/v1",
+      useV2Routes: process.env.ARCHESTRA_VLLM_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -277,6 +281,10 @@ export default {
       remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS
         ? JSON.parse(process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS)
         : undefined,
+    },
+    vllm: {
+      apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
+      baseUrl: process.env.ARCHESTRA_CHAT_VLLM_BASE_URL || "http://localhost:8000/v1",
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",

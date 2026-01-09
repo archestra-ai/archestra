@@ -261,9 +261,10 @@ export const ToolOutput = ({
     let formattedOutput = output;
     if (typeof output === "string") {
       try {
-        formattedOutput = JSON.parse(output);
+        // Trim whitespace before parsing to handle common edge cases
+        formattedOutput = JSON.parse(output.trim());
       } catch {
-        // Not valid JSON, use as-is
+        // Not valid JSON, use as-is but preserve formatting
       }
     }
     const codeString =
@@ -277,9 +278,8 @@ export const ToolOutput = ({
     const displayCode =
       isExpanded || !isLarge
         ? codeString
-        : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${
-            lines.length - MAX_LINES
-          } more lines)`;
+        : `${lines.slice(0, MAX_LINES).join("\n")}\n... (${lines.length - MAX_LINES
+        } more lines)`;
 
     Output = (
       <div className="relative group">
@@ -289,7 +289,7 @@ export const ToolOutput = ({
             className={cn(
               "absolute bottom-4 left-0 right-0 flex justify-center transition-all duration-200",
               !isExpanded &&
-                "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
+              "pt-16 pb-2 bg-gradient-to-t from-background/80 to-transparent",
             )}
           >
             <Button

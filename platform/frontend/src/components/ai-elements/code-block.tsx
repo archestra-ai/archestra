@@ -59,6 +59,9 @@ export const CodeBlock = ({
               fontSize: "0.875rem",
               background: "hsl(var(--background))",
               color: "hsl(var(--foreground))",
+              wordWrap: "break-word",
+              overflowWrap: "break-word",
+              whiteSpace: "pre-wrap",
             }}
             language={language}
             lineNumberStyle={{

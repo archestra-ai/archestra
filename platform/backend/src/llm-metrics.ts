@@ -143,8 +143,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   });
 
   logger.info(
-    `Metrics initialized with ${
-      nextLabelKeys.length
+    `Metrics initialized with ${nextLabelKeys.length
     } agent label keys: ${nextLabelKeys.join(", ")}`,
   );
 }
@@ -451,6 +450,17 @@ export function getObservableFetch(
             model,
             externalAgentId,
           );
+        } else if (provider === "cohere") {
+          const { input, output } = utils.adapters.cohere.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output },
+            model,
+            externalAgentId,
+          );
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }
@@ -527,8 +537,8 @@ export function getObservableGenAI(
       const duration = Math.round((Date.now() - startTime) / 1000);
       const statusCode =
         error instanceof Error &&
-        "status" in error &&
-        typeof error.status === "number"
+          "status" in error &&
+          typeof error.status === "number"
           ? error.status.toString()
           : "0";
 

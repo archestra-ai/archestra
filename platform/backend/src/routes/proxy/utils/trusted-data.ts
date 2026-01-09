@@ -1,7 +1,11 @@
 import type { SupportedProvider } from "@shared";
 import logger from "@/logging";
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
-import type { CommonMessage, GlobalToolPolicy, ToolResultUpdates } from "@/types";
+import type {
+  CommonMessage,
+  GlobalToolPolicy,
+  ToolResultUpdates,
+} from "@/types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**

@@ -499,9 +499,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // Create a block policy - should be ignored in YOLO mode
       await TrustedDataPolicyModel.create({
         toolId,
-        conditions: [
-          { key: "from", operator: "contains", value: "hacker" },
-        ],
+        conditions: [{ key: "from", operator: "contains", value: "hacker" }],
         action: "block_always",
         description: "Block hacker emails",
       });

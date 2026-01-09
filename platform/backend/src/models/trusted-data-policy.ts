@@ -4,7 +4,11 @@ import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
-import type { AutonomyPolicyOperator, GlobalToolPolicy, TrustedData } from "@/types";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  TrustedData,
+} from "@/types";
 
 /**
  * Check if a policy is a default policy (applies to all results)

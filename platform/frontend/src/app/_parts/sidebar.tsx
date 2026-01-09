@@ -24,7 +24,6 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { PermissivePolicyWarning } from "@/components/permissive-policy-warning";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -261,7 +260,6 @@ const MainSideBarSection = ({
 const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
   <SidebarFooter>
     <DefaultCredentialsWarning />
-    <PermissivePolicyWarning />
     <SignedIn>
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>

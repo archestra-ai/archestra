@@ -154,6 +154,30 @@ const vllmConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const ollamaConfig: ToolPersistenceTestConfig = {
+  providerName: "Ollama",
+
+  endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "qwen2:0.5b",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -163,6 +187,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   anthropicConfig,
   geminiConfig,
   vllmConfig,
+  ollamaConfig,
 ];
 
 for (const config of testConfigs) {

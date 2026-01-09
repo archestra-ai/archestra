@@ -43,6 +43,7 @@ import {
   Anthropic,
   ApiError,
   Gemini,
+  Ollama,
   OpenAi,
   Vllm,
   WebSocketMessageSchema,
@@ -98,6 +99,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionResponseSchema, {
     id: "VllmChatCompletionResponse",
+  });
+  z.globalRegistry.add(Ollama.API.ChatCompletionRequestSchema, {
+    id: "OllamaChatCompletionRequest",
+  });
+  z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
+    id: "OllamaChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

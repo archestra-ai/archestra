@@ -50,6 +50,7 @@ const providerDictionary: Record<SupportedProvider, string> = {
   anthropic: "Anthropic",
   gemini: "Gemini",
   vllm: "vLLM",
+  ollama: "Ollama",
 };
 
 // Helper to get entity display name

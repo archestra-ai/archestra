@@ -151,3 +151,30 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set. Without it, vLLM won't appear as an option in the platform.
 - **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. The `ARCHESTRA_CHAT_VLLM_API_KEY` is only needed if your vLLM deployment has authentication enabled.
+
+## Ollama
+
+[Ollama](https://ollama.ai/) is a local LLM runner that makes it easy to run open-source large language models on your machine. It's perfect for local development, testing, and privacy-conscious deployments.
+
+### Supported Ollama APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Ollama Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/ollama/{profile-id}`
+- **Authentication**: Pass your Ollama API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Ollama typically doesn't require authentication.
+
+### Environment Variables
+
+| Variable                        | Required | Description                                                                      |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `ARCHESTRA_OLLAMA_BASE_URL`     | Yes      | Ollama server base URL (e.g., `http://localhost:11434/v1` for default Ollama)    |
+| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, Ollama typically doesn't require auth)      |
+
+### Important Notes
+
+- **Configure base URL to enable Ollama**: The Ollama provider is only available when `ARCHESTRA_OLLAMA_BASE_URL` is set. Without it, Ollama won't appear as an option in the platform.
+- **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
+- **No API key required**: Ollama typically doesn't require authentication for local deployments.
+- **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.

@@ -268,6 +268,11 @@ export default {
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_VLLM_USE_V2_ROUTES !== "false",
     },
+    ollama: {
+      enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -281,6 +286,9 @@ export default {
     },
     vllm: {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
+    },
+    ollama: {
+      apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

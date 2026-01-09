@@ -203,6 +203,41 @@ const vllmConfig: ModelOptimizationTestConfig = {
   getModelFromResponse: (response) => response.model,
 };
 
+const ollamaConfig: ModelOptimizationTestConfig = {
+  providerName: "Ollama",
+  provider: "ollama",
+
+  endpoint: (agentId) => `/v1/ollama/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => {
+    const request: Record<string, unknown> = {
+      model: "e2e-test-ollama-baseline",
+      messages: [{ role: "user", content }],
+    };
+    if (tools && tools.length > 0) {
+      request.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+    return request;
+  },
+
+  baselineModel: "e2e-test-ollama-baseline",
+  optimizedModel: "e2e-test-ollama-optimized",
+
+  getModelFromResponse: (response) => response.model,
+};
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -232,6 +267,7 @@ const testConfigs: ModelOptimizationTestConfig[] = [
   anthropicConfig,
   geminiConfig,
   vllmConfig,
+  ollamaConfig,
 ];
 
 test.describe("LLMProxy-ModelOptimization", () => {

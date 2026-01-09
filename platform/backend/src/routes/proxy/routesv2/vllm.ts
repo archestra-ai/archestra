@@ -30,10 +30,10 @@ const vllmProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
   logger.info("[UnifiedProxy] Registering unified vLLM routes");
 
-  // Non-null assertion safe here: we've confirmed enabled is true above,
+  // Safe cast: we've confirmed enabled is true above,
   // and enabled = Boolean(baseUrl), so baseUrl must be defined
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.vllm.baseUrl!,
+    upstream: config.llm.vllm.baseUrl as string,
     prefix: API_PREFIX,
     rewritePrefix: "",
     preHandler: (request, _reply, next) => {

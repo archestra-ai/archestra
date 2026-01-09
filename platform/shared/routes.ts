@@ -148,7 +148,8 @@ export const RouteId = {
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
 
   // Proxy Routes - Ollama
-  OllamaChatCompletionsWithDefaultAgent: "ollamaChatCompletionsWithDefaultAgent",
+  OllamaChatCompletionsWithDefaultAgent:
+    "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
 
   // Chat Routes

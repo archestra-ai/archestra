@@ -10,7 +10,7 @@ export function useTools({
   initialData?: archestraApiTypes.GetToolsResponses["200"];
 }) {
   return useQuery({
-    queryKey: ["tools-dialog"],
+    queryKey: ["tools"],
     queryFn: async () => (await getTools()).data ?? null,
     initialData,
   });

@@ -284,11 +284,12 @@ export function useClearConversationEnabledTools() {
  */
 export function useProfileToolsWithIds(agentId: string | undefined) {
   return useQuery({
-    queryKey: ["agents", agentId, "tools"],
+    queryKey: ["agents", agentId, "tools", "mcp-only"],
     queryFn: async () => {
       if (!agentId) return [];
       const { data, error } = await getAgentTools({
         path: { agentId },
+        query: { excludeLlmProxyOrigin: true },
       });
       if (error) throw new Error("Failed to fetch profile tools");
       return data;

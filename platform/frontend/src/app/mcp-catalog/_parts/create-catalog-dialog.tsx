@@ -19,7 +19,7 @@ import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalog,
+  useInternalMcpCatalogSuspense,
 } from "@/lib/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils";
 import { ArchestraCatalogTab } from "./archestra-catalog-tab";
@@ -42,7 +42,7 @@ export function CreateCatalogDialog({
 }: CreateCatalogDialogProps) {
   const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
   const createMutation = useCreateInternalMcpCatalogItem();
-  const { data: catalogItems } = useInternalMcpCatalog();
+  const { data: catalogItems } = useInternalMcpCatalogSuspense();
   const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   const handleClose = () => {

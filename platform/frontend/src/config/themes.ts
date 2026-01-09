@@ -65,11 +65,13 @@ export function getThemeCategories(): ReturnType<
 }
 
 export const fontFamilyMap: Record<OrganizationCustomFont, string> = {
-  lato: '"Lato", system-ui, sans-serif',
-  inter: '"Inter", system-ui, sans-serif',
-  "open-sans": '"Open Sans", system-ui, sans-serif',
-  roboto: '"Roboto", system-ui, sans-serif',
-  "source-sans-pro": '"Source Sans Pro", system-ui, sans-serif',
+  lato: "var(--font-lato), Lato, system-ui, sans-serif",
+  inter: "var(--font-inter), Inter, system-ui, sans-serif",
+  "open-sans": "var(--font-open-sans), Open Sans, system-ui, sans-serif",
+  roboto: "var(--font-roboto), Roboto, system-ui, sans-serif",
+  "source-sans-pro":
+    "var(--font-source-sans), Source Sans Pro, system-ui, sans-serif",
+  "jetbrains-mono": "var(--font-jetbrains-mono), JetBrains Mono, monospace",
 };
 
 /**
@@ -81,6 +83,7 @@ export const fonts: Array<{ id: OrganizationCustomFont; name: string }> = [
   { id: "open-sans", name: "Open Sans" },
   { id: "roboto", name: "Roboto" },
   { id: "source-sans-pro", name: "Source Sans Pro" },
+  { id: "jetbrains-mono", name: "JetBrains Mono" },
 ];
 
 /**

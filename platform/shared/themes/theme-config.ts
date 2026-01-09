@@ -62,9 +62,13 @@ export const SUPPORTED_THEMES = [
   { id: "claude", category: "tech" },
   { id: "northern-lights", category: "tech" },
   { id: "vintage-paper", category: "tech" },
+  { id: "boxy-minimalistic", category: "minimal" },
 ] as const;
 
-export const THEME_IDS = SUPPORTED_THEMES.map((t) => t.id);
+export const THEME_IDS = SUPPORTED_THEMES.map((t) => t.id) as unknown as [
+  (typeof SUPPORTED_THEMES)[number]["id"],
+  ...Array<(typeof SUPPORTED_THEMES)[number]["id"]>,
+];
 
 /**
  * Category labels for display

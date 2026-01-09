@@ -320,13 +320,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - name: Checkout repository
         if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Build Docker image
         if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
@@ -338,38 +337,26 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Run docker scout to check for vulnerabilities and recommendations
+      # Scan Docker image for CVEs using Docker Scout
       # https://github.com/docker/scout-action
       #
-      # Branch ruleset has been configured to block PRs with critical or high vulnerabilities.
-      # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
+      # Fails the CI check if any critical or high severity CVEs are found.
+      # Only checks for CVEs with available fixes (ignores unfixed vulnerabilities).
       #
-      # NOTE: This step is skipped for PRs from forks because GitHub doesn't expose
-      # repository secrets to workflows triggered by fork PRs (for security reasons).
-      # Docker Scout requires Docker Hub authentication to run.
-      - name: Docker Scout
+      # NOTE: Skipped for fork PRs because GitHub doesn't expose repository secrets
+      # to workflows triggered by fork PRs. Docker Scout requires Docker Hub auth.
+      - name: Docker Scout CVE Check
         if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
-          command: cves,recommendations,compare
+          command: cves
           image: archestra/platform:ci-test
-          to: docker.io/archestra/platform:latest
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          ignore-unchanged: true
           only-severities: critical,high
+          only-fixed: true
           write-comment: false
-          sarif-file: sarif.output.json
-
-      # Upload SARIF result to GitHub Code Scanning
-      # https://github.com/docker/scout-action?tab=readme-ov-file#analyze-vulnerabilities-and-upload-report-to-github-code-scanning
-      #
-      # NOTE: Skipped for fork PRs since Docker Scout step is skipped (no SARIF file generated).
-      - name: Upload SARIF result
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
-        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
-        with:
-          sarif_file: sarif.output.json
+          exit-code: true
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

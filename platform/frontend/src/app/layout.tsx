@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   Inter,
+  JetBrains_Mono,
   Lato,
   Open_Sans,
   Roboto,
@@ -51,6 +52,11 @@ const sourceSansFont = Source_Sans_3({
   variable: "--font-source-sans",
 });
 
+const jetbrainsMonoFont = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+});
+
 export const metadata: Metadata = {
   title: "Archestra.AI",
   description: "Enterprise MCP Platform for AI Agents",
@@ -67,7 +73,7 @@ export default function RootLayout({
         <PublicEnvScript />
       </head>
       <body
-        className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} font-sans antialiased`}
+        className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} font-sans antialiased`}
       >
         <ArchestraQueryClientProvider>
           <AuthProvider>

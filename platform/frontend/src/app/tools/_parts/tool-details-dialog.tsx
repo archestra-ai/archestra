@@ -16,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
 import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
 import { ResponseModifierEditor } from "./response-modifier-editor";
@@ -37,7 +37,7 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: ToolDetailsDialogProps) {
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalogSuspense();
   if (!agentTool) return null;
 
   return (

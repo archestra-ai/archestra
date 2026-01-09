@@ -1,17 +1,17 @@
-import { OpenAi } from "..";
+import { z } from "zod";
+import OpenAi from "../openai";
 
-export type ChatRequest = OpenAi.API.ChatRequest;
-export const ChatRequestSchema = OpenAi.API.ChatRequestSchema;
+export const ChatRequestSchema = OpenAi.API.ChatCompletionRequestSchema;
+export const ChatResponseSchema = OpenAi.API.ChatCompletionResponseSchema;
+export const ChatHeadersSchema = OpenAi.API.ChatCompletionsHeadersSchema;
 
-export type ChatResponse = OpenAi.API.ChatResponse;
-export const ChatResponseSchema = OpenAi.API.ChatResponseSchema;
+// DeepSeek uses OpenAI-compatible streaming format
+export type StreamChunk = OpenAi.Types.ChatCompletionChunk;
 
-export type ChatHeaders = OpenAi.API.ChatHeaders;
-export const ChatHeadersSchema = OpenAi.API.ChatHeadersSchema;
-
-export type StreamChunk = OpenAi.API.StreamChunk;
-export const StreamChunkSchema = OpenAi.API.StreamChunkSchema;
+export type ChatRequest = z.infer<typeof ChatRequestSchema>;
+export type ChatResponse = z.infer<typeof ChatResponseSchema>;
+export type ChatHeaders = z.infer<typeof ChatHeadersSchema>;
 
 export namespace Types {
-    export type Model = OpenAi.API.Types.Model;
+    export type Model = OpenAi.Types.Model;
 }

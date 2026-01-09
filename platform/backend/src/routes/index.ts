@@ -7,7 +7,7 @@ import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
-import xaiRoutes from "./proxy/routesv2/xai";
+
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -57,7 +57,7 @@ export const mistralProxyRoutes = mistralProxyRoutesV2;
 export const deepseekProxyRoutes = deepseekProxyRoutesV2;
 
 // x.ai proxy routes - always use V2 (unified handler)
-export const xaiProxyRoutes = xaiRoutes;
+
 
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
@@ -66,4 +66,3 @@ export { default as tokenRoutes } from "./token";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";
 export { default as userTokenRoutes } from "./user-token";
-export { default as websocketRoutes } from "./websocket";

@@ -385,6 +385,8 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   mistral: fetchMistralModels,
   deepseek: fetchDeepSeekModels,
+  // TODO: Implement Cohere model fetching
+  cohere: async () => [],
 };
 
 /**

@@ -838,7 +838,7 @@ export async function executeArchestraTool(
       }
 
       const turndownService = new TurndownService();
-      const markdown = turndownService.turndown(article.content);
+      const markdown = turndownService.turndown(article.content || "");
 
       return {
         content: [

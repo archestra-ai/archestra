@@ -10,7 +10,7 @@ import type {
     LLMRequestAdapter,
     LLMResponseAdapter,
     LLMStreamAdapter,
-} from "./types";
+} from "@/types";
 
 class DeepSeekRequestAdapter extends OpenAIRequestAdapter {
     readonly provider = "deepseek" as const;
@@ -25,36 +25,36 @@ class DeepSeekStreamAdapter extends OpenAIStreamAdapter {
 }
 
 export const deepseekAdapterFactory: LLMProvider<
-    DeepSeek.API.ChatRequest,
-    DeepSeek.API.ChatResponse,
-    DeepSeek.Messages.Message[],
-    DeepSeek.API.StreamChunk,
-    DeepSeek.API.ChatHeaders
+    DeepSeek.Types.ChatRequest,
+    DeepSeek.Types.ChatResponse,
+    DeepSeek.Types.ChatRequest["messages"],
+    DeepSeek.Types.StreamChunk,
+    DeepSeek.Types.ChatHeaders
 > = {
     provider: "deepseek",
     interactionType: "deepseek:chat",
 
     createRequestAdapter(
-        request: DeepSeek.API.ChatRequest,
-    ): LLMRequestAdapter<DeepSeek.API.ChatRequest, DeepSeek.Messages.Message[]> {
+        request: DeepSeek.Types.ChatRequest,
+    ): LLMRequestAdapter<DeepSeek.Types.ChatRequest, DeepSeek.Types.ChatRequest["messages"]> {
         return new DeepSeekRequestAdapter(request);
     },
 
     createResponseAdapter(
-        response: DeepSeek.API.ChatResponse,
-    ): LLMResponseAdapter<DeepSeek.API.ChatResponse> {
+        response: DeepSeek.Types.ChatResponse,
+    ): LLMResponseAdapter<DeepSeek.Types.ChatResponse> {
         return new DeepSeekResponseAdapter(response);
     },
 
     createStreamAdapter(): LLMStreamAdapter<
-        DeepSeek.API.StreamChunk,
-        DeepSeek.API.ChatResponse
+        DeepSeek.Types.StreamChunk,
+        DeepSeek.Types.ChatResponse
     > {
         return new DeepSeekStreamAdapter();
     },
 
-    extractApiKey(headers: DeepSeek.API.ChatHeaders): string | undefined {
-        return headers.Authorization?.replace("Bearer ", "");
+    extractApiKey(headers: DeepSeek.Types.ChatHeaders): string | undefined {
+        return headers.authorization?.replace("Bearer ", "");
     },
 
     getBaseUrl(): string {
@@ -69,7 +69,7 @@ export const deepseekAdapterFactory: LLMProvider<
         return { apiKey };
     },
 
-    async execute(client: any, request: DeepSeek.API.ChatRequest): Promise<DeepSeek.API.ChatResponse> {
+    async execute(client: any, request: DeepSeek.Types.ChatRequest): Promise<DeepSeek.Types.ChatResponse> {
         const url = `${this.getBaseUrl()}/chat/completions`;
         const response = await fetch(url, {
             method: "POST",
@@ -88,10 +88,10 @@ export const deepseekAdapterFactory: LLMProvider<
         return response.json();
     },
 
-    async *executeStream(
+    async executeStream(
         client: any,
-        request: DeepSeek.API.ChatRequest,
-    ): AsyncIterable<DeepSeek.API.StreamChunk> {
+        request: DeepSeek.Types.ChatRequest,
+    ): Promise<AsyncIterable<DeepSeek.Types.StreamChunk>> {
         const url = `${this.getBaseUrl()}/chat/completions`;
         const response = await fetch(url, {
             method: "POST",
@@ -113,34 +113,38 @@ export const deepseekAdapterFactory: LLMProvider<
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
 
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let buffer = "";
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || "";
 
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith("data: ")) continue;
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-                    const data = trimmed.slice(6);
-                    if (data === "[DONE]") return;
+                            const data = trimmed.slice(6);
+                            if (data === "[DONE]") return;
 
-                    try {
-                        yield JSON.parse(data);
-                    } catch (e) {
-                        console.error("Failed to parse DeepSeek SSE chunk", { line, error: e });
+                            try {
+                                yield JSON.parse(data);
+                            } catch (e) {
+                                console.error("Failed to parse DeepSeek SSE chunk", { line, error: e });
+                            }
+                        }
                     }
+                } finally {
+                    reader.releaseLock();
                 }
-            }
-        } finally {
-            reader.releaseLock();
-        }
+            },
+        };
     },
 
     extractErrorMessage(error: unknown): string {

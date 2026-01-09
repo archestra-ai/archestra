@@ -12,7 +12,7 @@ namespace Mistral {
         export type ChatRequest = z.infer<typeof MistralAPI.ChatRequestSchema>;
         export type ChatResponse = z.infer<typeof MistralAPI.ChatResponseSchema>;
         export type ChatHeaders = z.infer<typeof MistralAPI.ChatHeadersSchema>;
-        export type StreamChunk = z.infer<typeof MistralAPI.StreamChunkSchema>;
+        export type StreamChunk = MistralAPI.StreamChunk;
         export type Model = MistralAPI.Types.Model;
     }
 }

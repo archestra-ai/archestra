@@ -10,7 +10,7 @@ import type {
     LLMRequestAdapter,
     LLMResponseAdapter,
     LLMStreamAdapter,
-} from "./types";
+} from "@/types";
 
 class MistralRequestAdapter extends OpenAIRequestAdapter {
     readonly provider = "mistral" as const;
@@ -25,51 +25,51 @@ class MistralStreamAdapter extends OpenAIStreamAdapter {
 }
 
 export const mistralAdapterFactory: LLMProvider<
-    Mistral.API.ChatRequest,
-    Mistral.API.ChatResponse,
-    Mistral.Messages.ChatMessage[],
-    Mistral.API.StreamChunk,
-    Mistral.API.ChatHeaders
+    Mistral.Types.ChatRequest,
+    Mistral.Types.ChatResponse,
+    Mistral.Types.ChatRequest["messages"],
+    Mistral.Types.StreamChunk,
+    Mistral.Types.ChatHeaders
 > = {
     provider: "mistral",
     interactionType: "mistral:chat",
 
     createRequestAdapter(
-        request: Mistral.API.ChatRequest,
-    ): LLMRequestAdapter<Mistral.API.ChatRequest, Mistral.Messages.ChatMessage[]> {
+        request: Mistral.Types.ChatRequest,
+    ): LLMRequestAdapter<Mistral.Types.ChatRequest, Mistral.Types.ChatRequest["messages"]> {
         return new MistralRequestAdapter(request);
-    }
+    },
 
-  createResponseAdapter(
-        response: Mistral.API.ChatResponse,
-    ): LLMResponseAdapter<Mistral.API.ChatResponse> {
+    createResponseAdapter(
+        response: Mistral.Types.ChatResponse,
+    ): LLMResponseAdapter<Mistral.Types.ChatResponse> {
         return new MistralResponseAdapter(response);
-    }
+    },
 
-  createStreamAdapter(): LLMStreamAdapter<
-        Mistral.API.StreamChunk,
-        Mistral.API.ChatResponse
+    createStreamAdapter(): LLMStreamAdapter<
+        Mistral.Types.StreamChunk,
+        Mistral.Types.ChatResponse
     > {
         return new MistralStreamAdapter();
-    }
+    },
 
-  extractApiKey(headers: Mistral.API.ChatHeaders): string | undefined {
-        return headers.Authorization?.replace("Bearer ", "");
-    }
+    extractApiKey(headers: Mistral.Types.ChatHeaders): string | undefined {
+        return headers.authorization?.replace("Bearer ", "");
+    },
 
-  getBaseUrl(): string {
+    getBaseUrl(): string {
         return config.llm.mistral.baseUrl;
-    }
+    },
 
-  getSpanName(): string {
+    getSpanName(): string {
         return "mistral-chat";
-    }
+    },
 
-  createClient(apiKey: string | undefined): any {
+    createClient(apiKey: string | undefined): any {
         return { apiKey };
-    }
+    },
 
-  async execute(client: any, request: Mistral.API.ChatRequest): Promise<Mistral.API.ChatResponse> {
+    async execute(client: any, request: Mistral.Types.ChatRequest): Promise<Mistral.Types.ChatResponse> {
         const url = `${this.getBaseUrl()}/chat/completions`;
         const response = await fetch(url, {
             method: "POST",
@@ -86,12 +86,12 @@ export const mistralAdapterFactory: LLMProvider<
         }
 
         return response.json();
-    }
+    },
 
-  async *executeStream(
+    async executeStream(
         client: any,
-        request: Mistral.API.ChatRequest,
-    ): AsyncIterable<Mistral.API.StreamChunk> {
+        request: Mistral.Types.ChatRequest,
+    ): Promise<AsyncIterable<Mistral.Types.StreamChunk>> {
         const url = `${this.getBaseUrl()}/chat/completions`;
         const response = await fetch(url, {
             method: "POST",
@@ -113,37 +113,41 @@ export const mistralAdapterFactory: LLMProvider<
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
 
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let buffer = "";
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || "";
 
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith("data: ")) continue;
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-                    const data = trimmed.slice(6);
-                    if (data === "[DONE]") return;
+                            const data = trimmed.slice(6);
+                            if (data === "[DONE]") return;
 
-                    try {
-                        yield JSON.parse(data);
-                    } catch (e) {
-                        console.error("Failed to parse Mistral SSE chunk", { line, error: e });
+                            try {
+                                yield JSON.parse(data);
+                            } catch (e) {
+                                console.error("Failed to parse Mistral SSE chunk", { line, error: e });
+                            }
+                        }
                     }
+                } finally {
+                    reader.releaseLock();
                 }
-            }
-        } finally {
-            reader.releaseLock();
-        }
-    }
+            },
+        };
+    },
 
-  extractErrorMessage(error: unknown): string {
+    extractErrorMessage(error: unknown): string {
         if (error instanceof Error) return error.message;
         return String(error);
     }

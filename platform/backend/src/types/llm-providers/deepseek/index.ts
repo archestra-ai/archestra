@@ -12,7 +12,7 @@ namespace DeepSeek {
         export type ChatRequest = z.infer<typeof DeepSeekAPI.ChatRequestSchema>;
         export type ChatResponse = z.infer<typeof DeepSeekAPI.ChatResponseSchema>;
         export type ChatHeaders = z.infer<typeof DeepSeekAPI.ChatHeadersSchema>;
-        export type StreamChunk = z.infer<typeof DeepSeekAPI.StreamChunkSchema>;
+        export type StreamChunk = DeepSeekAPI.StreamChunk;
         export type Model = DeepSeekAPI.Types.Model;
     }
 }

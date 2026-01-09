@@ -104,7 +104,7 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const data = (await response.json()) as {
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   };
-  const excludePatterns = ["-instruct", "-embedding", "-tts", "-whisper"];
+  const excludePatterns = ["instruct", "embedding", "tts", "whisper", "image", "audio", "sora", "dall-e"];
 
   return data.data
     .filter((model) => {

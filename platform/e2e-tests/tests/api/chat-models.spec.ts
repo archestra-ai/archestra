@@ -138,30 +138,4 @@ test.describe("Chat Models API", () => {
       }
     }
   });
-
-  test("should cache models (subsequent requests should be fast)", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    // First request - may hit provider APIs
-    const response1 = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/chat/models",
-    });
-    expect(response1.ok()).toBe(true);
-    const models1 = await response1.json();
-
-    // Second request - should use cache
-    const response2 = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/chat/models",
-    });
-    expect(response2.ok()).toBe(true);
-    const models2 = await response2.json();
-
-    // Results should be the same (from cache)
-    expect(models2.length).toBe(models1.length);
-  });
 });

@@ -355,6 +355,7 @@ jobs:
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           only-severities: critical,high
           only-fixed: true
+          write-comment: false
           exit-code: true
 
   helm-chart-linting-and-tests:

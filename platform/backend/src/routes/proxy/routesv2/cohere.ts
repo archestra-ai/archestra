@@ -18,7 +18,9 @@ import * as utils from "../utils";
 
 const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const COHERE_PREFIX = `${PROXY_API_PREFIX}/cohere`;
-  const CHAT_SUFFIX = "/v2/chat";
+  // Public chat route should be provider-agnostic and not expose Cohere's internal path
+  // e.g. POST /v1/cohere/:agentId/chat or POST /v1/cohere/chat
+  const CHAT_SUFFIX = "/chat";
 
   logger.info("[UnifiedProxy] Registering unified Cohere routes");
 
@@ -35,8 +37,12 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     prefix: COHERE_PREFIX,
     rewritePrefix: "",
     preHandler: (request, _reply, next) => {
-      // Skip chat route (we handle it specially below with full agent support)
-      if (request.method === "POST" && request.url.includes(CHAT_SUFFIX)) {
+      // Only skip the dedicated /chat endpoints (not compatibility routes)
+      const urlPath = request.url.split("?")[0];
+      const isChatEndpoint =
+        request.method === "POST" && urlPath.endsWith(CHAT_SUFFIX);
+
+      if (isChatEndpoint) {
         logger.info(
           {
             method: request.method,
@@ -44,7 +50,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
             action: "skip-proxy",
             reason: "handled-by-custom-handler",
           },
-          "Cohere proxy preHandler: skipping chat route",
+          "Cohere's proxy preHandler: Skipping the chat route",
         );
         next(new Error("skip"));
         return;
@@ -57,7 +63,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (uuidMatch) {
-        // Strip UUID: /v1/cohere/:uuid/path -> /v1/cohere/path
+       
         const remainingPath = uuidMatch[2] || "";
         const originalUrl = request.raw.url;
         request.raw.url = `${COHERE_PREFIX}${remainingPath}`;
@@ -70,7 +76,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
             upstream: config.llm.cohere.baseUrl,
             finalProxyUrl: `${config.llm.cohere.baseUrl}${remainingPath}`,
           },
-          "Cohere proxy preHandler: URL rewritten (UUID stripped)",
+          "Cohere's proxy preHandler: URL rewritten (UUID stripped)",
         );
       } else {
         logger.info(
@@ -80,7 +86,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
             upstream: config.llm.cohere.baseUrl,
             finalProxyUrl: `${config.llm.cohere.baseUrl}${pathAfterPrefix}`,
           },
-          "Cohere proxy preHandler: proxying request",
+          "Cohere's proxy preHandler: proxying request",
         );
       }
 
@@ -88,10 +94,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-  /**
-   * Cohere v2 Chat endpoint (standard format)
-   * No agentId is provided -- agent is created/fetched based on the user-agent header
-   */
+
   fastify.post(
     `${COHERE_PREFIX}${CHAT_SUFFIX}`,
     {
@@ -129,10 +132,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Cohere v2 Chat endpoint with specific agent
-   * An agentId is provided -- agent is fetched based on the agentId
-   */
+
   fastify.post(
     `${COHERE_PREFIX}/:agentId${CHAT_SUFFIX}`,
     {

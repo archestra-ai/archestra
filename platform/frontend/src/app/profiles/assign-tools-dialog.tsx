@@ -600,7 +600,7 @@ export function AssignToolsDialog({
             disabled={
               isLoading ||
               isSaving ||
-              selectedTools.some((tool) => {
+              selectedTools.some(function isMissingCredentials(tool) {
                 // If using dynamic credential, it's valid
                 if (tool.useDynamicTeamCredential) return false;
 
@@ -608,7 +608,12 @@ export function AssignToolsDialog({
                 const mcpCatalogItem = internalMcpCatalogItems?.find(
                   (item) => item.id === mcpTool?.catalogId,
                 );
-                const isLocalServer = mcpCatalogItem?.serverType === "local";
+                // Tools without a catalog item can't have credentials configured - skip validation
+                if (!mcpCatalogItem) {
+                  return false;
+                }
+
+                const isLocalServer = mcpCatalogItem.serverType === "local";
                 return isLocalServer
                   ? !tool.executionSourceId
                   : !tool.credentialsSourceId;

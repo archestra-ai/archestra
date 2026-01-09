@@ -164,6 +164,43 @@ const geminiConfig: CompressionTestConfig = {
   }),
 };
 
+const cohereConfig: CompressionTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (profileId) => `/v1/cohere/${profileId}/chat`,
+
+  headers: (wiremockStub) => ({
+    authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  // Cohere format: assistant has tool_calls and tool results are separate tool messages
+  buildRequestWithToolResult: () => ({
+    model: "command-xlarge-nightly",
+    messages: [
+      { role: "user", content: "What files are in the current directory?" },
+      {
+        role: "assistant",
+        tool_calls: [
+          {
+            id: "call_123",
+            type: "function",
+            function: {
+              name: "list_files",
+              arguments: '{"directory": "."}',
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_123",
+        content: JSON.stringify(TOOL_RESULT_DATA),
+      },
+    ],
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -172,6 +209,7 @@ const testConfigs: CompressionTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  cohereConfig,
 ];
 
 for (const config of testConfigs) {

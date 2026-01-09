@@ -113,15 +113,25 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    if (this.type === "openai:chatCompletions") {
+    if (this.provider === "openai" && this.endpoint === "chatCompletions") {
       return new OpenAiChatCompletionInteraction(interaction);
-    } else if (this.type === "anthropic:messages") {
+    } else if (this.provider === "anthropic" && this.endpoint === "messages") {
       return new AnthropicMessagesInteraction(interaction);
-    }
-    else if (this.type === "cohere:chat") {
+    } else if (this.provider === "cohere" && this.endpoint === "chat") {
       return createCohereInteraction(interaction);
-    }
-    else {
+    } else if (this.provider === "gemini" && this.endpoint === "generateContent") {
+      return new GeminiGenerateContentInteraction(interaction);
+    } else {
+      // fallback based on provider if endpoint doesn't match expected shape
+      if (this.provider === "cohere") {
+        return createCohereInteraction(interaction);
+      }
+      if (this.provider === "anthropic") {
+        return new AnthropicMessagesInteraction(interaction);
+      }
+      if (this.provider === "openai") {
+        return new OpenAiChatCompletionInteraction(interaction);
+      }
       return new GeminiGenerateContentInteraction(interaction);
     }
   }

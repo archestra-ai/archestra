@@ -69,7 +69,8 @@ export const fontFamilyMap: Record<OrganizationCustomFont, string> = {
   inter: "var(--font-inter), Inter, system-ui, sans-serif",
   "open-sans": "var(--font-open-sans), Open Sans, system-ui, sans-serif",
   roboto: "var(--font-roboto), Roboto, system-ui, sans-serif",
-  "source-sans-pro": "var(--font-source-sans), Source Sans Pro, system-ui, sans-serif",
+  "source-sans-pro":
+    "var(--font-source-sans), Source Sans Pro, system-ui, sans-serif",
   "jetbrains-mono": "var(--font-jetbrains-mono), JetBrains Mono, monospace",
 };
 

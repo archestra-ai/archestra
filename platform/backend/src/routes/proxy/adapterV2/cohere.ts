@@ -1,12 +1,3 @@
-/**
- * Cohere LLM Proxy Adapter (V2)
- *
- * Implements the adapter pattern for Cohere v2 Chat API integration.
- * Handles request transformation, response parsing, and streaming.
- *
- * API Reference: https://docs.cohere.com/reference/chat
- */
-
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -47,6 +38,14 @@ type CohereStreamChunk = {
   [key: string]: unknown;
 };
 
+// Small helper to safely parse JSON without throwing. Returns ok=false on parse error.
+function safeJsonParse(input: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(input) };
+  } catch {
+    return { ok: false };
+  }
+}
 // =============================================================================
 // REQUEST ADAPTER
 // =============================================================================
@@ -89,11 +88,8 @@ class CohereRequestAdapter
         const toolName = this.findToolName(toolMsg.tool_call_id);
 
         let content: unknown;
-        try {
-          content = JSON.parse(toolMsg.content);
-        } catch {
-          content = toolMsg.content;
-        }
+        const parsed = safeJsonParse(toolMsg.content);
+        content = parsed.ok ? parsed.value : toolMsg.content;
 
         results.push({
           id: toolMsg.tool_call_id,
@@ -213,11 +209,8 @@ class CohereRequestAdapter
 
         if (toolName) {
           let toolResult: unknown;
-          try {
-            toolResult = JSON.parse(toolMsg.content);
-          } catch {
-            toolResult = toolMsg.content;
-          }
+          const parsed = safeJsonParse(toolMsg.content);
+          toolResult = parsed.ok ? parsed.value : toolMsg.content;
 
           commonMessage.toolCalls = [
             {
@@ -582,7 +575,19 @@ export async function convertToolResultsToToon(
 
       try {
         const unwrapped = unwrapToolContent(toolMsg.content);
-        const parsed = JSON.parse(unwrapped);
+        const parsedRes = safeJsonParse(unwrapped);
+        if (!parsedRes.ok) {
+          logger.info(
+            {
+              toolCallId: toolMsg.tool_call_id,
+              contentPreview: toolMsg.content.substring(0, 100),
+            },
+            "convertToolResultsToToon: skipping - content is not JSON",
+          );
+          return message;
+        }
+
+        const parsed = parsedRes.value as unknown;
         const noncompressed = unwrapped;
         const compressed = toonEncode(parsed);
 
@@ -628,10 +633,14 @@ export async function convertToolResultsToToon(
   // Calculate cost savings
   let costSavings = 0;
   if (totalTokensBefore > 0) {
-    const tokenPrice = await TokenPriceModel.getByModel(model);
+    const tokenPrice = await TokenPriceModel.findByModel(model);
     if (tokenPrice) {
       const savedTokens = totalTokensBefore - totalTokensAfter;
-      costSavings = savedTokens * tokenPrice.inputPricePerToken;
+      const inputPricePerToken =
+        parseFloat(tokenPrice.pricePerMillionInput) / 1_000_000;
+      costSavings = savedTokens * (Number.isFinite(inputPricePerToken)
+        ? inputPricePerToken
+        : 0);
     }
   }
 
@@ -661,11 +670,10 @@ function createCohereClient(
   options: CreateClientOptions,
 ): CohereClient {
   const baseUrl = options.baseUrl || config.llm.cohere.baseUrl;
-  const observableFetch = getObservableFetch(
-    "cohere",
-    options.agent,
-    options.externalAgentId,
-  );
+  // Only wrap fetch with metrics when agent context is available
+  const observableFetch = options.agent
+    ? getObservableFetch("cohere", options.agent, options.externalAgentId)
+    : fetch;
 
   return {
     chat: {
@@ -705,7 +713,7 @@ function createCohereClient(
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
-            `Cohere API error: ${response.status} - ${errorText}`,
+            `Error from Cohere API : ${response.status} - ${errorText}`,
           );
         }
 
@@ -735,7 +743,7 @@ function createCohereClient(
             try {
               yield JSON.parse(data);
             } catch {
-              logger.warn({ data }, "Failed to parse Cohere stream data");
+              logger.warn({ data }, "Failed to parse Cohere's stream data");
             }
           }
         }
@@ -771,7 +779,7 @@ export const cohereAdapterFactory: LLMProvider<
 
   createClient(apiKey: string, options: CreateClientOptions) {
     if (options.mockMode) {
-      // TODO: Implement MockCohereClient for testing
+  
       throw new Error("Mock mode not yet implemented for Cohere");
     }
     return createCohereClient(apiKey, options);
@@ -796,7 +804,7 @@ export const cohereAdapterFactory: LLMProvider<
     const response = await client.chat.create(request);
     logger.info({ response }, "Cohere raw response");
     if (!response) {
-      throw new Error("Cohere API returned undefined response");
+      throw new Error("'Cohere's API has returned an undefined response.");
     }
     return response;
   },

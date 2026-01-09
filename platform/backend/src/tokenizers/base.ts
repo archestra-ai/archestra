@@ -1,9 +1,10 @@
-import type { Anthropic, Gemini, OpenAi } from "@/types";
+import type { Anthropic, Gemini, OpenAi, Vllm } from "@/types";
 
 export type ProviderMessage =
   | OpenAi.Types.ChatCompletionsRequest["messages"][number]
   | Anthropic.Types.MessagesRequest["messages"][number]
-  | Gemini.Types.GenerateContentRequest["contents"][number];
+  | Gemini.Types.GenerateContentRequest["contents"][number]
+  | Vllm.Types.ChatCompletionsRequest["messages"][number];
 
 /**
  * Base interface for tokenizers

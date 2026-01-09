@@ -130,6 +130,30 @@ const geminiConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const vllmConfig: ToolPersistenceTestConfig = {
+  providerName: "vLLM",
+
+  endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "meta-llama/Llama-3.1-8B-Instruct",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -138,6 +162,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  vllmConfig,
 ];
 
 for (const config of testConfigs) {

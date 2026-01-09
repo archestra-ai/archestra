@@ -133,3 +133,29 @@ For non-GKE environments, Vertex AI supports several authentication methods thro
 
 See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
 
+## vLLM
+
+[vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.
+
+### Supported vLLM APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### vLLM Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/vllm/{agent-id}`
+- **Authentication**: Pass your vLLM API key (if configured) in the `Authorization` header as `Bearer <your-api-key>`. Many vLLM deployments don't require authentication.
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ARCHESTRA_VLLM_BASE_URL` | No | vLLM server base URL (default: `http://localhost:8000/v1`) |
+| `ARCHESTRA_CHAT_VLLM_API_KEY` | No | API key for vLLM server (optional, many deployments don't require auth) |
+
+### Important Notes
+
+- **OpenAI Compatibility**: vLLM exposes an OpenAI-compatible API, making it easy to switch between OpenAI and self-hosted models. The request/response format is identical to OpenAI's Chat Completions API.
+- **Model Names**: Use the model names as configured in your vLLM deployment. These will appear in the model selector when fetching available models.
+- **Tool Calling**: Function calling (tool use) is fully supported for models that support it, including tool invocation policies and trusted data policies.
+

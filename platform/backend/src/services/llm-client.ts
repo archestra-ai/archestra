@@ -11,6 +11,11 @@ import { secretManager } from "@/secrets-manager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
 /**
+ * Note: vLLM uses the @ai-sdk/openai provider since vLLM exposes an OpenAI-compatible API.
+ * When creating a vLLM model, we use createOpenAI with vLLM's base URL.
+ */
+
+/**
  * Type representing a model that can be passed to streamText/generateText
  */
 export type LLMModel = Parameters<typeof streamText>[0]["model"];
@@ -20,6 +25,9 @@ export type LLMModel = Parameters<typeof streamText>[0]["model"];
  * It's a recommended to rely on explicit provider selection whenever possible,
  * Since same models could be served by different providers.
  * Currently it exists for backward compatibility.
+ *
+ * Note: vLLM can serve any model, so it cannot be auto-detected by model name.
+ * Users must explicitly select vLLM as the provider.
  */
 export function detectProviderFromModel(model: string): SupportedChatProvider {
   const lowerModel = model.toLowerCase();
@@ -41,6 +49,7 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
   }
 
   // Default to anthropic for backwards compatibility
+  // Note: vLLM cannot be auto-detected as it can serve any model
   return "anthropic";
 }
 
@@ -96,6 +105,9 @@ export async function resolveProviderApiKey(params: {
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
       apiKeySource = "environment";
+    } else if (provider === "vllm" && config.chat.vllm.apiKey) {
+      providerApiKey = config.chat.vllm.apiKey;
+      apiKeySource = "environment";
     }
   }
 
@@ -111,7 +123,9 @@ export function isApiKeyRequired(
 ): boolean {
   // For Gemini with Vertex AI enabled, API key is not required
   const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
-  return !apiKey && !isGeminiWithVertexAi;
+  // vLLM typically doesn't require API keys (uses "EMPTY" or dummy values)
+  const isVllm = provider === "vllm";
+  return !apiKey && !isGeminiWithVertexAi && !isVllm;
 }
 
 /**
@@ -174,6 +188,18 @@ export function createLLMModel(params: {
     return client.chat(modelName);
   }
 
+  if (provider === "vllm") {
+    // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
+    // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY", // vLLM typically doesn't require API keys
+      baseURL: `http://localhost:${config.api.port}/v1/vllm/${agentId}`,
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  }
+
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
@@ -214,13 +240,15 @@ export async function createLLMModelForAgent(params: {
 
   // Check if Gemini with Vertex AI (doesn't require API key)
   const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
+  // vLLM typically doesn't require API keys
+  const isVllm = provider === "vllm";
 
   logger.info(
-    { apiKeySource: source, provider, isGeminiWithVertexAi },
+    { apiKeySource: source, provider, isGeminiWithVertexAi, isVllm },
     "Using LLM provider API key",
   );
 
-  if (!apiKey && !isGeminiWithVertexAi) {
+  if (!apiKey && !isGeminiWithVertexAi && !isVllm) {
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Chat Settings.",

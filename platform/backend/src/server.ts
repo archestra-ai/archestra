@@ -44,6 +44,7 @@ import {
   ApiError,
   Gemini,
   OpenAi,
+  Vllm,
   WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -91,6 +92,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
     id: "AnthropicMessagesResponse",
+  });
+  z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
+    id: "VllmChatCompletionRequest",
+  });
+  z.globalRegistry.add(Vllm.API.ChatCompletionResponseSchema, {
+    id: "VllmChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

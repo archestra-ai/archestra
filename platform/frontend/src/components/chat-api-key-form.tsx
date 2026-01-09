@@ -90,6 +90,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
   },
+  vllm: {
+    name: "vLLM",
+    icon: "/icons/vllm.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://docs.vllm.ai/",
+    consoleName: "vLLM Docs",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

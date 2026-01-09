@@ -25,12 +25,12 @@
   "license": "ISC",
   "dependencies": {
     "better-auth": "1.4.10",
-    "zod": "^4.1.13"
+    "zod": "^4.3.4"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.89.2",
     "@types/node": "^25",
-    "knip": "^5.78.0",
+    "knip": "^5.79.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2"
   }

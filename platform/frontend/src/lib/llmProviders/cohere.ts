@@ -218,9 +218,7 @@ class CohereChatInteraction implements InteractionUtils {
           content = userMsg.content;
         } else if (Array.isArray(userMsg.content)) {
           content = userMsg.content
-            .filter(
-              (block): block is CohereTextContent => block.type === "text",
-            )
+            .filter((block): block is CohereTextContent => block.type === "text")
             .map((block) => block.text)
             .join("");
         }
@@ -228,32 +226,25 @@ class CohereChatInteraction implements InteractionUtils {
         if (content) {
           uiMessages.push({
             role: "user",
-            content,
+            parts: [{ type: "text", text: content }],
           });
         }
       } else if (message.role === "assistant") {
         const assistantMsg = message as CohereAssistantMessage;
-        let content = "";
+        const parts: PartialUIMessage["parts"] = [];
 
-        if (typeof assistantMsg.content === "string") {
-          content = assistantMsg.content;
+        // Extract assistant text
+        if (typeof assistantMsg.content === "string" && assistantMsg.content) {
+          parts.push({ type: "text", text: assistantMsg.content });
         } else if (Array.isArray(assistantMsg.content)) {
-          content = assistantMsg.content
-            .filter(
-              (block): block is CohereTextContent => block.type === "text",
-            )
-            .map((block) => block.text)
-            .join("");
+          for (const block of assistantMsg.content) {
+            if (block.type === "text") {
+              parts.push({ type: "text", text: block.text });
+            }
+          }
         }
 
-        if (content) {
-          uiMessages.push({
-            role: "assistant",
-            content,
-          });
-        }
-
-        // Handle tool calls in assistant messages
+        // Handle tool calls in assistant messages (invocations)
         if (assistantMsg.tool_calls?.length) {
           for (const toolCall of assistantMsg.tool_calls) {
             let args: Record<string, unknown> = {};
@@ -263,34 +254,42 @@ class CohereChatInteraction implements InteractionUtils {
               // Keep empty args if parsing fails
             }
 
-            uiMessages.push({
-              role: "assistant",
-              content: "",
-              parts: [
-                {
-                  type: `tool-${toolCall.function.name}`,
-                  toolCallId: toolCall.id,
-                  state: "result",
-                  input: args,
-                  output: undefined,
-                },
-              ],
-            });
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.function.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: args,
+            } as unknown as PartialUIMessage["parts"][number]);
           }
         }
+
+        if (parts.length > 0) {
+          uiMessages.push({ role: "assistant", parts });
+        }
+
+        // If assistant had tool_calls, tool results (role: tool) will be processed separately
       } else if (message.role === "tool") {
         const toolMsg = message as CohereToolMessage;
+        // Parse tool output
+        let output: unknown;
+        try {
+          output = JSON.parse(toolMsg.content);
+        } catch {
+          output = toolMsg.content;
+        }
+
         uiMessages.push({
           role: "assistant",
-          content: "",
           parts: [
             {
-              type: "tool-result",
+              type: "dynamic-tool",
+              toolName: "tool-result",
               toolCallId: toolMsg.tool_call_id,
-              state: "result",
+              state: "output-available",
               input: {},
-              output: toolMsg.content,
-            },
+              output,
+            } as unknown as PartialUIMessage["parts"][number],
           ],
         });
       }
@@ -299,38 +298,22 @@ class CohereChatInteraction implements InteractionUtils {
     // Process response
     if (response?.message) {
       const responseMessage = response.message;
-      let content = "";
+      const parts: PartialUIMessage["parts"] = [];
 
       if (Array.isArray(responseMessage.content)) {
-        content = responseMessage.content
-          .filter((block): block is CohereTextContent => block.type === "text")
-          .map((block) => block.text)
-          .join("");
+        for (const block of responseMessage.content) {
+          if (block.type === "text") {
+            parts.push({ type: "text", text: block.text });
+          }
+        }
       }
 
-      // Check for policy denial or refusal
-      const policyDenied = parsePolicyDenied(content);
-      const refusal = parseRefusalMessage(content);
-
-      if (policyDenied) {
-        uiMessages.push({
-          role: "assistant",
-          content: "",
-          parts: [policyDenied],
-        });
-      } else if (refusal.reason) {
-        uiMessages.push({
-          role: "assistant",
-          content: `⚠️ ${refusal.reason}`,
-        });
-      } else if (content) {
-        uiMessages.push({
-          role: "assistant",
-          content,
-        });
+      // Check for policy denial or refusal. We push the text so ChatBotDemo can parse it.
+      if (parts.length > 0) {
+        uiMessages.push({ role: "assistant", parts });
       }
 
-      // Handle tool calls in response
+      // Handle tool calls in response (LLM requested tool calls)
       if (responseMessage.tool_calls?.length) {
         for (const toolCall of responseMessage.tool_calls) {
           let args: Record<string, unknown> = {};
@@ -342,14 +325,14 @@ class CohereChatInteraction implements InteractionUtils {
 
           uiMessages.push({
             role: "assistant",
-            content: "",
             parts: [
               {
-                type: `tool-${toolCall.function.name}`,
+                type: "dynamic-tool",
+                toolName: toolCall.function.name,
                 toolCallId: toolCall.id,
-                state: "call",
+                state: "input-available",
                 input: args,
-              },
+              } as unknown as PartialUIMessage["parts"][number],
             ],
           });
         }

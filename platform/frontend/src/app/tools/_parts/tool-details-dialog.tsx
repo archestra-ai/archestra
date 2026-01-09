@@ -57,33 +57,28 @@ export function ToolDetailsDialog({
     if (assignment.useDynamicTeamCredential) {
       return "Team Credential";
     }
-    // First try backend-provided email for remote MCP servers
-    if (assignment.credentialOwnerEmail) {
-      return assignment.credentialOwnerEmail;
+
+    // Get the credential server ID (remote or local)
+    const credentialServerId =
+      assignment.credentialSourceMcpServerId ||
+      assignment.executionSourceMcpServerId;
+
+    // If no credential server, no credential is set
+    if (!credentialServerId) {
+      return "—";
     }
-    // Then try backend-provided email for local MCP servers
-    if (assignment.executionOwnerEmail) {
-      return assignment.executionOwnerEmail;
+
+    // Check if user has access to the credential server
+    // mcpServers only contains servers the user has team access to
+    const server = mcpServers?.find((s) => s.id === credentialServerId);
+
+    if (!server) {
+      // Credential server exists but user doesn't have access
+      return "Owner outside your team";
     }
-    // Fallback to looking up from MCP servers (remote servers)
-    if (assignment.credentialSourceMcpServerId && mcpServers) {
-      const server = mcpServers.find(
-        (s) => s.id === assignment.credentialSourceMcpServerId,
-      );
-      if (server?.ownerEmail) {
-        return server.ownerEmail;
-      }
-    }
-    // Fallback to looking up from MCP servers (local servers)
-    if (assignment.executionSourceMcpServerId && mcpServers) {
-      const server = mcpServers.find(
-        (s) => s.id === assignment.executionSourceMcpServerId,
-      );
-      if (server?.ownerEmail) {
-        return server.ownerEmail;
-      }
-    }
-    return "—";
+
+    // User has access - show owner email
+    return server.ownerEmail || "—";
   };
 
   return (

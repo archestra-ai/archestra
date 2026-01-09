@@ -13942,6 +13942,15 @@
         "parameters": [
           {
             "schema": {
+              "default": false,
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeLlmProxyOrigin",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
@@ -47271,7 +47280,8 @@
                         "vercel",
                         "claude",
                         "northern-lights",
-                        "vintage-paper"
+                        "vintage-paper",
+                        "boxy-minimalistic"
                       ]
                     },
                     "customFont": {
@@ -47281,7 +47291,8 @@
                         "inter",
                         "open-sans",
                         "roboto",
-                        "source-sans-pro"
+                        "source-sans-pro",
+                        "jetbrains-mono"
                       ]
                     },
                     "convertToolResultsToToon": {
@@ -47588,7 +47599,8 @@
                       "vercel",
                       "claude",
                       "northern-lights",
-                      "vintage-paper"
+                      "vintage-paper",
+                      "boxy-minimalistic"
                     ]
                   },
                   "customFont": {
@@ -47598,7 +47610,8 @@
                       "inter",
                       "open-sans",
                       "roboto",
-                      "source-sans-pro"
+                      "source-sans-pro",
+                      "jetbrains-mono"
                     ]
                   },
                   "limitCleanupInterval": {
@@ -47725,7 +47738,8 @@
                         "vercel",
                         "claude",
                         "northern-lights",
-                        "vintage-paper"
+                        "vintage-paper",
+                        "boxy-minimalistic"
                       ]
                     },
                     "customFont": {
@@ -47735,7 +47749,8 @@
                         "inter",
                         "open-sans",
                         "roboto",
-                        "source-sans-pro"
+                        "source-sans-pro",
+                        "jetbrains-mono"
                       ]
                     },
                     "convertToolResultsToToon": {
@@ -48290,7 +48305,8 @@
                         "vercel",
                         "claude",
                         "northern-lights",
-                        "vintage-paper"
+                        "vintage-paper",
+                        "boxy-minimalistic"
                       ]
                     },
                     "customFont": {
@@ -48300,7 +48316,8 @@
                         "inter",
                         "open-sans",
                         "roboto",
-                        "source-sans-pro"
+                        "source-sans-pro",
+                        "jetbrains-mono"
                       ]
                     },
                     "logo": {

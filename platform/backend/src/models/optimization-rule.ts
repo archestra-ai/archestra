@@ -254,6 +254,45 @@ class OptimizationRuleModel {
       { organizationId },
       "OptimizationRuleModel.ensureDefaultOptimizationRules: starting",
     );
+    const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
+    {
+      openai: [
+        {
+          entityType: "organization",
+          entityId: organizationId,
+          conditions: [{ maxLength: 1000 }],
+          provider: "openai",
+          targetModel: "gpt-5-mini",
+          enabled: true,
+        },
+      ],
+      anthropic: [
+        {
+          entityType: "organization",
+          entityId: organizationId,
+          conditions: [{ maxLength: 1000 }],
+          provider: "anthropic",
+          targetModel: "claude-haiku-4-5",
+          enabled: true,
+        },
+      ],
+      gemini: [],
+      mistral: [],
+      deepseek: [],
+      groq: [],
+      minimax: [
+        {
+          entityType: "organization",
+          entityId: organizationId,
+          conditions: [{ maxLength: 1000 }],
+          provider: "minimax",
+          targetModel: "abab6.5s-chat",
+          enabled: true,
+        },
+      ],
+      cohere: [],
+    };
+
     const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
       openai: [
         {
@@ -270,34 +309,18 @@ class OptimizationRuleModel {
         },
       ],
       gemini: [],
+      mistral: [],
+      deepseek: [],
+      groq: [],
+      minimax: [
+        {
+          provider: "minimax",
+          model: "abab6.5s-chat",
+          ...getDefaultModelPrice("abab6.5s-chat"),
+        },
+      ],
+      cohere: [],
     };
-
-    // Define rules per provider
-    const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
-      {
-        openai: [
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            conditions: [{ maxLength: 1000 }],
-            provider: "openai",
-            targetModel: "gpt-5-mini",
-            enabled: true,
-          },
-        ],
-        anthropic: [
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            // Adding a hasTools: false will not work with chat because it has tools
-            conditions: [{ maxLength: 1000 }],
-            provider: "anthropic",
-            targetModel: "claude-haiku-4-5",
-            enabled: true,
-          },
-        ],
-        gemini: [],
-      };
 
     // Filter by provider if specified, otherwise get providers from interactions
     let providers: SupportedProvider[] =

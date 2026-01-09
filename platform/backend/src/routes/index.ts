@@ -5,6 +5,10 @@ import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
+import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
+import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
+import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
+import groqProxyRoutesV2 from "./proxy/routesv2/groq";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -44,6 +48,19 @@ export const geminiProxyRoutes = config.llm.gemini.useV2Routes
 export const openAiProxyRoutes = config.llm.openai.useV2Routes
   ? openAiProxyRoutesV2
   : openAiProxyRoutesV1;
+
+// MiniMax proxy routes
+export const minimaxProxyRoutes = minimaxProxyRoutesV2;
+
+// Mistral proxy routes
+export const mistralProxyRoutes = mistralProxyRoutesV2;
+
+// DeepSeek proxy routes
+export const deepseekProxyRoutes = deepseekProxyRoutesV2;
+
+// Groq proxy routes
+export const groqProxyRoutes = groqProxyRoutesV2;
+
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

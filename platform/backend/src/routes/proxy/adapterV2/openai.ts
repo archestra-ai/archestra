@@ -31,6 +31,7 @@ import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
+import { SupportedProvider } from "@shared";
 import { MockOpenAIClient } from "../mock-openai-client";
 import {
   doesModelSupportImages,
@@ -75,10 +76,9 @@ type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 // REQUEST ADAPTER
 // =============================================================================
 
-class OpenAIRequestAdapter
-  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
-{
-  readonly provider = "openai" as const;
+export class OpenAIRequestAdapter
+  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages> {
+  readonly provider: SupportedProvider = "openai";
   private request: OpenAiRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
@@ -643,8 +643,8 @@ function stripImageBlocksFromContent(content: unknown): string {
 // RESPONSE ADAPTER
 // =============================================================================
 
-class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
-  readonly provider = "openai" as const;
+export class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
+  readonly provider: SupportedProvider = "openai";
   private response: OpenAiResponse;
 
   constructor(response: OpenAiResponse) {
@@ -741,10 +741,9 @@ class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
 // STREAM ADAPTER
 // =============================================================================
 
-class OpenAIStreamAdapter
-  implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
-{
-  readonly provider = "openai" as const;
+export class OpenAIStreamAdapter
+  implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
+  readonly provider: SupportedProvider = "openai";
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
 
@@ -927,13 +926,13 @@ class OpenAIStreamAdapter
     const toolCalls =
       this.state.toolCalls.length > 0
         ? this.state.toolCalls.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: {
-              name: tc.name,
-              arguments: tc.arguments,
-            },
-          }))
+          id: tc.id,
+          type: "function" as const,
+          function: {
+            name: tc.name,
+            arguments: tc.arguments,
+          },
+        }))
         : undefined;
 
     return {

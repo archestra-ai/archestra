@@ -79,6 +79,164 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Mistral API
+ */
+async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.mistral.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Mistral models",
+    );
+    throw new Error(`Failed to fetch Mistral models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: any[];
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "mistral" as const,
+  }));
+}
+
+/**
+ * Fetch models from DeepSeek API
+ */
+async function fetchDeepSeekModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.deepseek.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch DeepSeek models",
+    );
+    throw new Error(`Failed to fetch DeepSeek models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: any[];
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "deepseek" as const,
+  }));
+}
+
+/**
+ * Fetch models from Groq API
+ */
+async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.groq.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Groq models",
+    );
+    throw new Error(`Failed to fetch Groq models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: any[];
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "groq" as const,
+  }));
+}
+
+/**
+ * Fetch models from MiniMax API
+ */
+async function fetchMiniMaxModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.minimax.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      // MiniMax might not support /models or requires specific headers
+      throw new Error(`Status ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      data: any[];
+    };
+
+    if (!data.data || !Array.isArray(data.data)) {
+      throw new Error("Invalid response format");
+    }
+
+    return data.data.map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "minimax" as const,
+    }));
+  } catch (error) {
+    logger.warn(
+      { error: (error as Error).message },
+      "Failed to fetch MiniMax models from API, returning static list",
+    );
+
+    // Static list as fallback for MiniMax (from their documentation)
+    return [
+      {
+        id: "abab6.5s-chat",
+        displayName: "abab6.5s-chat",
+        provider: "minimax",
+      },
+      {
+        id: "abab6.5g-chat",
+        displayName: "abab6.5g-chat",
+        provider: "minimax",
+      },
+      {
+        id: "abab6.5t-chat",
+        displayName: "abab6.5t-chat",
+        provider: "minimax",
+      },
+    ];
+  }
+}
+
+/**
  * Fetch models from OpenAI API
  */
 async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -300,6 +458,14 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "mistral":
+      return config.chat.mistral.apiKey || null;
+    case "deepseek":
+      return config.chat.deepseek.apiKey || null;
+    case "groq":
+      return config.chat.groq.apiKey || null;
+    case "minimax":
+      return config.chat.minimax.apiKey || null;
     default:
       return null;
   }
@@ -313,6 +479,11 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  mistral: fetchMistralModels,
+  deepseek: fetchDeepSeekModels,
+  groq: fetchGroqModels,
+  minimax: fetchMiniMaxModels,
+  cohere: async () => [], // cohere remains empty for now
 };
 
 /**
@@ -367,7 +538,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "mistral", "deepseek", "groq", "minimax"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

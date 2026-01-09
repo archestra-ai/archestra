@@ -142,6 +142,15 @@ export const RouteId = {
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
+  // Proxy Routes - Mistral
+  MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
+
+  // Proxy Routes - DeepSeek
+  DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
+
+  // Proxy Routes - Groq
+  GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

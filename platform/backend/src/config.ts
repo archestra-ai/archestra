@@ -261,6 +261,26 @@ export default {
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE || "",
       },
     },
+    mistral: {
+      baseUrl:
+        process.env.ARCHESTRA_MISTRAL_BASE_URL || "https://api.mistral.ai/v1",
+      useV2Routes: true,
+    },
+    deepseek: {
+      baseUrl:
+        process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      useV2Routes: true,
+    },
+    groq: {
+      baseUrl:
+        process.env.ARCHESTRA_GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+      useV2Routes: true,
+    },
+    minimax: {
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
+      useV2Routes: true,
+    },
   },
   chat: {
     openai: {
@@ -271,6 +291,18 @@ export default {
     },
     gemini: {
       apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
+    },
+    mistral: {
+      apiKey: process.env.ARCHESTRA_CHAT_MISTRAL_API_KEY || "",
+    },
+    deepseek: {
+      apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+    },
+    groq: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
+    },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

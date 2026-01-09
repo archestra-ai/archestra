@@ -42,7 +42,11 @@ import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,
+  DeepSeek,
   Gemini,
+  Groq,
+  MiniMax,
+  Mistral,
   OpenAi,
   WebSocketMessageSchema,
 } from "@/types";
@@ -54,7 +58,7 @@ import * as routes from "./routes";
 const eeRoutes =
   config.enterpriseLicenseActivated || config.codegenMode
     ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-      await import("./routes/index.ee")
+    await import("./routes/index.ee")
     : ({} as Record<string, never>);
 
 const {
@@ -94,6 +98,30 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",
+  });
+  z.globalRegistry.add(MiniMax.API.ChatRequestSchema, {
+    id: "MiniMaxChatCompletionRequest",
+  });
+  z.globalRegistry.add(MiniMax.API.ChatResponseSchema, {
+    id: "MiniMaxChatCompletionResponse",
+  });
+  z.globalRegistry.add(Mistral.API.ChatRequestSchema, {
+    id: "MistralChatCompletionRequest",
+  });
+  z.globalRegistry.add(Mistral.API.ChatResponseSchema, {
+    id: "MistralChatCompletionResponse",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatRequestSchema, {
+    id: "DeepSeekChatCompletionRequest",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatResponseSchema, {
+    id: "DeepSeekChatCompletionResponse",
+  });
+  z.globalRegistry.add(Groq.API.ChatRequestSchema, {
+    id: "GroqChatCompletionRequest",
+  });
+  z.globalRegistry.add(Groq.API.ChatResponseSchema, {
+    id: "GroqChatCompletionResponse",
   });
 }
 
@@ -311,8 +339,7 @@ const startMetricsServer = async () => {
     host,
   });
   metricsServer.log.info(
-    `Metrics server started on port ${observability.metrics.port}${
-      metricsSecret ? " (with authentication)" : " (no authentication)"
+    `Metrics server started on port ${observability.metrics.port}${metricsSecret ? " (with authentication)" : " (no authentication)"
     }`,
   );
 };
@@ -342,8 +369,7 @@ const startMcpServerRuntime = async (
       });
     } catch (error) {
       fastify.log.error(
-        `Failed to import MCP Server Runtime: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"
         }`,
       );
       // Continue server startup even if MCP runtime fails

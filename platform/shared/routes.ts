@@ -143,13 +143,48 @@ export const RouteId = {
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
   // Proxy Routes - Mistral
+  MistralChatCompletionsWithDefaultAgent: "mistralChatCompletionsWithDefaultAgent",
   MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
 
   // Proxy Routes - DeepSeek
+  DeepSeekChatCompletionsWithDefaultAgent: "deepSeekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
   // Proxy Routes - Groq
+  GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
   GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",
+
+  // Proxy Routes - Perplexity
+  PerplexityChatCompletionsWithDefaultAgent: "perplexityChatCompletionsWithDefaultAgent",
+  PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
+
+  // Proxy Routes - Cerebras
+  CerebrasChatCompletionsWithDefaultAgent: "cerebrasChatCompletionsWithDefaultAgent",
+  CerebrasChatCompletionsWithAgent: "cerebrasChatCompletionsWithAgent",
+
+  // Proxy Routes - xAI
+  xAiChatCompletionsWithDefaultAgent: "xAiChatCompletionsWithDefaultAgent",
+  xAiChatCompletionsWithAgent: "xAiChatCompletionsWithAgent",
+
+  // Proxy Routes - Z.ai
+  ZaiChatCompletionsWithDefaultAgent: "zaiChatCompletionsWithDefaultAgent",
+  ZaiChatCompletionsWithAgent: "zaiChatCompletionsWithAgent",
+
+  // Proxy Routes - Together AI
+  TogetherAiChatCompletionsWithDefaultAgent: "togetherAiChatCompletionsWithDefaultAgent",
+  TogetherAiChatCompletionsWithAgent: "togetherAiChatCompletionsWithAgent",
+
+  // Proxy Routes - Fireworks
+  FireworksAiChatCompletionsWithDefaultAgent: "fireworksChatCompletionsWithDefaultAgent",
+  FireworksAiChatCompletionsWithAgent: "fireworksChatCompletionsWithAgent",
+
+  // Proxy Routes - SambaNova
+  SambaNovaAiChatCompletionsWithDefaultAgent: "sambaNovaChatCompletionsWithDefaultAgent",
+  SambaNovaAiChatCompletionsWithAgent: "sambaNovaChatCompletionsWithAgent",
+
+  // Proxy Routes - Novita
+  NovitaAiChatCompletionsWithDefaultAgent: "novitaChatCompletionsWithDefaultAgent",
+  NovitaAiChatCompletionsWithAgent: "novitaChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",

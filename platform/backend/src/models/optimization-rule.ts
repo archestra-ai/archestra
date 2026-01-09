@@ -291,6 +291,14 @@ class OptimizationRuleModel {
         },
       ],
       cohere: [],
+      perplexity: [],
+      cerebras: [],
+      xai: [],
+      zai: [],
+      togetherai: [],
+      fireworks: [],
+      sambanova: [],
+      novita: [],
     };
 
     const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
@@ -320,6 +328,14 @@ class OptimizationRuleModel {
         },
       ],
       cohere: [],
+      perplexity: [],
+      cerebras: [],
+      xai: [],
+      zai: [],
+      togetherai: [],
+      fireworks: [],
+      sambanova: [],
+      novita: [],
     };
 
     // Filter by provider if specified, otherwise get providers from interactions

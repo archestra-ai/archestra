@@ -12,6 +12,14 @@ export const SupportedProvidersSchema = z.enum([
   "groq",
   "minimax",
   "cohere",
+  "perplexity",
+  "cerebras",
+  "xai",
+  "zai",
+  "togetherai",
+  "fireworks",
+  "sambanova",
+  "novita",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -22,6 +30,14 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "deepseek:chat",
   "groq:chat",
   "minimax:chat",
+  "perplexity:chat",
+  "cerebras:chat",
+  "xai:chat",
+  "zai:chat",
+  "togetherai:chat",
+  "fireworks:chat",
+  "sambanova:chat",
+  "novita:chat",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -39,4 +55,12 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   groq: "Groq",
   minimax: "MiniMax",
   cohere: "Cohere",
+  perplexity: "Perplexity",
+  cerebras: "Cerebras",
+  xai: "xAI",
+  zai: "Z.ai",
+  togetherai: "Together AI",
+  fireworks: "Fireworks AI",
+  sambanova: "SambaNova",
+  novita: "Novita",
 };

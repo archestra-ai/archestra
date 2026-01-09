@@ -466,6 +466,14 @@ async function getProviderApiKey({
       return config.chat.groq.apiKey || null;
     case "minimax":
       return config.chat.minimax.apiKey || null;
+    case "perplexity":
+      return config.chat.perplexity.apiKey || null;
+    case "cerebras":
+      return config.chat.cerebras.apiKey || null;
+    case "xai":
+      return config.chat.xai.apiKey || null;
+    case "zai":
+      return config.chat.zai.apiKey || null;
     default:
       return null;
   }
@@ -483,6 +491,14 @@ const modelFetchers: Record<
   deepseek: fetchDeepSeekModels,
   groq: fetchGroqModels,
   minimax: fetchMiniMaxModels,
+  perplexity: fetchGroqModels, // Perplexity is OpenAI-compatible
+  cerebras: fetchGroqModels, // Cerebras is OpenAI-compatible (can use same fetcher)
+  xai: fetchGroqModels, // xAI is OpenAI-compatible
+  zai: fetchGroqModels, // Z.ai is OpenAI-compatible
+  togetherai: fetchGroqModels, // Together AI is OpenAI-compatible
+  fireworks: fetchGroqModels, // Fireworks is OpenAI-compatible
+  sambanova: fetchGroqModels, // SambaNova is OpenAI-compatible
+  novita: fetchGroqModels, // Novita is OpenAI-compatible
   cohere: async () => [], // cohere remains empty for now
 };
 
@@ -538,7 +554,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai", "mistral", "deepseek", "groq", "minimax"].includes(provider)) {
+    if (["anthropic", "openai", "mistral", "deepseek", "groq", "minimax", "perplexity", "cerebras", "xai", "zai", "togetherai", "fireworks", "sambanova", "novita"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

@@ -48,6 +48,14 @@ import {
   MiniMax,
   Mistral,
   OpenAi,
+  Perplexity,
+  Cerebras,
+  TogetherAI,
+  Fireworks,
+  SambaNova,
+  Novita,
+  xAi,
+  Zai,
   WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
@@ -95,6 +103,54 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
     id: "AnthropicMessagesResponse",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatRequestSchema, {
+    id: "PerplexityChatCompletionRequest",
+  });
+  z.globalRegistry.add(Perplexity.API.ChatResponseSchema, {
+    id: "PerplexityChatCompletionResponse",
+  });
+  z.globalRegistry.add(Cerebras.API.ChatRequestSchema, {
+    id: "CerebrasChatCompletionRequest",
+  });
+  z.globalRegistry.add(Cerebras.API.ChatResponseSchema, {
+    id: "CerebrasChatCompletionResponse",
+  });
+  z.globalRegistry.add(xAi.API.ChatRequestSchema, {
+    id: "xAiChatCompletionRequest",
+  });
+  z.globalRegistry.add(xAi.API.ChatResponseSchema, {
+    id: "xAiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Zai.API.ChatRequestSchema, {
+    id: "ZaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Zai.API.ChatResponseSchema, {
+    id: "ZaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(TogetherAI.API.ChatRequestSchema, {
+    id: "TogetherAiChatCompletionRequest",
+  });
+  z.globalRegistry.add(TogetherAI.API.ChatResponseSchema, {
+    id: "TogetherAiChatCompletionResponse",
+  });
+  z.globalRegistry.add(Fireworks.API.ChatRequestSchema, {
+    id: "FireworksChatCompletionRequest",
+  });
+  z.globalRegistry.add(Fireworks.API.ChatResponseSchema, {
+    id: "FireworksChatCompletionResponse",
+  });
+  z.globalRegistry.add(SambaNova.API.ChatRequestSchema, {
+    id: "SambaNovaChatCompletionRequest",
+  });
+  z.globalRegistry.add(SambaNova.API.ChatResponseSchema, {
+    id: "SambaNovaChatCompletionResponse",
+  });
+  z.globalRegistry.add(Novita.API.ChatRequestSchema, {
+    id: "NovitaChatCompletionRequest",
+  });
+  z.globalRegistry.add(Novita.API.ChatResponseSchema, {
+    id: "NovitaChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

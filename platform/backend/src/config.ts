@@ -281,6 +281,46 @@ export default {
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
       useV2Routes: true,
     },
+    perplexity: {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_BASE_URL || "https://api.perplexity.ai",
+      useV2Routes: true,
+    },
+    cerebras: {
+      baseUrl:
+        process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+      useV2Routes: true,
+    },
+    xai: {
+      baseUrl:
+        process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+      useV2Routes: true,
+    },
+    zai: {
+      baseUrl:
+        process.env.ARCHESTRA_ZAI_BASE_URL || "https://api.z.ai/v1",
+      useV2Routes: true,
+    },
+    togetherai: {
+      baseUrl:
+        process.env.ARCHESTRA_TOGETHERAI_BASE_URL || "https://api.together.xyz/v1",
+      useV2Routes: true,
+    },
+    fireworks: {
+      baseUrl:
+        process.env.ARCHESTRA_FIREWORKS_BASE_URL || "https://api.fireworks.ai/inference/v1",
+      useV2Routes: true,
+    },
+    sambanova: {
+      baseUrl:
+        process.env.ARCHESTRA_SAMBANOVA_BASE_URL || "https://api.sambanova.ai/v1",
+      useV2Routes: true,
+    },
+    novita: {
+      baseUrl:
+        process.env.ARCHESTRA_NOVITA_BASE_URL || "https://api.novita.ai/v1",
+      useV2Routes: true,
+    },
   },
   chat: {
     openai: {
@@ -303,6 +343,30 @@ export default {
     },
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+    },
+    perplexity: {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
+    },
+    cerebras: {
+      apiKey: process.env.ARCHESTRA_CHAT_CEREBRAS_API_KEY || "",
+    },
+    xai: {
+      apiKey: process.env.ARCHESTRA_CHAT_XAI_API_KEY || "",
+    },
+    zai: {
+      apiKey: process.env.ARCHESTRA_CHAT_ZAI_API_KEY || "",
+    },
+    togetherai: {
+      apiKey: process.env.ARCHESTRA_CHAT_TOGETHERAI_API_KEY || "",
+    },
+    fireworks: {
+      apiKey: process.env.ARCHESTRA_CHAT_FIREWORKS_API_KEY || "",
+    },
+    sambanova: {
+      apiKey: process.env.ARCHESTRA_CHAT_SAMBANOVA_API_KEY || "",
+    },
+    novita: {
+      apiKey: process.env.ARCHESTRA_CHAT_NOVITA_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

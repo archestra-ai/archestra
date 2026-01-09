@@ -9,6 +9,14 @@ import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
 import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import deepseekProxyRoutesV2 from "./proxy/routesv2/deepseek";
 import groqProxyRoutesV2 from "./proxy/routesv2/groq";
+import perplexityProxyRoutesV2 from "./proxy/routesv2/perplexity";
+import cerebrasProxyRoutesV2 from "./proxy/routesv2/cerebras";
+import xaiProxyRoutesV2 from "./proxy/routesv2/xai";
+import zaiProxyRoutesV2 from "./proxy/routesv2/zai";
+import togetheraiProxyRoutesV2 from "./proxy/routesv2/togetherai";
+import fireworksProxyRoutesV2 from "./proxy/routesv2/fireworks";
+import sambanovaProxyRoutesV2 from "./proxy/routesv2/sambanova";
+import novitaProxyRoutesV2 from "./proxy/routesv2/novita";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -60,6 +68,30 @@ export const deepseekProxyRoutes = deepseekProxyRoutesV2;
 
 // Groq proxy routes
 export const groqProxyRoutes = groqProxyRoutesV2;
+
+// Perplexity proxy routes
+export const perplexityProxyRoutes = perplexityProxyRoutesV2;
+
+// Cerebras proxy routes
+export const cerebrasProxyRoutes = cerebrasProxyRoutesV2;
+
+// xAI proxy routes
+export const xaiProxyRoutes = xaiProxyRoutesV2;
+
+// Z.ai proxy routes
+export const zaiProxyRoutes = zaiProxyRoutesV2;
+
+// Together AI proxy routes
+export const togetheraiProxyRoutes = togetheraiProxyRoutesV2;
+
+// Fireworks proxy routes
+export const fireworksProxyRoutes = fireworksProxyRoutesV2;
+
+// SambaNova proxy routes
+export const sambanovaProxyRoutes = sambanovaProxyRoutesV2;
+
+// Novita proxy routes
+export const novitaProxyRoutes = novitaProxyRoutesV2;
 
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";

@@ -57,6 +57,22 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "minimax";
   }
 
+  if (lowerModel.includes("together")) {
+    return "togetherai";
+  }
+
+  if (lowerModel.includes("fireworks")) {
+    return "fireworks";
+  }
+
+  if (lowerModel.includes("sambanova")) {
+    return "sambanova";
+  }
+
+  if (lowerModel.includes("novita")) {
+    return "novita";
+  }
+
   // Default to anthropic for backwards compatibility
   return "anthropic";
 }
@@ -125,6 +141,18 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "minimax" && config.chat.minimax.apiKey) {
       providerApiKey = config.chat.minimax.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "togetherai" && config.chat.togetherai.apiKey) {
+      providerApiKey = config.chat.togetherai.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "fireworks" && config.chat.fireworks.apiKey) {
+      providerApiKey = config.chat.fireworks.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "sambanova" && config.chat.sambanova.apiKey) {
+      providerApiKey = config.chat.sambanova.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "novita" && config.chat.novita.apiKey) {
+      providerApiKey = config.chat.novita.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -199,8 +227,42 @@ export function createLLMModel(params: {
       baseURL: `http://localhost:${config.api.port}/v1/openai/${agentId}`,
       headers,
     });
-    // Use .chat() to force Chat Completions API (not Responses API)
-    // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  }
+
+  if (provider === "perplexity") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/perplexity/${agentId}/v1`,
+      headers,
+    });
+    return client.chat(modelName);
+  }
+
+  if (provider === "cerebras") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/cerebras/${agentId}/v1`,
+      headers,
+    });
+    return client.chat(modelName);
+  }
+
+  if (provider === "xai") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/xai/${agentId}/v1`,
+      headers,
+    });
+    return client.chat(modelName);
+  }
+
+  if (provider === "zai") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/zai/${agentId}/v1`,
+      headers,
+    });
     return client.chat(modelName);
   }
 

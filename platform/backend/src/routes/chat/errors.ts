@@ -678,6 +678,14 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   deepseek: parseOpenAIError,
   groq: parseOpenAIError,
   minimax: parseOpenAIError,
+  perplexity: parseOpenAIError,
+  cerebras: parseOpenAIError,
+  xai: parseOpenAIError,
+  zai: parseOpenAIError,
+  togetherai: parseOpenAIError,
+  fireworks: parseOpenAIError,
+  sambanova: parseOpenAIError,
+  novita: parseOpenAIError,
   cohere: (body) => null, // Placeholder for cohere
 };
 
@@ -694,6 +702,14 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   deepseek: mapOpenAIErrorWrapper,
   groq: mapOpenAIErrorWrapper,
   minimax: mapOpenAIErrorWrapper,
+  perplexity: mapOpenAIErrorWrapper,
+  cerebras: mapOpenAIErrorWrapper,
+  xai: mapOpenAIErrorWrapper,
+  zai: mapOpenAIErrorWrapper,
+  togetherai: mapOpenAIErrorWrapper,
+  fireworks: mapOpenAIErrorWrapper,
+  sambanova: mapOpenAIErrorWrapper,
+  novita: mapOpenAIErrorWrapper,
   cohere: (status) => mapStatusCodeToErrorCode(status),
 };
 

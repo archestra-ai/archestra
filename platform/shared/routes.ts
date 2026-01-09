@@ -93,6 +93,7 @@ export const RouteId = {
 
   // Tool Routes
   GetTools: "getTools",
+  GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
 
   // Interaction Routes

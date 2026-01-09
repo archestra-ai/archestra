@@ -10,9 +10,7 @@ import type { OrganizationTheme } from "@shared";
 import {
   DEFAULT_THEME_ID,
   getThemeById as getThemeByIdShared,
-  getThemeCategories as getThemeCategoriesShared,
   getThemeMetadata,
-  getThemesByCategory as getThemesByCategoryShared,
   type ThemeMetadata as ThemeMetadataShared,
 } from "@shared";
 
@@ -40,26 +38,4 @@ export function getThemeById(id: OrganizationTheme): ThemeMetadata | undefined {
     name:
       theme.id === DEFAULT_THEME_ID ? `${theme.name} (Default)` : theme.name,
   };
-}
-
-/**
- * Get themes by category
- */
-export function getThemesByCategory(
-  category: ThemeMetadata["category"],
-): ThemeMetadata[] {
-  return getThemesByCategoryShared(category).map((theme) => ({
-    ...theme,
-    name:
-      theme.id === DEFAULT_THEME_ID ? `${theme.name} (Default)` : theme.name,
-  }));
-}
-
-/**
- * Get all theme categories
- */
-export function getThemeCategories(): ReturnType<
-  typeof getThemeCategoriesShared
-> {
-  return getThemeCategoriesShared();
 }

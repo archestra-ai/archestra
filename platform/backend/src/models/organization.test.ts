@@ -39,12 +39,12 @@ describe("OrganizationModel", () => {
       // Update organization with custom theme
       await db
         .update(schema.organizationsTable)
-        .set({ theme: "cyberpunk" })
+        .set({ theme: "twitter" })
         .where(eq(schema.organizationsTable.id, org.id));
 
       const appearance = await OrganizationModel.getPublicAppearance();
 
-      expect(appearance.theme).toBe("cyberpunk");
+      expect(appearance.theme).toBe("twitter");
     });
 
     test("should return custom font when set", async ({ makeOrganization }) => {
@@ -83,7 +83,7 @@ describe("OrganizationModel", () => {
       const firstOrg = await makeOrganization();
       await db
         .update(schema.organizationsTable)
-        .set({ theme: "catppuccin", customFont: "roboto" })
+        .set({ theme: "claude", customFont: "roboto" })
         .where(eq(schema.organizationsTable.id, firstOrg.id));
 
       // Create second organization with different settings
@@ -92,7 +92,7 @@ describe("OrganizationModel", () => {
       const appearance = await OrganizationModel.getPublicAppearance();
 
       // Should return first organization's appearance
-      expect(appearance.theme).toBe("catppuccin");
+      expect(appearance.theme).toBe("claude");
       expect(appearance.customFont).toBe("roboto");
     });
 
@@ -138,10 +138,10 @@ describe("OrganizationModel", () => {
       const org = await makeOrganization();
 
       const updated = await OrganizationModel.patch(org.id, {
-        theme: "cyberpunk",
+        theme: "twitter",
       });
 
-      expect(updated?.theme).toBe("cyberpunk");
+      expect(updated?.theme).toBe("twitter");
     });
 
     test("should update organization font", async ({ makeOrganization }) => {
@@ -178,7 +178,7 @@ describe("OrganizationModel", () => {
 
     test("should return null for non-existent organization", async () => {
       const updated = await OrganizationModel.patch("non-existent-id", {
-        theme: "cyberpunk",
+        theme: "twitter",
       });
 
       expect(updated).toBeNull();

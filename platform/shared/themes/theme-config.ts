@@ -42,7 +42,6 @@ export const SUPPORTED_THEMES = [
   { id: "perpetuity", category: "dark" },
   { id: "midnight-bloom", category: "dark" },
   { id: "starry-night", category: "dark" },
-  { id: "cyberpunk", category: "dark" },
 
   // Nature & Earthy
   { id: "mocha-mousse", category: "nature" },

@@ -46449,7 +46449,8 @@
                         "vercel",
                         "claude",
                         "northern-lights",
-                        "vintage-paper"
+                        "vintage-paper",
+                        "radix-lyra"
                       ]
                     },
                     "customFont": {
@@ -46459,7 +46460,8 @@
                         "inter",
                         "open-sans",
                         "roboto",
-                        "source-sans-pro"
+                        "source-sans-pro",
+                        "jetbrains-mono"
                       ]
                     },
                     "convertToolResultsToToon": {
@@ -46766,7 +46768,8 @@
                       "vercel",
                       "claude",
                       "northern-lights",
-                      "vintage-paper"
+                      "vintage-paper",
+                      "radix-lyra"
                     ]
                   },
                   "customFont": {
@@ -46776,7 +46779,8 @@
                       "inter",
                       "open-sans",
                       "roboto",
-                      "source-sans-pro"
+                      "source-sans-pro",
+                      "jetbrains-mono"
                     ]
                   },
                   "limitCleanupInterval": {
@@ -46903,7 +46907,8 @@
                         "vercel",
                         "claude",
                         "northern-lights",
-                        "vintage-paper"
+                        "vintage-paper",
+                        "radix-lyra"
                       ]
                     },
                     "customFont": {
@@ -46913,7 +46918,8 @@
                         "inter",
                         "open-sans",
                         "roboto",
-                        "source-sans-pro"
+                        "source-sans-pro",
+                        "jetbrains-mono"
                       ]
                     },
                     "convertToolResultsToToon": {
@@ -47468,7 +47474,8 @@
                         "vercel",
                         "claude",
                         "northern-lights",
-                        "vintage-paper"
+                        "vintage-paper",
+                        "radix-lyra"
                       ]
                     },
                     "customFont": {
@@ -47478,7 +47485,8 @@
                         "inter",
                         "open-sans",
                         "roboto",
-                        "source-sans-pro"
+                        "source-sans-pro",
+                        "jetbrains-mono"
                       ]
                     },
                     "logo": {

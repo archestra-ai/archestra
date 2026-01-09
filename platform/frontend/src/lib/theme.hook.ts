@@ -154,10 +154,11 @@ const applyThemeOnUI = (themeId: OrganizationTheme) => {
 };
 
 const applyFontOnUI = (fontId: OrganizationCustomFont) => {
-  const root = document.documentElement;
+  // Apply to body because Next.js font variables are defined on body via classes
+  const body = document.body;
   const fontFamily = fontFamilyMap[fontId];
   if (fontFamily) {
-    root.style.setProperty("--font-sans", fontFamily);
+    body.style.setProperty("--font-sans", fontFamily);
   }
 };
 

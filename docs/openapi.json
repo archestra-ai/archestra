@@ -281,116 +281,92 @@
                       ]
                     },
                     "audio": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id"
-                          ]
-                        },
-                        {
-                          "type": "null"
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "nullable": true
                     },
                     "content": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "text"
-                                    ]
-                                  },
-                                  "text": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "text"
-                                ]
-                              }
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805",
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "refusal"
-                                    ]
-                                  },
-                                  "refusal": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "refusal"
-                                ]
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "function_call": {
-                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "arguments": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "arguments",
-                            "name"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "refusal": {
                       "anyOf": [
                         {
                           "type": "string"
                         },
                         {
-                          "type": "null"
+                          "type": "array",
+                          "items": {
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ]
+                          }
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805",
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "refusal"
+                                ]
+                              },
+                              "refusal": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "refusal"
+                            ]
+                          }
                         }
-                      ]
+                      ],
+                      "nullable": true
+                    },
+                    "function_call": {
+                      "type": "object",
+                      "properties": {
+                        "arguments": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "arguments",
+                        "name"
+                      ],
+                      "nullable": true,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "refusal": {
+                      "type": "string",
+                      "nullable": true
                     },
                     "tool_calls": {
                       "type": "array",
@@ -537,14 +513,8 @@
                       ]
                     },
                     "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "name": {
                       "type": "string"
@@ -590,14 +560,8 @@
                           "additionalProperties": {}
                         },
                         "strict": {
-                          "anyOf": [
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
+                          "type": "boolean",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -770,14 +734,8 @@
                                     "additionalProperties": {}
                                   },
                                   "strict": {
-                                    "anyOf": [
-                                      {
-                                        "type": "boolean"
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ]
+                                    "type": "boolean",
+                                    "nullable": true
                                   }
                                 },
                                 "required": [
@@ -924,34 +882,16 @@
             ]
           },
           "temperature": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "nullable": true
           },
           "max_tokens": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "nullable": true
           },
           "stream": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "boolean",
+            "nullable": true
           }
         },
         "required": [
@@ -985,36 +925,19 @@
                   "type": "number"
                 },
                 "logprobs": {
-                  "anyOf": [
-                    {},
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "nullable": true
                 },
                 "message": {
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000",
                   "type": "object",
                   "properties": {
                     "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "refusal": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "role": {
                       "type": "string",
@@ -1027,35 +950,24 @@
                       "items": {}
                     },
                     "audio": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "function_call": {
-                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "arguments": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "arguments",
-                            "name"
-                          ]
+                      "type": "object",
+                      "properties": {
+                        "arguments": {
+                          "type": "string"
                         },
-                        {
-                          "type": "null"
+                        "name": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "arguments",
+                        "name"
+                      ],
+                      "nullable": true,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -1168,14 +1080,8 @@
             "type": "string"
           },
           "system_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "nullable": true
           },
           "usage": {
             "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113",
@@ -2983,23 +2889,12 @@
                                 ]
                               },
                               "cache_control": {
-                                "anyOf": [
-                                  {},
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "nullable": true
                               },
                               "citations": {
-                                "anyOf": [
-                                  {
-                                    "type": "array",
-                                    "items": {}
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "type": "array",
+                                "items": {},
+                                "nullable": true
                               }
                             },
                             "required": [
@@ -3024,12 +2919,7 @@
                                 ]
                               },
                               "cache_control": {
-                                "anyOf": [
-                                  {},
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "nullable": true
                               }
                             },
                             "required": [
@@ -3052,12 +2942,7 @@
                                 ]
                               },
                               "cache_control": {
-                                "anyOf": [
-                                  {},
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "nullable": true
                               },
                               "content": {
                                 "anyOf": [
@@ -3081,23 +2966,12 @@
                                               ]
                                             },
                                             "cache_control": {
-                                              "anyOf": [
-                                                {},
-                                                {
-                                                  "type": "null"
-                                                }
-                                              ]
+                                              "nullable": true
                                             },
                                             "citations": {
-                                              "anyOf": [
-                                                {
-                                                  "type": "array",
-                                                  "items": {}
-                                                },
-                                                {
-                                                  "type": "null"
-                                                }
-                                              ]
+                                              "type": "array",
+                                              "items": {},
+                                              "nullable": true
                                             }
                                           },
                                           "required": [
@@ -3142,25 +3016,13 @@
             "type": "number"
           },
           "container": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "nullable": true
           },
           "context_management": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {}
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "object",
+            "properties": {},
+            "nullable": true
           },
           "mcp_servers": {
             "type": "array",
@@ -3170,14 +3032,8 @@
             "type": "object",
             "properties": {
               "user_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string",
+                "nullable": true
               }
             },
             "required": [
@@ -3212,23 +3068,12 @@
                     "type": "string"
                   },
                   "cache_control": {
-                    "anyOf": [
-                      {},
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "nullable": true
                   },
                   "citations": {
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {}
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "type": "array",
+                    "items": {},
+                    "nullable": true
                   }
                 },
                 "required": [
@@ -3251,23 +3096,12 @@
                       "type": "string"
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "citations": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {}
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {},
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3365,25 +3199,14 @@
                       "type": "string"
                     },
                     "type": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "custom"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "enum": [
+                        "custom"
+                      ],
+                      "nullable": true
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "input_schema": {
                       "type": "object",
@@ -3414,12 +3237,7 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3443,12 +3261,7 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3472,12 +3285,7 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3501,22 +3309,11 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "max_characters": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "number",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3540,56 +3337,28 @@
                       ]
                     },
                     "allowed_domains": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     },
                     "blocked_domains": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "max_uses": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "number",
+                      "nullable": true
                     },
                     "user_location": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3627,15 +3396,9 @@
                   "type": "object",
                   "properties": {
                     "citations": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {}
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {},
+                      "nullable": true
                     },
                     "text": {
                       "type": "string"
@@ -3690,22 +3453,11 @@
             ]
           },
           "stop_reason": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ]
+            "nullable": true
           },
           "stop_sequence": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "nullable": true
           },
           "type": {
             "type": "string",
@@ -4050,120 +3802,96 @@
                       ]
                     },
                     "audio": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
                     },
                     "content": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "text"
-                                    ]
-                                  },
-                                  "text": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "text"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805",
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "refusal"
-                                    ]
-                                  },
-                                  "refusal": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "refusal"
-                                ],
-                                "additionalProperties": false
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "function_call": {
-                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "arguments": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "arguments",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "refusal": {
                       "anyOf": [
                         {
                           "type": "string"
                         },
                         {
-                          "type": "null"
+                          "type": "array",
+                          "items": {
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "text"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805",
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "refusal"
+                                ]
+                              },
+                              "refusal": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "refusal"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
-                      ]
+                      ],
+                      "nullable": true
+                    },
+                    "function_call": {
+                      "type": "object",
+                      "properties": {
+                        "arguments": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "arguments",
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "refusal": {
+                      "type": "string",
+                      "nullable": true
                     },
                     "tool_calls": {
                       "type": "array",
@@ -4317,14 +4045,8 @@
                       ]
                     },
                     "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "name": {
                       "type": "string"
@@ -4371,14 +4093,8 @@
                           "additionalProperties": {}
                         },
                         "strict": {
-                          "anyOf": [
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
+                          "type": "boolean",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -4558,14 +4274,8 @@
                                     "additionalProperties": {}
                                   },
                                   "strict": {
-                                    "anyOf": [
-                                      {
-                                        "type": "boolean"
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ]
+                                    "type": "boolean",
+                                    "nullable": true
                                   }
                                 },
                                 "required": [
@@ -4723,34 +4433,16 @@
             ]
           },
           "temperature": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "nullable": true
           },
           "max_tokens": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "nullable": true
           },
           "stream": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "boolean",
+            "nullable": true
           }
         },
         "required": [
@@ -4785,36 +4477,19 @@
                   "type": "number"
                 },
                 "logprobs": {
-                  "anyOf": [
-                    {},
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "nullable": true
                 },
                 "message": {
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000",
                   "type": "object",
                   "properties": {
                     "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "refusal": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "role": {
                       "type": "string",
@@ -4827,36 +4502,25 @@
                       "items": {}
                     },
                     "audio": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "function_call": {
-                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "arguments": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "arguments",
-                            "name"
-                          ],
-                          "additionalProperties": false
+                      "type": "object",
+                      "properties": {
+                        "arguments": {
+                          "type": "string"
                         },
-                        {
-                          "type": "null"
+                        "name": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": [
+                        "arguments",
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -4975,14 +4639,8 @@
             "type": "string"
           },
           "system_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "nullable": true
           },
           "usage": {
             "description": "https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113",
@@ -6872,23 +6530,12 @@
                                 ]
                               },
                               "cache_control": {
-                                "anyOf": [
-                                  {},
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "nullable": true
                               },
                               "citations": {
-                                "anyOf": [
-                                  {
-                                    "type": "array",
-                                    "items": {}
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "type": "array",
+                                "items": {},
+                                "nullable": true
                               }
                             },
                             "required": [
@@ -6914,12 +6561,7 @@
                                 ]
                               },
                               "cache_control": {
-                                "anyOf": [
-                                  {},
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "nullable": true
                               }
                             },
                             "required": [
@@ -6943,12 +6585,7 @@
                                 ]
                               },
                               "cache_control": {
-                                "anyOf": [
-                                  {},
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                "nullable": true
                               },
                               "content": {
                                 "anyOf": [
@@ -6972,23 +6609,12 @@
                                               ]
                                             },
                                             "cache_control": {
-                                              "anyOf": [
-                                                {},
-                                                {
-                                                  "type": "null"
-                                                }
-                                              ]
+                                              "nullable": true
                                             },
                                             "citations": {
-                                              "anyOf": [
-                                                {
-                                                  "type": "array",
-                                                  "items": {}
-                                                },
-                                                {
-                                                  "type": "null"
-                                                }
-                                              ]
+                                              "type": "array",
+                                              "items": {},
+                                              "nullable": true
                                             }
                                           },
                                           "required": [
@@ -7036,26 +6662,13 @@
             "type": "number"
           },
           "container": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "nullable": true
           },
           "context_management": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "object",
+            "properties": {},
+            "nullable": true
           },
           "mcp_servers": {
             "type": "array",
@@ -7065,14 +6678,8 @@
             "type": "object",
             "properties": {
               "user_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string",
+                "nullable": true
               }
             },
             "required": [
@@ -7108,23 +6715,12 @@
                     "type": "string"
                   },
                   "cache_control": {
-                    "anyOf": [
-                      {},
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "nullable": true
                   },
                   "citations": {
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {}
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "type": "array",
+                    "items": {},
+                    "nullable": true
                   }
                 },
                 "required": [
@@ -7148,23 +6744,12 @@
                       "type": "string"
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "citations": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {}
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {},
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -7267,25 +6852,14 @@
                       "type": "string"
                     },
                     "type": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "custom"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "string",
+                      "enum": [
+                        "custom"
+                      ],
+                      "nullable": true
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "input_schema": {
                       "type": "object",
@@ -7317,12 +6891,7 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -7347,12 +6916,7 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -7377,12 +6941,7 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -7407,22 +6966,11 @@
                       ]
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "max_characters": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "number",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -7447,56 +6995,28 @@
                       ]
                     },
                     "allowed_domains": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     },
                     "blocked_domains": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     },
                     "cache_control": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     },
                     "max_uses": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "number",
+                      "nullable": true
                     },
                     "user_location": {
-                      "anyOf": [
-                        {},
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -7536,15 +7056,9 @@
                   "type": "object",
                   "properties": {
                     "citations": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {}
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "array",
+                      "items": {},
+                      "nullable": true
                     },
                     "text": {
                       "type": "string"
@@ -7601,22 +7115,11 @@
             ]
           },
           "stop_reason": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ]
+            "nullable": true
           },
           "stop_sequence": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "nullable": true
           },
           "type": {
             "type": "string",
@@ -14385,48 +13888,6 @@
         }
       }
     },
-    "/api/auth/{*}": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "*",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "*",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
     "/api/autonomy-policies/operators": {
       "get": {
         "operationId": "getOperators",
@@ -18509,7 +17970,8 @@
                         "enum": [
                           "anthropic",
                           "openai",
-                          "gemini"
+                          "mistral",
+                          "deepseek"
                         ]
                       },
                       "secretId": {
@@ -18819,7 +18281,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "gemini"
+                      "mistral",
+                      "deepseek"
                     ]
                   },
                   "apiKey": {
@@ -18880,7 +18343,8 @@
                       "enum": [
                         "anthropic",
                         "openai",
-                        "gemini"
+                        "mistral",
+                        "deepseek"
                       ]
                     },
                     "secretId": {
@@ -19158,7 +18622,8 @@
               "enum": [
                 "anthropic",
                 "openai",
-                "gemini"
+                "mistral",
+                "deepseek"
               ]
             },
             "in": "query",
@@ -19192,7 +18657,8 @@
                         "enum": [
                           "anthropic",
                           "openai",
-                          "gemini"
+                          "mistral",
+                          "deepseek"
                         ]
                       },
                       "secretId": {
@@ -19525,7 +18991,8 @@
                       "enum": [
                         "anthropic",
                         "openai",
-                        "gemini"
+                        "mistral",
+                        "deepseek"
                       ]
                     },
                     "secretId": {
@@ -19896,7 +19363,8 @@
                       "enum": [
                         "anthropic",
                         "openai",
-                        "gemini"
+                        "mistral",
+                        "deepseek"
                       ]
                     },
                     "secretId": {
@@ -20424,7 +19892,8 @@
               "enum": [
                 "anthropic",
                 "openai",
-                "gemini"
+                "mistral",
+                "deepseek"
               ]
             },
             "in": "query",
@@ -20453,7 +19922,8 @@
                         "enum": [
                           "anthropic",
                           "openai",
-                          "gemini"
+                          "mistral",
+                          "deepseek"
                         ]
                       },
                       "createdAt": {
@@ -21334,7 +20804,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "gemini"
+                      "mistral",
+                      "deepseek"
                     ]
                   },
                   "chatApiKeyId": {
@@ -22099,7 +21570,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "gemini"
+                      "mistral",
+                      "deepseek"
                     ]
                   },
                   "chatApiKeyId": {
@@ -45064,8 +44536,10 @@
                         "type": "string",
                         "enum": [
                           "openai",
+                          "anthropic",
                           "gemini",
-                          "anthropic"
+                          "cohere",
+                          "mistral"
                         ]
                       },
                       "targetModel": {
@@ -45375,8 +44849,10 @@
                     "type": "string",
                     "enum": [
                       "openai",
+                      "anthropic",
                       "gemini",
-                      "anthropic"
+                      "cohere",
+                      "mistral"
                     ]
                   },
                   "targetModel": {
@@ -45461,8 +44937,10 @@
                       "type": "string",
                       "enum": [
                         "openai",
+                        "anthropic",
                         "gemini",
-                        "anthropic"
+                        "cohere",
+                        "mistral"
                       ]
                     },
                     "targetModel": {
@@ -45773,8 +45251,10 @@
                     "type": "string",
                     "enum": [
                       "openai",
+                      "anthropic",
                       "gemini",
-                      "anthropic"
+                      "cohere",
+                      "mistral"
                     ]
                   },
                   "targetModel": {
@@ -45863,8 +45343,10 @@
                       "type": "string",
                       "enum": [
                         "openai",
+                        "anthropic",
                         "gemini",
-                        "anthropic"
+                        "cohere",
+                        "mistral"
                       ]
                     },
                     "targetModel": {
@@ -57487,8 +56969,10 @@
                         "type": "string",
                         "enum": [
                           "openai",
+                          "anthropic",
                           "gemini",
-                          "anthropic"
+                          "cohere",
+                          "mistral"
                         ]
                       },
                       "model": {
@@ -57753,8 +57237,10 @@
                     "type": "string",
                     "enum": [
                       "openai",
+                      "anthropic",
                       "gemini",
-                      "anthropic"
+                      "cohere",
+                      "mistral"
                     ]
                   },
                   "model": {
@@ -57796,8 +57282,10 @@
                       "type": "string",
                       "enum": [
                         "openai",
+                        "anthropic",
                         "gemini",
-                        "anthropic"
+                        "cohere",
+                        "mistral"
                       ]
                     },
                     "model": {
@@ -58082,8 +57570,10 @@
                       "type": "string",
                       "enum": [
                         "openai",
+                        "anthropic",
                         "gemini",
-                        "anthropic"
+                        "cohere",
+                        "mistral"
                       ]
                     },
                     "model": {
@@ -58347,8 +57837,10 @@
                     "type": "string",
                     "enum": [
                       "openai",
+                      "anthropic",
                       "gemini",
-                      "anthropic"
+                      "cohere",
+                      "mistral"
                     ]
                   },
                   "model": {
@@ -58395,8 +57887,10 @@
                       "type": "string",
                       "enum": [
                         "openai",
+                        "anthropic",
                         "gemini",
-                        "anthropic"
+                        "cohere",
+                        "mistral"
                       ]
                     },
                     "model": {
@@ -61477,21 +60971,8 @@
         "parameters": [
           {
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "admin",
-                    "editor",
-                    "member"
-                  ]
-                },
-                {
-                  "description": "Custom role ID (base62)",
-                  "type": "string",
-                  "minLength": 1
-                }
-              ]
+              "type": "string",
+              "minLength": 1
             },
             "in": "path",
             "name": "roleId",
@@ -61817,21 +61298,8 @@
         "parameters": [
           {
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "admin",
-                    "editor",
-                    "member"
-                  ]
-                },
-                {
-                  "description": "Custom role ID (base62)",
-                  "type": "string",
-                  "minLength": 1
-                }
-              ]
+              "type": "string",
+              "minLength": 1
             },
             "in": "path",
             "name": "roleId",

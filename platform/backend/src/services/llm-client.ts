@@ -40,6 +40,18 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  if (lowerModel.includes("mistral") || lowerModel.includes("mixtral")) {
+    return "mistral";
+  }
+
+  if (lowerModel.includes("deepseek")) {
+    return "deepseek";
+  }
+
+  if (lowerModel.includes("groq")) {
+    return "groq";
+  }
+
   // Default to anthropic for backwards compatibility
   return "anthropic";
 }
@@ -95,6 +107,15 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "gemini" && config.chat.gemini.apiKey) {
       providerApiKey = config.chat.gemini.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "mistral" && config.chat.mistral.apiKey) {
+      providerApiKey = config.chat.mistral.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "deepseek" && config.chat.deepseek.apiKey) {
+      providerApiKey = config.chat.deepseek.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "groq" && config.chat.groq.apiKey) {
+      providerApiKey = config.chat.groq.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -171,6 +192,33 @@ export function createLLMModel(params: {
     });
     // Use .chat() to force Chat Completions API (not Responses API)
     // so our proxy's tool policy evaluation is applied
+    return client.chat(modelName);
+  }
+
+  if (provider === "mistral") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/mistral/${agentId}/v1`,
+      headers,
+    });
+    return client.chat(modelName);
+  }
+
+  if (provider === "deepseek") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/deepseek/${agentId}/v1`,
+      headers,
+    });
+    return client.chat(modelName);
+  }
+
+  if (provider === "groq") {
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/groq/${agentId}/v1`,
+      headers,
+    });
     return client.chat(modelName);
   }
 

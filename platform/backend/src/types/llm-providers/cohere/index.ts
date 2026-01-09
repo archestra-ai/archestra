@@ -1,10 +1,3 @@
-/**
- * Cohere LLM Provider Types
- *
- * Type definitions for Cohere v2 Chat API
- * API Reference: https://docs.cohere.com/reference/chat
- */
-
 import type { z } from "zod";
 import * as CohereAPI from "./api";
 import * as CohereMessages from "./messages";

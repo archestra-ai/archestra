@@ -1,16 +1,159 @@
-import type { archestraApiTypes } from "@shared";
 import config from "@/lib/config";
 
-type WebSocketMessage = archestraApiTypes.WebSocketMessage;
+// Client -> Server messages (defined locally to avoid dependency on generated types)
+type ClientWebSocketMessage =
+  | { type: "hello-world"; payload: Record<string, never> }
+  | {
+      type: "subscribe_browser_stream";
+      payload: { conversationId: string };
+    }
+  | {
+      type: "unsubscribe_browser_stream";
+      payload: { conversationId: string };
+    }
+  | {
+      type: "browser_navigate";
+      payload: { conversationId: string; url: string };
+    }
+  | {
+      type: "browser_click";
+      payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+      };
+    }
+  | {
+      type: "browser_type";
+      payload: { conversationId: string; text: string; element?: string };
+    }
+  | {
+      type: "browser_press_key";
+      payload: { conversationId: string; key: string };
+    }
+  | {
+      type: "browser_get_snapshot";
+      payload: { conversationId: string };
+    }
+  | {
+      type: "browser_navigate_back";
+      payload: { conversationId: string };
+    }
+  | {
+      type: "browser_set_zoom";
+      payload: { conversationId: string; zoomPercent: number };
+    };
 
-type MessageHandler<T extends WebSocketMessage = WebSocketMessage> = (
-  message: T,
-) => void;
+// Server -> Client messages (not in OpenAPI spec)
+type BrowserScreenshotMessage = {
+  type: "browser_screenshot";
+  payload: {
+    conversationId: string;
+    screenshot: string;
+    url?: string;
+  };
+};
+
+type BrowserNavigateResultMessage = {
+  type: "browser_navigate_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    url?: string;
+    error?: string;
+  };
+};
+
+type BrowserStreamErrorMessage = {
+  type: "browser_stream_error";
+  payload: {
+    conversationId: string;
+    error: string;
+  };
+};
+
+type BrowserClickResultMessage = {
+  type: "browser_click_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+type BrowserTypeResultMessage = {
+  type: "browser_type_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+type BrowserPressKeyResultMessage = {
+  type: "browser_press_key_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+type BrowserSnapshotMessage = {
+  type: "browser_snapshot";
+  payload: {
+    conversationId: string;
+    snapshot?: string;
+    error?: string;
+  };
+};
+
+type BrowserSetZoomResultMessage = {
+  type: "browser_set_zoom_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+type BrowserNavigateBackResultMessage = {
+  type: "browser_navigate_back_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+type ErrorMessage = {
+  type: "error";
+  payload: {
+    message: string;
+  };
+};
+
+type ServerWebSocketMessage =
+  | BrowserScreenshotMessage
+  | BrowserNavigateResultMessage
+  | BrowserNavigateBackResultMessage
+  | BrowserStreamErrorMessage
+  | BrowserClickResultMessage
+  | BrowserTypeResultMessage
+  | BrowserPressKeyResultMessage
+  | BrowserSnapshotMessage
+  | BrowserSetZoomResultMessage
+  | ErrorMessage;
+
+// All message types that can be received
+type IncomingWebSocketMessage = ClientWebSocketMessage | ServerWebSocketMessage;
+
+type MessageHandler = (message: IncomingWebSocketMessage) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
-  // biome-ignore lint/suspicious/noExplicitAny: Generic message handler
-  private handlers: Map<WebSocketMessage["type"], Set<MessageHandler<any>>> =
+  private handlers: Map<IncomingWebSocketMessage["type"], Set<MessageHandler>> =
     new Map();
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
@@ -18,27 +161,36 @@ class WebSocketService {
   private reconnectDelay = 1000; // Start with 1 second
   private maxReconnectDelay = 30000; // Max 30 seconds
   private isManuallyDisconnected = false;
+  private isConnecting = false;
+  private pendingMessages: ClientWebSocketMessage[] = [];
 
   async connect(): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (
+      this.ws?.readyState === WebSocket.OPEN ||
+      this.ws?.readyState === WebSocket.CONNECTING ||
+      this.isConnecting
+    ) {
       return;
     }
 
     this.isManuallyDisconnected = false;
+    this.isConnecting = true;
 
     try {
       this.ws = new WebSocket(config.websocket.url);
 
       this.ws.addEventListener("open", () => {
+        this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
+        this.flushPendingMessages();
       });
 
       // this.ws.addEventListener("error", (_error) => {});
 
       this.ws.addEventListener("message", (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data);
+          const message: IncomingWebSocketMessage = JSON.parse(event.data);
           this.handleMessage(message);
         } catch (error) {
           console.error("[WebSocket] Failed to parse message:", error);
@@ -47,6 +199,7 @@ class WebSocketService {
 
       this.ws.addEventListener("close", () => {
         this.ws = null;
+        this.isConnecting = false;
 
         // Attempt to reconnect unless manually disconnected
         if (!this.isManuallyDisconnected) {
@@ -54,6 +207,7 @@ class WebSocketService {
         }
       });
     } catch (error) {
+      this.isConnecting = false;
       console.error("[WebSocket] Connection failed:", error);
       this.scheduleReconnect();
     }
@@ -82,6 +236,7 @@ class WebSocketService {
 
   disconnect(): void {
     this.isManuallyDisconnected = true;
+    this.pendingMessages = [];
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -94,21 +249,25 @@ class WebSocketService {
     }
   }
 
-  subscribe<T extends WebSocketMessage["type"]>(
+  /**
+   * Subscribe to messages of a specific type (typed version for known types)
+   */
+  subscribe<T extends IncomingWebSocketMessage["type"]>(
     type: T,
-    handler: MessageHandler<Extract<WebSocketMessage, { type: T }>>,
+    handler: (message: Extract<IncomingWebSocketMessage, { type: T }>) => void,
   ): () => void {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set());
     }
 
-    this.handlers.get(type)?.add(handler);
+    const wrappedHandler = handler as unknown as MessageHandler;
+    this.handlers.get(type)?.add(wrappedHandler);
 
     // Return unsubscribe function
     return () => {
       const handlers = this.handlers.get(type);
       if (handlers) {
-        handlers.delete(handler);
+        handlers.delete(wrappedHandler);
         if (handlers.size === 0) {
           this.handlers.delete(type);
         }
@@ -116,7 +275,7 @@ class WebSocketService {
     };
   }
 
-  private handleMessage(message: WebSocketMessage): void {
+  private handleMessage(message: IncomingWebSocketMessage): void {
     const handlers = this.handlers.get(message.type);
     if (handlers) {
       handlers.forEach((handler) => {
@@ -133,9 +292,9 @@ class WebSocketService {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  send(message: WebSocketMessage): void {
+  private sendNow(message: ClientWebSocketMessage): void {
     if (!this.isConnected()) {
-      console.error("[WebSocket] Not connected, cannot send message");
+      this.pendingMessages.push(message);
       return;
     }
 
@@ -143,7 +302,37 @@ class WebSocketService {
       this.ws?.send(JSON.stringify(message));
     } catch (error) {
       console.error("[WebSocket] Failed to send message:", error);
+      this.pendingMessages.unshift(message);
     }
+  }
+
+  private flushPendingMessages(): void {
+    if (!this.isConnected() || this.pendingMessages.length === 0) {
+      return;
+    }
+
+    const queuedMessages = [...this.pendingMessages];
+    this.pendingMessages = [];
+    for (const message of queuedMessages) {
+      this.sendNow(message);
+    }
+  }
+
+  /**
+   * Send a message to the server (only client messages allowed)
+   */
+  send(message: ClientWebSocketMessage): void {
+    if (!this.isConnected()) {
+      this.pendingMessages.push(message);
+      if (!this.isManuallyDisconnected && !this.isConnecting && !this.ws) {
+        this.connect().catch((error) => {
+          console.error("[WebSocket] Auto-connect failed:", error);
+        });
+      }
+      return;
+    }
+
+    this.sendNow(message);
   }
 }
 

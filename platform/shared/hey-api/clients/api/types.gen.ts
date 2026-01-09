@@ -34,7 +34,7 @@ export type OpenAiChatCompletionRequestInput = {
              */
             image_url: {
                 url: string;
-                detail: 'auto' | 'low' | 'high';
+                detail?: 'auto' | 'low' | 'high';
             };
         } | {
             type: 'input_audio';
@@ -108,6 +108,15 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
         }>;
         tool_call_id: string;
     } | {
@@ -1246,6 +1255,14 @@ export type AnthropicMessagesRequestInput = {
             cache_control?: unknown;
             citations?: Array<unknown> | unknown;
         } | {
+            type: 'image';
+            source: {
+                type: 'base64';
+                media_type: string;
+                data: string;
+            };
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1260,6 +1277,14 @@ export type AnthropicMessagesRequestInput = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                };
+                cache_control?: unknown;
             }>;
             is_error?: boolean;
         }>;
@@ -1364,9 +1389,63 @@ export type AnthropicMessagesResponseInput = {
 };
 
 export type WebSocketMessageInput = {
-    type: 'hello-world';
+    type: string;
     payload: {
         [key: string]: unknown;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        tabIndex?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        url: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        text: string;
+        element?: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        key: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        zoomPercent: number;
     };
 };
 
@@ -1400,7 +1479,7 @@ export type OpenAiChatCompletionRequest = {
              */
             image_url: {
                 url: string;
-                detail: 'auto' | 'low' | 'high';
+                detail?: 'auto' | 'low' | 'high';
             };
         } | {
             type: 'input_audio';
@@ -1474,6 +1553,15 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
         }>;
         tool_call_id: string;
     } | {
@@ -2612,6 +2700,14 @@ export type AnthropicMessagesRequest = {
             cache_control?: unknown;
             citations?: Array<unknown> | unknown;
         } | {
+            type: 'image';
+            source: {
+                type: 'base64';
+                media_type: string;
+                data: string;
+            };
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -2626,6 +2722,14 @@ export type AnthropicMessagesRequest = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                };
+                cache_control?: unknown;
             }>;
             is_error?: boolean;
         }>;
@@ -2730,9 +2834,63 @@ export type AnthropicMessagesResponse = {
 };
 
 export type WebSocketMessage = {
-    type: 'hello-world';
+    type: string;
     payload: {
         [key: string]: never;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        tabIndex?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        url: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        text: string;
+        element?: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        key: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        zoomPercent: number;
     };
 };
 
@@ -8338,6 +8496,7 @@ export type GetFeaturesResponses = {
         byosVaultKvVersion: '1' | '2';
         geminiVertexAiEnabled: boolean;
         globalToolPolicy: 'permissive' | 'restrictive';
+        browserStreamingEnabled: boolean;
     };
 };
 

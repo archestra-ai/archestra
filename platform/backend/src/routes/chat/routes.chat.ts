@@ -5,6 +5,7 @@ import {
   generateText,
   stepCountIs,
   streamText,
+  type UIMessage,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -27,6 +28,7 @@ import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
 } from "@/secrets-manager";
+import { browserStreamFeature } from "@/services/browser-stream-feature";
 import {
   createLLMModelForAgent,
   detectProviderFromModel,
@@ -42,7 +44,12 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { estimateMessagesSize } from "@/utils/message-size";
 import { mapProviderError } from "./errors";
+import {
+  stripImagesFromMessages,
+  type UiMessage,
+} from "./strip-images-from-messages";
 
 /**
  * Get a smart default model and provider based on available API keys for the user.
@@ -120,7 +127,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: z.object({
           id: UuidIdSchema, // Chat ID from useChat
-          messages: z.array(z.any()), // UIMessage[]
+          messages: z.array(z.unknown()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
         }),
         // Streaming responses don't have a schema
@@ -165,7 +172,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: conversation.agentId,
         userId: user.id,
         userIsProfileAdmin,
-
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
         conversationId: conversation.id,
         promptId: conversation.promptId ?? undefined,
@@ -230,9 +236,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         externalAgentId,
       });
 
+      // Strip images and large browser tool results from messages before sending to LLM
+      // This prevents context limit issues from accumulated screenshots and page snapshots
+      const strippedMessagesForLLM = config.features.browserStreamingEnabled
+        ? stripImagesFromMessages(messages as UiMessage[])
+        : (messages as UiMessage[]);
+
       // Stream with AI SDK
       // Build streamText config conditionally
-      const modelMessages = await convertToModelMessages(messages);
+      // Cast to UIMessage[] - UiMessage is structurally compatible at runtime
+      const modelMessages = await convertToModelMessages(
+        strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
+      );
       const streamTextConfig: Parameters<typeof streamText>[0] = {
         model,
         messages: modelMessages,
@@ -264,7 +279,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
           "Content-Encoding": "none",
         },
-        originalMessages: messages,
+        originalMessages: messages as UIMessage[],
         onError: (error) => {
           logger.error(
             { error, conversationId, agentId: conversation.agentId },
@@ -325,13 +340,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
 
             if (messagesToSave.length > 0) {
+              let messagesToStore = messagesToSave as UiMessage[];
+
+              if (config.features.browserStreamingEnabled) {
+                // Strip base64 images and large browser tool results before storing
+                const beforeSize = estimateMessagesSize(messagesToSave);
+                messagesToStore = stripImagesFromMessages(
+                  messagesToSave as UiMessage[],
+                );
+                const afterSize = estimateMessagesSize(messagesToStore);
+
+                logger.info(
+                  {
+                    messageCount: messagesToSave.length,
+                    beforeSizeKB: Math.round(beforeSize.length / 1024),
+                    afterSizeKB: Math.round(afterSize.length / 1024),
+                    savedKB: Math.round(
+                      (beforeSize.length - afterSize.length) / 1024,
+                    ),
+                    sizeEstimateReliable:
+                      !beforeSize.isEstimated && !afterSize.isEstimated,
+                  },
+                  "[Chat] Stripped messages before saving to DB",
+                );
+              }
+
               // Append only new messages with timestamps
               const now = Date.now();
-              // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
-              const messageData = messagesToSave.map((msg: any, index) => ({
+              const messageData = messagesToStore.map((msg, index) => ({
                 conversationId,
-                role: msg.role,
-                content: msg, // Store entire UIMessage
+                role: msg.role ?? "assistant",
+                content: msg, // Store entire UIMessage (with images stripped)
                 createdAt: new Date(now + index), // Preserve order
               }));
 
@@ -648,6 +687,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
+      // Get conversation to retrieve agentId before deletion
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (conversation && browserStreamFeature.isEnabled()) {
+        // Close browser tab for this conversation (best effort, don't fail if it errors)
+        try {
+          await browserStreamFeature.closeTab(conversation.agentId, id, {
+            userId: user.id,
+            userIsProfileAdmin: false,
+          });
+        } catch (error) {
+          logger.warn(
+            { error, conversationId: id },
+            "Failed to close browser tab on conversation deletion",
+          );
+        }
+      }
+
       await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
     },

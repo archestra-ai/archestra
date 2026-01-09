@@ -40,6 +40,21 @@ export interface Context {
   userId?: string;
 }
 
+function getProviderMessagesCount(messages: unknown): number | null {
+  if (Array.isArray(messages)) {
+    return messages.length;
+  }
+
+  if (messages && typeof messages === "object") {
+    const candidate = messages as Record<string, unknown>;
+    if (Array.isArray(candidate.messages)) {
+      return candidate.messages.length;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Generic LLM proxy handler that works with any provider through adapters
  */
@@ -61,13 +76,15 @@ export async function handleLLMProxy<
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
+  const providerMessages = requestAdapter.getProviderMessages();
+  const messagesCount = getProviderMessagesCount(providerMessages);
 
   logger.debug(
     {
       agentId,
       model: requestAdapter.getModel(),
       stream: requestAdapter.isStreaming(),
-      messagesCount: requestAdapter.getProviderMessages(),
+      messagesCount,
       toolsCount: requestAdapter.getTools().length,
     },
     `[${providerName}Proxy] handleLLMProxy: request received`,

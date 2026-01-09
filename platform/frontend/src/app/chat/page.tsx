@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, FileText, Plus } from "lucide-react";
+import { Eye, EyeOff, FileText, Globe, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { AgentToolsDisplay } from "@/components/chat/agent-tools-display";
+import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -41,6 +42,7 @@ import { useHasPermissions } from "@/lib/auth.query";
 import {
   useConversation,
   useCreateConversation,
+  useHasPlaywrightMcpTools,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat.query";
@@ -53,6 +55,7 @@ import {
   useChatApiKeys,
 } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
+import { useFeatureFlag } from "@/lib/features.hook";
 import { useFeatures } from "@/lib/features.query";
 import {
   applyPendingActions,
@@ -107,6 +110,9 @@ export default function ChatPage() {
   const { data: canCreateCatalog } = useHasPermissions({
     internalMcpCatalog: ["create"],
   });
+
+  // State for browser panel
+  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
 
   // Fetch prompts for conversation prompt name lookup
   const { data: prompts = [] } = usePrompts();
@@ -310,6 +316,22 @@ export default function ChatPage() {
 
   // Get current agent info
   const currentProfileId = conversation?.agentId;
+  const browserToolsAgentId = conversationId
+    ? (conversation?.agentId ?? conversation?.agent?.id)
+    : (initialAgentId ?? undefined);
+
+  // Check if Playwright MCP is available for browser panel
+  const hasPlaywrightMcp = useHasPlaywrightMcpTools(browserToolsAgentId);
+
+  // Check if browser streaming feature is enabled
+  const isBrowserStreamingEnabled = useFeatureFlag("browserStreamingEnabled");
+
+  // Close browser panel when switching to a profile without Playwright tools
+  useEffect(() => {
+    if (!hasPlaywrightMcp && isBrowserPanelOpen) {
+      setIsBrowserPanelOpen(false);
+    }
+  }, [hasPlaywrightMcp, isBrowserPanelOpen]);
 
   // Clear MCP Gateway sessions when opening a NEW conversation
   useEffect(() => {
@@ -708,7 +730,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen w-full">
-      <div className="flex-1 flex flex-col w-full">
+      <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
 
@@ -765,7 +787,18 @@ export default function ChatPage() {
                 </>
               )}
             </div>
-            <div className="flex gap-2 items-center">
+            <div className="flex-1 flex justify-end gap-2 items-center">
+              {hasPlaywrightMcp && isBrowserStreamingEnabled && (
+                <Button
+                  variant={isBrowserPanelOpen ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
+                  className="text-xs"
+                >
+                  <Globe className="h-3 w-3 mr-1" />
+                  Browser
+                </Button>
+              )}
               {!isArtifactOpen && (
                 <Button
                   variant="ghost"
@@ -1047,6 +1080,14 @@ export default function ChatPage() {
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
       />
+
+      {isBrowserPanelOpen && isBrowserStreamingEnabled && hasPlaywrightMcp && (
+        <BrowserPanel
+          isOpen={isBrowserPanelOpen}
+          onClose={() => setIsBrowserPanelOpen(false)}
+          conversationId={conversationId}
+        />
+      )}
 
       {/* Right-side artifact panel */}
       <ConversationArtifactPanel

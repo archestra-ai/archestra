@@ -1,4 +1,8 @@
-import { archestraApiSdk, type SupportedProvider } from "@shared";
+import {
+  archestraApiSdk,
+  isBrowserMcpTool,
+  type SupportedProvider,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -314,4 +318,15 @@ export function usePromptTools(promptId: string | undefined) {
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
   });
+}
+
+export function useHasPlaywrightMcpTools(agentId: string | undefined) {
+  const toolsQuery = useChatProfileMcpTools(agentId);
+
+  return (
+    toolsQuery.data?.some((tool) => {
+      const toolName = tool.name;
+      return typeof toolName === "string" && isBrowserMcpTool(toolName);
+    }) ?? false
+  );
 }

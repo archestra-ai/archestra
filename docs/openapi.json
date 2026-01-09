@@ -173,8 +173,7 @@
                                       }
                                     },
                                     "required": [
-                                      "url",
-                                      "detail"
+                                      "url"
                                     ]
                                   }
                                 },
@@ -495,22 +494,62 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
+                            "anyOf": [
+                              {
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
                                   "text"
                                 ]
                               },
-                              "text": {
-                                "type": "string"
+                              {
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755",
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765",
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ]
                               }
-                            },
-                            "required": [
-                              "type",
-                              "text"
                             ]
                           }
                         }
@@ -3010,6 +3049,51 @@
                           {
                             "type": "object",
                             "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "image"
+                                ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "base64"
+                                    ]
+                                  },
+                                  "media_type": {
+                                    "type": "string"
+                                  },
+                                  "data": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "media_type",
+                                  "data"
+                                ]
+                              },
+                              "cache_control": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "source"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
                               "id": {
                                 "type": "string"
                               },
@@ -3103,6 +3187,51 @@
                                           "required": [
                                             "text",
                                             "type"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "image"
+                                              ]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "base64"
+                                                  ]
+                                                },
+                                                "media_type": {
+                                                  "type": "string"
+                                                },
+                                                "data": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type",
+                                                "media_type",
+                                                "data"
+                                              ]
+                                            },
+                                            "cache_control": {
+                                              "anyOf": [
+                                                {},
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "source"
                                           ]
                                         }
                                       ]
@@ -3747,13 +3876,281 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": [
-                  "hello-world"
-                ]
+                "const": "hello-world"
               },
               "payload": {
                 "type": "object",
                 "properties": {}
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "subscribe_browser_stream"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "tabIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "unsubscribe_browser_stream"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_navigate"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "url"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_click"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "element": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_type"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "element": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "text"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_press_key"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "key"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_get_snapshot"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_navigate_back"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_set_zoom"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "zoomPercent": {
+                    "type": "number",
+                    "minimum": 10,
+                    "maximum": 200
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "zoomPercent"
+                ]
               }
             },
             "required": [
@@ -3935,8 +4332,7 @@
                                       }
                                     },
                                     "required": [
-                                      "url",
-                                      "detail"
+                                      "url"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -4273,24 +4669,66 @@
                         {
                           "type": "array",
                           "items": {
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
+                            "anyOf": [
+                              {
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821",
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
                                   "text"
-                                ]
+                                ],
+                                "additionalProperties": false
                               },
-                              "text": {
-                                "type": "string"
+                              {
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755",
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "image_url"
+                                    ]
+                                  },
+                                  "image_url": {
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765",
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "image_url"
+                                ],
+                                "additionalProperties": false
                               }
-                            },
-                            "required": [
-                              "type",
-                              "text"
-                            ],
-                            "additionalProperties": false
+                            ]
                           }
                         }
                       ]
@@ -6900,6 +7338,53 @@
                           {
                             "type": "object",
                             "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "image"
+                                ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "base64"
+                                    ]
+                                  },
+                                  "media_type": {
+                                    "type": "string"
+                                  },
+                                  "data": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "media_type",
+                                  "data"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "cache_control": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "source"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
                               "id": {
                                 "type": "string"
                               },
@@ -6994,6 +7479,53 @@
                                           "required": [
                                             "text",
                                             "type"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "image"
+                                              ]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "base64"
+                                                  ]
+                                                },
+                                                "media_type": {
+                                                  "type": "string"
+                                                },
+                                                "data": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type",
+                                                "media_type",
+                                                "data"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "cache_control": {
+                                              "anyOf": [
+                                                {},
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "source"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -7660,13 +8192,299 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": [
-                  "hello-world"
-                ]
+                "const": "hello-world"
               },
               "payload": {
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "subscribe_browser_stream"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "tabIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "unsubscribe_browser_stream"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_navigate"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "url"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_click"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "element": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_type"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "element": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_press_key"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "key"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_get_snapshot"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_navigate_back"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "conversationId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "browser_set_zoom"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "zoomPercent": {
+                    "type": "number",
+                    "minimum": 10,
+                    "maximum": 200
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "zoomPercent"
+                ],
                 "additionalProperties": false
               }
             },
@@ -26930,6 +27748,9 @@
                         "permissive",
                         "restrictive"
                       ]
+                    },
+                    "browserStreamingEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -26937,7 +27758,8 @@
                     "byosEnabled",
                     "byosVaultKvVersion",
                     "geminiVertexAiEnabled",
-                    "globalToolPolicy"
+                    "globalToolPolicy",
+                    "browserStreamingEnabled"
                   ],
                   "additionalProperties": false
                 }

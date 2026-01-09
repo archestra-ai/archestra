@@ -131,6 +131,46 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from x.ai API
+ */
+async function fetchXaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.chat.xai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch x.ai models",
+    );
+    throw new Error(`Failed to fetch x.ai models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Array<{
+      id: string;
+      created: number;
+    }>;
+  };
+
+  // Filter to only Grok models
+  return data.data
+    .filter((model) => model.id.toLowerCase().startsWith("grok-"))
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "xai" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+}
+
+/**
  * Fetch models from Gemini API
  */
 async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -212,6 +252,8 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "xai":
+      return config.chat.xai.apiKey || null;
     default:
       return null;
   }
@@ -225,6 +267,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  xai: fetchXaiModels,
 };
 
 /**
@@ -275,7 +318,7 @@ async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "xai"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

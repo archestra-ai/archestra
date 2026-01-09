@@ -2,6 +2,7 @@ import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import config from "@/config";
+import { SupportedProvider } from "@shared";
 import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
@@ -40,10 +41,9 @@ type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
 // REQUEST ADAPTER
 // =============================================================================
 
-class OpenAIRequestAdapter
-  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
-{
-  readonly provider = "openai" as const;
+export class OpenAIRequestAdapter
+  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages> {
+  readonly provider: SupportedProvider = "openai";
   private request: OpenAiRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
@@ -303,8 +303,8 @@ class OpenAIRequestAdapter
 // RESPONSE ADAPTER
 // =============================================================================
 
-class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
-  readonly provider = "openai" as const;
+export class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
+  readonly provider: SupportedProvider = "openai";
   private response: OpenAiResponse;
 
   constructor(response: OpenAiResponse) {
@@ -401,10 +401,9 @@ class OpenAIResponseAdapter implements LLMResponseAdapter<OpenAiResponse> {
 // STREAM ADAPTER
 // =============================================================================
 
-class OpenAIStreamAdapter
-  implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
-{
-  readonly provider = "openai" as const;
+export class OpenAIStreamAdapter
+  implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
+  readonly provider: SupportedProvider = "openai";
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
 
@@ -587,13 +586,13 @@ class OpenAIStreamAdapter
     const toolCalls =
       this.state.toolCalls.length > 0
         ? this.state.toolCalls.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: {
-              name: tc.name,
-              arguments: tc.arguments,
-            },
-          }))
+          id: tc.id,
+          type: "function" as const,
+          function: {
+            name: tc.name,
+            arguments: tc.arguments,
+          },
+        }))
         : undefined;
 
     return {

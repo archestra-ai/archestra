@@ -105,20 +105,20 @@ const xaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
             const externalAgentId = utils.externalAgentId.getExternalAgentId(
                 request.headers,
             );
+            const userId = await utils.userId.getUserId(request.headers);
 
-            const proxyConfig = {
-                upstream: config.llm.xai.baseUrl,
-                endpoint: CHAT_COMPLETIONS_SUFFIX,
-                provider: "xai" as const,
-            };
-
-            return handleLLMProxy({
-                request,
+            return handleLLMProxy(
+                request.body,
+                request.headers,
                 reply,
-                proxyConfig,
-                adapterFactory: xaiAdapterFactory,
-                externalAgentId,
-            });
+                xaiAdapterFactory,
+                {
+                    organizationId: request.organizationId,
+                    agentId: undefined,
+                    externalAgentId,
+                    userId,
+                },
+            );
         },
     );
 
@@ -150,19 +150,23 @@ const xaiProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
                 "[UnifiedProxy] Handling x.ai request (specific agent)",
             );
 
-            const proxyConfig = {
-                upstream: config.llm.xai.baseUrl,
-                endpoint: CHAT_COMPLETIONS_SUFFIX,
-                provider: "xai" as const,
-            };
+            const externalAgentId = utils.externalAgentId.getExternalAgentId(
+                request.headers,
+            );
+            const userId = await utils.userId.getUserId(request.headers);
 
-            return handleLLMProxy({
-                request,
+            return handleLLMProxy(
+                request.body,
+                request.headers,
                 reply,
-                proxyConfig,
-                adapterFactory: xaiAdapterFactory,
-                agentId,
-            });
+                xaiAdapterFactory,
+                {
+                    organizationId: request.organizationId,
+                    agentId,
+                    externalAgentId,
+                    userId,
+                },
+            );
         },
     );
 };

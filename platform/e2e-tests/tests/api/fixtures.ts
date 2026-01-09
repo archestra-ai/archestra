@@ -493,7 +493,7 @@ const createOptimizationRule = async (
   rule: {
     entityType: "organization" | "team" | "agent";
     entityId: string;
-    provider: "openai" | "anthropic" | "gemini";
+    provider: "openai" | "anthropic" | "gemini" | "cohere";
     conditions: OptimizationRuleCondition[];
     targetModel: string;
     enabled?: boolean;

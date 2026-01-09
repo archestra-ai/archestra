@@ -56,7 +56,7 @@ export type ChatApiKeyResponse =
   archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
 const PROVIDER_CONFIG: Record<
-  CreateChatApiKeyBody["provider"],
+  string,
   {
     name: string;
     icon: string;

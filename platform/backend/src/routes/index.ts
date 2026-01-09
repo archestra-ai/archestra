@@ -3,6 +3,7 @@ import anthropicProxyRoutesV1 from "./proxy/anthropic";
 import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
+import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 
@@ -43,6 +44,8 @@ export const geminiProxyRoutes = config.llm.gemini.useV2Routes
 export const openAiProxyRoutes = config.llm.openai.useV2Routes
   ? openAiProxyRoutesV2
   : openAiProxyRoutesV1;
+// Cohere proxy routes - V2 only for now
+export const cohereProxyRoutes = cohereProxyRoutesV2;
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

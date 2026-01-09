@@ -40,24 +40,24 @@ export const CreateTokenPriceSchema = BaseCreateTokenPriceSchema.refine(
   },
 );
 
-// Apply .partial() before refinement to comply with Zod v4.3+
-export const UpdateTokenPriceSchema = BaseCreateTokenPriceSchema.partial().refine(
-  (data) => {
-    // Only validate prices if provided
-    if (data.pricePerMillionInput !== undefined) {
-      const inputPrice = parseFloat(data.pricePerMillionInput);
-      if (inputPrice < 0) return false;
-    }
-    if (data.pricePerMillionOutput !== undefined) {
-      const outputPrice = parseFloat(data.pricePerMillionOutput);
-      if (outputPrice < 0) return false;
-    }
-    return true;
-  },
-  {
-    message: "Prices must be non-negative",
-  },
-);
+export const UpdateTokenPriceSchema =
+  BaseCreateTokenPriceSchema.partial().refine(
+    (data) => {
+      // Only validate prices if provided
+      if (data.pricePerMillionInput !== undefined) {
+        const inputPrice = parseFloat(data.pricePerMillionInput);
+        if (inputPrice < 0) return false;
+      }
+      if (data.pricePerMillionOutput !== undefined) {
+        const outputPrice = parseFloat(data.pricePerMillionOutput);
+        if (outputPrice < 0) return false;
+      }
+      return true;
+    },
+    {
+      message: "Prices must be non-negative",
+    },
+  );
 
 /**
  * Exported types

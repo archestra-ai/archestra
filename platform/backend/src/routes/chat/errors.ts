@@ -365,18 +365,17 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
   }
 }
 
-// =============================================================================
+
 // Cohere Error Types and Parser
-// =============================================================================
+
 
 interface ParsedCohereError {
   message?: string;
 }
 
 /**
- * Parse Cohere error response body.
- * Cohere errors have structure: { message: string }
- *
+ * 
+ *  Errors in Cohere have this structure: { message: string }
  * @see https://docs.cohere.com/reference/errors
  */
 function parseCohereError(responseBody: string): ParsedCohereError | null {
@@ -393,12 +392,7 @@ function parseCohereError(responseBody: string): ParsedCohereError | null {
   }
 }
 
-/**
- * Map Cohere error to ChatErrorCode.
- * Cohere uses standard HTTP status codes for error classification.
- *
- * @see https://docs.cohere.com/reference/errors
- */
+
 function mapCohereErrorToCode(
   statusCode: number | undefined,
   _parsedError: ParsedCohereError | null,

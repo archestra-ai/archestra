@@ -20,9 +20,7 @@ import { ToolsClient } from "./page.client";
 export const dynamic = "force-dynamic";
 
 export type ToolsInitialData = {
-  agentTools: archestraApiTypes.GetAllAgentToolsResponses["200"];
-  agents: archestraApiTypes.GetAllAgentsResponses["200"];
-  mcpServers: archestraApiTypes.GetMcpServersResponses["200"];
+  toolsWithAssignments: archestraApiTypes.GetToolsWithAssignmentsResponses["200"];
   internalMcpCatalog: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   toolInvocationPolicies: ReturnType<typeof transformToolInvocationPolicies>;
   toolResultPolicies: ReturnType<typeof transformToolResultPolicies>;
@@ -30,7 +28,7 @@ export type ToolsInitialData = {
 
 export default async function ToolsPage() {
   let initialData: ToolsInitialData = {
-    agentTools: {
+    toolsWithAssignments: {
       data: [],
       pagination: {
         currentPage: 1,
@@ -41,8 +39,6 @@ export default async function ToolsPage() {
         hasPrev: false,
       },
     },
-    agents: [],
-    mcpServers: [],
     internalMcpCatalog: [],
     toolInvocationPolicies: { all: [], byProfileToolId: {} },
     toolResultPolicies: { all: [], byProfileToolId: {} },
@@ -50,9 +46,9 @@ export default async function ToolsPage() {
   try {
     const headers = await getServerApiHeaders();
     initialData = {
-      agentTools:
+      toolsWithAssignments:
         (
-          await archestraApiSdk.getAllAgentTools({
+          await archestraApiSdk.getToolsWithAssignments({
             headers,
             query: {
               limit: DEFAULT_TOOLS_PAGE_SIZE,
@@ -62,9 +58,7 @@ export default async function ToolsPage() {
               excludeArchestraTools: true,
             },
           })
-        ).data || initialData.agentTools,
-      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
-      mcpServers: (await archestraApiSdk.getMcpServers({ headers })).data || [],
+        ).data || initialData.toolsWithAssignments,
       internalMcpCatalog:
         (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
       toolInvocationPolicies: transformToolInvocationPolicies(

@@ -23,23 +23,22 @@ import {
 import config from "@/lib/config";
 import {
   organizationKeys,
-  useActiveMemberRole,
   useActiveOrganization,
 } from "@/lib/organization.query";
 
 function MembersSettingsContent() {
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
-  const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
+
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const hasPermissionTodo = "TODO:";
+
   const invitationsEnabled = !config.disableInvitations;
 
   const members = activeOrg ? (
     <div className="space-y-6">
-      {invitationsEnabled && activeMemberRole && hasPermissionTodo && (
+      {invitationsEnabled && (
         <Dialog
           open={inviteDialogOpen}
           onOpenChange={(open) => {
@@ -70,8 +69,8 @@ function MembersSettingsContent() {
         action={
           invitationsEnabled
             ? () => {
-                setInviteDialogOpen(true);
-              }
+              setInviteDialogOpen(true);
+            }
             : undefined
         }
       />

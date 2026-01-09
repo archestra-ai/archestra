@@ -4,7 +4,9 @@ import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
+import mistralProxyRoutesV2 from "./proxy/routesv2/mistral";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
+import xaiRoutes from "./proxy/routesv2/xai";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -31,18 +33,28 @@ export { default as organizationRoutes } from "./organization";
 export { default as policyConfigSubagentRoutes } from "./policy-config-subagent";
 export { default as promptAgentRoutes } from "./prompt-agents";
 export { default as promptRoutes } from "./prompts";
+
 // Anthropic proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
   ? anthropicProxyRoutesV2
   : anthropicProxyRoutesV1;
+
 // Gemini proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const geminiProxyRoutes = config.llm.gemini.useV2Routes
   ? geminiProxyRoutesV2
   : geminiProxyRoutesV1;
+
 // OpenAI proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const openAiProxyRoutes = config.llm.openai.useV2Routes
   ? openAiProxyRoutesV2
   : openAiProxyRoutesV1;
+
+// Mistral proxy routes - always use V2 (unified handler)
+export const mistralProxyRoutes = mistralProxyRoutesV2;
+
+// x.ai proxy routes - always use V2 (unified handler)
+export const xaiProxyRoutes = xaiRoutes;
+
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
@@ -50,3 +62,4 @@ export { default as tokenRoutes } from "./token";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";
 export { default as userTokenRoutes } from "./user-token";
+export { default as websocketRoutes } from "./websocket";

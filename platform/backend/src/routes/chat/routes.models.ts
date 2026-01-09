@@ -19,6 +19,7 @@ import {
   type Anthropic,
   constructResponseSchema,
   type Gemini,
+  type Mistral,
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
@@ -75,6 +76,40 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
     displayName: model.display_name,
     provider: "anthropic" as const,
     createdAt: model.created_at,
+  }));
+}
+
+/**
+ * Fetch models from Mistral API
+ */
+async function fetchMistralModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.mistral.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Mistral models",
+    );
+    throw new Error(`Failed to fetch Mistral models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Mistral.Types.Model[];
+  };
+
+  return data.data.map((model) => ({
+    id: model.id,
+    displayName: model.id,
+    provider: "mistral" as const,
+    createdAt: new Date(model.created * 1000).toISOString(),
   }));
 }
 
@@ -300,6 +335,8 @@ async function getProviderApiKey({
       return config.chat.openai.apiKey || null;
     case "gemini":
       return config.chat.gemini.apiKey || null;
+    case "mistral":
+      return config.chat.mistral.apiKey || null;
     default:
       return null;
   }
@@ -313,6 +350,7 @@ const modelFetchers: Record<
   anthropic: fetchAnthropicModels,
   openai: fetchOpenAiModels,
   gemini: fetchGeminiModels,
+  mistral: fetchMistralModels,
 };
 
 /**
@@ -367,9 +405,9 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "mistral"].includes(provider)) {
       if (apiKey) {
-        models = await modelFetchers[provider](apiKey);
+        models = await modelFetchers[provider as "anthropic" | "openai" | "mistral"](apiKey);
       }
     } else if (provider === "gemini") {
       if (vertexAiEnabled) {

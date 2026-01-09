@@ -1,5 +1,34 @@
 import { expect, test } from "./fixtures";
 
+// Orlando-format models (aggregated from all providers under the OpenAI endpoint)
+const ALL_MODELS = [
+  {
+    id: "gpt-4o",
+    displayName: "GPT-4o",
+    provider: "openai",
+  },
+  {
+    id: "gpt-4o-mini",
+    displayName: "GPT-4o Mini",
+    provider: "openai",
+  },
+  {
+    id: "claude-3-5-sonnet-20241022",
+    displayName: "Claude 3.5 Sonnet",
+    provider: "anthropic",
+  },
+  {
+    id: "gemini-2.5-flash",
+    displayName: "Gemini 2.5 Flash",
+    provider: "gemini",
+  },
+  {
+    id: "gemini-2.5-pro",
+    displayName: "Gemini 2.5 Pro",
+    provider: "gemini",
+  },
+];
+
 test.describe("Chat Models API", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -16,18 +45,13 @@ test.describe("Chat Models API", () => {
     expect(response.ok()).toBe(true);
     const models = await response.json();
 
-    expect(Array.isArray(models)).toBe(true);
-
-    // Check that models have the expected shape
-    for (const model of models) {
-      expect(model).toHaveProperty("id");
-      expect(model).toHaveProperty("displayName");
-      expect(model).toHaveProperty("provider");
-      expect(["openai", "anthropic", "gemini"]).toContain(model.provider);
-    }
+    // Wiremock returns Orlando-format models (aggregated from all providers)
+    // plus additional models from anthropic and gemini endpoints
+    // Check that all expected models are present
+    expect(models).toEqual(expect.arrayContaining(ALL_MODELS));
   });
 
-  test("should fetch chat models filtered by provider (openai)", async ({
+  test("should fetch chat models filtered by provider (openai) - Orlando format", async ({
     request,
     makeApiRequest,
   }) => {
@@ -40,14 +64,8 @@ test.describe("Chat Models API", () => {
     expect(response.ok()).toBe(true);
     const models = await response.json();
 
-    expect(Array.isArray(models)).toBe(true);
-
-    // All models should be from OpenAI provider
-    for (const model of models) {
-      expect(model.provider).toBe("openai");
-      expect(model).toHaveProperty("id");
-      expect(model).toHaveProperty("displayName");
-    }
+    // Orlando aggregates all models under the OpenAI endpoint
+    expect(models).toEqual(ALL_MODELS);
   });
 
   test("should fetch chat models filtered by provider (anthropic)", async ({
@@ -63,14 +81,15 @@ test.describe("Chat Models API", () => {
     expect(response.ok()).toBe(true);
     const models = await response.json();
 
-    expect(Array.isArray(models)).toBe(true);
-
-    // All models should be from Anthropic provider
-    for (const model of models) {
-      expect(model.provider).toBe("anthropic");
-      expect(model).toHaveProperty("id");
-      expect(model).toHaveProperty("displayName");
-    }
+    // Anthropic endpoint returns only Anthropic models
+    expect(models).toEqual([
+      {
+        id: "claude-3-5-sonnet-20241022",
+        displayName: "Claude 3.5 Sonnet",
+        provider: "anthropic",
+        createdAt: "2024-10-22T00:00:00Z",
+      },
+    ]);
   });
 
   test("should fetch chat models filtered by provider (gemini)", async ({
@@ -86,14 +105,19 @@ test.describe("Chat Models API", () => {
     expect(response.ok()).toBe(true);
     const models = await response.json();
 
-    expect(Array.isArray(models)).toBe(true);
-
-    // All models should be from Gemini provider
-    for (const model of models) {
-      expect(model.provider).toBe("gemini");
-      expect(model).toHaveProperty("id");
-      expect(model).toHaveProperty("displayName");
-    }
+    // Gemini endpoint returns only Gemini models
+    expect(models).toEqual([
+      {
+        id: "gemini-2.5-pro",
+        displayName: "Gemini 2.5 Pro",
+        provider: "gemini",
+      },
+      {
+        id: "gemini-2.5-flash",
+        displayName: "Gemini 2.5 Flash",
+        provider: "gemini",
+      },
+    ]);
   });
 
   test("should return empty array for invalid provider", async ({

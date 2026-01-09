@@ -41,7 +41,7 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "cohere";
   }
 
-  // Default to anthropic for backwards compatibility
+ 
   return "anthropic";
 }
 
@@ -73,16 +73,33 @@ export async function resolveProviderApiKey(params: {
   });
 
   if (resolvedApiKey?.secretId) {
-    const secret = await secretManager().getSecret(resolvedApiKey.secretId);
+    const secretId =
+      Array.isArray(resolvedApiKey.secretId) && resolvedApiKey.secretId.length > 0
+        ? resolvedApiKey.secretId[0]
+        : resolvedApiKey.secretId;
+    const secret = await secretManager().getSecret(String(secretId));
     // Support both old format (anthropicApiKey) and new format (apiKey)
+    // Normalize secret.secret to an object if it's an array (take first element)
+    const secretObj =
+      secret && Array.isArray(secret.secret) && secret.secret.length > 0
+        ? secret.secret[0]
+        : secret?.secret;
     const secretValue =
-      secret?.secret?.apiKey ??
-      secret?.secret?.anthropicApiKey ??
-      secret?.secret?.geminiApiKey ??
-      secret?.secret?.openaiApiKey;
+      secretObj?.apiKey ??
+      secretObj?.anthropicApiKey ??
+      secretObj?.geminiApiKey ??
+      secretObj?.openaiApiKey;
     if (secretValue) {
       providerApiKey = secretValue as string;
-      apiKeySource = resolvedApiKey.scope;
+      // Normalize scope to a string (supports string or array)
+      const scopeVal = Array.isArray(resolvedApiKey.scope)
+        ? resolvedApiKey.scope[0]
+        : resolvedApiKey.scope;
+      if (typeof scopeVal === "string" && scopeVal.length > 0) {
+        apiKeySource = scopeVal;
+      } else if (scopeVal != null) {
+        apiKeySource = String(scopeVal);
+      }
     }
   }
 
@@ -179,8 +196,6 @@ export function createLLMModel(params: {
   }
 
   if (provider === "cohere") {
-    // Cohere has an OpenAI-compatible API at /compatibility/v1
-    // URL format: /v1/cohere/:agentId (SDK appends /chat/completions)
     const client = createOpenAI({
       apiKey,
       baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}/compatibility/v1`,

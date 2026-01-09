@@ -1,7 +1,7 @@
 "use client";
 
-import type { OrganizationTheme } from "@shared";
 import { Check } from "lucide-react";
+import type { OrganizationTheme } from "@shared";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { themes, type ThemeMetadata } from "@/config/themes";
+import { type ThemeMetadata, themes } from "@/config/themes";
 
 interface ThemeSelectorProps {
   selectedTheme: OrganizationTheme | undefined;

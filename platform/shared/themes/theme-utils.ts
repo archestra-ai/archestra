@@ -32,6 +32,26 @@ export interface ThemeMetadata {
   id: ThemeId;
   name: string;
   category: ThemeCategory;
+  fontFamily: string;
+  fontDisplayName: string;
+}
+
+/**
+ * Extract display name from a CSS font-family value
+ * e.g., "Inter, sans-serif" -> "Inter"
+ * e.g., "ui-sans-serif, system-ui..." -> "System"
+ */
+export function extractFontDisplayName(fontFamily: string): string {
+  // Handle system font stack
+  if (fontFamily.startsWith("ui-sans-serif") || fontFamily.startsWith("ui-")) {
+    return "System";
+  }
+
+  // Extract the first font name (before the comma)
+  const firstFont = fontFamily.split(",")[0].trim();
+
+  // Remove quotes if present
+  return firstFont.replace(/["']/g, "");
 }
 
 /**
@@ -54,10 +74,17 @@ export function getThemeMetadata(): ThemeMetadata[] {
 
   return SUPPORTED_THEMES.map((config) => {
     const item = itemsByName.get(config.id);
+    // Extract font-sans from light mode vars (fallback to theme vars, then default)
+    const fontFamily =
+      item?.cssVars.light?.["font-sans"] ||
+      item?.cssVars.theme?.["font-sans"] ||
+      "Inter, sans-serif";
     return {
       id: config.id,
       name: item?.title || config.id,
       category: config.category,
+      fontFamily,
+      fontDisplayName: extractFontDisplayName(fontFamily),
     };
   }).filter((theme): theme is ThemeMetadata => theme !== null);
 }

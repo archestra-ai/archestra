@@ -21,12 +21,10 @@ export const SUPPORTED_THEMES = [
   { id: "modern-minimal", category: "minimal" },
   { id: "graphite", category: "minimal" },
   { id: "clean-slate", category: "minimal" },
-  { id: "mono", category: "minimal" },
   { id: "elegant-luxury", category: "minimal" },
   { id: "claymorphism", category: "minimal" },
 
   // Vibrant & Colorful
-  { id: "t3-chat", category: "vibrant" },
   { id: "twitter", category: "vibrant" },
   { id: "bubblegum", category: "vibrant" },
   { id: "tangerine", category: "vibrant" },
@@ -58,7 +56,6 @@ export const SUPPORTED_THEMES = [
   { id: "bold-tech", category: "tech" },
   { id: "neo-brutalism", category: "tech" },
   { id: "supabase", category: "tech" },
-  { id: "vercel", category: "tech" },
   { id: "claude", category: "tech" },
   { id: "northern-lights", category: "tech" },
   { id: "vintage-paper", category: "tech" },

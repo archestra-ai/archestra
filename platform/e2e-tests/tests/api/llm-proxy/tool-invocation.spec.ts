@@ -449,19 +449,15 @@ for (const config of testConfigs) {
         agentId,
         "read_file",
       );
-      toolId = readFileAgentTool.tool.id;
+      toolId = (readFileAgentTool.tool as any).id;
 
       // 4. Create a trusted data policy
       const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
-        toolId,
+        agentToolId: toolId,
         description: "Mark messages containing UNTRUSTED_DATA as untrusted",
-        conditions: [
-          {
-            key: config.trustedDataPolicyAttributePath,
-            operator: "contains",
-            value: "UNTRUSTED_DATA",
-          },
-        ],
+        attributePath: config.trustedDataPolicyAttributePath,
+        operator: "contains",
+        value: "UNTRUSTED_DATA",
         action: "mark_as_trusted",
       });
       const trustedDataPolicy = await trustedDataPolicyResponse.json();
@@ -471,14 +467,10 @@ for (const config of testConfigs) {
       const toolInvocationPolicyResponse = await createToolInvocationPolicy(
         request,
         {
-          toolId,
-          conditions: [
-            {
-              key: "file_path",
-              operator: "contains",
-              value: "/etc/",
-            },
-          ],
+          agentToolId: toolId,
+          argumentPath: "file_path",
+          operator: "contains",
+          value: "/etc/",
           action: "block_always",
           reason: "Reading /etc/ files is not allowed for security reasons",
         },

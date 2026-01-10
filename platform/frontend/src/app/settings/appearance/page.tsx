@@ -10,7 +10,6 @@ import {
   useUpdateOrganization,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
-import { FontSelector } from "./_components/font-selector";
 import { LightDarkToggle } from "./_components/light-dark-toggle";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
@@ -26,33 +25,22 @@ export default function AppearanceSettingsPage() {
   const orgTheme = useOrgTheme();
   const {
     currentUITheme,
-    currentUIFont,
     themeFromBackend,
-    fontFromBackend,
     setPreviewTheme,
-    setPreviewFont,
     applyThemeOnUI,
-    applyFontOnUI,
     saveAppearance,
     logo,
     DEFAULT_THEME,
-    DEFAULT_FONT,
     isLoadingAppearance,
   } = orgTheme ?? {
     currentUITheme: "modern-minimal" as const,
-    currentUIFont: "lato" as const,
     DEFAULT_THEME: "modern-minimal" as const,
-    DEFAULT_FONT: "lato" as const,
   };
 
   useOnUnmount(() => {
     if (themeFromBackend) {
       applyThemeOnUI?.(themeFromBackend);
       setPreviewTheme?.(themeFromBackend);
-    }
-    if (fontFromBackend) {
-      applyFontOnUI?.(fontFromBackend);
-      setPreviewFont?.(fontFromBackend);
     }
   });
 
@@ -80,18 +68,7 @@ export default function AppearanceSettingsPage() {
           selectedTheme={currentUITheme}
           onThemeSelect={(themeId) => {
             setPreviewTheme?.(themeId);
-            setHasChanges(
-              themeId !== themeFromBackend || currentUIFont !== fontFromBackend,
-            );
-          }}
-        />
-        <FontSelector
-          selectedFont={currentUIFont || DEFAULT_FONT}
-          onFontSelect={(fontId) => {
-            setPreviewFont?.(fontId);
-            setHasChanges(
-              currentUITheme !== themeFromBackend || fontId !== fontFromBackend,
-            );
+            setHasChanges(themeId !== themeFromBackend);
           }}
         />
         {hasChanges && (
@@ -99,10 +76,7 @@ export default function AppearanceSettingsPage() {
             <PermissionButton
               permissions={{ organization: ["update"] }}
               onClick={() => {
-                saveAppearance?.(
-                  currentUITheme || DEFAULT_THEME,
-                  currentUIFont || DEFAULT_FONT,
-                );
+                saveAppearance?.(currentUITheme || DEFAULT_THEME);
                 setHasChanges(false);
               }}
               disabled={updateAppearanceSettingsMutation.isPending}
@@ -113,7 +87,6 @@ export default function AppearanceSettingsPage() {
               variant="outline"
               onClick={() => {
                 setPreviewTheme?.(themeFromBackend || DEFAULT_THEME);
-                setPreviewFont?.(fontFromBackend || DEFAULT_FONT);
                 setHasChanges(false);
               }}
               disabled={updateAppearanceSettingsMutation.isPending}

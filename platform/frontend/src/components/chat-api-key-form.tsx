@@ -97,6 +97,21 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://dashboard.cohere.com/api-keys",
     consoleName: "Cohere Dashboard",
+  vllm: {
+    name: "vLLM",
+    icon: "/icons/vllm.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://docs.vllm.ai/",
+    consoleName: "vLLM Docs",
+  },
+  ollama: {
+    name: "Ollama",
+    icon: "/icons/ollama.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://ollama.ai/",
+    consoleName: "Ollama",
   },
 } as const;
 
@@ -133,6 +148,11 @@ interface ChatApiKeyFormProps {
    * Whether mutation is pending (from parent)
    */
   isPending?: boolean;
+  /**
+   * Whether Gemini Vertex AI mode is enabled.
+   * When true, Gemini provider is disabled (uses ADC instead of API key).
+   */
+  geminiVertexAiEnabled?: boolean;
 }
 
 /**
@@ -147,6 +167,7 @@ export function ChatApiKeyForm({
   existingKeys,
   form,
   isPending = false,
+  geminiVertexAiEnabled = false,
 }: ChatApiKeyFormProps) {
   const byosEnabled = useFeatureFlag("byosEnabled");
   const isEditMode = Boolean(existingKey);
@@ -309,25 +330,37 @@ export function ChatApiKeyForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(PROVIDER_CONFIG).map(([key, config]) => (
-                <SelectItem key={key} value={key} disabled={!config.enabled}>
-                  <div className="flex items-center gap-2">
-                    <Image
-                      src={config.icon}
-                      alt={config.name}
-                      width={16}
-                      height={16}
-                      className="rounded dark:invert"
-                    />
-                    <span>{config.name}</span>
-                    {!config.enabled && (
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Coming Soon
-                      </Badge>
-                    )}
-                  </div>
-                </SelectItem>
-              ))}
+              {Object.entries(PROVIDER_CONFIG).map(([key, config]) => {
+                const isGeminiDisabledByVertexAi =
+                  key === "gemini" && geminiVertexAiEnabled;
+                const isDisabled =
+                  !config.enabled || isGeminiDisabledByVertexAi;
+
+                return (
+                  <SelectItem key={key} value={key} disabled={isDisabled}>
+                    <div className="flex items-center gap-2">
+                      <Image
+                        src={config.icon}
+                        alt={config.name}
+                        width={16}
+                        height={16}
+                        className="rounded dark:invert"
+                      />
+                      <span>{config.name}</span>
+                      {!config.enabled && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Coming Soon
+                        </Badge>
+                      )}
+                      {isGeminiDisabledByVertexAi && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          Vertex AI
+                        </Badge>
+                      )}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

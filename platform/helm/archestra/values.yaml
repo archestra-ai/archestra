@@ -1,7 +1,15 @@
 archestra:
   # The Docker image to use for the Archestra Platform
   # This image contains both the backend API and frontend
-  image: archestra/platform:latest
+  image: archestra/platform
+
+  # The image tag for the Archestra Platform
+  #
+  # This value is automatically updated by release-please during releases.
+  # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
+  # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
+  # See: https://github.com/googleapis/release-please/issues/2195
+  imageTag: "1.0.13" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -336,10 +344,13 @@ archestra:
 postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance
   # If null, a PostgreSQL instance will be deployed using the Bitnami PostgreSQL chart
-  # Example: postgresql://username:password@host:5432/database
+  # Accepts both postgres:// and postgresql:// URI schemes
+  # Example: postgres://username:password@host:5432/database
+  # IMPORTANT: When setting external_database_url, you MUST also set enabled=false
   external_database_url: null
 
-  # PostgreSQL subchart configuration (only used when external_database_url is null)
+  # Whether to deploy the bundled PostgreSQL instance
+  # Set to false when using external_database_url
   enabled: true
   auth:
     database: archestra_dev

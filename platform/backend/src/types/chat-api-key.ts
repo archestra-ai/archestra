@@ -13,6 +13,8 @@ export const SupportedChatProviderSchema = z.enum([
   "openai",
   "gemini",
   "cohere",
+  "vllm",
+  "ollama",
 ]);
 export type SupportedChatProvider = z.infer<typeof SupportedChatProviderSchema>;
 

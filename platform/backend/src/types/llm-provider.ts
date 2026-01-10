@@ -131,6 +131,12 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    */
   applyToonCompression(model: string): Promise<ToonCompressionResult>;
 
+  /**
+   * Convert tool result content to provider-specific format (e.g., MCP image blocks)
+   * @param messages - Provider-specific messages to convert
+   */
+  convertToolResultContent(messages: TMessages): TMessages;
+
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------

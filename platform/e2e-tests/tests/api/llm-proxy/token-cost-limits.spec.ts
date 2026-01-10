@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import { expect, test } from "../fixtures";
 
 // =============================================================================
@@ -11,7 +12,7 @@ interface TokenCostLimitTestConfig {
   buildRequest: (content: string) => object;
   modelName: string;
   tokenPrice: {
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     model: string;
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -110,6 +111,60 @@ const geminiConfig: TokenCostLimitTestConfig = {
   },
 };
 
+const vllmConfig: TokenCostLimitTestConfig = {
+  providerName: "vLLM",
+
+  endpoint: (profileId) => `/v1/vllm/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-vllm-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-vllm-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  tokenPrice: {
+    provider: "vllm",
+    model: "test-vllm-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
+const ollamaConfig: TokenCostLimitTestConfig = {
+  providerName: "Ollama",
+
+  endpoint: (profileId) => `/v1/ollama/${profileId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content) => ({
+    model: "test-ollama-cost-limit",
+    messages: [{ role: "user", content }],
+  }),
+
+  modelName: "test-ollama-cost-limit",
+
+  // WireMock returns: prompt_tokens: 100, completion_tokens: 20
+  // Cost = (100 * 20000 + 20 * 30000) / 1,000,000 = $2.60
+  tokenPrice: {
+    provider: "ollama",
+    model: "test-ollama-cost-limit",
+    pricePerMillionInput: "20000.00",
+    pricePerMillionOutput: "30000.00",
+  },
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -118,6 +173,8 @@ const testConfigs: TokenCostLimitTestConfig[] = [
   openaiConfig,
   anthropicConfig,
   geminiConfig,
+  vllmConfig,
+  ollamaConfig,
 ];
 
 for (const config of testConfigs) {

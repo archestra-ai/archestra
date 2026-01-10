@@ -7,6 +7,8 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_VAULT_TOKEN,
+  type SupportedProvider,
+  SupportedProviders,
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
@@ -131,11 +133,36 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
 };
 
 /**
+ * Parse additional trusted origins from environment variable.
+ * Used to add extra trusted origins beyond the frontend URL (e.g., external IdPs for SSO).
+ *
+ * Format: Comma-separated list of origins (e.g., "http://idp.example.com:8080,https://auth.example.com")
+ * Whitespace around each origin is trimmed.
+ *
+ * @returns Array of additional trusted origins
+ */
+export const getAdditionalTrustedOrigins = (): string[] => {
+  const envValue =
+    process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  return envValue
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+};
+
+/**
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
+ * Also includes any additional trusted origins from ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS.
  */
 export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
+  const additionalOrigins = getAdditionalTrustedOrigins();
 
   // Default: allow localhost wildcards for development
   if (origins.length === 0) {
@@ -144,11 +171,12 @@ export const getTrustedOrigins = (): string[] => {
       "https://localhost:*",
       "http://127.0.0.1:*",
       "https://127.0.0.1:*",
+      ...additionalOrigins,
     ];
   }
 
-  // Production: use configured origins
-  return origins;
+  // Production: use configured origins plus additional origins
+  return [...origins, ...additionalOrigins];
 };
 
 /**
@@ -236,28 +264,36 @@ export default {
       },
     },
     cohere: {
-      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.com",
+         enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_COHERE_USE_V2_ROUTES !== "false",
+    },
+    vllm: {
+      enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
+      useV2Routes: process.env.ARCHESTRA_VLLM_USE_V2_ROUTES !== "false",
+    },
+    ollama: {
+      enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
   },
   chat: {
     openai: {
       apiKey: process.env.ARCHESTRA_CHAT_OPENAI_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_OPENAI_BASE_URL ||
-        "https://api.openai.com/v1",
     },
     anthropic: {
       apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
-        "https://api.anthropic.com",
     },
     gemini: {
       apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",
-      baseUrl:
-        process.env.ARCHESTRA_CHAT_GEMINI_BASE_URL ||
-        "https://generativelanguage.googleapis.com",
+    },
+    vllm: {
+      apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
+    },
+    ollama: {
+      apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
@@ -271,12 +307,24 @@ export default {
     },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+    defaultProvider: ((): SupportedProvider => {
+      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
+      if (
+        provider &&
+        SupportedProviders.includes(provider as SupportedProvider)
+      ) {
+        return provider as SupportedProvider;
+      }
+      return "anthropic";
+    })(),
   },
   features: {
     /**
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
+    browserStreamingEnabled:
+      process.env.FEATURES_BROWSER_STREAMING_ENABLED === "true",
   },
   enterpriseLicenseActivated:
     process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",

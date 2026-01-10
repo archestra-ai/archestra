@@ -8,7 +8,9 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
+import VllmChatCompletionInteraction from "./llmProviders/vllm";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -113,9 +115,12 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    if (this.provider === "openai" && this.endpoint === "chatCompletions") {
+    // Note: Type discriminator stored in database determines the interaction type
+    const type = this.type as string;
+    if (type === "openai:chatCompletions") {
       return new OpenAiChatCompletionInteraction(interaction);
-    } else if (this.provider === "anthropic" && this.endpoint === "messages") {
+    }
+    if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
     } else if (this.provider === "cohere" && this.endpoint === "chat") {
       return createCohereInteraction(interaction);
@@ -134,6 +139,14 @@ export class DynamicInteraction implements InteractionUtils {
       }
       return new GeminiGenerateContentInteraction(interaction);
     }
+    if (type === "vllm:chatCompletions") {
+      return new VllmChatCompletionInteraction(interaction);
+    }
+    if (type === "ollama:chatCompletions") {
+      return new OllamaChatCompletionInteraction(interaction);
+    }
+    // Default to Gemini for any other provider
+    return new GeminiGenerateContentInteraction(interaction);
   }
 
   isLastMessageToolCall(): boolean {

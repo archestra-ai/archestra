@@ -1,6 +1,10 @@
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
+import type {
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+} from "openai/resources/chat/completions/completions";
 import config from "@/config";
 import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
@@ -22,7 +26,19 @@ import type {
   ToonCompressionResult,
   UsageView,
 } from "@/types";
+import { estimateMessagesSize } from "@/utils/message-size";
+import {
+  estimateToolResultContentLength,
+  previewToolResultContent,
+} from "@/utils/tool-result-preview";
 import { MockOpenAIClient } from "../mock-openai-client";
+import {
+  doesModelSupportImages,
+  hasImageContent,
+  isImageTooLarge,
+  isMcpImageBlock,
+} from "../utils/mcp-image";
+import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import type { CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
@@ -35,6 +51,25 @@ type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 type OpenAiHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
+
+type OpenAiToolResultImageBlock = {
+  type: "image_url";
+  image_url: {
+    url: string;
+    detail?: "auto" | "low" | "high";
+  };
+};
+
+type OpenAiToolResultTextBlock = {
+  type: "text";
+  text: string;
+};
+
+type OpenAiToolResultContentBlock =
+  | OpenAiToolResultImageBlock
+  | OpenAiToolResultTextBlock;
+
+type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
 
 // =============================================================================
 // REQUEST ADAPTER
@@ -159,6 +194,120 @@ class OpenAIRequestAdapter
     };
   }
 
+  convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
+    const model = this.getModel();
+    const modelSupportsImages = doesModelSupportImages(model);
+    let toolMessagesWithImages = 0;
+    let strippedImageCount = 0;
+
+    // First, analyze all tool messages to understand what we're dealing with
+    for (const message of messages) {
+      if (message.role === "tool") {
+        const contentLength = estimateToolResultContentLength(message.content);
+        const contentSizeKB = Math.round(contentLength.length / 1024);
+        const contentPatternSample = previewToolResultContent(
+          message.content,
+          2000,
+        );
+        const contentPreview = contentPatternSample.slice(0, 200);
+
+        // Check for base64 patterns in preview to avoid full serialization.
+        const hasBase64 =
+          contentPatternSample.includes("data:image") ||
+          contentPatternSample.includes('"type":"image"') ||
+          contentPatternSample.includes('"data":"');
+
+        // Find tool name from previous assistant message
+        const toolName = this.findToolNameInMessages(
+          messages,
+          message.tool_call_id,
+        );
+
+        logger.info(
+          {
+            toolCallId: message.tool_call_id,
+            toolName,
+            contentSizeKB,
+            hasBase64,
+            contentLengthEstimated: contentLength.isEstimated,
+            isArray: Array.isArray(message.content),
+            contentPreview,
+          },
+          "[OpenAIAdapter] Analyzing tool result content",
+        );
+
+        // If it's an array, analyze each item
+        if (Array.isArray(message.content)) {
+          for (const [idx, item] of message.content.entries()) {
+            if (typeof item === "object" && item !== null) {
+              const itemType = (item as Record<string, unknown>).type;
+              const itemLength = estimateToolResultContentLength(item);
+              logger.info(
+                {
+                  toolCallId: message.tool_call_id,
+                  itemIndex: idx,
+                  itemType,
+                  itemSizeKB: Math.round(itemLength.length / 1024),
+                  itemLengthEstimated: itemLength.isEstimated,
+                  isMcpImage: isMcpImageBlock(item),
+                },
+                "[OpenAIAdapter] Tool result array item",
+              );
+            }
+          }
+        }
+      }
+    }
+
+    const result = messages.map((message) => {
+      if (message.role !== "tool") {
+        return message;
+      }
+
+      // Check if this tool message contains images
+      if (!hasImageContent(message.content)) {
+        return message;
+      }
+
+      // If model doesn't support images, strip image blocks from content
+      if (!modelSupportsImages) {
+        strippedImageCount++;
+        const strippedContent = stripImageBlocksFromContent(message.content);
+        return {
+          ...message,
+          content: strippedContent,
+        };
+      }
+
+      // Model supports images - convert MCP image blocks to OpenAI format
+      const convertedContent = convertMcpImageBlocksToOpenAi(message.content);
+      if (!convertedContent) {
+        return message;
+      }
+
+      toolMessagesWithImages++;
+      return {
+        ...message,
+        content: convertedContent,
+      };
+    });
+
+    if (toolMessagesWithImages > 0 || strippedImageCount > 0) {
+      logger.info(
+        {
+          model,
+          modelSupportsImages,
+          totalMessages: messages.length,
+          toolMessagesWithImages,
+          strippedImageCount,
+        },
+        "[OpenAIAdapter] Processed tool messages with image content",
+      );
+    }
+
+    return result;
+  }
+
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------
@@ -169,6 +318,75 @@ class OpenAIRequestAdapter
     if (Object.keys(this.toolResultUpdates).length > 0) {
       messages = this.applyUpdates(messages, this.toolResultUpdates);
     }
+
+    if (config.features.browserStreamingEnabled) {
+      messages = this.convertToolResultContent(messages);
+      const sizeBeforeStrip = estimateMessagesSize(messages);
+      messages = stripBrowserToolsResults(messages);
+      const sizeAfterStrip = estimateMessagesSize(messages);
+
+      if (sizeBeforeStrip.length !== sizeAfterStrip.length) {
+        logger.info(
+          {
+            sizeBeforeKB: Math.round(sizeBeforeStrip.length / 1024),
+            sizeAfterKB: Math.round(sizeAfterStrip.length / 1024),
+            savedKB: Math.round(
+              (sizeBeforeStrip.length - sizeAfterStrip.length) / 1024,
+            ),
+            sizeEstimateReliable:
+              !sizeBeforeStrip.isEstimated && !sizeAfterStrip.isEstimated,
+          },
+          "[OpenAIAdapter] Stripped browser tool results",
+        );
+      }
+    }
+
+    // Calculate approximate request size for debugging
+    const requestSize = estimateMessagesSize(messages);
+    const requestSizeKB = Math.round(requestSize.length / 1024);
+    const estimatedTokens = Math.round(requestSize.length / 4);
+    let imageCount = 0;
+    let totalImageBase64Length = 0;
+
+    for (const msg of messages) {
+      if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (
+            typeof part === "object" &&
+            part !== null &&
+            "type" in part &&
+            part.type === "image_url" &&
+            "image_url" in part &&
+            part.image_url &&
+            typeof part.image_url === "object" &&
+            "url" in part.image_url
+          ) {
+            imageCount++;
+            const imageUrl = part.image_url.url;
+            if (typeof imageUrl === "string" && imageUrl.startsWith("data:")) {
+              const base64Part = imageUrl.split(",")[1];
+              if (base64Part) {
+                totalImageBase64Length += base64Part.length;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    logger.info(
+      {
+        model: this.getModel(),
+        messageCount: messages.length,
+        requestSizeKB,
+        estimatedTokens,
+        sizeEstimateReliable: !requestSize.isEstimated,
+        hasToolResultUpdates: Object.keys(this.toolResultUpdates).length > 0,
+        imageCount,
+        totalImageBase64KB: Math.round((totalImageBase64Length * 3) / 4 / 1024),
+      },
+      "[OpenAIAdapter] Building provider request",
+    );
 
     return {
       ...this.request,
@@ -297,6 +515,128 @@ class OpenAIRequestAdapter
     );
     return result;
   }
+}
+
+function convertMcpImageBlocksToOpenAi(
+  content: unknown,
+): OpenAiToolResultContent | null {
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  if (!hasImageContent(content)) {
+    return null;
+  }
+
+  const openAiContent: OpenAiToolResultContentBlock[] = [];
+  const imageTooLargePlaceholder = "[Image omitted due to size]";
+
+  for (const item of content) {
+    if (typeof item !== "object" || item === null) continue;
+    const candidate = item as Record<string, unknown>;
+
+    if (isMcpImageBlock(item)) {
+      const mimeType = item.mimeType ?? "image/png";
+      const base64Length = typeof item.data === "string" ? item.data.length : 0;
+      const estimatedSizeKB = Math.round((base64Length * 3) / 4 / 1024);
+      const shouldStripImage = isImageTooLarge(item);
+
+      if (shouldStripImage) {
+        logger.info(
+          {
+            mimeType,
+            base64Length,
+            estimatedSizeKB,
+          },
+          "[OpenAIAdapter] Stripping MCP image block due to size limit",
+        );
+        openAiContent.push({
+          type: "text",
+          text: imageTooLargePlaceholder,
+        });
+        continue;
+      }
+
+      logger.info(
+        {
+          mimeType,
+          base64Length,
+          estimatedSizeKB,
+          // Estimate tokens: base64 chars / 4 (rough estimate for text tokens)
+          // But for images, OpenAI uses tile-based calculation
+          estimatedBase64Tokens: Math.round(base64Length / 4),
+        },
+        "[OpenAIAdapter] Converting MCP image block to OpenAI format",
+      );
+
+      openAiContent.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${mimeType};base64,${item.data}`,
+        },
+      });
+    } else if (candidate.type === "text" && "text" in candidate) {
+      openAiContent.push({
+        type: "text",
+        text:
+          typeof candidate.text === "string"
+            ? candidate.text
+            : JSON.stringify(candidate),
+      });
+    }
+  }
+
+  logger.info(
+    {
+      totalBlocks: openAiContent.length,
+      imageBlocks: openAiContent.filter((b) => b.type === "image_url").length,
+      textBlocks: openAiContent.filter((b) => b.type === "text").length,
+    },
+    "[OpenAIAdapter] Converted MCP content to OpenAI format",
+  );
+
+  return openAiContent.length > 0 ? openAiContent : null;
+}
+
+/**
+ * Strip image blocks from MCP content when model doesn't support images.
+ * Keeps text blocks and replaces image blocks with a placeholder message.
+ */
+function stripImageBlocksFromContent(content: unknown): string {
+  if (!Array.isArray(content)) {
+    return typeof content === "string" ? content : JSON.stringify(content);
+  }
+
+  const textParts: string[] = [];
+  let imageCount = 0;
+
+  for (const item of content) {
+    if (typeof item !== "object" || item === null) continue;
+    const candidate = item as Record<string, unknown>;
+
+    if (isMcpImageBlock(item)) {
+      imageCount++;
+    } else if (candidate.type === "text" && "text" in candidate) {
+      textParts.push(
+        typeof candidate.text === "string"
+          ? candidate.text
+          : JSON.stringify(candidate.text),
+      );
+    }
+  }
+
+  // Add placeholder for stripped images
+  if (imageCount > 0) {
+    textParts.push(
+      `[${imageCount} image(s) removed - model does not support image inputs]`,
+    );
+    logger.info(
+      { imageCount },
+      "[OpenAIAdapter] Stripped images from tool result (model does not support images)",
+    );
+  }
+
+  return textParts.join("\n");
 }
 
 // =============================================================================
@@ -814,10 +1154,13 @@ export const openaiAdapterFactory: LLMProvider<
     request: OpenAiRequest,
   ): Promise<OpenAiResponse> {
     const openaiClient = client as OpenAIProvider;
-    return openaiClient.chat.completions.create({
+    const openaiRequest = {
       ...request,
       stream: false,
-    }) as Promise<OpenAiResponse>;
+    } as unknown as ChatCompletionCreateParamsNonStreaming;
+    return openaiClient.chat.completions.create(
+      openaiRequest,
+    ) as Promise<OpenAiResponse>;
   },
 
   async executeStream(
@@ -825,11 +1168,12 @@ export const openaiAdapterFactory: LLMProvider<
     request: OpenAiRequest,
   ): Promise<AsyncIterable<OpenAiStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
-    const stream = await openaiClient.chat.completions.create({
+    const openaiRequest = {
       ...request,
       stream: true,
       stream_options: { include_usage: true },
-    });
+    } as unknown as ChatCompletionCreateParamsStreaming;
+    const stream = await openaiClient.chat.completions.create(openaiRequest);
 
     return {
       [Symbol.asyncIterator]: async function* () {

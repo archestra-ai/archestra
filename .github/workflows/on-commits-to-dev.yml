@@ -97,8 +97,6 @@ jobs:
             --zone us-central1-a \
             --project friendly-path-465518-r6
 
-      # NOTE: temporarily removing the following to debug something..
-      # --set archestra.env.ARCHESTRA_AUTH_COOKIE_DOMAIN="${{ secrets.ARCHESTRA_STAGING_AUTH_COOKIE_DOMAIN }}" \
       - name: Deploy to staging
         run: |
           helm upgrade archestra-platform \
@@ -110,6 +108,7 @@ jobs:
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
             --set archestra.env.ARCHESTRA_FRONTEND_URL="https://frontend.archestra.dev" \
             --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \
+            --set archestra.env.ARCHESTRA_AUTH_COOKIE_DOMAIN=".archestra.dev" \
             --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \
             --set archestra.env.ARCHESTRA_AUTH_SECRET="${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}" \
@@ -119,6 +118,7 @@ jobs:
             --set archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}" \
             --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
             --set archestra.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="true" \
+            --set archestra.env.FEATURES_BROWSER_STREAMING_ENABLED="true" \
             --values .github/values-staging.yaml \
             --wait
 

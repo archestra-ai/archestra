@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import type { RouteId } from "@shared";
+import { type RouteId, SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
@@ -93,6 +93,11 @@ export class Authnz {
       );
       return true;
     }
+    // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
+    const isLlmProxyRoute = SupportedProviders.some((provider) =>
+      url.startsWith(`/v1/${provider}`),
+    );
+
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
@@ -100,6 +105,7 @@ export class Authnz {
       url.startsWith("/v1/anthropic") ||
       url.startsWith("/v1/gemini") ||
       url.startsWith("/v1/cohere") ||
+      isLlmProxyRoute ||
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||
@@ -109,7 +115,9 @@ export class Authnz {
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
       // Allow fetching public SSO providers list for login page (minimal info, no secrets)
-      (method === "GET" && url === "/api/sso-providers/public")
+      (method === "GET" && url === "/api/sso-providers/public") ||
+      // Allow fetching public appearance settings for login page (theme, logo, font)
+      (method === "GET" && url === "/api/organization/appearance")
     ) {
       logger.debug({ url, method }, "[Authnz] Route is in skip list");
       return true;

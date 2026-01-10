@@ -11,12 +11,23 @@ import { secretManager } from "@/secrets-manager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
 /**
+ * Note: vLLM and Ollama use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
+ * When creating a vLLM/Ollama model, we use createOpenAI with the respective base URL.
+ */
+
+/**
  * Type representing a model that can be passed to streamText/generateText
  */
 export type LLMModel = Parameters<typeof streamText>[0]["model"];
 
 /**
  * Detect which provider a model belongs to based on its name
+ * It's a recommended to rely on explicit provider selection whenever possible,
+ * Since same models could be served by different providers.
+ * Currently it exists for backward compatibility.
+ *
+ * Note: vLLM and Ollama can serve any model, so they cannot be auto-detected by model name.
+ * Users must explicitly select vLLM or Ollama as the provider.
  */
 export function detectProviderFromModel(model: string): SupportedChatProvider {
   const lowerModel = model.toLowerCase();
@@ -42,6 +53,8 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
   }
 
  
+  // Default to anthropic for backwards compatibility
+  // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
 }
 
@@ -116,6 +129,11 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "cohere" && config.chat.cohere.apiKey) {
       providerApiKey = config.chat.cohere.apiKey;
+    } else if (provider === "vllm" && config.chat.vllm.apiKey) {
+      providerApiKey = config.chat.vllm.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "ollama" && config.chat.ollama.apiKey) {
+      providerApiKey = config.chat.ollama.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -132,7 +150,10 @@ export function isApiKeyRequired(
 ): boolean {
   // For Gemini with Vertex AI enabled, API key is not required
   const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
-  return !apiKey && !isGeminiWithVertexAi;
+  // vLLM and Ollama typically don't require API keys (use "EMPTY" or dummy values)
+  const isVllm = provider === "vllm";
+  const isOllama = provider === "ollama";
+  return !apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama;
 }
 
 /**
@@ -201,6 +222,27 @@ export function createLLMModel(params: {
       baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}/compatibility/v1`,
       headers,
     });
+  if (provider === "vllm") {
+    // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
+    // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY", // vLLM typically doesn't require API keys
+      baseURL: `http://localhost:${config.api.port}/v1/vllm/${agentId}`,
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  }
+
+  if (provider === "ollama") {
+    // URL format: /v1/ollama/:agentId (SDK appends /chat/completions)
+    // Ollama uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
+      baseURL: `http://localhost:${config.api.port}/v1/ollama/${agentId}`,
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
     return client.chat(modelName);
   }
 
@@ -208,13 +250,16 @@ export function createLLMModel(params: {
 }
 
 /**
- * Full helper to resolve API key and create LLM model
+ * Full helper to resolve API key and create LLM model.
+ * Provider must be explicitly passed - callers can use detectProviderFromModel
+ * as a fallback for backward compatibility with existing conversations.
  */
 export async function createLLMModelForAgent(params: {
   organizationId: string;
   userId: string;
   agentId: string;
   model: string;
+  provider: SupportedChatProvider;
   conversationId?: string | null;
   externalAgentId?: string;
 }): Promise<{
@@ -227,11 +272,10 @@ export async function createLLMModelForAgent(params: {
     userId,
     agentId,
     model: modelName,
+    provider,
     conversationId,
     externalAgentId,
   } = params;
-
-  const provider = detectProviderFromModel(modelName);
 
   const { apiKey, source } = await resolveProviderApiKey({
     organizationId,
@@ -242,13 +286,16 @@ export async function createLLMModelForAgent(params: {
 
   // Check if Gemini with Vertex AI (doesn't require API key)
   const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
+  // vLLM and Ollama typically don't require API keys
+  const isVllm = provider === "vllm";
+  const isOllama = provider === "ollama";
 
   logger.info(
-    { apiKeySource: source, provider, isGeminiWithVertexAi },
+    { apiKeySource: source, provider, isGeminiWithVertexAi, isVllm, isOllama },
     "Using LLM provider API key",
   );
 
-  if (!apiKey && !isGeminiWithVertexAi) {
+  if (!apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama) {
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Chat Settings.",

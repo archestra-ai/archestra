@@ -24,6 +24,7 @@ import {
   PLACEHOLDER_KEY,
   PROVIDER_CONFIG,
 } from "@/components/chat-api-key-form";
+import { GeminiVertexAiAlert } from "@/components/gemini-vertex-ai-alert";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ function ChatSettingsContent() {
   const updateMutation = useUpdateChatApiKey();
   const deleteMutation = useDeleteChatApiKey();
   const byosEnabled = useFeatureFlag("byosEnabled");
+  const geminiVertexAiEnabled = useFeatureFlag("geminiVertexAiEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -389,6 +391,8 @@ function ChatSettingsContent() {
           </Alert>
         )}
 
+      {geminiVertexAiEnabled && <GeminiVertexAiAlert variant="full" />}
+
       <div data-testid={E2eTestId.ChatApiKeysTable}>
         <DataTable
           columns={columns}
@@ -407,6 +411,7 @@ function ChatSettingsContent() {
               Add a new LLM provider API key for use in Chat
             </DialogDescription>
           </DialogHeader>
+          {geminiVertexAiEnabled && <GeminiVertexAiAlert variant="compact" />}
           <div className="py-2">
             <ChatApiKeyForm
               mode="full"
@@ -414,6 +419,7 @@ function ChatSettingsContent() {
               form={createForm}
               existingKeys={apiKeys}
               isPending={createMutation.isPending}
+              geminiVertexAiEnabled={geminiVertexAiEnabled}
             />
           </div>
           <DialogFooter>

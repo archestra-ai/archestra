@@ -1,7 +1,12 @@
+import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { Organization, UpdateOrganization } from "@/types";
+import type {
+  Organization,
+  PublicAppearance,
+  UpdateOrganization,
+} from "@/types";
 
 class OrganizationModel {
   /**
@@ -114,6 +119,31 @@ class OrganizationModel {
     );
     return organization || null;
   }
-}
 
+  /**
+   * Get public appearance settings (theme, logo, font) for unauthenticated pages.
+   * Returns the default organization's appearance settings.
+   */
+  static async getPublicAppearance(): Promise<PublicAppearance> {
+    const [organization] = await db
+      .select({
+        theme: schema.organizationsTable.theme,
+        customFont: schema.organizationsTable.customFont,
+        logo: schema.organizationsTable.logo,
+      })
+      .from(schema.organizationsTable)
+      .limit(1);
+
+    // Return defaults if no organization exists
+    if (!organization) {
+      return {
+        theme: DEFAULT_THEME_ID,
+        customFont: "lato" as OrganizationCustomFont,
+        logo: null,
+      };
+    }
+
+    return organization;
+  }
+}
 export default OrganizationModel;

@@ -15,6 +15,9 @@ export function getTokenizer(provider: SupportedProvider): Tokenizer {
     case "anthropic":
       return new AnthropicTokenizer();
     case "openai":
+    case "vllm":
+    case "ollama":
+      // vLLM and Ollama use tiktoken-compatible tokenization for most models
       return new TiktokenTokenizer();
     case "cohere":
       return new TiktokenTokenizer();

@@ -1,6 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -18,6 +20,7 @@ import type {
   CommonToolResult,
   InternalMcpCatalog,
 } from "@/types";
+import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
@@ -50,9 +53,73 @@ export type TokenAuthContext = {
   userId?: string;
 };
 
+/**
+ * Simple async queue to serialize operations per connection
+ * Prevents concurrent MCP calls to the same server (important for stdio transport)
+ */
+type QueueState = {
+  activeCount: number;
+  queue: Array<() => void>;
+};
+
+class ConnectionLimiter {
+  private states = new Map<string, QueueState>();
+
+  /**
+   * Execute a function with a per-connection concurrency limit.
+   */
+  runWithLimit<T>(
+    connectionKey: string,
+    limit: number,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (limit <= 0) {
+      return fn();
+    }
+
+    const state = this.states.get(connectionKey) ?? {
+      activeCount: 0,
+      queue: [],
+    };
+    this.states.set(connectionKey, state);
+
+    return new Promise<T>((resolve, reject) => {
+      const execute = () => {
+        state.activeCount += 1;
+        Promise.resolve()
+          .then(fn)
+          .then(resolve, reject)
+          .finally(() => {
+            state.activeCount -= 1;
+            const next = state.queue.shift();
+            if (next) {
+              next();
+              return;
+            }
+            if (state.activeCount === 0) {
+              this.states.delete(connectionKey);
+            }
+          });
+      };
+
+      if (state.activeCount < limit) {
+        execute();
+        return;
+      }
+
+      state.queue.push(execute);
+    });
+  }
+}
+
+type TransportKind = "stdio" | "http";
+
+const HTTP_CONCURRENCY_LIMIT = 4;
+
 class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
+  private connectionLimiter = new ConnectionLimiter();
 
   /**
    * Execute a single tool call against its assigned MCP server
@@ -91,47 +158,73 @@ class McpClient {
     }
     const { secrets } = secretsResult;
 
-    try {
-      // Get the appropriate transport
-      const transport = await this.getTransport(
-        catalogItem,
-        targetLocalMcpServerId,
-        secrets,
-      );
+    // Build connection cache key using the resolved target server ID
+    // This ensures each user gets their own connection for dynamic credentials
+    const connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
 
-      // Build connection cache key using the resolved target server ID
-      // This ensures each user gets their own connection for dynamic credentials
-      const connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
+    const executeToolCall = async (
+      getTransport: () => Promise<Transport>,
+    ): Promise<CommonToolResult> => {
+      try {
+        // Get the appropriate transport
+        const transport = await getTransport();
 
-      // Get or create client
-      const client = await this.getOrCreateClient(connectionKey, transport);
+        // Get or create client
+        const client = await this.getOrCreateClient(connectionKey, transport);
 
-      // Strip prefix and execute (same for all transports!)
-      const prefixName = tool.catalogName || tool.mcpServerName || "unknown";
-      const mcpToolName = this.stripServerPrefix(toolCall.name, prefixName);
+        // Strip prefix and execute (same for all transports!)
+        const prefixName = tool.catalogName || tool.mcpServerName || "unknown";
+        const mcpToolName = this.stripServerPrefix(toolCall.name, prefixName);
 
-      const result = await client.callTool({
-        name: mcpToolName,
-        arguments: toolCall.arguments,
-      });
+        const result = await client.callTool({
+          name: mcpToolName,
+          arguments: toolCall.arguments,
+        });
 
-      // Apply template and return
-      return await this.createSuccessResult(
-        toolCall,
-        agentId,
-        tool.mcpServerName || "unknown",
-        result.content,
-        !!result.isError,
-        tool.responseModifierTemplate,
-      );
-    } catch (error) {
-      return await this.createErrorResult(
-        toolCall,
-        agentId,
-        error instanceof Error ? error.message : "Unknown error",
-        tool.mcpServerName || "unknown",
+        // Apply template and return
+        return await this.createSuccessResult(
+          toolCall,
+          agentId,
+          tool.mcpServerName || "unknown",
+          result.content,
+          !!result.isError,
+          tool.responseModifierTemplate,
+        );
+      } catch (error) {
+        return await this.createErrorResult(
+          toolCall,
+          agentId,
+          error instanceof Error ? error.message : "Unknown error",
+          tool.mcpServerName || "unknown",
+        );
+      }
+    };
+
+    if (!this.shouldLimitConcurrency()) {
+      return executeToolCall(() =>
+        this.getTransport(catalogItem, targetLocalMcpServerId, secrets),
       );
     }
+
+    const transportKind = await this.getTransportKind(
+      catalogItem,
+      targetLocalMcpServerId,
+    );
+    const concurrencyLimit = this.getConcurrencyLimit(transportKind);
+
+    return this.connectionLimiter.runWithLimit(
+      connectionKey,
+      concurrencyLimit,
+      () =>
+        executeToolCall(() =>
+          this.getTransportWithKind(
+            catalogItem,
+            targetLocalMcpServerId,
+            secrets,
+            transportKind,
+          ),
+        ),
+    );
   }
 
   /**
@@ -139,7 +232,7 @@ class McpClient {
    */
   private async getOrCreateClient(
     connectionKey: string,
-    transport: import("@modelcontextprotocol/sdk/shared/transport.js").Transport,
+    transport: Transport,
   ): Promise<Client> {
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
@@ -486,21 +579,36 @@ class McpClient {
   /**
    * Get appropriate transport based on server type and configuration
    */
-  private async getTransport(
+  private shouldLimitConcurrency(): boolean {
+    return config.features.browserStreamingEnabled;
+  }
+
+  private getConcurrencyLimit(transportKind: TransportKind): number {
+    return transportKind === "stdio" ? 1 : HTTP_CONCURRENCY_LIMIT;
+  }
+
+  private async getTransportKind(
+    catalogItem: InternalMcpCatalog,
+    targetLocalMcpServerId: string,
+  ): Promise<TransportKind> {
+    if (catalogItem.serverType === "remote") {
+      return "http";
+    }
+
+    const usesStreamableHttp = await McpServerRuntimeManager.usesStreamableHttp(
+      targetLocalMcpServerId,
+    );
+    return usesStreamableHttp ? "http" : "stdio";
+  }
+
+  private async getTransportWithKind(
     catalogItem: InternalMcpCatalog,
     targetLocalMcpServerId: string,
     secrets: Record<string, unknown>,
-  ): Promise<
-    import("@modelcontextprotocol/sdk/shared/transport.js").Transport
-  > {
-    if (catalogItem.serverType === "local") {
-      const usesStreamableHttp =
-        await McpServerRuntimeManager.usesStreamableHttp(
-          targetLocalMcpServerId,
-        );
-
-      if (usesStreamableHttp) {
-        // HTTP transport
+    transportKind: TransportKind,
+  ): Promise<Transport> {
+    if (transportKind === "http") {
+      if (catalogItem.serverType === "local") {
         const url = McpServerRuntimeManager.getHttpEndpointUrl(
           targetLocalMcpServerId,
         );
@@ -513,6 +621,30 @@ class McpClient {
         return new StreamableHTTPClientTransport(new URL(url), {
           requestInit: { headers: new Headers({}) },
         });
+      }
+
+      if (catalogItem.serverType === "remote") {
+        if (!catalogItem.serverUrl) {
+          throw new Error("Remote server missing serverUrl");
+        }
+
+        const headers: Record<string, string> = {};
+        if (secrets.access_token) {
+          headers.Authorization = `Bearer ${secrets.access_token}`;
+        }
+
+        return new StreamableHTTPClientTransport(
+          new URL(catalogItem.serverUrl),
+          {
+            requestInit: { headers: new Headers(headers) },
+          },
+        );
+      }
+    }
+
+    if (transportKind === "stdio") {
+      if (catalogItem.serverType !== "local") {
+        throw new Error("Stdio transport is only supported for local servers");
       }
 
       // Stdio transport - use K8s attach!
@@ -536,23 +668,24 @@ class McpClient {
       });
     }
 
-    // Remote server
-    if (catalogItem.serverType === "remote") {
-      if (!catalogItem.serverUrl) {
-        throw new Error("Remote server missing serverUrl");
-      }
+    throw new Error(`Unsupported transport kind: ${transportKind}`);
+  }
 
-      const headers: Record<string, string> = {};
-      if (secrets.access_token) {
-        headers.Authorization = `Bearer ${secrets.access_token}`;
-      }
-
-      return new StreamableHTTPClientTransport(new URL(catalogItem.serverUrl), {
-        requestInit: { headers: new Headers(headers) },
-      });
-    }
-
-    throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
+  private async getTransport(
+    catalogItem: InternalMcpCatalog,
+    targetLocalMcpServerId: string,
+    secrets: Record<string, unknown>,
+  ): Promise<Transport> {
+    const transportKind = await this.getTransportKind(
+      catalogItem,
+      targetLocalMcpServerId,
+    );
+    return this.getTransportWithKind(
+      catalogItem,
+      targetLocalMcpServerId,
+      secrets,
+      transportKind,
+    );
   }
 
   /**
@@ -672,10 +805,10 @@ class McpClient {
       if (toolResult.isError) {
         logData.error = toolResult.error;
       } else {
-        logData.resultContent =
-          typeof toolResult.content === "string"
-            ? toolResult.content.substring(0, 100)
-            : JSON.stringify(toolResult.content).substring(0, 100);
+        logData.resultContent = previewToolResultContent(
+          toolResult.content,
+          100,
+        );
       }
 
       logger.info(

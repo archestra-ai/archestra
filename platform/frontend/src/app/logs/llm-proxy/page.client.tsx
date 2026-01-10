@@ -1,7 +1,6 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
@@ -23,14 +22,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
-import {
-  useInteractionSessions,
-  useInteractions,
-} from "@/lib/interaction.query";
+import { useInteractionSessions } from "@/lib/interaction.query";
 
-import { DynamicInteraction } from "@/lib/interaction.utils";
-
-import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 type SessionData =
@@ -132,78 +126,6 @@ function Pagination({
   );
 }
 
-function SessionInteractionsTable({
-  sessionId,
-  profileId,
-}: {
-  sessionId: string | null;
-  profileId: string;
-}) {
-  const router = useRouter();
-  // Fetch interactions for this session
-  const { data: interactionsResponse } = useInteractions({
-    sessionId: sessionId ?? undefined,
-    profileId,
-    limit: 100, // Get all interactions for this session
-    offset: 0,
-  });
-
-  const interactions = interactionsResponse?.data ?? [];
-
-  if (interactions.length === 0) {
-    return (
-      <div className="p-4 text-sm text-muted-foreground">
-        No interactions found
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-muted/30 rounded-md mx-4 mb-4">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="w-[140px] text-xs">Time</TableHead>
-            <TableHead className="w-[120px] text-xs">Model</TableHead>
-            <TableHead className="w-[100px] text-xs">Tokens</TableHead>
-            <TableHead className="text-xs">User Message</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {interactions.map((interaction) => {
-            const dynamicInteraction = new DynamicInteraction(interaction);
-            const userMessage = dynamicInteraction.getLastUserMessage();
-
-            return (
-              <TableRow
-                key={interaction.id}
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => router.push(`/logs/${interaction.id}`)}
-              >
-                <TableCell className="font-mono text-xs py-2">
-                  {formatDate({ date: dynamicInteraction.createdAt })}
-                </TableCell>
-                <TableCell className="text-xs py-2">
-                  <Badge variant="outline" className="text-xs">
-                    {dynamicInteraction.modelName}
-                  </Badge>
-                </TableCell>
-                <TableCell className="font-mono text-xs py-2">
-                  {(interaction.inputTokens ?? 0).toLocaleString()} /{" "}
-                  {(interaction.outputTokens ?? 0).toLocaleString()}
-                </TableCell>
-                <TableCell className="text-xs py-2">
-                  <TruncatedText message={userMessage} maxLength={100} />
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
 function SessionRow({
   session,
   agents,
@@ -211,20 +133,19 @@ function SessionRow({
   session: SessionData;
   agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const router = useRouter();
 
   const agent = agents?.find((a) => a.id === session.profileId);
   const isSingleInteraction =
     session.sessionId === null && session.interactionId;
 
-  // For single interactions (no session), navigate directly to detail page
-  // For sessions, expand to show interactions
+  // For single interactions (no session), navigate directly to interaction detail page
+  // For sessions, navigate to session detail page
   const handleRowClick = () => {
     if (isSingleInteraction) {
       router.push(`/logs/${session.interactionId}`);
-    } else {
-      setIsExpanded(!isExpanded);
+    } else if (session.sessionId) {
+      router.push(`/logs/llm-proxy/session/${session.sessionId}`);
     }
   };
 
@@ -234,85 +155,60 @@ function SessionRow({
     : "—";
 
   return (
-    <>
-      <TableRow
-        className={cn("cursor-pointer", isExpanded && "bg-muted/50")}
-        onClick={handleRowClick}
-      >
-        <TableCell className="w-[30px] py-3">
-          {/* Show expand icon only for sessions (not single interactions) */}
-          {session.sessionId ? (
-            isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )
-          ) : null}
-        </TableCell>
-        <TableCell className="py-3">
-          <SessionSourceBadge
-            sessionSource={session.sessionSource}
-            sessionId={session.sessionId}
-          />
-        </TableCell>
-        <TableCell className="font-mono text-xs py-3">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>{displaySessionId}</span>
-              </TooltipTrigger>
-              {session.sessionId && (
-                <TooltipContent>
-                  <p className="font-mono text-xs">{session.sessionId}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        </TableCell>
-        <TableCell className="py-3">
-          <TruncatedText
-            message={agent?.name ?? session.profileName ?? "Unknown"}
-            maxLength={25}
-          />
-        </TableCell>
-        <TableCell className="font-mono text-xs py-3">
-          {session.requestCount.toLocaleString()}
-        </TableCell>
-        <TableCell className="py-3">
-          <div className="flex flex-wrap gap-1">
-            {session.models.map((model) => (
-              <Badge
-                key={model}
-                variant="secondary"
-                className="text-xs whitespace-nowrap"
-              >
-                {model}
-              </Badge>
-            ))}
-          </div>
-        </TableCell>
-        <TableCell className="font-mono text-xs py-3">
-          {session.totalInputTokens.toLocaleString()} /{" "}
-          {session.totalOutputTokens.toLocaleString()}
-        </TableCell>
-        <TableCell className="font-mono text-xs py-3">
-          {formatDate({ date: session.firstRequest })}
-        </TableCell>
-        <TableCell className="font-mono text-xs py-3">
-          {formatDate({ date: session.lastRequest })}
-        </TableCell>
-      </TableRow>
-      {isExpanded && session.sessionId && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={9} className="p-0">
-            <SessionInteractionsTable
-              sessionId={session.sessionId}
-              profileId={session.profileId}
-            />
-          </TableCell>
-        </TableRow>
-      )}
-    </>
+    <TableRow className="cursor-pointer" onClick={handleRowClick}>
+      <TableCell className="py-3">
+        <SessionSourceBadge
+          sessionSource={session.sessionSource}
+          sessionId={session.sessionId}
+        />
+      </TableCell>
+      <TableCell className="font-mono text-xs py-3">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>{displaySessionId}</span>
+            </TooltipTrigger>
+            {session.sessionId && (
+              <TooltipContent>
+                <p className="font-mono text-xs">{session.sessionId}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      </TableCell>
+      <TableCell className="py-3">
+        <TruncatedText
+          message={agent?.name ?? session.profileName ?? "Unknown"}
+          maxLength={25}
+        />
+      </TableCell>
+      <TableCell className="font-mono text-xs py-3">
+        {session.requestCount.toLocaleString()}
+      </TableCell>
+      <TableCell className="py-3">
+        <div className="flex flex-wrap gap-1">
+          {session.models.map((model) => (
+            <Badge
+              key={model}
+              variant="secondary"
+              className="text-xs whitespace-nowrap"
+            >
+              {model}
+            </Badge>
+          ))}
+        </div>
+      </TableCell>
+      <TableCell className="font-mono text-xs py-3">
+        {session.totalInputTokens.toLocaleString()} /{" "}
+        {session.totalOutputTokens.toLocaleString()}
+      </TableCell>
+      <TableCell className="font-mono text-xs py-3">
+        {formatDate({ date: session.firstRequest })}
+      </TableCell>
+      <TableCell className="font-mono text-xs py-3">
+        {formatDate({ date: session.lastRequest })}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -448,7 +344,6 @@ function SessionsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[30px]" />
                 <TableHead className="w-[100px]">Source</TableHead>
                 <TableHead className="w-[100px]">Session ID</TableHead>
                 <TableHead className="w-[150px]">Profile</TableHead>

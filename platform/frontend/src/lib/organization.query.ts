@@ -12,7 +12,6 @@ import {
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { appearanceKeys } from "@/lib/appearance.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 /**
@@ -280,17 +279,8 @@ export function useUpdateOrganization(
 
       return updatedOrganization;
     },
-    onSuccess: (updatedOrganization) => {
-      // Update organization details cache
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      // Update appearance cache immediately with the new values
-      queryClient.setQueryData(appearanceKeys.public(), {
-        theme: updatedOrganization.theme,
-        customFont: updatedOrganization.customFont,
-        logo: updatedOrganization.logo,
-      });
-      // Invalidate features cache since globalToolPolicy comes from organization record
-      queryClient.invalidateQueries({ queryKey: ["features"] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
       toast.success(onSuccessMessage);
     },
     onError: (_error) => {

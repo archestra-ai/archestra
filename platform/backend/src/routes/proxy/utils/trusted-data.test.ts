@@ -6,6 +6,7 @@ import { evaluateIfContextIsTrusted } from "./trusted-data";
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
   let toolId: string;
+  let agentToolId: string;
 
   beforeEach(async ({ makeAgent }) => {
     // Create test agent
@@ -23,8 +24,12 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     const tool = await ToolModel.findByName("get_emails");
     toolId = (tool as Tool).id;
 
-    // Create agent-tool relationship (untrusted by default when no policies)
-    await AgentToolModel.create(agentId, toolId, {});
+    // Create agent-tool relationship with security settings
+    const agentTool = await AgentToolModel.create(agentId, toolId, {
+      allowUsageWhenUntrustedDataIsPresent: false,
+      toolResultTreatment: "untrusted",
+    });
+    agentToolId = agentTool.id;
   });
 
   describe("evaluateIfContextIsTrusted", () => {
@@ -39,7 +44,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -49,10 +53,10 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as untrusted and blocks tool result when matching block policy", async () => {
       // Create a block policy
       await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [
-          { key: "emails[*].from", operator: "contains", value: "hacker" },
-        ],
+        agentToolId,
+        attributePath: "emails[*].from",
+        operator: "contains",
+        value: "hacker",
         action: "block_always",
         description: "Block hacker emails",
       });
@@ -68,7 +72,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
               name: "get_emails",
               content: {
                 emails: [
-                  { from: "hacker@company.com", subject: "Suspicious" },
+                  { from: "user@company.com", subject: "Normal" },
                   { from: "hacker@evil.com", subject: "Malicious" },
                 ],
               },
@@ -84,7 +88,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       // Context should be untrusted and tool result should be blocked
@@ -98,14 +101,10 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as trusted when tool result matches allow policy", async () => {
       // Create an allow policy
       await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [
-          {
-            key: "emails[*].from",
-            operator: "endsWith",
-            value: "@trusted.com",
-          },
-        ],
+        agentToolId,
+        attributePath: "emails[*].from",
+        operator: "endsWith",
+        value: "@trusted.com",
         action: "mark_as_trusted",
         description: "Allow trusted emails",
       });
@@ -135,7 +134,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       expect(result.contextIsTrusted).toBe(true);
@@ -145,14 +143,10 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as untrusted when no policies match", async () => {
       // Create a policy that won't match
       await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [
-          {
-            key: "emails[*].from",
-            operator: "endsWith",
-            value: "@trusted.com",
-          },
-        ],
+        agentToolId,
+        attributePath: "emails[*].from",
+        operator: "endsWith",
+        value: "@trusted.com",
         action: "mark_as_trusted",
         description: "Allow trusted emails",
       });
@@ -179,7 +173,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       // Context should be untrusted when no policies match
@@ -190,15 +183,19 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "trusted" }],
+        agentToolId,
+        attributePath: "source",
+        operator: "equal",
+        value: "trusted",
         action: "mark_as_trusted",
         description: "Allow trusted source",
       });
 
       await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "malicious" }],
+        agentToolId,
+        attributePath: "source",
+        operator: "equal",
+        value: "malicious",
         action: "block_always",
         description: "Block malicious source",
       });
@@ -235,7 +232,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       // Context should be untrusted if any tool result is blocked or untrusted
@@ -266,7 +262,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       // Should mark as untrusted when tool is not found
@@ -294,7 +289,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       // Should handle gracefully and mark as untrusted
@@ -314,15 +308,14 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
     });
 
-    test("marks context as trusted when tool has trusted default policy", async () => {
-      // Create a tool with trusted default policy
+    test("marks context as trusted when tool has trusted treatment", async () => {
+      // Create a tool with trusted treatment
       await ToolModel.createToolIfNotExists({
         agentId,
         name: "trusted_tool",
@@ -333,15 +326,10 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const trustedTool = await ToolModel.findByName("trusted_tool");
       const trustedToolId = (trustedTool as Tool).id;
 
-      // Create agent-tool relationship
-      await AgentToolModel.create(agentId, trustedToolId, {});
-
-      // Delete auto-created default policy and create trusted policy
-      await TrustedDataPolicyModel.deleteByToolId(trustedToolId);
-      await TrustedDataPolicyModel.create({
-        toolId: trustedToolId,
-        conditions: [],
-        action: "mark_as_trusted",
+      // Create agent-tool relationship with trusted treatment
+      await AgentToolModel.create(agentId, trustedToolId, {
+        allowUsageWhenUntrustedDataIsPresent: false,
+        toolResultTreatment: "trusted",
       });
 
       const commonMessages: CommonMessage[] = [
@@ -364,15 +352,14 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
     });
 
-    test("block policies override trusted default policy", async () => {
-      // Create a tool with trusted default policy
+    test("block policies override trusted treatment", async () => {
+      // Create a tool with trusted treatment
       await ToolModel.createToolIfNotExists({
         agentId,
         name: "default_trusted_tool",
@@ -383,20 +370,22 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const tool = await ToolModel.findByName("default_trusted_tool");
       const trustedToolId = (tool as Tool).id;
 
-      // Create agent-tool relationship
-      await AgentToolModel.create(agentId, trustedToolId, {});
-
-      // Create default trusted policy
-      await TrustedDataPolicyModel.create({
-        toolId: trustedToolId,
-        conditions: [],
-        action: "mark_as_trusted",
-      });
+      // Create agent-tool relationship with trusted treatment
+      const trustedAgentTool = await AgentToolModel.create(
+        agentId,
+        trustedToolId,
+        {
+          allowUsageWhenUntrustedDataIsPresent: false,
+          toolResultTreatment: "trusted",
+        },
+      );
 
       // Create a block policy
       await TrustedDataPolicyModel.create({
-        toolId: trustedToolId,
-        conditions: [{ key: "dangerous", operator: "equal", value: "true" }],
+        agentToolId: trustedAgentTool.id,
+        attributePath: "dangerous",
+        operator: "equal",
+        value: "true",
         action: "block_always",
         description: "Block dangerous data",
       });
@@ -421,7 +410,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       expect(result.contextIsTrusted).toBe(false);
@@ -457,7 +445,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
 
       // Both should be untrusted (no policies match)
@@ -501,7 +488,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "openai",
-        false,
       );
       const updated = applyUpdates(openAiMessages, result.toolResultUpdates);
 
@@ -547,7 +533,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         agentId,
         "test-api-key",
         "anthropic",
-        false,
       );
       const updated = applyUpdates(anthropicMessages, result.toolResultUpdates);
 

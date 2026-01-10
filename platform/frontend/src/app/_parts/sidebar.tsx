@@ -8,7 +8,6 @@ import {
   Cable,
   DollarSign,
   Github,
-  Layers,
   LogIn,
   type LucideIcon,
   MessageCircle,
@@ -24,7 +23,6 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { PermissivePolicyWarning } from "@/components/permissive-policy-warning";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,14 +68,9 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
         pathname === "/chat" && !searchParams.get("conversation"),
     },
     {
-      title: "Agents",
-      url: "/agents",
-      icon: Bot,
-    },
-    {
       title: "Profiles",
       url: "/profiles",
-      icon: Layers,
+      icon: Bot,
     },
     {
       title: "Logs",
@@ -261,7 +254,6 @@ const MainSideBarSection = ({
 const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
   <SidebarFooter>
     <DefaultCredentialsWarning />
-    <PermissivePolicyWarning />
     <SignedIn>
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>

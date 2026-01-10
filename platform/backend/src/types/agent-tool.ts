@@ -8,7 +8,18 @@ import { schema } from "@/database";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
-export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
+const ToolResultTreatmentSchema = z.enum([
+  "trusted",
+  "sanitize_with_dual_llm",
+  "untrusted",
+]);
+
+export const SelectAgentToolSchema = createSelectSchema(
+  schema.agentToolsTable,
+  {
+    toolResultTreatment: ToolResultTreatmentSchema,
+  },
+)
   .omit({
     agentId: true,
     toolId: true,
@@ -32,8 +43,18 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
     }),
   });
 
-export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
-export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
+export const InsertAgentToolSchema = createInsertSchema(
+  schema.agentToolsTable,
+  {
+    toolResultTreatment: ToolResultTreatmentSchema,
+  },
+);
+export const UpdateAgentToolSchema = createUpdateSchema(
+  schema.agentToolsTable,
+  {
+    toolResultTreatment: ToolResultTreatmentSchema,
+  },
+);
 
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
@@ -53,6 +74,7 @@ export const AgentToolSortBySchema = z.enum([
   "agent",
   "origin",
   "createdAt",
+  "allowUsageWhenUntrustedDataIsPresent",
 ]);
 export const AgentToolSortDirectionSchema = z.enum(["asc", "desc"]);
 
@@ -60,8 +82,31 @@ export type AgentTool = z.infer<typeof SelectAgentToolSchema>;
 export type InsertAgentTool = z.infer<typeof InsertAgentToolSchema>;
 export type UpdateAgentTool = z.infer<typeof UpdateAgentToolSchema>;
 
+export type ToolResultTreatment = z.infer<typeof ToolResultTreatmentSchema>;
+
 export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
 export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
 export type AgentToolSortDirection = z.infer<
   typeof AgentToolSortDirectionSchema
+>;
+
+export const BulkUpdateAgentToolsRequestSchema = z.object({
+  ids: z.array(UuidIdSchema).min(1, "At least one ID is required"),
+  field: z.enum([
+    "allowUsageWhenUntrustedDataIsPresent",
+    "toolResultTreatment",
+  ]),
+  value: z.union([z.boolean(), ToolResultTreatmentSchema]),
+  clearAutoConfigured: z.boolean().optional(),
+});
+
+export const BulkUpdateAgentToolsResponseSchema = z.object({
+  updatedCount: z.number(),
+});
+
+export type BulkUpdateAgentToolsRequest = z.infer<
+  typeof BulkUpdateAgentToolsRequestSchema
+>;
+export type BulkUpdateAgentToolsResponse = z.infer<
+  typeof BulkUpdateAgentToolsResponseSchema
 >;

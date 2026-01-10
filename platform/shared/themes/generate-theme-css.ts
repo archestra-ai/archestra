@@ -32,20 +32,16 @@ interface ThemeItem {
 
 /**
  * Generate CSS variables for a theme
- * Includes OKLCH color values and radius variable
+ * Only OKLCH color values are active - all other variables are commented out
  */
 function generateCSSVars(vars: Record<string, string>): string {
   return Object.entries(vars)
     .map(([key, value]) => {
-      // Keep variables with oklch values (colors)
+      // Only keep variables with oklch values (colors)
       if (value.includes("oklch")) {
         return `  --${key}: ${value};`;
       }
-      // Keep radius variable for consistent border-radius
-      if (key === "radius") {
-        return `  --${key}: ${value};`;
-      }
-      // ignore everything else (fonts, shadows, etc.)
+      // ignore everything else (fonts, radius, shadows, etc.)
       return undefined;
     })
     .filter(Boolean)
@@ -54,16 +50,15 @@ function generateCSSVars(vars: Record<string, string>): string {
 
 /**
  * Generate CSS class for a theme
- * Uses html.theme-* selector for higher specificity to override :root defaults
  */
 function generateThemeCSS(theme: ThemeItem): string {
   const className = `theme-${theme.name}`;
 
-  // Generate light mode CSS - use html.class for higher specificity than :root
-  const lightCSS = `html.${className} {\n${generateCSSVars(theme.cssVars.light)}\n}`;
+  // Generate light mode CSS
+  const lightCSS = `.${className} {\n${generateCSSVars(theme.cssVars.light)}\n}`;
 
   // Generate dark mode CSS
-  const darkCSS = `html.dark.${className} {\n${generateCSSVars(theme.cssVars.dark)}\n}`;
+  const darkCSS = `.dark.${className} {\n${generateCSSVars(theme.cssVars.dark)}\n}`;
 
   return `/* ${theme.title} */\n${lightCSS}\n\n${darkCSS}`;
 }

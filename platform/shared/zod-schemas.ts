@@ -86,7 +86,6 @@ export const OrganizationCustomFontSchema = z.enum([
   "open-sans",
   "roboto",
   "source-sans-pro",
-  "jetbrains-mono",
 ]);
 
 export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;

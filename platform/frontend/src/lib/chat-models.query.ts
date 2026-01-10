@@ -1,6 +1,5 @@
 import { archestraApiSdk, type SupportedProvider } from "@shared";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 
 const { getChatModels } = archestraApiSdk;
 
@@ -41,19 +40,16 @@ export function useChatModels() {
 export function useModelsByProvider() {
   const query = useChatModels();
 
-  // Memoize to prevent creating new object reference on every render
-  const modelsByProvider = useMemo(() => {
-    return query.data.reduce(
-      (acc, model) => {
-        if (!acc[model.provider]) {
-          acc[model.provider] = [];
-        }
-        acc[model.provider].push(model);
-        return acc;
-      },
-      {} as Record<SupportedProvider, ChatModel[]>,
-    );
-  }, [query.data]);
+  const modelsByProvider = query.data.reduce(
+    (acc, model) => {
+      if (!acc[model.provider]) {
+        acc[model.provider] = [];
+      }
+      acc[model.provider].push(model);
+      return acc;
+    },
+    {} as Record<SupportedProvider, ChatModel[]>,
+  );
 
   return {
     ...query,

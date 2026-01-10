@@ -34,7 +34,7 @@ export type OpenAiChatCompletionRequestInput = {
              */
             image_url: {
                 url: string;
-                detail?: 'auto' | 'low' | 'high';
+                detail: 'auto' | 'low' | 'high';
             };
         } | {
             type: 'input_audio';
@@ -108,15 +108,6 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
         }>;
         tool_call_id: string;
     } | {
@@ -1255,14 +1246,6 @@ export type AnthropicMessagesRequestInput = {
             cache_control?: unknown;
             citations?: Array<unknown> | unknown;
         } | {
-            type: 'image';
-            source: {
-                type: 'base64';
-                media_type: string;
-                data: string;
-            };
-            cache_control?: unknown;
-        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1277,14 +1260,6 @@ export type AnthropicMessagesRequestInput = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | unknown;
-            } | {
-                type: 'image';
-                source: {
-                    type: 'base64';
-                    media_type: string;
-                    data: string;
-                };
-                cache_control?: unknown;
             }>;
             is_error?: boolean;
         }>;
@@ -1389,63 +1364,9 @@ export type AnthropicMessagesResponseInput = {
 };
 
 export type WebSocketMessageInput = {
-    type: string;
+    type: 'hello-world';
     payload: {
         [key: string]: unknown;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        tabIndex?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        url: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        element?: string;
-        x?: number;
-        y?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        text: string;
-        element?: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        key: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        zoomPercent: number;
     };
 };
 
@@ -1479,7 +1400,7 @@ export type OpenAiChatCompletionRequest = {
              */
             image_url: {
                 url: string;
-                detail?: 'auto' | 'low' | 'high';
+                detail: 'auto' | 'low' | 'high';
             };
         } | {
             type: 'input_audio';
@@ -1553,15 +1474,6 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
-        } | {
-            type: 'image_url';
-            /**
-             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
-             */
-            image_url: {
-                url: string;
-                detail?: 'auto' | 'low' | 'high';
-            };
         }>;
         tool_call_id: string;
     } | {
@@ -2700,14 +2612,6 @@ export type AnthropicMessagesRequest = {
             cache_control?: unknown;
             citations?: Array<unknown> | unknown;
         } | {
-            type: 'image';
-            source: {
-                type: 'base64';
-                media_type: string;
-                data: string;
-            };
-            cache_control?: unknown;
-        } | {
             id: string;
             input: unknown;
             name: string;
@@ -2722,14 +2626,6 @@ export type AnthropicMessagesRequest = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | unknown;
-            } | {
-                type: 'image';
-                source: {
-                    type: 'base64';
-                    media_type: string;
-                    data: string;
-                };
-                cache_control?: unknown;
             }>;
             is_error?: boolean;
         }>;
@@ -2834,63 +2730,9 @@ export type AnthropicMessagesResponse = {
 };
 
 export type WebSocketMessage = {
-    type: string;
+    type: 'hello-world';
     payload: {
         [key: string]: never;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        tabIndex?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        url: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        element?: string;
-        x?: number;
-        y?: number;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        text: string;
-        element?: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        key: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-    };
-} | {
-    type: string;
-    payload: {
-        conversationId: string;
-        zoomPercent: number;
     };
 };
 
@@ -4015,9 +3857,8 @@ export type GetAllAgentToolsData = {
          * For test isolation
          */
         excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
         sortDirection?: 'asc' | 'desc';
-        skipPagination?: boolean;
         limit?: number;
         offset?: number;
     };
@@ -4090,6 +3931,8 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
@@ -4404,6 +4247,88 @@ export type BulkAssignToolsResponses = {
 
 export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
 
+export type BulkUpdateAgentToolsData = {
+    body: {
+        ids: Array<string>;
+        field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
+        value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        clearAutoConfigured?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-tools/bulk-update';
+};
+
+export type BulkUpdateAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
+
+export type BulkUpdateAgentToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updatedCount: number;
+    };
+};
+
+export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
+
 export type AutoConfigureAgentToolPoliciesData = {
     body: {
         agentToolIds: Array<string>;
@@ -4482,6 +4407,7 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             agentToolId: string;
             success: boolean;
             config?: {
+                allowUsageWhenUntrustedDataIsPresent: boolean;
                 toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
                 reasoning: string;
             };
@@ -4497,9 +4423,7 @@ export type GetAgentToolsData = {
     path: {
         agentId: string;
     };
-    query?: {
-        excludeLlmProxyOrigin?: boolean;
-    };
+    query?: never;
     url: '/api/agents/{agentId}/tools';
 };
 
@@ -4598,6 +4522,8 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body?: {
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
@@ -4678,6 +4604,8 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
@@ -5093,13 +5021,11 @@ export type GetToolInvocationPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        toolId: string;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5110,13 +5036,11 @@ export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesRespons
 
 export type CreateToolInvocationPolicyData = {
     body: {
-        toolId: string;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
         reason?: string | null;
     };
     path?: never;
@@ -5189,13 +5113,11 @@ export type CreateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        toolId: string;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5357,13 +5279,11 @@ export type GetToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        toolId: string;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5374,13 +5294,11 @@ export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[k
 
 export type UpdateToolInvocationPolicyData = {
     body?: {
-        toolId?: string;
-        conditions?: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        agentToolId?: string;
+        argumentName?: string;
+        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value?: string;
+        action?: 'allow_when_context_is_untrusted' | 'block_always';
         reason?: string | null;
     };
     path: {
@@ -5455,13 +5373,11 @@ export type UpdateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        toolId: string;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5542,14 +5458,12 @@ export type GetTrustedDataPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        toolId: string;
-        description: string | null;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -5559,14 +5473,12 @@ export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[key
 
 export type CreateTrustedDataPolicyData = {
     body: {
-        toolId: string;
-        description?: string | null;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;
@@ -5638,14 +5550,12 @@ export type CreateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        toolId: string;
-        description: string | null;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -5806,14 +5716,12 @@ export type GetTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        toolId: string;
-        description: string | null;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -5823,14 +5731,12 @@ export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof G
 
 export type UpdateTrustedDataPolicyData = {
     body?: {
-        toolId?: string;
-        description?: string | null;
-        conditions?: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        agentToolId?: string;
+        description?: string;
+        attributePath?: string;
+        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value?: string;
+        action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path: {
         id: string;
@@ -5904,182 +5810,18 @@ export type UpdateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        toolId: string;
-        description: string | null;
-        conditions: Array<{
-            key: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-        }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
 };
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
-
-export type BulkUpsertDefaultCallPolicyData = {
-    body: {
-        toolIds: Array<string>;
-        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/tool-invocation/bulk-default';
-};
-
-export type BulkUpsertDefaultCallPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type BulkUpsertDefaultCallPolicyError = BulkUpsertDefaultCallPolicyErrors[keyof BulkUpsertDefaultCallPolicyErrors];
-
-export type BulkUpsertDefaultCallPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        updated: number;
-        created: number;
-    };
-};
-
-export type BulkUpsertDefaultCallPolicyResponse = BulkUpsertDefaultCallPolicyResponses[keyof BulkUpsertDefaultCallPolicyResponses];
-
-export type BulkUpsertDefaultResultPolicyData = {
-    body: {
-        toolIds: Array<string>;
-        action: 'mark_as_trusted' | 'mark_as_untrusted' | 'block_always' | 'sanitize_with_dual_llm';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/trusted-data-policies/bulk-default';
-};
-
-export type BulkUpsertDefaultResultPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type BulkUpsertDefaultResultPolicyError = BulkUpsertDefaultResultPolicyErrors[keyof BulkUpsertDefaultResultPolicyErrors];
-
-export type BulkUpsertDefaultResultPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        updated: number;
-        created: number;
-    };
-};
-
-export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
 
 export type GetChatApiKeysData = {
     body?: never;
@@ -6857,7 +6599,6 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -6881,7 +6622,6 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'openai' | 'gemini';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -6961,7 +6701,6 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -7139,7 +6878,6 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -7161,7 +6899,6 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
-        selectedProvider?: 'anthropic' | 'openai' | 'gemini';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -7245,7 +6982,6 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -7432,7 +7168,6 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -7535,7 +7270,6 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -8497,8 +8231,6 @@ export type GetFeaturesResponses = {
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
         geminiVertexAiEnabled: boolean;
-        globalToolPolicy: 'permissive' | 'restrictive';
-        browserStreamingEnabled: boolean;
     };
 };
 
@@ -13975,12 +13707,11 @@ export type GetOrganizationResponses = {
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
-        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper' | 'boxy-minimalistic';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
-        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 
@@ -13988,11 +13719,10 @@ export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganiza
 
 export type UpdateOrganizationData = {
     body?: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper' | 'boxy-minimalistic';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
         compressionScope?: 'organization' | 'team';
-        globalToolPolicy?: 'permissive' | 'restrictive';
         logo?: string | null;
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
@@ -14075,12 +13805,11 @@ export type UpdateOrganizationResponses = {
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
-        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper' | 'boxy-minimalistic';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
-        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 
@@ -14164,85 +13893,6 @@ export type GetOnboardingStatusResponses = {
 
 export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
 
-export type GetPublicAppearanceData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/appearance';
-};
-
-export type GetPublicAppearanceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetPublicAppearanceError = GetPublicAppearanceErrors[keyof GetPublicAppearanceErrors];
-
-export type GetPublicAppearanceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper' | 'boxy-minimalistic';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        logo: string | null;
-    };
-};
-
-export type GetPublicAppearanceResponse = GetPublicAppearanceResponses[keyof GetPublicAppearanceResponses];
-
 export type GetPolicyConfigSubagentPromptData = {
     body?: never;
     path?: never;
@@ -14319,85 +13969,6 @@ export type GetPolicyConfigSubagentPromptResponses = {
 };
 
 export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
-
-export type GetAllPromptAgentConnectionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/prompt-agents';
-};
-
-export type GetAllPromptAgentConnectionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAllPromptAgentConnectionsError = GetAllPromptAgentConnectionsErrors[keyof GetAllPromptAgentConnectionsErrors];
-
-export type GetAllPromptAgentConnectionsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        promptId: string;
-        agentPromptId: string;
-    }>;
-};
-
-export type GetAllPromptAgentConnectionsResponse = GetAllPromptAgentConnectionsResponses[keyof GetAllPromptAgentConnectionsResponses];
 
 export type GetPromptAgentsData = {
     body?: never;
@@ -14725,9 +14296,8 @@ export type GetPromptsResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -14742,6 +14312,8 @@ export type CreatePromptData = {
         userPrompt?: string | null;
         systemPrompt?: string | null;
         version?: number;
+        parentPromptId?: string | null;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -14819,9 +14391,8 @@ export type CreatePromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -14988,9 +14559,8 @@ export type GetPromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -15083,9 +14653,8 @@ export type UpdatePromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -15165,28 +14734,19 @@ export type GetPromptVersionsResponses = {
     /**
      * Default Response
      */
-    200: {
-        current: {
-            id: string;
-            organizationId: string;
-            name: string;
-            agentId: string;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            version: number;
-            history: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown>;
-            createdAt: string;
-            updatedAt: string;
-        };
-        history: Array<{
-            version: number;
-            userPrompt: string | null;
-            systemPrompt: string | null;
-            createdAt: string;
-        }>;
-    };
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
@@ -15288,7 +14848,6 @@ export type GetPromptToolsResponses = {
         description: string | null;
         createdAt: string;
         updatedAt: string;
-        agentPromptId: string;
     }>;
 };
 
@@ -15296,7 +14855,7 @@ export type GetPromptToolsResponse = GetPromptToolsResponses[keyof GetPromptTool
 
 export type RollbackPromptData = {
     body: {
-        version: number;
+        versionId: string;
     };
     path: {
         id: string;
@@ -15376,9 +14935,8 @@ export type RollbackPromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        history: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -17903,144 +17461,6 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
-
-export type GetToolsWithAssignmentsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        search?: string;
-        /**
-         * Can be 'llm-proxy' or a catalogId
-         */
-        origin?: string;
-        /**
-         * Hide built-in Archestra tools
-         */
-        excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
-        sortDirection?: 'asc' | 'desc';
-        limit?: number;
-        offset?: number;
-    };
-    url: '/api/tools/with-assignments';
-};
-
-export type GetToolsWithAssignmentsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetToolsWithAssignmentsError = GetToolsWithAssignmentsErrors[keyof GetToolsWithAssignmentsErrors];
-
-export type GetToolsWithAssignmentsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        data: Array<{
-            id: string;
-            name: string;
-            description: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            catalogId: string | null;
-            mcpServerId: string | null;
-            mcpServerName: string | null;
-            mcpServerCatalogId: string | null;
-            createdAt: string;
-            updatedAt: string;
-            assignmentCount: number;
-            assignments: Array<{
-                agentToolId: string;
-                agent: {
-                    id: string;
-                    name: string;
-                };
-                credentialSourceMcpServerId: string | null;
-                credentialOwnerEmail: string | null;
-                executionSourceMcpServerId: string | null;
-                executionOwnerEmail: string | null;
-                useDynamicTeamCredential: boolean;
-                responseModifierTemplate: string | null;
-            }>;
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
-        };
-    };
-};
-
-export type GetToolsWithAssignmentsResponse = GetToolsWithAssignmentsResponses[keyof GetToolsWithAssignmentsResponses];
 
 export type GetUserTokenData = {
     body?: never;

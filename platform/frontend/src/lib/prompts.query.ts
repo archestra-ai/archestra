@@ -36,8 +36,7 @@ export function usePrompt(id: string) {
 export function usePromptVersions(id: string) {
   return useQuery({
     queryKey: ["prompts", id, "versions"],
-    queryFn: async () =>
-      (await getPromptVersions({ path: { id } })).data ?? null,
+    queryFn: async () => (await getPromptVersions({ path: { id } })).data ?? [],
     enabled: !!id,
   });
 }
@@ -91,11 +90,18 @@ export function useUpdatePrompt() {
 export function useRollbackPrompt() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+    mutationFn: async ({
+      id,
+      versionId,
+    }: {
+      id: string;
+      versionId: string;
+    }) => {
+      // Manual API call until SDK is regenerated after server restart
       const response = await fetch(`/api/prompts/${id}/rollback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ version }),
+        body: JSON.stringify({ versionId }),
       });
       if (!response.ok) throw new Error("Rollback failed");
       return response.json();

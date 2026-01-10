@@ -78,56 +78,6 @@ export default class ReadonlyVaultSecretManager implements ISecretManager {
   }
 
   /**
-   * Check if an error is a 4xx HTTP error from Vault
-   */
-  private isVault4xxError(error: unknown): boolean {
-    const vaultError = error as { response?: { statusCode?: number } };
-    const statusCode = vaultError.response?.statusCode;
-    return statusCode !== undefined && statusCode >= 400 && statusCode < 500;
-  }
-
-  /**
-   * Execute a Vault operation with automatic token refresh for K8s auth.
-   * If a 4xx error occurs and K8s auth is used, re-authenticate and retry once.
-   */
-  private async executeWithK8sTokenRefresh<T>(
-    operation: () => Promise<T>,
-    operationName: string,
-  ): Promise<T> {
-    try {
-      return await operation();
-    } catch (error) {
-      // Only retry for K8s auth method and 4xx errors
-      if (
-        this.config.authMethod !== "kubernetes" ||
-        !this.isVault4xxError(error)
-      ) {
-        throw error;
-      }
-
-      logger.info(
-        { operationName },
-        "BYOSVaultSecretManager: received 4xx error with K8s auth, re-authenticating",
-      );
-
-      // Reset initialization state and re-authenticate
-      this.initialized = false;
-      try {
-        await this.ensureInitialized();
-      } catch (authError) {
-        logger.error(
-          { authError, operationName },
-          "BYOSVaultSecretManager: re-authentication failed after 4xx error",
-        );
-        throw authError;
-      }
-
-      // Retry the operation once
-      return await operation();
-    }
-  }
-
-  /**
    * Authenticate with Vault using Kubernetes service account token
    */
   private async loginWithKubernetes(): Promise<void> {
@@ -525,10 +475,7 @@ export default class ReadonlyVaultSecretManager implements ISecretManager {
     const listPath = this.getListPath(folderPath);
 
     try {
-      const result = await this.executeWithK8sTokenRefresh(
-        () => this.client.list(listPath),
-        "listSecretsInFolder",
-      );
+      const result = await this.client.list(listPath);
       const keys = (result?.data?.keys as string[] | undefined) ?? [];
 
       // Filter out folder entries (they end with /)
@@ -579,10 +526,7 @@ export default class ReadonlyVaultSecretManager implements ISecretManager {
     }
 
     try {
-      const vaultResponse = await this.executeWithK8sTokenRefresh(
-        () => this.client.read(vaultPath),
-        "getSecretFromPath",
-      );
+      const vaultResponse = await this.client.read(vaultPath);
       const secretData = this.extractSecretData(vaultResponse);
 
       logger.info(
@@ -622,10 +566,7 @@ export default class ReadonlyVaultSecretManager implements ISecretManager {
     const listPath = this.getListPath(folderPath);
 
     try {
-      const result = await this.executeWithK8sTokenRefresh(
-        () => this.client.list(listPath),
-        "checkFolderConnectivity",
-      );
+      const result = await this.client.list(listPath);
       const keys = (result?.data?.keys as string[] | undefined) ?? [];
       const secretCount = keys.filter((key) => !key.endsWith("/")).length;
 

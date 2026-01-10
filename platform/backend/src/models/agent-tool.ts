@@ -34,6 +34,8 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
+        | "allowUsageWhenUntrustedDataIsPresent"
+        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -153,6 +155,8 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
+          | "allowUsageWhenUntrustedDataIsPresent"
+          | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
@@ -217,6 +221,8 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
+        | "allowUsageWhenUntrustedDataIsPresent"
+        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -229,6 +235,8 @@ class AgentToolModel {
     const assignments: Array<{
       agentId: string;
       toolId: string;
+      allowUsageWhenUntrustedDataIsPresent?: boolean;
+      toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
       responseModifierTemplate?: string | null;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
@@ -303,6 +311,8 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
+          | "allowUsageWhenUntrustedDataIsPresent"
+          | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
@@ -368,6 +378,8 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
+        | "allowUsageWhenUntrustedDataIsPresent"
+        | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
@@ -389,29 +401,107 @@ class AgentToolModel {
     return agentTool;
   }
 
+  static async bulkUpdateSameValue(
+    ids: string[],
+    field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
+    value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+    clearAutoConfigured = false,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const updateData: Record<string, unknown> = {
+      [field]: value,
+      updatedAt: new Date(),
+    };
+
+    // Clear auto-configured timestamp and reasoning if requested (manual policy change)
+    if (clearAutoConfigured) {
+      updateData.policiesAutoConfiguredAt = null;
+      updateData.policiesAutoConfiguredReasoning = null;
+    }
+
+    const result = await db
+      .update(schema.agentToolsTable)
+      .set(updateData)
+      .where(inArray(schema.agentToolsTable.id, ids));
+
+    return result.rowCount ?? 0;
+  }
+
+  static async findAll(
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<AgentTool[]> {
+    // Get all agent-tool relationships with joined agent and tool details
+    let query = db
+      .select({
+        ...getTableColumns(schema.agentToolsTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        tool: {
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          description: schema.toolsTable.description,
+          parameters: schema.toolsTable.parameters,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
+          mcpServerId: schema.toolsTable.mcpServerId,
+          mcpServerName: schema.mcpServersTable.name,
+          mcpServerCatalogId: schema.mcpServersTable.catalogId,
+        },
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .$dynamic();
+
+    // Apply access control filtering for users that are not agent admins if needed
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    return query;
+  }
+
   /**
-   * Find all agent-tool relationships with pagination, sorting, and filtering support.
-   * When skipPagination is true, returns all matching records without applying limit/offset.
+   * Find all agent-tool relationships with pagination, sorting, and filtering support
    */
-  static async findAll(params: {
-    pagination?: PaginationQuery;
+  static async findAllPaginated(
+    pagination: PaginationQuery,
     sorting?: {
       sortBy?: AgentToolSortBy;
       sortDirection?: AgentToolSortDirection;
-    };
-    filters?: AgentToolFilters;
-    userId?: string;
-    isAgentAdmin?: boolean;
-    skipPagination?: boolean;
-  }): Promise<PaginatedResult<AgentTool>> {
-    const {
-      pagination = { limit: 20, offset: 0 },
-      sorting,
-      filters,
-      userId,
-      isAgentAdmin,
-      skipPagination = false,
-    } = params;
+    },
+    filters?: AgentToolFilters,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<PaginatedResult<AgentTool>> {
     // Build WHERE conditions
     const whereConditions: SQL[] = [];
 
@@ -507,57 +597,55 @@ class AgentToolModel {
           sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
         );
         break;
+      case "allowUsageWhenUntrustedDataIsPresent":
+        orderByClause = direction(
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        );
+        break;
       default:
         orderByClause = direction(schema.agentToolsTable.createdAt);
         break;
     }
 
-    // Build the base data query
-    const baseDataQuery = db
-      .select({
-        ...getTableColumns(schema.agentToolsTable),
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
-        tool: {
-          id: schema.toolsTable.id,
-          name: schema.toolsTable.name,
-          description: schema.toolsTable.description,
-          parameters: schema.toolsTable.parameters,
-          createdAt: schema.toolsTable.createdAt,
-          updatedAt: schema.toolsTable.updatedAt,
-          catalogId: schema.toolsTable.catalogId,
-          mcpServerId: schema.toolsTable.mcpServerId,
-          mcpServerName: schema.mcpServersTable.name,
-          mcpServerCatalogId: schema.mcpServersTable.catalogId,
-        },
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-      )
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .where(whereClause)
-      .orderBy(orderByClause)
-      .$dynamic();
-
-    // Apply pagination only if not skipped
-    const dataQuery = skipPagination
-      ? baseDataQuery
-      : baseDataQuery.limit(pagination.limit).offset(pagination.offset);
-
     // Run both queries in parallel
     const [data, [{ total }]] = await Promise.all([
-      dataQuery,
+      db
+        .select({
+          ...getTableColumns(schema.agentToolsTable),
+          agent: {
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+          },
+          tool: {
+            id: schema.toolsTable.id,
+            name: schema.toolsTable.name,
+            description: schema.toolsTable.description,
+            parameters: schema.toolsTable.parameters,
+            createdAt: schema.toolsTable.createdAt,
+            updatedAt: schema.toolsTable.updatedAt,
+            catalogId: schema.toolsTable.catalogId,
+            mcpServerId: schema.toolsTable.mcpServerId,
+            mcpServerName: schema.mcpServersTable.name,
+            mcpServerCatalogId: schema.mcpServersTable.catalogId,
+          },
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        )
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .leftJoin(
+          schema.mcpServersTable,
+          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        )
+        .where(whereClause)
+        .orderBy(orderByClause)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
       db
         .select({ total: count() })
         .from(schema.agentToolsTable)
@@ -576,16 +664,93 @@ class AgentToolModel {
         .where(whereClause),
     ]);
 
-    // When skipping pagination, return all data with correct metadata
-    // Use Math.max(1, data.length) to avoid division by zero when data is empty
-    if (skipPagination) {
-      return createPaginatedResult(data, data.length, {
-        limit: Math.max(1, data.length),
-        offset: 0,
+    return createPaginatedResult(data, Number(total), pagination);
+  }
+
+  static async getSecurityConfig(
+    agentId: string,
+    toolName: string,
+  ): Promise<{
+    allowUsageWhenUntrustedDataIsPresent: boolean;
+    toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+  } | null> {
+    const [agentTool] = await db
+      .select({
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.toolsTable.name, toolName),
+        ),
+      );
+
+    return agentTool || null;
+  }
+
+  /**
+   * Batch fetch security configs for multiple tools at once.
+   * Returns a Map of toolName -> security config.
+   */
+  static async getSecurityConfigBatch(
+    agentId: string,
+    toolNames: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >
+  > {
+    if (toolNames.length === 0) {
+      return new Map();
+    }
+
+    const agentTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+
+    const result = new Map<
+      string,
+      {
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      }
+    >();
+
+    for (const tool of agentTools) {
+      result.set(tool.toolName, {
+        allowUsageWhenUntrustedDataIsPresent:
+          tool.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: tool.toolResultTreatment,
       });
     }
 
-    return createPaginatedResult(data, Number(total), pagination);
+    return result;
   }
 
   /**
@@ -599,21 +764,6 @@ class AgentToolModel {
       .delete(schema.agentToolsTable)
       .where(
         eq(schema.agentToolsTable.executionSourceMcpServerId, mcpServerId),
-      );
-    return result.rowCount ?? 0;
-  }
-
-  /**
-   * Delete all agent-tool assignments that use a specific MCP server as their credential source.
-   * Used when a remote MCP server is deleted/uninstalled.
-   */
-  static async deleteByCredentialSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    const result = await db
-      .delete(schema.agentToolsTable)
-      .where(
-        eq(schema.agentToolsTable.credentialSourceMcpServerId, mcpServerId),
       );
     return result.rowCount ?? 0;
   }

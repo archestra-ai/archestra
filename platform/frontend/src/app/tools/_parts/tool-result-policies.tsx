@@ -17,18 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
   useOperators,
-  useResultPolicyMutation,
   useToolResultPolicies,
   useToolResultPoliciesCreateMutation,
   useToolResultPoliciesDeleteMutation,
   useToolResultPoliciesUpdateMutation,
 } from "@/lib/policy.query";
-import {
-  getResultTreatmentFromPolicies,
-  type ToolResultTreatment,
-} from "@/lib/policy.utils";
 import { PolicyCard } from "./policy-card";
 
 function AttributePathExamples() {
@@ -149,32 +145,23 @@ function AttributePathExamples() {
   );
 }
 
-type ToolForPolicies = {
-  id: string;
-};
-
-export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
+export function ToolResultPolicies({
+  agentTool,
+}: {
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
+}) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
   const {
     data: { byProfileToolId },
-    data: resultPolicies,
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
-  const allPolicies = byProfileToolId[tool.id] || [];
-  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
-  const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
+  const policies = byProfileToolId[agentTool.id] || [];
   const toolResultPoliciesUpdateMutation =
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
     useToolResultPoliciesDeleteMutation();
-  const resultPolicyMutation = useResultPolicyMutation();
-
-  // Derive treatment from policies (default policy with empty conditions)
-  const toolResultTreatment = getResultTreatmentFromPolicies(
-    tool.id,
-    resultPolicies,
-  );
+  const agentToolPatchMutation = useProfileToolPatchMutation();
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
@@ -203,13 +190,13 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
             DEFAULT
           </div>
           <Select
-            value={toolResultTreatment}
-            disabled={resultPolicyMutation.isPending}
-            onValueChange={(value) => {
-              if (value === toolResultTreatment) return;
-              resultPolicyMutation.mutate({
-                toolId: tool.id,
-                treatment: value as ToolResultTreatment,
+            value={agentTool.toolResultTreatment}
+            onValueChange={(
+              value: "trusted" | "sanitize_with_dual_llm" | "untrusted",
+            ) => {
+              agentToolPatchMutation.mutate({
+                id: agentTool.id,
+                toolResultTreatment: value,
               });
             }}
           >
@@ -247,7 +234,9 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                 )}
                 <Select
                   defaultValue={policy.operator}
-                  onValueChange={(value: string) =>
+                  onValueChange={(
+                    value: archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["operator"],
+                  ) =>
                     toolResultPoliciesUpdateMutation.mutate({
                       ...policy,
                       operator: value,
@@ -329,10 +318,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
         variant="outline"
         className="w-full"
         onClick={() =>
-          toolResultPoliciesCreateMutation.mutate({
-            toolId: tool.id,
-            attributePath: "result",
-          })
+          toolResultPoliciesCreateMutation.mutate({ agentToolId: agentTool.id })
         }
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Tool Result Policy

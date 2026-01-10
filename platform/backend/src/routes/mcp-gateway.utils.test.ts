@@ -1,19 +1,6 @@
-import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
 import { TeamTokenModel, UserTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      enterpriseLicenseActivated: true,
-    },
-  };
-});
-
-const { validateMCPGatewayToken } = await import("./mcp-gateway.utils");
+import { validateMCPGatewayToken } from "./mcp-gateway.utils";
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {

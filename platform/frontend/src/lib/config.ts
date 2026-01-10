@@ -46,25 +46,14 @@ export const getDisplayProxyUrl = (): string => {
 };
 
 /**
- * Get the WebSocket base URL (without path)
- */
-const getWebSocketBaseUrl = (): string => {
-  const backendBaseUrl = getBackendBaseUrl();
-
-  // In development, use localhost
-  if (!backendBaseUrl || typeof window === "undefined") {
-    return "ws://localhost:9000";
-  }
-
-  // Convert http(s) to ws(s)
-  return backendBaseUrl.replace(/^http/, "ws");
-};
-
-/**
- * Get the WebSocket URL for general communication
+ * Get the WebSocket URL
  */
 export const getWebSocketUrl = (): string => {
-  return `${getWebSocketBaseUrl()}/ws`;
+  const backendBaseUrl = getBackendBaseUrl();
+
+  // Convert http(s) to ws(s)
+  const wsUrl = backendBaseUrl.replace(/^http/, "ws");
+  return `${wsUrl}/ws`;
 };
 
 /**

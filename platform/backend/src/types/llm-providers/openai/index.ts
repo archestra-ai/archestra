@@ -8,7 +8,6 @@ import type OpenAIProvider from "openai";
 import type { z } from "zod";
 import * as OpenAiAPI from "./api";
 import * as OpenAiMessages from "./messages";
-import type * as OpenAiModels from "./models";
 import * as OpenAiTools from "./tools";
 
 namespace OpenAi {
@@ -34,8 +33,6 @@ namespace OpenAi {
 
     export type ChatCompletionChunk =
       OpenAIProvider.Chat.Completions.ChatCompletionChunk;
-    export type Model = z.infer<typeof OpenAiModels.ModelSchema>;
-    export type OrlandoModel = z.infer<typeof OpenAiModels.OrlandoModelSchema>;
   }
 }
 

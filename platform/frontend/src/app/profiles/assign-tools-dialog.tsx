@@ -10,7 +10,7 @@ import {
   Server,
 } from "lucide-react";
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   DYNAMIC_CREDENTIAL_VALUE,
@@ -49,22 +49,16 @@ export function AssignToolsDialog({
   open,
   onOpenChange,
 }: AssignToolsDialogProps) {
-  // Fetch all tools and filter for MCP tools (using non-suspense queries for dialog/portal)
+  // Fetch all tools and filter for MCP tools
   const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
   const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
-  const { data: internalMcpCatalogItems, isLoading: isLoadingCatalog } =
-    useInternalMcpCatalog();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
   // Fetch currently assigned tools for this agent (use getAllProfileTools to get credentialSourceMcpServerId)
-  // Use skipPagination to ensure all assigned tools are returned regardless of the default pagination limit
-  // Use agentId filter to fetch only tools for this specific agent (more efficient than fetching all and filtering client-side)
-  const { data: allProfileTools } = useAllProfileTools({
-    skipPagination: true,
-    filters: { agentId: agent.id },
-  });
+  const { data: allProfileTools } = useAllProfileTools({});
   const agentToolRelations = useMemo(
-    () => allProfileTools?.data || [],
-    [allProfileTools],
+    () => allProfileTools?.data?.filter((at) => at.agent.id === agent.id) || [],
+    [allProfileTools, agent.id],
   );
 
   // Track selected tools with their credentials, execution source, and agent-tool IDs
@@ -167,7 +161,7 @@ export function AssignToolsDialog({
   const unassignTool = useUnassignTool();
   const patchProfileTool = useProfileToolPatchMutation();
 
-  const isLoading = isLoadingAllTools || isLoadingCatalog;
+  const isLoading = isLoadingAllTools;
   const isSaving =
     assignTool.isPending ||
     unassignTool.isPending ||
@@ -288,7 +282,6 @@ export function AssignToolsDialog({
     setSearchQuery("");
     setOriginFilter("all");
     setShowAssignedOnly(false);
-    setExpandedTools(new Set());
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -529,29 +522,23 @@ export function AssignToolsDialog({
                               <span className="text-xs text-muted-foreground">
                                 Credential to use:
                               </span>
-                              <Suspense
-                                fallback={
-                                  <Loader2 className="h-4 w-4 animate-spin" />
+                              <TokenSelect
+                                catalogId={catalogId}
+                                onValueChange={(credentialSourceId) =>
+                                  isLocalServer
+                                    ? handleExecutionSourceChange(
+                                        tool.id,
+                                        credentialSourceId ?? undefined,
+                                      )
+                                    : handleCredentialsSourceChange(
+                                        tool.id,
+                                        credentialSourceId ?? undefined,
+                                      )
                                 }
-                              >
-                                <TokenSelect
-                                  catalogId={catalogId}
-                                  onValueChange={(credentialSourceId) =>
-                                    isLocalServer
-                                      ? handleExecutionSourceChange(
-                                          tool.id,
-                                          credentialSourceId ?? undefined,
-                                        )
-                                      : handleCredentialsSourceChange(
-                                          tool.id,
-                                          credentialSourceId ?? undefined,
-                                        )
-                                  }
-                                  value={displayValue ?? undefined}
-                                  className="mb-4"
-                                  shouldSetDefaultValue
-                                />
-                              </Suspense>
+                                value={displayValue ?? undefined}
+                                className="mb-4"
+                                shouldSetDefaultValue
+                              />
                             </div>
                           );
                         })()}
@@ -600,7 +587,7 @@ export function AssignToolsDialog({
             disabled={
               isLoading ||
               isSaving ||
-              selectedTools.some(function isMissingCredentials(tool) {
+              selectedTools.some((tool) => {
                 // If using dynamic credential, it's valid
                 if (tool.useDynamicTeamCredential) return false;
 
@@ -608,12 +595,7 @@ export function AssignToolsDialog({
                 const mcpCatalogItem = internalMcpCatalogItems?.find(
                   (item) => item.id === mcpTool?.catalogId,
                 );
-                // Tools without a catalog item can't have credentials configured - skip validation
-                if (!mcpCatalogItem) {
-                  return false;
-                }
-
-                const isLocalServer = mcpCatalogItem.serverType === "local";
+                const isLocalServer = mcpCatalogItem?.serverType === "local";
                 return isLocalServer
                   ? !tool.executionSourceId
                   : !tool.credentialsSourceId;

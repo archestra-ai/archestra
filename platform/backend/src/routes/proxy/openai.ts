@@ -214,10 +214,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[OpenAIProxy] Limit check passed");
 
-      // Get global tool policy from organization (with fallback)
-      const globalToolPolicy =
-        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
-
       // Persist non-MCP tools declared by client for tracking
       logger.debug(
         { toolCount: tools?.length || 0 },
@@ -399,9 +395,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toonCostSavings = stats.toonCostSavings;
       }
 
-      const openAiSdkMessages =
-        filteredMessages as OpenAIProvider.Chat.Completions.ChatCompletionMessageParam[];
-
       fastify.log.info(
         {
           shouldApplyToonCompression,
@@ -443,7 +436,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
               model,
-              messages: openAiSdkMessages,
+              messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: true,
               stream_options: { include_usage: true },
@@ -588,7 +581,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
-              globalToolPolicy,
             );
 
           // If there are tool calls, evaluate policies and stream the result
@@ -858,7 +850,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
               model,
-              messages: openAiSdkMessages,
+              messages: filteredMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,
             });
@@ -896,7 +888,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgentId,
             contextIsTrusted,
             enabledToolNames,
-            globalToolPolicy,
           );
 
         if (toolInvocationRefusal) {

@@ -5,8 +5,7 @@ import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { ChatApiKeyModel, TeamModel } from "@/models";
-import { testProviderApiKey } from "@/routes/chat/routes.models";
-import { isVertexAiEnabled } from "@/routes/proxy/utils/gemini-client";
+import { testProviderApiKey } from "@/routes/chat-models";
 import {
   assertByosEnabled,
   isByosEnabled,
@@ -19,7 +18,6 @@ import {
   constructResponseSchema,
   SelectChatApiKeySchema,
   type SelectSecret,
-  type SupportedChatProvider,
   SupportedChatProviderSchema,
 } from "@/types";
 
@@ -120,9 +118,6 @@ const chatApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
-      // Prevent creating Gemini API keys when Vertex AI is enabled
-      validateProviderAllowed(body.provider);
-
       // Validate scope/teamId combination and authorization
       await validateScopeAndAuthorization({
         scope: body.scope,
@@ -590,19 +585,6 @@ function getChatApiKeySecretName({
     return `chatapikey-team-${teamId}`;
   }
   return `chatapikey-org_wide`;
-}
-
-/**
- * Validates that the provider is allowed based on current configuration.
- * Throws ApiError if Gemini provider is requested while Vertex AI is enabled.
- */
-export function validateProviderAllowed(provider: SupportedChatProvider): void {
-  if (provider === "gemini" && isVertexAiEnabled()) {
-    throw new ApiError(
-      400,
-      "Cannot create Gemini API key: Vertex AI is configured. Gemini uses Application Default Credentials instead of API keys.",
-    );
-  }
 }
 
 export default chatApiKeysRoutes;

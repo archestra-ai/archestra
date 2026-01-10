@@ -245,10 +245,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[AnthropicProxy] Limit check passed");
 
-      // Get global tool policy from organization (with fallback)
-      const globalToolPolicy =
-        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
-
       // Persist non-MCP tools declared by client for tracking
       if (tools) {
         logger.debug(
@@ -632,7 +628,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
-              globalToolPolicy,
             );
             fastify.log.info(
               { refused: !!toolInvocationRefusal },
@@ -976,7 +971,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
-              globalToolPolicy,
             );
 
           if (toolInvocationRefusal) {

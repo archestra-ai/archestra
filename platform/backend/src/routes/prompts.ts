@@ -8,7 +8,6 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertPromptSchema,
-  PromptVersionsResponseSchema,
   SelectPromptSchema,
   SelectToolSchema,
   UpdatePromptSchema,
@@ -133,34 +132,29 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetPromptVersions,
-        description: "Get all versions of a prompt (current + history)",
+        description: "Get all versions of a prompt",
         tags: ["Prompts"],
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(PromptVersionsResponseSchema),
+        response: constructResponseSchema(z.array(SelectPromptSchema)),
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
       const versions = await PromptModel.findVersions(id);
 
-      if (!versions) {
+      if (versions.length === 0) {
         throw new ApiError(404, "Prompt not found");
       }
 
-      // Verify prompt belongs to this organization
-      if (versions.current.organizationId !== organizationId) {
+      // Verify first version belongs to this organization
+      if (versions[0].organizationId !== organizationId) {
         throw new ApiError(404, "Prompt not found");
       }
 
       return reply.send(versions);
     },
   );
-
-  // Schema for prompt tools with agentPromptId mapping
-  const PromptToolWithAgentSchema = SelectToolSchema.extend({
-    agentPromptId: z.string().uuid(),
-  });
 
   fastify.get(
     "/api/prompts/:id/tools",
@@ -173,7 +167,7 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.array(PromptToolWithAgentSchema)),
+        response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
     async ({ params: { id }, organizationId, user, headers }, reply) => {
@@ -201,13 +195,9 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const userAccessibleAgentIds =
         await AgentTeamModel.getUserAccessibleAgentIds(user.id, isAgentAdmin);
 
-      // Return tools with agentPromptId for mapping
       const accessibleTools = allToolsWithDetails
         .filter((t) => userAccessibleAgentIds.includes(t.profileId))
-        .map((t) => ({
-          ...t.tool,
-          agentPromptId: t.agentPromptId,
-        }));
+        .map((t) => t.tool);
 
       return reply.send(accessibleTools);
     },
@@ -224,12 +214,12 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: z.object({
-          version: z.number().int().positive(),
+          versionId: UuidIdSchema,
         }),
         response: constructResponseSchema(SelectPromptSchema),
       },
     },
-    async ({ params: { id }, body: { version }, organizationId }, reply) => {
+    async ({ params: { id }, body: { versionId }, organizationId }, reply) => {
       // Verify the prompt belongs to this organization
       const existingPrompt = await PromptModel.findByIdAndOrganizationId(
         id,
@@ -240,7 +230,7 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Prompt not found");
       }
 
-      const rolledBack = await PromptModel.rollback(id, version);
+      const rolledBack = await PromptModel.rollback(id, versionId);
 
       if (!rolledBack) {
         throw new ApiError(400, "Invalid version or rollback failed");

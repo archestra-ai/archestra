@@ -1,7 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
 
 /**
@@ -148,7 +147,12 @@ class PromptAgentModel {
         schema.agentsTable,
         eq(schema.promptsTable.agentId, schema.agentsTable.id),
       )
-      .where(eq(schema.promptAgentsTable.promptId, promptId));
+      .where(
+        and(
+          eq(schema.promptAgentsTable.promptId, promptId),
+          eq(schema.promptsTable.isActive, true),
+        ),
+      );
 
     return results;
   }
@@ -298,61 +302,6 @@ class PromptAgentModel {
       assigned: toAssign,
       duplicates,
     };
-  }
-
-  /**
-   * Get all prompt-agent connections for an organization
-   * Used for canvas visualization of agent relationships
-   * Filters by user's team access unless they're an admin
-   */
-  static async findAllByOrganizationId(
-    organizationId: string,
-    userId: string,
-    isAgentAdmin: boolean,
-  ): Promise<Array<{ id: string; promptId: string; agentPromptId: string }>> {
-    logger.debug(
-      { organizationId, userId, isAgentAdmin },
-      "PromptAgentModel.findAllByOrganizationId: fetching all connections for organization",
-    );
-
-    const results = await db
-      .select({
-        id: schema.promptAgentsTable.id,
-        promptId: schema.promptAgentsTable.promptId,
-        agentPromptId: schema.promptAgentsTable.agentPromptId,
-        // Include agentId for filtering
-        agentId: schema.promptsTable.agentId,
-      })
-      .from(schema.promptAgentsTable)
-      .innerJoin(
-        schema.promptsTable,
-        eq(schema.promptAgentsTable.promptId, schema.promptsTable.id),
-      )
-      .where(eq(schema.promptsTable.organizationId, organizationId));
-
-    // Admins see all connections
-    if (isAgentAdmin) {
-      return results.map(({ id, promptId, agentPromptId }) => ({
-        id,
-        promptId,
-        agentPromptId,
-      }));
-    }
-
-    // For non-admins, batch-load accessible agent IDs and filter in memory
-    const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-      userId,
-      false,
-    );
-    const accessibleAgentIdSet = new Set(accessibleAgentIds);
-
-    return results
-      .filter((r) => r.agentId && accessibleAgentIdSet.has(r.agentId))
-      .map(({ id, promptId, agentPromptId }) => ({
-        id,
-        promptId,
-        agentPromptId,
-      }));
   }
 
   /**

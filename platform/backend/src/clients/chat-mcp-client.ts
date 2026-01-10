@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { isArchestraMcpServerTool, isBrowserMcpTool, TimeInMs } from "@shared";
-import { type JSONSchema7, jsonSchema, type Tool } from "ai";
+import { isArchestraMcpServerTool, TimeInMs } from "@shared";
+import { jsonSchema, type Tool } from "ai";
 import {
   type ArchestraContext,
   executeArchestraTool,
@@ -48,19 +48,15 @@ function getCacheKey(agentId: string, userId: string): string {
 /**
  * Generate the full cache key for tool cache
  * Includes promptId because agent tools depend on the prompt context
- * Includes conversationId because browser tools need correct tab selection
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
   promptId?: string,
-  conversationId?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
-  const parts = [baseKey];
-  if (promptId) parts.push(promptId);
-  if (conversationId) parts.push(conversationId);
-  return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
+  const fullKey = promptId ? `${baseKey}:${promptId}` : baseKey;
+  return `${CacheKey.ChatMcpTools}-${fullKey}`;
 }
 
 export const __test = {
@@ -75,7 +71,6 @@ export const __test = {
     // For tests, individual keys should be cleared explicitly
   },
   getCacheKey,
-  isBrowserMcpTool,
 };
 
 /**
@@ -401,29 +396,23 @@ export async function getChatMcpClient(
 /**
  * Validate and normalize JSON Schema for OpenAI
  */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalizeJsonSchema(schema: unknown): JSONSchema7 {
-  const fallbackSchema: JSONSchema7 = { type: "object", properties: {} };
-
+// biome-ignore lint/suspicious/noExplicitAny: JSON Schema structure is dynamic and varies by tool
+function normalizeJsonSchema(schema: any): any {
   // If schema is missing or invalid, return a minimal valid schema
-  if (!isRecord(schema)) {
-    return fallbackSchema;
-  }
-
-  const schemaType = schema.type;
-  if (typeof schemaType !== "string") {
-    return fallbackSchema;
-  }
-
-  if (schemaType === "None" || schemaType === "null") {
-    return fallbackSchema;
+  if (
+    !schema ||
+    !schema.type ||
+    schema.type === "None" ||
+    schema.type === "null"
+  ) {
+    return {
+      type: "object",
+      properties: {},
+    };
   }
 
   // Return the schema as-is if it's already valid JSON Schema
-  return schema as JSONSchema7;
+  return schema;
 }
 
 /**
@@ -436,7 +425,6 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
  * @param enabledToolIds - Optional array of tool IDs to filter by. Empty array = all tools enabled.
  * @param promptId - Optional prompt ID for agent tools lookup
  * @param organizationId - Optional organization ID for agent tools lookup
- * @param conversationId - Optional conversation ID for browser tab selection
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools({
@@ -458,12 +446,7 @@ export async function getChatMcpTools({
   promptId?: string;
   organizationId?: string;
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(
-    agentId,
-    userId,
-    promptId,
-    conversationId,
-  );
+  const toolCacheKey = getToolCacheKey(agentId, userId, promptId);
 
   // Check cache first using cacheManager
   const cachedTools =
@@ -546,56 +529,24 @@ export async function getChatMcpTools({
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,
           inputSchema: jsonSchema(normalizedSchema),
-          execute: async (args: unknown) => {
+          // biome-ignore lint/suspicious/noExplicitAny: Tool execute function requires flexible typing for MCP integration
+          execute: async (args: any) => {
             logger.info(
               { agentId, userId, toolName: mcpTool.name, arguments: args },
               "Executing MCP tool from chat (direct)",
             );
 
-            const toolArguments = isRecord(args) ? args : undefined;
-
             try {
-              // For browser tools, ensure the correct conversation tab is selected first
-              // Only if browser streaming feature is enabled
-              // Lazily loaded to avoid circular dependency (browser-stream.ts imports from chat-mcp-client.ts)
-              const { browserStreamFeature } = await import(
-                "@/services/browser-stream-feature"
-              );
-
-              if (
-                conversationId &&
-                isBrowserMcpTool(mcpTool.name) &&
-                browserStreamFeature.isEnabled()
-              ) {
-                logger.info(
-                  { agentId, userId, conversationId, toolName: mcpTool.name },
-                  "Selecting conversation browser tab before executing browser tool",
-                );
-
-                const tabResult = await browserStreamFeature.selectOrCreateTab(
-                  agentId,
-                  conversationId,
-                  { userId, userIsProfileAdmin },
-                );
-
-                if (!tabResult.success) {
-                  logger.warn(
-                    {
-                      agentId,
-                      conversationId,
-                      toolName: mcpTool.name,
-                      error: tabResult.error,
-                    },
-                    "Failed to select conversation tab for browser tool, continuing anyway",
-                  );
-                }
-              }
-
               // Check if this is an Archestra tool - handle directly without DB lookup
               if (isArchestraMcpServerTool(mcpTool.name)) {
+                logger.info(
+                  { agentId, userId, toolName: mcpTool.name },
+                  "Executing Archestra tool from chat",
+                );
+
                 const archestraResponse = await executeArchestraTool(
                   mcpTool.name,
-                  toolArguments,
+                  args,
                   {
                     profile: { id: agentId, name: agentName },
                     conversationId,
@@ -623,7 +574,7 @@ export async function getChatMcpTools({
                 }
 
                 // Convert MCP content to string for AI SDK
-                return (
+                const content = (
                   archestraResponse.content as Array<{
                     type: string;
                     text?: string;
@@ -635,6 +586,13 @@ export async function getChatMcpTools({
                       : JSON.stringify(item),
                   )
                   .join("\n");
+
+                logger.info(
+                  { agentId, userId, toolName: mcpTool.name },
+                  "Archestra tool execution completed",
+                );
+
+                return content;
               }
 
               // Execute non-Archestra tools via mcpClient
@@ -642,7 +600,7 @@ export async function getChatMcpTools({
               const toolCall = {
                 id: randomUUID(),
                 name: mcpTool.name,
-                arguments: toolArguments ?? {},
+                arguments: args || {},
               };
 
               const result = await mcpClient.executeToolCall(
@@ -659,12 +617,24 @@ export async function getChatMcpTools({
               // Check if MCP tool returned an error first
               // When isError is true, throw to signal AI SDK that tool execution failed
               // This allows AI SDK to create a tool-error part and continue the conversation
+              // Use result.error (not result.content which is null for errors)
               if (result.isError) {
+                logger.error(
+                  { agentId, userId, toolName: mcpTool.name, result },
+                  "MCP tool execution failed",
+                );
                 throw new Error(result.error || "Tool execution failed");
               }
 
+              logger.info(
+                { agentId, userId, toolName: mcpTool.name, result },
+                "MCP tool execution completed (direct)",
+              );
+
               // Convert MCP content to string for AI SDK
-              return (result.content as Array<{ type: string; text?: string }>)
+              const content = (
+                result.content as Array<{ type: string; text?: string }>
+              )
                 .map((item: { type: string; text?: string }) => {
                   if (item.type === "text" && item.text) {
                     return item.text;
@@ -672,6 +642,8 @@ export async function getChatMcpTools({
                   return JSON.stringify(item);
                 })
                 .join("\n");
+
+              return content;
             } catch (error) {
               logger.error(
                 {
@@ -768,7 +740,7 @@ export async function getChatMcpTools({
                   throw new Error(errorText);
                 }
 
-                return (
+                const content = (
                   response.content as Array<{ type: string; text?: string }>
                 )
                   .map((item) =>
@@ -777,16 +749,20 @@ export async function getChatMcpTools({
                       : JSON.stringify(item),
                   )
                   .join("\n");
+
+                logger.info(
+                  { agentId, userId, toolName: agentTool.name },
+                  "Agent tool execution completed",
+                );
+
+                return content;
               } catch (error) {
                 logger.error(
                   {
                     agentId,
                     userId,
                     toolName: agentTool.name,
-                    promptId,
                     err: error,
-                    errorMessage:
-                      error instanceof Error ? error.message : String(error),
                   },
                   "Agent tool execution failed",
                 );

@@ -120,7 +120,7 @@ async function makeOrganization(
       slug: `test-org-${orgId.substring(0, 8)}`,
       createdAt: new Date(),
       limitCleanupInterval: null,
-      theme: "cosmic-night",
+      theme: "modern-minimal",
       customFont: "lato",
       ...overrides,
     })
@@ -224,28 +224,37 @@ async function makeAgentTool(
   overrides: Partial<
     Pick<
       AgentTool,
-      "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+      | "allowUsageWhenUntrustedDataIsPresent"
+      | "toolResultTreatment"
+      | "credentialSourceMcpServerId"
+      | "executionSourceMcpServerId"
     >
   > = {},
 ) {
-  return await AgentToolModel.create(agentId, toolId, overrides);
+  return await AgentToolModel.create(agentId, toolId, {
+    allowUsageWhenUntrustedDataIsPresent: false,
+    toolResultTreatment: "untrusted" as const,
+    ...overrides,
+  });
 }
 
 /**
  * Creates a test tool invocation policy using the ToolInvocationPolicy model
  */
 async function makeToolPolicy(
-  toolId: string,
+  agentToolId: string,
   overrides: Partial<
     Pick<
       ToolInvocation.ToolInvocationPolicy,
-      "conditions" | "action" | "reason"
+      "argumentName" | "operator" | "value" | "action" | "reason"
     >
   > = {},
 ): Promise<ToolInvocation.ToolInvocationPolicy> {
   return await ToolInvocationPolicyModel.create({
-    toolId,
-    conditions: [{ key: "test-arg", operator: "equal", value: "test-value" }],
+    agentToolId,
+    argumentName: "test-arg",
+    operator: "equal",
+    value: "test-value",
     action: "block_always",
     reason: "Test policy reason",
     ...overrides,
@@ -257,18 +266,22 @@ async function makeToolPolicy(
  * Returns the created policy
  */
 async function makeTrustedDataPolicy(
-  toolId: string,
+  agentToolId: string,
   overrides: Partial<
-    Pick<TrustedData.TrustedDataPolicy, "description" | "conditions" | "action">
+    Pick<
+      TrustedData.TrustedDataPolicy,
+      "description" | "attributePath" | "operator" | "value" | "action"
+    >
   > = {},
 ): Promise<TrustedData.TrustedDataPolicy> {
   return await TrustedDataPolicyModel.create({
-    toolId,
-    description: overrides.description ?? "Test trusted data policy",
-    conditions: overrides.conditions ?? [
-      { key: "test.path", operator: "equal", value: "test-value" },
-    ],
-    action: overrides.action ?? "mark_as_trusted",
+    agentToolId,
+    description: "Test trusted data policy",
+    attributePath: "test.path",
+    operator: "equal",
+    value: "test-value",
+    action: "mark_as_trusted",
+    ...overrides,
   });
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
 import {
   cloneElement,
   isValidElement,
@@ -20,15 +19,6 @@ interface WithInlineConfirmProps {
   onConfirm?: () => void;
   confirmText?: string;
   cancelText?: string;
-  /**
-   * When true, replaces the trigger with confirm/cancel buttons inline
-   * instead of showing a popover. Better UX as no mouse movement needed.
-   */
-  replaceMode?: boolean;
-  /**
-   * Called when the confirm state changes (useful for hiding sibling elements)
-   */
-  onOpenChange?: (open: boolean) => void;
 }
 
 export function WithInlineConfirm({
@@ -36,17 +26,9 @@ export function WithInlineConfirm({
   onConfirm,
   confirmText = "Delete",
   cancelText = "Cancel",
-  replaceMode = false,
-  onOpenChange,
 }: WithInlineConfirmProps) {
   const [open, setOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Notify parent when open state changes
-  const updateOpen = (newOpen: boolean) => {
-    setOpen(newOpen);
-    onOpenChange?.(newOpen);
-  };
 
   const clearCloseTimeout = () => {
     if (closeTimeoutRef.current) {
@@ -57,13 +39,13 @@ export function WithInlineConfirm({
 
   const scheduleClose = () => {
     clearCloseTimeout();
-    closeTimeoutRef.current = setTimeout(() => updateOpen(false), 100);
+    closeTimeoutRef.current = setTimeout(() => setOpen(false), 100);
   };
 
   const handleConfirm = (e: React.MouseEvent) => {
     e.stopPropagation();
     clearCloseTimeout();
-    updateOpen(false);
+    setOpen(false);
     if (onConfirm) {
       onConfirm();
     } else if (isValidElement(children) && children.props.onClick) {
@@ -74,14 +56,14 @@ export function WithInlineConfirm({
   const handleCancel = (e: React.MouseEvent) => {
     e.stopPropagation();
     clearCloseTimeout();
-    updateOpen(false);
+    setOpen(false);
   };
 
   const handleTriggerClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     clearCloseTimeout();
-    updateOpen(true);
+    setOpen(true);
   };
 
   const handleContentClick = (e: React.MouseEvent) => {
@@ -92,32 +74,6 @@ export function WithInlineConfirm({
     return children;
   }
 
-  // Replace mode: show inline confirm button in place of trigger
-  if (replaceMode) {
-    if (open) {
-      return (
-        <Button
-          type="button"
-          size="sm"
-          variant="destructive"
-          className="h-6 px-1.5 text-xs gap-1"
-          onClick={handleConfirm}
-          onPointerLeave={scheduleClose}
-          onPointerEnter={clearCloseTimeout}
-        >
-          Confirm
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      );
-    }
-
-    return cloneElement(children, {
-      onClick: handleTriggerClick,
-      ...({ "data-confirm-open": undefined } as Record<string, unknown>),
-    });
-  }
-
-  // Original popover mode
   const triggerElement = cloneElement(children, {
     onClick: handleTriggerClick,
     onPointerLeave: scheduleClose,
@@ -128,7 +84,7 @@ export function WithInlineConfirm({
   });
 
   return (
-    <Popover open={open} onOpenChange={updateOpen}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{triggerElement}</PopoverTrigger>
       <PopoverContent
         side="right"

@@ -1,10 +1,12 @@
 import type { archestraApiTypes } from "@shared";
 
-type ToolWithParameters = {
-  parameters?: archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number]["parameters"];
-};
+export function ToolReadonlyDetails({
+  agentTool,
+}: {
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
+}) {
+  const tool = agentTool.tool;
 
-export function ToolReadonlyDetails({ tool }: { tool: ToolWithParameters }) {
   return (
     <div className="border border-border rounded-lg p-6 bg-card">
       <div className="text-xs font-medium text-muted-foreground mb-4">

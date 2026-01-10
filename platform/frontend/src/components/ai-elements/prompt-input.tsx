@@ -449,11 +449,6 @@ export type PromptInputProps = Omit<
     code: "max_files" | "max_file_size" | "accept";
     message: string;
   }) => void;
-  /**
-   * When false, keep user input intact after submit.
-   * Useful for actions like Stop where the text should remain.
-   */
-  clearOnSubmit?: boolean;
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
@@ -470,7 +465,6 @@ export const PromptInput = ({
   maxFileSize,
   onError,
   onSubmit,
-  clearOnSubmit = true,
   children,
   ...props
 }: PromptInputProps) => {
@@ -726,7 +720,7 @@ export const PromptInput = ({
 
     // Reset form immediately after capturing text to avoid race condition
     // where user input during async blob conversion would be lost
-    if (clearOnSubmit && !usingProvider) {
+    if (!usingProvider) {
       form.reset();
     }
 
@@ -753,11 +747,9 @@ export const PromptInput = ({
           if (result instanceof Promise) {
             result
               .then(() => {
-                if (clearOnSubmit) {
-                  clear();
-                  if (usingProvider) {
-                    controller.textInput.clear();
-                  }
+                clear();
+                if (usingProvider) {
+                  controller.textInput.clear();
                 }
               })
               .catch(() => {
@@ -765,11 +757,9 @@ export const PromptInput = ({
               });
           } else {
             // Sync function completed without throwing, clear attachments
-            if (clearOnSubmit) {
-              clear();
-              if (usingProvider) {
-                controller.textInput.clear();
-              }
+            clear();
+            if (usingProvider) {
+              controller.textInput.clear();
             }
           }
         } catch {
@@ -825,15 +815,12 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
-> & {
-  disableEnterSubmit?: boolean;
-};
+>;
 
 export const PromptInputTextarea = ({
   onChange,
   className,
   placeholder = "What would you like to know?",
-  disableEnterSubmit = false,
   ...props
 }: PromptInputTextareaProps) => {
   const controller = useOptionalPromptInputController();
@@ -843,10 +830,6 @@ export const PromptInputTextarea = ({
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === "Enter") {
       if (isComposing || e.nativeEvent.isComposing) {
-        return;
-      }
-      if (disableEnterSubmit) {
-        e.preventDefault();
         return;
       }
       if (e.shiftKey) {

@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   assignToolToAgent,
-  autoConfigureAgentToolPolicies,
   bulkAssignTools,
   getAllAgentTools,
+  bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
+  autoConfigureAgentToolPolicies,
 } = archestraApiSdk;
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -19,7 +20,6 @@ export function useAllProfileTools({
   pagination,
   sorting,
   filters,
-  skipPagination,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
   pagination?: {
@@ -37,7 +37,6 @@ export function useAllProfileTools({
     credentialSourceMcpServerId?: string;
     mcpServerOwnerId?: string;
   };
-  skipPagination?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -52,7 +51,6 @@ export function useAllProfileTools({
         origin: filters?.origin,
         credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
-        skipPagination,
       },
     ],
     queryFn: async () => {
@@ -67,7 +65,6 @@ export function useAllProfileTools({
           origin: filters?.origin,
           mcpServerOwnerId: filters?.mcpServerOwnerId,
           excludeArchestraTools: true,
-          skipPagination,
         },
       });
       return (
@@ -244,6 +241,25 @@ export function useProfileToolPatchMutation() {
         path: { id: updatedProfileTool.id },
       });
       return result.data ?? null;
+    },
+    onSuccess: () => {
+      // Invalidate all agent-tools queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: ["agent-tools"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useBulkUpdateProfileTools() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      bulkUpdate: archestraApiTypes.BulkUpdateAgentToolsData["body"],
+    ) => {
+      const result = await bulkUpdateAgentTools({ body: bulkUpdate });
+      return result.data;
     },
     onSuccess: () => {
       // Invalidate all agent-tools queries to refetch updated data

@@ -89,7 +89,7 @@ spec:
               echo "PostgreSQL is up - continuing"
       containers:
         - name: {{ .Chart.Name }}
-          image: {{ include "archestra-platform.image" . }}
+          image: {{ .Values.archestra.image }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - name: backend

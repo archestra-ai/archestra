@@ -17,9 +17,6 @@ import { formatDate } from "@/lib/utils";
 import { TruncatedText } from "../truncated-text";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
-type HistoryEntry = NonNullable<
-  archestraApiTypes.GetPromptVersionsResponses["200"]
->["history"][number];
 
 interface PromptVersionHistoryDialogProps {
   open: boolean;
@@ -32,16 +29,18 @@ export function PromptVersionHistoryDialog({
   onOpenChange,
   prompt,
 }: PromptVersionHistoryDialogProps) {
-  const { data: versions, isLoading } = usePromptVersions(prompt?.id || "");
+  const { data: versions = [], isLoading } = usePromptVersions(
+    prompt?.id || "",
+  );
   const rollbackMutation = useRollbackPrompt();
 
-  const handleRollback = async (version: number) => {
+  const handleRollback = async (versionId: string) => {
     if (!prompt) return;
 
     try {
       await rollbackMutation.mutateAsync({
         id: prompt.id,
-        version,
+        versionId,
       });
       toast.success("Rolled back to selected version");
       onOpenChange(false);
@@ -49,11 +48,6 @@ export function PromptVersionHistoryDialog({
       toast.error("Failed to rollback to version");
     }
   };
-
-  const current = versions?.current;
-  const history = [...(versions?.history ?? [])].sort(
-    (a, b) => b.version - a.version,
-  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -71,117 +65,74 @@ export function PromptVersionHistoryDialog({
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Current version */}
-            {current && (
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      Version {current.version}
-                    </span>
-                    <Badge variant="default" className="text-xs">
-                      <Check className="h-3 w-3 mr-1" />
-                      Current
-                    </Badge>
+            {(versions as Prompt[]).map((version) => {
+              return (
+                <div
+                  key={version.id}
+                  className="border rounded-lg p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        Version {version.version}
+                      </span>
+                      {version.isActive && (
+                        <Badge variant="default" className="text-xs">
+                          <Check className="h-3 w-3 mr-1" />
+                          Current
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate({ date: version.createdAt })}
+                      </span>
+                      {!version.isActive && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRollback(version.id)}
+                          disabled={rollbackMutation.isPending}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Rollback
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDate({ date: current.createdAt })}
-                  </span>
+
+                  {version.systemPrompt && (
+                    <div className="text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        System Prompt:
+                      </span>
+                      <div className="mt-1">
+                        <TruncatedText
+                          message={version.systemPrompt}
+                          className="text-foreground"
+                          maxLength={100}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {version.userPrompt && (
+                    <div className="text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        User Prompt:
+                      </span>
+                      <div className="mt-1">
+                        <TruncatedText
+                          message={version.userPrompt}
+                          className="text-foreground"
+                          maxLength={100}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {current.systemPrompt && (
-                  <div className="text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      System Prompt:
-                    </span>
-                    <div className="mt-1">
-                      <TruncatedText
-                        message={current.systemPrompt}
-                        className="text-foreground"
-                        maxLength={100}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {current.userPrompt && (
-                  <div className="text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      User Prompt:
-                    </span>
-                    <div className="mt-1">
-                      <TruncatedText
-                        message={current.userPrompt}
-                        className="text-foreground"
-                        maxLength={100}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* History versions */}
-            {history.map((entry: HistoryEntry) => (
-              <div
-                key={entry.version}
-                className="border rounded-lg p-4 space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">Version {entry.version}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {formatDate({ date: entry.createdAt })}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRollback(entry.version)}
-                      disabled={rollbackMutation.isPending}
-                    >
-                      <RotateCcw className="h-3 w-3 mr-1" />
-                      Rollback
-                    </Button>
-                  </div>
-                </div>
-
-                {entry.systemPrompt && (
-                  <div className="text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      System Prompt:
-                    </span>
-                    <div className="mt-1">
-                      <TruncatedText
-                        message={entry.systemPrompt}
-                        className="text-foreground"
-                        maxLength={100}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {entry.userPrompt && (
-                  <div className="text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      User Prompt:
-                    </span>
-                    <div className="mt-1">
-                      <TruncatedText
-                        message={entry.userPrompt}
-                        className="text-foreground"
-                        maxLength={100}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {history.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No previous versions
-              </p>
-            )}
+              );
+            })}
           </div>
         )}
       </DialogContent>

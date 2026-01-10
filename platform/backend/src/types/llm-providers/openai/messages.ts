@@ -64,7 +64,7 @@ const ContentPartImageSchema = z
     image_url: z
       .object({
         url: z.string(),
-        detail: z.enum(["auto", "low", "high"]).optional(),
+        detail: z.enum(["auto", "low", "high"]),
       })
       .describe(
         `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765`,
@@ -187,10 +187,7 @@ const AssistantMessageParamSchema = z
 const ToolMessageParamSchema = z
   .object({
     role: z.enum(["tool"]),
-    content: z.union([
-      z.string(),
-      z.array(z.union([ContentPartTextSchema, ContentPartImageSchema])),
-    ]),
+    content: z.union([z.string(), z.array(ContentPartTextSchema)]),
     tool_call_id: z.string(),
   })
   .describe(

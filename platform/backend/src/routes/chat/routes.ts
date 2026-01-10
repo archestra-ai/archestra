@@ -5,7 +5,6 @@ import {
   generateText,
   stepCountIs,
   streamText,
-  type UIMessage,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -28,7 +27,6 @@ import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
 } from "@/secrets-manager";
-import { browserStreamFeature } from "@/services/browser-stream-feature";
 import {
   createLLMModelForAgent,
   detectProviderFromModel,
@@ -40,25 +38,19 @@ import {
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
-  type SupportedChatProvider,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
-import { estimateMessagesSize } from "@/utils/message-size";
 import { mapProviderError } from "./errors";
-import {
-  stripImagesFromMessages,
-  type UiMessage,
-} from "./strip-images-from-messages";
 
 /**
- * Get a smart default model and provider based on available API keys for the user.
+ * Get a smart default model based on available API keys for the user.
  * Priority: personal key > team key > org-wide key > env var > fallback
  */
 async function getSmartDefaultModel(
   userId: string,
   organizationId: string,
-): Promise<{ model: string; provider: SupportedChatProvider }> {
+): Promise<string> {
   // Get user's team IDs for resolution
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
@@ -84,11 +76,11 @@ async function getSmartDefaultModel(
         // Found a valid API key for this provider - return appropriate default model
         switch (provider) {
           case "anthropic":
-            return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
+            return "claude-opus-4-1-20250805";
           case "gemini":
-            return { model: "gemini-2.5-pro", provider: "gemini" };
+            return "gemini-2.5-pro";
           case "openai":
-            return { model: "gpt-4o", provider: "openai" };
+            return "gpt-4o";
         }
       }
     }
@@ -96,25 +88,22 @@ async function getSmartDefaultModel(
 
   // Check environment variables as fallback
   if (config.chat.anthropic.apiKey) {
-    return { model: "claude-opus-4-1-20250805", provider: "anthropic" };
+    return "claude-opus-4-1-20250805";
   }
   if (config.chat.openai.apiKey) {
-    return { model: "gpt-4o", provider: "openai" };
+    return "gpt-4o";
   }
   if (config.chat.gemini.apiKey) {
-    return { model: "gemini-2.5-pro", provider: "gemini" };
+    return "gemini-2.5-pro";
   }
 
   // Check if Vertex AI is enabled - use Gemini without API key
   if (isVertexAiEnabled()) {
-    return { model: "gemini-2.5-pro", provider: "gemini" };
+    return "gemini-2.5-pro";
   }
 
-  // Ultimate fallback - use configured defaults
-  return {
-    model: config.chat.defaultModel,
-    provider: config.chat.defaultProvider,
-  };
+  // Ultimate fallback - use configured default
+  return config.chat.defaultModel;
 }
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -127,7 +116,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: z.object({
           id: UuidIdSchema, // Chat ID from useChat
-          messages: z.array(z.unknown()), // UIMessage[]
+          messages: z.array(z.any()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
         }),
         // Streaming responses don't have a schema
@@ -172,6 +161,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: conversation.agentId,
         userId: user.id,
         userIsProfileAdmin,
+
         enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
         conversationId: conversation.id,
         promptId: conversation.promptId ?? undefined,
@@ -197,12 +187,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         systemPrompt = allParts.join("\n\n");
       }
 
-      // Use stored provider if available, otherwise detect from model name for backward compatibility
-      // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
-      // so we can safely use detectProviderFromModel for them.
-      const provider =
-        (conversation.selectedProvider as SupportedChatProvider | null) ??
-        detectProviderFromModel(conversation.selectedModel);
+      // Detect provider from model name
+      const provider = detectProviderFromModel(conversation.selectedModel);
 
       logger.info(
         {
@@ -215,7 +201,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
           model: conversation.selectedModel,
           provider,
-          providerSource: conversation.selectedProvider ? "stored" : "detected",
           promptId: prompt?.id,
           hasSystemPromptParts: systemPromptParts.length > 0,
           hasUserPromptParts: userPromptParts.length > 0,
@@ -231,23 +216,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         agentId: conversation.agentId,
         model: conversation.selectedModel,
-        provider,
         conversationId,
         externalAgentId,
       });
 
-      // Strip images and large browser tool results from messages before sending to LLM
-      // This prevents context limit issues from accumulated screenshots and page snapshots
-      const strippedMessagesForLLM = config.features.browserStreamingEnabled
-        ? stripImagesFromMessages(messages as UiMessage[])
-        : (messages as UiMessage[]);
-
       // Stream with AI SDK
       // Build streamText config conditionally
-      // Cast to UIMessage[] - UiMessage is structurally compatible at runtime
-      const modelMessages = await convertToModelMessages(
-        strippedMessagesForLLM as unknown as Omit<UIMessage, "id">[],
-      );
+      const modelMessages = await convertToModelMessages(messages);
       const streamTextConfig: Parameters<typeof streamText>[0] = {
         model,
         messages: modelMessages,
@@ -279,7 +254,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
           "Content-Encoding": "none",
         },
-        originalMessages: messages as UIMessage[],
+        originalMessages: messages,
         onError: (error) => {
           logger.error(
             { error, conversationId, agentId: conversation.agentId },
@@ -340,37 +315,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
 
             if (messagesToSave.length > 0) {
-              let messagesToStore = messagesToSave as UiMessage[];
-
-              if (config.features.browserStreamingEnabled) {
-                // Strip base64 images and large browser tool results before storing
-                const beforeSize = estimateMessagesSize(messagesToSave);
-                messagesToStore = stripImagesFromMessages(
-                  messagesToSave as UiMessage[],
-                );
-                const afterSize = estimateMessagesSize(messagesToStore);
-
-                logger.info(
-                  {
-                    messageCount: messagesToSave.length,
-                    beforeSizeKB: Math.round(beforeSize.length / 1024),
-                    afterSizeKB: Math.round(afterSize.length / 1024),
-                    savedKB: Math.round(
-                      (beforeSize.length - afterSize.length) / 1024,
-                    ),
-                    sizeEstimateReliable:
-                      !beforeSize.isEstimated && !afterSize.isEstimated,
-                  },
-                  "[Chat] Stripped messages before saving to DB",
-                );
-              }
-
               // Append only new messages with timestamps
               const now = Date.now();
-              const messageData = messagesToStore.map((msg, index) => ({
+              // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+              const messageData = messagesToSave.map((msg: any, index) => ({
                 conversationId,
-                role: msg.role ?? "assistant",
-                content: msg, // Store entire UIMessage (with images stripped)
+                role: msg.role,
+                content: msg, // Store entire UIMessage
                 createdAt: new Date(now + index), // Preserve order
               }));
 
@@ -522,7 +473,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId: true,
           title: true,
           selectedModel: true,
-          selectedProvider: true,
           chatApiKeyId: true,
         })
           .required({ agentId: true })
@@ -530,7 +480,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             promptId: true,
             title: true,
             selectedModel: true,
-            selectedProvider: true,
             chatApiKeyId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
@@ -538,14 +487,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: {
-          agentId,
-          promptId,
-          title,
-          selectedModel,
-          selectedProvider,
-          chatApiKeyId,
-        },
+        body: { agentId, promptId, title, selectedModel, chatApiKeyId },
         user,
         organizationId,
         headers,
@@ -570,35 +512,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
-      // Determine model and provider to use
-      // If frontend provides both, use them; otherwise use smart defaults
-      let modelToUse = selectedModel;
-      let providerToUse = selectedProvider;
-
-      if (!selectedModel) {
-        // No model specified - use smart defaults for both model and provider
-        const smartDefault = await getSmartDefaultModel(
-          user.id,
-          organizationId,
-        );
-        modelToUse = smartDefault.model;
-        providerToUse = smartDefault.provider;
-      } else if (!selectedProvider) {
-        // Model specified but no provider - detect provider from model name
-        // This handles older API clients that don't send selectedProvider
-        // It's a rare case which should happen only for a case when backend already has a provider selection logic, but frontend is stale.
-        // In other words, it's a backward compatibility case which should happen only for a very short period of time.
-        providerToUse = detectProviderFromModel(selectedModel);
-      }
+      // Determine smart default model if none specified
+      const modelToUse =
+        selectedModel || (await getSmartDefaultModel(user.id, organizationId));
 
       logger.info(
         {
           agentId,
           organizationId,
           selectedModel,
-          selectedProvider,
           modelToUse,
-          providerToUse,
           chatApiKeyId,
           wasSmartDefault: !selectedModel,
         },
@@ -614,7 +537,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           promptId,
           title,
           selectedModel: modelToUse,
-          selectedProvider: providerToUse,
           chatApiKeyId,
         }),
       );
@@ -687,28 +609,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Get conversation to retrieve agentId before deletion
-      const conversation = await ConversationModel.findById({
-        id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (conversation && browserStreamFeature.isEnabled()) {
-        // Close browser tab for this conversation (best effort, don't fail if it errors)
-        try {
-          await browserStreamFeature.closeTab(conversation.agentId, id, {
-            userId: user.id,
-            userIsProfileAdmin: false,
-          });
-        } catch (error) {
-          logger.warn(
-            { error, conversationId: id },
-            "Failed to close browser tab on conversation deletion",
-          );
-        }
-      }
-
       await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
     },

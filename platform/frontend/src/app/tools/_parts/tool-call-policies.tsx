@@ -11,46 +11,37 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
-  useCallPolicyMutation,
   useOperators,
   useToolInvocationPolicies,
   useToolInvocationPolicyCreateMutation,
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
-import { getAllowUsageFromPolicies } from "@/lib/policy.utils";
 import { PolicyCard } from "./policy-card";
 
-type ToolForPolicies = {
-  id: string;
-  parameters?: archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number]["parameters"];
-};
-
-export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
+export function ToolCallPolicies({
+  agentTool,
+}: {
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
+}) {
   const {
     data: { byProfileToolId },
-    data: invocationPolicies,
   } = useToolInvocationPolicies();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
     useToolInvocationPolicyDeleteMutation();
   const toolInvocationPolicyUpdateMutation =
     useToolInvocationPolicyUpdateMutation();
-  const callPolicyMutation = useCallPolicyMutation();
   const { data: operators } = useOperators();
 
-  const allPolicies = byProfileToolId[tool.id] || [];
-  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
-  const policies = allPolicies.filter((policy) => policy.conditions.length > 0);
+  const policies = byProfileToolId[agentTool.id] || [];
 
-  const argumentNames = Object.keys(tool.parameters?.properties || []);
-
-  // Derive allow usage from policies (default policy with empty conditions)
-  const allowUsageWhenUntrustedDataIsPresent = getAllowUsageFromPolicies(
-    tool.id,
-    invocationPolicies,
+  const argumentNames = Object.keys(
+    agentTool.tool.parameters?.properties || [],
   );
 
   return (
@@ -71,14 +62,14 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
           </span>
         </div>
         <Switch
-          checked={allowUsageWhenUntrustedDataIsPresent}
-          onCheckedChange={(checked) => {
-            if (checked === allowUsageWhenUntrustedDataIsPresent) return;
-            callPolicyMutation.mutate({
-              toolId: tool.id,
-              allowUsage: checked,
-            });
-          }}
+          checked={agentTool.allowUsageWhenUntrustedDataIsPresent}
+          onCheckedChange={() =>
+            agentToolPatchMutation.mutate({
+              id: agentTool.id,
+              allowUsageWhenUntrustedDataIsPresent:
+                !agentTool.allowUsageWhenUntrustedDataIsPresent,
+            })
+          }
         />
       </div>
       {policies.map((policy) => (
@@ -109,7 +100,9 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                 </Select>
                 <Select
                   defaultValue={policy.operator}
-                  onValueChange={(value: string) =>
+                  onValueChange={(
+                    value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["operator"],
+                  ) =>
                     toolInvocationPolicyUpdateMutation.mutate({
                       ...policy,
                       operator: value,
@@ -200,11 +193,12 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
         className="w-full"
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({
-            toolId: tool.id,
-            argumentName: argumentNames[0],
+            agentToolId: agentTool.id,
           })
         }
-        disabled={argumentNames.length === 0}
+        disabled={
+          Object.keys(agentTool.tool.parameters?.properties || {}).length === 0
+        }
         disabledText="This tool has no parameters"
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters

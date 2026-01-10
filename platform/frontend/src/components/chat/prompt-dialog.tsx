@@ -4,12 +4,13 @@ import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ChatToolsDisplay } from "@/components/chat/chat-tools-display";
-import { ProfileSelector } from "@/components/chat/profile-selector";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -17,6 +18,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import {
@@ -62,7 +70,7 @@ export function PromptDialog({
   // Available prompts that can be used as agents (excluding self)
   const availableAgentPrompts = useMemo(() => {
     return allPrompts
-      .filter((p) => p.id !== prompt?.id)
+      .filter((p) => p.id !== prompt?.id && p.isActive)
       .map((p) => {
         const profile = allProfiles.find((prof) => prof.id === p.agentId);
         return {
@@ -134,7 +142,7 @@ export function PromptDialog({
       let promptId: string;
 
       if (prompt) {
-        // Update increments version (ID stays the same with JSONB history)
+        // Update creates a new version with a new ID
         const updated = await updatePrompt.mutateAsync({
           id: prompt.id,
           data: {
@@ -144,8 +152,9 @@ export function PromptDialog({
             systemPrompt: trimmedSystemPrompt || undefined,
           },
         });
+        // Use the new version's ID for agent sync
         promptId = updated?.id ?? prompt.id;
-        toast.success("Agent updated successfully");
+        toast.success("New version created successfully");
       } else {
         const created = await createPrompt.mutateAsync({
           name: trimmedName,
@@ -154,7 +163,7 @@ export function PromptDialog({
           systemPrompt: trimmedSystemPrompt || undefined,
         });
         promptId = created?.id ?? "";
-        toast.success("Agent created successfully");
+        toast.success("Prompt created successfully");
       }
 
       // Sync agents if any were selected and we have a valid promptId
@@ -173,7 +182,7 @@ export function PromptDialog({
 
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to save Agent");
+      toast.error("Failed to save prompt");
     }
   }, [
     name,
@@ -194,7 +203,7 @@ export function PromptDialog({
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {prompt ? "Edit Agent" : "Create New Agent"}
+            {prompt ? "Edit Prompt" : "Create New Prompt"}
             {prompt && onViewVersionHistory && (
               <Button
                 variant="link"
@@ -209,6 +218,11 @@ export function PromptDialog({
               </Button>
             )}
           </DialogTitle>
+          <DialogDescription>
+            {prompt
+              ? "This will create a new version of the prompt"
+              : "Create a new prompt for a profile. It will be shared across your organization."}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -221,35 +235,32 @@ export function PromptDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="agentId">Tools *</Label>
-            <p className="text-sm text-muted-foreground">
-              Select profile with the tools that will be available
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <ProfileSelector
-                currentAgentId={agentId}
-                onProfileChange={setProfileId}
-              />
-              {agentId && <ChatToolsDisplay agentId={agentId} readOnly />}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Agents</Label>
-            <p className="text-sm text-muted-foreground">
-              Select other agents to delegate tasks
-            </p>
-            <MultiSelect
-              value={selectedAgentPromptIds}
-              onValueChange={setSelectedAgentPromptIds}
-              items={availableAgentPrompts}
-              placeholder="Select agents..."
-              disabled={availableAgentPrompts.length === 0}
-            />
-            {availableAgentPrompts.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No other agent available
-              </p>
-            )}
+            <Label htmlFor="agentId">Profile with tools*</Label>
+            <WithPermissions
+              permissions={{ profile: ["read"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => {
+                return hasPermission === undefined ? null : hasPermission ? (
+                  <Select value={agentId} onValueChange={setProfileId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allProfiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    Unable to show the list of profiles
+                  </Badge>
+                );
+              }}
+            </WithPermissions>
           </div>
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt</Label>
@@ -270,6 +281,25 @@ export function PromptDialog({
               placeholder="Enter user prompt (shown to user, sent to LLM)"
               className="min-h-[150px] font-mono"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Agents</Label>
+            <p className="text-sm text-muted-foreground">
+              Select agents that this prompt can delegate tasks to. Each agent
+              becomes a tool available to the LLM.
+            </p>
+            <MultiSelect
+              value={selectedAgentPromptIds}
+              onValueChange={setSelectedAgentPromptIds}
+              items={availableAgentPrompts}
+              placeholder="Select agents..."
+              disabled={availableAgentPrompts.length === 0}
+            />
+            {availableAgentPrompts.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No other prompts available to use as agents.
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>

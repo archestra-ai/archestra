@@ -235,11 +235,11 @@ describe("createFastifyInstance", () => {
         },
       });
 
-      // Zod validation errors are handled properly and return 400
-      expect(response.statusCode).toBe(400);
+      // Zod validation errors are handled as standard errors, so they become 500
+      expect(response.statusCode).toBe(500);
       const body = response.json();
       expect(body.error).toBeDefined();
-      expect(body.error.type).toBe("api_validation_error");
+      expect(body.error.type).toBe("api_internal_server_error");
       expect(typeof body.error.message).toBe("string");
     });
   });

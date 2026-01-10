@@ -87,9 +87,8 @@
           "jsonpath": "$.version"
         },
         {
-          "type": "yaml",
-          "path": "helm/archestra/values.yaml",
-          "jsonpath": "$.archestra.imageTag"
+          "type": "generic",
+          "path": "helm/archestra/values.yaml"
         }
       ]
     }

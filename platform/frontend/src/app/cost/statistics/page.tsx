@@ -481,7 +481,10 @@ export default function StatisticsPage() {
             <CardTitle>Costs</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={costSavingsChartConfig} className="aspect-auto h-80 w-full">
+            <ChartContainer
+              config={costSavingsChartConfig}
+              className="aspect-auto h-80 w-full"
+            >
               {costSavingsChartData.length > 0 ? (
                 <LineChart
                   accessibilityLayer
@@ -514,7 +517,11 @@ export default function StatisticsPage() {
                     type="monotone"
                     stroke="var(--color-nonOptimized)"
                     strokeWidth={2}
-                    dot={{ strokeWidth: 0, r: 3, fill: "var(--color-nonOptimized)" }}
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-nonOptimized)",
+                    }}
                     activeDot={{ strokeWidth: 0, r: 5 }}
                   />
                   <Line
@@ -576,7 +583,11 @@ export default function StatisticsPage() {
                     type="monotone"
                     stroke="var(--color-optimization)"
                     strokeWidth={2}
-                    dot={{ strokeWidth: 0, r: 3, fill: "var(--color-optimization)" }}
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-optimization)",
+                    }}
                     activeDot={{ strokeWidth: 0, r: 5 }}
                   />
                   <Line
@@ -584,7 +595,11 @@ export default function StatisticsPage() {
                     type="monotone"
                     stroke="var(--color-compression)"
                     strokeWidth={2}
-                    dot={{ strokeWidth: 0, r: 3, fill: "var(--color-compression)" }}
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-compression)",
+                    }}
                     activeDot={{ strokeWidth: 0, r: 5 }}
                   />
                 </LineChart>
@@ -605,7 +620,10 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer config={teamChartConfig} className="aspect-auto h-80 w-full">
+              <ChartContainer
+                config={teamChartConfig}
+                className="aspect-auto h-80 w-full"
+              >
                 {teamChartData.length > 0 ? (
                   <LineChart
                     accessibilityLayer
@@ -640,7 +658,11 @@ export default function StatisticsPage() {
                         type="monotone"
                         stroke={`var(--color-${team.teamId})`}
                         strokeWidth={2}
-                        dot={{ strokeWidth: 0, r: 3, fill: `var(--color-${team.teamId})` }}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${team.teamId})`,
+                        }}
                         activeDot={{ strokeWidth: 0, r: 5 }}
                       />
                     ))}
@@ -709,7 +731,10 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer config={profileChartConfig} className="aspect-auto h-80 w-full">
+              <ChartContainer
+                config={profileChartConfig}
+                className="aspect-auto h-80 w-full"
+              >
                 {profileChartData.length > 0 ? (
                   <LineChart
                     accessibilityLayer
@@ -744,7 +769,11 @@ export default function StatisticsPage() {
                         type="monotone"
                         stroke={`var(--color-${agent.agentId})`}
                         strokeWidth={2}
-                        dot={{ strokeWidth: 0, r: 3, fill: `var(--color-${agent.agentId})` }}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${agent.agentId})`,
+                        }}
                         activeDot={{ strokeWidth: 0, r: 5 }}
                       />
                     ))}
@@ -813,7 +842,10 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <ChartContainer config={modelChartConfig} className="aspect-auto h-80 w-full">
+              <ChartContainer
+                config={modelChartConfig}
+                className="aspect-auto h-80 w-full"
+              >
                 {modelChartData.length > 0 ? (
                   <LineChart
                     accessibilityLayer
@@ -848,7 +880,11 @@ export default function StatisticsPage() {
                         type="monotone"
                         stroke={`var(--color-${model.model})`}
                         strokeWidth={2}
-                        dot={{ strokeWidth: 0, r: 3, fill: `var(--color-${model.model})` }}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${model.model})`,
+                        }}
                         activeDot={{ strokeWidth: 0, r: 5 }}
                       />
                     ))}

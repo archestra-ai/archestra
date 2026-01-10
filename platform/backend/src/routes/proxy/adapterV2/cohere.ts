@@ -155,6 +155,10 @@ class CohereRequestAdapter
     };
   }
 
+  convertToolResultContent(messages: CohereMessages): CohereMessages {
+    return messages;
+  }
+
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------

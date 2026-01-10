@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { THEME_IDS } from "./themes/theme-config";
+import { SUPPORTED_THEMES } from "./themes/theme-config";
 
 export const OAuthConfigSchema = z.object({
   name: z.string(),
@@ -79,7 +79,7 @@ export const LocalConfigFormSchema = z.object({
  * All themes from https://github.com/jnsahaj/tweakcn
  * Theme IDs are generated from shared/themes/theme-config.ts
  */
-export const OrganizationThemeSchema = z.enum(THEME_IDS);
+export const OrganizationThemeSchema = z.enum(SUPPORTED_THEMES);
 export const OrganizationCustomFontSchema = z.enum([
   "lato",
   "inter",

@@ -25,8 +25,6 @@ export const SUPPORTED_THEMES = [
   "vintage-paper",
 ] as const;
 
-export const THEME_IDS = SUPPORTED_THEMES;
-
 /**
  * Default theme ID
  */

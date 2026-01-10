@@ -222,6 +222,9 @@ export function createLLMModel(params: {
       baseURL: `http://localhost:${config.api.port}/v1/cohere/${agentId}/compatibility/v1`,
       headers,
     });
+    return client.chat(modelName);
+  }
+
   if (provider === "vllm") {
     // URL format: /v1/vllm/:agentId (SDK appends /chat/completions)
     // vLLM uses OpenAI-compatible API, so we use the OpenAI SDK

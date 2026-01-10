@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
+    "urlPathPattern": "/gemini/v1beta/models/[^:]+:generateContent",
     "headers": {
       "x-goog-api-key": {
         "contains": "gemini-token-cost-limit-test"

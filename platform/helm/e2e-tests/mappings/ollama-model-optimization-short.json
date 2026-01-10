@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/v1/chat/completions",
+    "urlPath": "/ollama/v1/chat/completions",
     "headers": {
       "Authorization": {
         "contains": "ollama-model-optimization-short"

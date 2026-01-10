@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1/models.*",
+    "urlPathPattern": "/openai/v1/models.*",
     "headers": {
       "Authorization": {
         "matches": "Bearer .*"

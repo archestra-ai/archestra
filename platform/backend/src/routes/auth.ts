@@ -171,8 +171,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-  // Explicit route for getUser to ensure routeOptions (operationId) are populated
-  // This is critical for downstream middleware/logging that relies on routeOptions
   fastify.route({
     method: "GET",
     url: "/api/auth/admin/get-user",
@@ -187,7 +185,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       try {
-        // Check if a user with the default email exists
         const user = await UserModel.getById(request.query.id);
 
         return reply.send({ ...user });

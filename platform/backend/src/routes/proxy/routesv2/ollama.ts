@@ -20,75 +20,73 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/ollama`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  // Skip registration if Ollama is not configured
-  if (!config.llm.ollama.enabled) {
-    logger.info(
-      "[UnifiedProxy] Ollama base URL not configured, skipping Ollama routes",
-    );
-    return;
-  }
-
   logger.info("[UnifiedProxy] Registering unified Ollama routes");
 
-  // Safe cast: we've confirmed enabled is true above,
-  // and enabled = Boolean(baseUrl), so baseUrl must be defined
-  await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.ollama.baseUrl as string,
-    prefix: API_PREFIX,
-    rewritePrefix: "",
-    preHandler: (request, _reply, next) => {
-      if (
-        request.method === "POST" &&
-        request.url.includes(CHAT_COMPLETIONS_SUFFIX)
-      ) {
-        logger.info(
-          {
-            method: request.method,
-            url: request.url,
-            action: "skip-proxy",
-            reason: "handled-by-custom-handler",
-          },
-          "Ollama proxy preHandler: skipping chat/completions route",
+  // Only register HTTP proxy if Ollama is configured (has baseUrl)
+  // Routes are always registered for OpenAPI schema generation
+  if (config.llm.ollama.enabled) {
+    await fastify.register(fastifyHttpProxy, {
+      upstream: config.llm.ollama.baseUrl as string,
+      prefix: API_PREFIX,
+      rewritePrefix: "",
+      preHandler: (request, _reply, next) => {
+        if (
+          request.method === "POST" &&
+          request.url.includes(CHAT_COMPLETIONS_SUFFIX)
+        ) {
+          logger.info(
+            {
+              method: request.method,
+              url: request.url,
+              action: "skip-proxy",
+              reason: "handled-by-custom-handler",
+            },
+            "Ollama proxy preHandler: skipping chat/completions route",
+          );
+          next(new Error("skip"));
+          return;
+        }
+
+        const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+        const uuidMatch = pathAfterPrefix.match(
+          /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
         );
-        next(new Error("skip"));
-        return;
-      }
 
-      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
-      const uuidMatch = pathAfterPrefix.match(
-        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
-      );
+        if (uuidMatch) {
+          const remainingPath = uuidMatch[2] || "";
+          const originalUrl = request.raw.url;
+          request.raw.url = `${API_PREFIX}${remainingPath}`;
 
-      if (uuidMatch) {
-        const remainingPath = uuidMatch[2] || "";
-        const originalUrl = request.raw.url;
-        request.raw.url = `${API_PREFIX}${remainingPath}`;
+          logger.info(
+            {
+              method: request.method,
+              originalUrl,
+              rewrittenUrl: request.raw.url,
+              upstream: config.llm.ollama.baseUrl,
+              finalProxyUrl: `${config.llm.ollama.baseUrl}/v1${remainingPath}`,
+            },
+            "Ollama proxy preHandler: URL rewritten (UUID stripped)",
+          );
+        } else {
+          logger.info(
+            {
+              method: request.method,
+              url: request.url,
+              upstream: config.llm.ollama.baseUrl,
+              finalProxyUrl: `${config.llm.ollama.baseUrl}/v1${pathAfterPrefix}`,
+            },
+            "Ollama proxy preHandler: proxying request",
+          );
+        }
 
-        logger.info(
-          {
-            method: request.method,
-            originalUrl,
-            rewrittenUrl: request.raw.url,
-            upstream: config.llm.ollama.baseUrl,
-            finalProxyUrl: `${config.llm.ollama.baseUrl}/v1${remainingPath}`,
-          },
-          "Ollama proxy preHandler: URL rewritten (UUID stripped)",
-        );
-      } else {
-        logger.info(
-          {
-            method: request.method,
-            url: request.url,
-            upstream: config.llm.ollama.baseUrl,
-            finalProxyUrl: `${config.llm.ollama.baseUrl}/v1${pathAfterPrefix}`,
-          },
-          "Ollama proxy preHandler: proxying request",
-        );
-      }
-
-      next();
-    },
-  });
+        next();
+      },
+    });
+  } else {
+    logger.info(
+      "[UnifiedProxy] Ollama base URL not configured, HTTP proxy disabled",
+    );
+  }
 
   fastify.post(
     `${API_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
@@ -107,6 +105,15 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      if (!config.llm.ollama.enabled) {
+        return reply.status(500).send({
+          error: {
+            message:
+              "Ollama provider is not configured. Set ARCHESTRA_OLLAMA_BASE_URL to enable.",
+            type: "api_internal_server_error",
+          },
+        });
+      }
       logger.debug(
         { url: request.url },
         "[UnifiedProxy] Handling Ollama request (default agent)",
@@ -150,6 +157,15 @@ const ollamaProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      if (!config.llm.ollama.enabled) {
+        return reply.status(500).send({
+          error: {
+            message:
+              "Ollama provider is not configured. Set ARCHESTRA_OLLAMA_BASE_URL to enable.",
+            type: "api_internal_server_error",
+          },
+        });
+      }
       logger.debug(
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Ollama request (with agent)",

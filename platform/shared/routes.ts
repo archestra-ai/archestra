@@ -93,6 +93,7 @@ export const RouteId = {
 
   // Tool Routes
   GetTools: "getTools",
+  GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
 
   // Interaction Routes
@@ -117,6 +118,8 @@ export const RouteId = {
   GetTrustedDataPolicy: "getTrustedDataPolicy",
   UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
   DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
+  BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
+  BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
   GetPolicyConfigSubagentPrompt: "getPolicyConfigSubagentPrompt",
 
   // Dual LLM Config Routes
@@ -139,6 +142,15 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+
+  // Proxy Routes - vLLM
+  VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
+  VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
+
+  // Proxy Routes - Ollama
+  OllamaChatCompletionsWithDefaultAgent:
+    "ollamaChatCompletionsWithDefaultAgent",
+  OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",
@@ -180,6 +192,7 @@ export const RouteId = {
   DeleteAgentPrompt: "deleteAgentPrompt",
 
   // Prompt Agent Routes (agent assignment to prompts)
+  GetAllPromptAgentConnections: "getAllPromptAgentConnections",
   GetPromptAgents: "getPromptAgents",
   SyncPromptAgents: "syncPromptAgents",
   DeletePromptAgent: "deletePromptAgent",
@@ -195,6 +208,9 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
+
+  // Appearance Routes (public/unauthenticated)
+  GetPublicAppearance: "getPublicAppearance",
 
   // SSO Provider Routes
   GetPublicSsoProviders: "getPublicSsoProviders",

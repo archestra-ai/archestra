@@ -1,3 +1,13 @@
+/**
+ * @deprecated LEGACY V1 ROUTE - LLM Proxy v2 is now the default
+ *
+ * This is the legacy v1 Anthropic proxy route handler.
+ *
+ * The new unified LLM proxy handler (./llm-proxy-handler.ts) is now the default.
+ * V2 routes are located at: ./routesv2/anthropic.ts
+ *
+ * This file should be removed after full migration to v2 routes.
+ */
 import AnthropicProvider from "@anthropic-ai/sdk";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
@@ -234,6 +244,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       logger.debug({ resolvedAgentId }, "[AnthropicProxy] Limit check passed");
+
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
       // Persist non-MCP tools declared by client for tracking
       if (tools) {
@@ -618,6 +632,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
             fastify.log.info(
               { refused: !!toolInvocationRefusal },
@@ -961,6 +976,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
 
           if (toolInvocationRefusal) {

@@ -4,6 +4,57 @@ import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 
+const mockConnect = vi.fn().mockRejectedValue(new Error("Connection closed"));
+const mockClose = vi.fn();
+
+const createMockClient = () => ({
+  connect: mockConnect,
+  listTools: vi.fn(),
+  callTool: vi.fn(),
+  close: mockClose,
+  ping: vi.fn(),
+});
+
+vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
+  // biome-ignore lint/complexity/useArrowFunction: mock constructor to satisfy Vitest class warning
+  Client: vi.fn(function () {
+    return createMockClient();
+  }),
+}));
+
+vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+  StreamableHTTPClientTransport: vi.fn(),
+}));
+
+describe("isBrowserMcpTool", () => {
+  test("returns true for tools containing 'playwright'", () => {
+    expect(chatClient.__test.isBrowserMcpTool("mcp-playwright__navigate")).toBe(
+      true,
+    );
+    expect(
+      chatClient.__test.isBrowserMcpTool("some_playwright_tool_name"),
+    ).toBe(true);
+    expect(chatClient.__test.isBrowserMcpTool("playwright")).toBe(true);
+  });
+
+  test("returns true for tools starting with 'browser_'", () => {
+    expect(chatClient.__test.isBrowserMcpTool("browser_navigate")).toBe(true);
+    expect(chatClient.__test.isBrowserMcpTool("browser_take_screenshot")).toBe(
+      true,
+    );
+    expect(chatClient.__test.isBrowserMcpTool("browser_click")).toBe(true);
+    expect(chatClient.__test.isBrowserMcpTool("browser_tabs")).toBe(true);
+  });
+
+  test("returns false for non-browser tools", () => {
+    expect(chatClient.__test.isBrowserMcpTool("lookup_email")).toBe(false);
+    expect(chatClient.__test.isBrowserMcpTool("get_weather")).toBe(false);
+    expect(chatClient.__test.isBrowserMcpTool("search_database")).toBe(false);
+    // Edge case: contains 'browser' but doesn't start with 'browser_'
+    expect(chatClient.__test.isBrowserMcpTool("my_browser_helper")).toBe(false);
+  });
+});
+
 describe("chat-mcp-client health check", () => {
   test("discards cached client when ping fails and fetches fresh tools", async ({
     makeAgent,

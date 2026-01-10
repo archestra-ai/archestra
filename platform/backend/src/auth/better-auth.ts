@@ -262,6 +262,10 @@ export type BetterAuth = typeof auth;
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
 
+  if (!path) {
+    return ctx;
+  }
+
   logger.debug({ path, method }, "[auth:beforeHook] Processing auth request");
 
   // Block invitation creation when invitations are disabled
@@ -401,6 +405,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
  */
 export async function handleAfterHook(ctx: HookEndpointContext) {
   const { path, method, body, context } = ctx;
+
+  if (!path) {
+    return ctx;
+  }
 
   logger.debug({ path, method }, "[auth:afterHook] Processing post-auth hook");
 

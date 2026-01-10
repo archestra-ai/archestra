@@ -141,7 +141,7 @@ PostgreSQL host for database connectivity checks
 */}}
 {{- define "archestra-platform.postgresql.host" -}}
 {{- if .Values.postgresql.external_database_url -}}
-{{- regexReplaceAll "^postgresql://[^@]+@([^:/]+).*$" .Values.postgresql.external_database_url "${1}" -}}
+{{- regexReplaceAll "^postgres(ql)?://[^@]+@([^:/]+).*$" .Values.postgresql.external_database_url "${2}" -}}
 {{- else -}}
 {{- include "archestra-platform.fullname" . }}-postgresql
 {{- end -}}
@@ -152,7 +152,7 @@ PostgreSQL port for database connectivity checks
 */}}
 {{- define "archestra-platform.postgresql.port" -}}
 {{- if .Values.postgresql.external_database_url -}}
-{{- regexReplaceAll "^postgresql://[^@]+@[^:]+:([0-9]+).*$" .Values.postgresql.external_database_url "${1}" -}}
+{{- regexReplaceAll "^postgres(ql)?://[^@]+@[^:]+:([0-9]+).*$" .Values.postgresql.external_database_url "${2}" -}}
 {{- else -}}
 5432
 {{- end -}}
@@ -174,4 +174,34 @@ ServiceAccount name for the Archestra Platform
 {{- else }}
 {{- default "default" .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+Full container image reference for the Archestra Platform.
+This helper constructs the image reference smartly:
+- If archestra.image already contains a tag (colon after the last slash), use it as-is
+- Otherwise, append the imageTag value
+
+This maintains backward compatibility with existing deployments that set the full image:tag
+in archestra.image, while also supporting the new imageTag field used by release-please.
+
+Examples:
+  image: "archestra/platform", imageTag: "1.0.0" -> "archestra/platform:1.0.0"
+  image: "archestra/platform:ci-test", imageTag: "1.0.0" -> "archestra/platform:ci-test"
+  image: "registry.io:5000/archestra/platform", imageTag: "1.0.0" -> "registry.io:5000/archestra/platform:1.0.0"
+*/}}
+{{- define "archestra-platform.image" -}}
+{{- $image := .Values.archestra.image -}}
+{{- $imageTag := .Values.archestra.imageTag -}}
+{{- /* Extract the part after the last slash to check for a tag */ -}}
+{{- $lastSlashIndex := (sub (len $image) (len (trimPrefix "/" (regexReplaceAll ".*/" $image "")))) -}}
+{{- $afterLastSlash := regexReplaceAll ".*/" $image "" -}}
+{{- /* Check if there's a colon in the image name part (after the last slash) */ -}}
+{{- if contains ":" $afterLastSlash -}}
+{{- /* Image already has a tag, use as-is */ -}}
+{{- $image -}}
+{{- else -}}
+{{- /* No tag in image, append imageTag */ -}}
+{{- printf "%s:%s" $image $imageTag -}}
+{{- end -}}
 {{- end }}

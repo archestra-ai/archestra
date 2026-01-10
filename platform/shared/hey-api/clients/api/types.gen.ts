@@ -34,7 +34,7 @@ export type OpenAiChatCompletionRequestInput = {
              */
             image_url: {
                 url: string;
-                detail: 'auto' | 'low' | 'high';
+                detail?: 'auto' | 'low' | 'high';
             };
         } | {
             type: 'input_audio';
@@ -108,6 +108,15 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
         }>;
         tool_call_id: string;
     } | {
@@ -1246,6 +1255,14 @@ export type AnthropicMessagesRequestInput = {
             cache_control?: unknown;
             citations?: Array<unknown> | unknown;
         } | {
+            type: 'image';
+            source: {
+                type: 'base64';
+                media_type: string;
+                data: string;
+            };
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1260,6 +1277,14 @@ export type AnthropicMessagesRequestInput = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                };
+                cache_control?: unknown;
             }>;
             is_error?: boolean;
         }>;
@@ -1363,10 +1388,719 @@ export type AnthropicMessagesResponseInput = {
     };
 };
 
+export type VllmChatCompletionRequestInput = {
+    model: string;
+    /**
+     * A message in the conversation
+     */
+    messages: Array<{
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * Audio input details
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * File details
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * A tool call in the assistant message
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * Function call details
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * Custom tool call details
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning?: string | unknown;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string | unknown;
+        name: string;
+    }>;
+    /**
+     * A tool definition
+     */
+    tools?: Array<{
+        type: 'function';
+        /**
+         * A function definition for tool calling
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * The parameters the functions accepts, described as a JSON Schema object.
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    }>;
+    /**
+     * Tool choice option
+     */
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * Allowed tools configuration
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model.
+             * auto: allows the model to pick from allowed tools or generate a message.
+             * required: requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * A function definition for tool calling
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object.
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    };
+    temperature?: number | unknown;
+    max_tokens?: number | unknown;
+    stream?: boolean | unknown;
+    top_p?: number | unknown;
+    top_k?: number | unknown;
+    frequency_penalty?: number | unknown;
+    presence_penalty?: number | unknown;
+    repetition_penalty?: number | unknown;
+    stop?: string | Array<string>;
+    seed?: number | unknown;
+    n?: number | unknown;
+    best_of?: number | unknown;
+    logprobs?: boolean | unknown;
+    top_logprobs?: number | unknown;
+};
+
+export type VllmChatCompletionResponseInput = {
+    id: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * The assistant message in the response
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * A tool call in the assistant message
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * Function call details
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+            reasoning?: string | unknown;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    system_fingerprint?: string | unknown;
+    /**
+     * Token usage statistics for the completion
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        completion_tokens_details?: unknown;
+        prompt_tokens_details?: unknown;
+    };
+};
+
+export type OllamaChatCompletionRequestInput = {
+    model: string;
+    /**
+     * A message in the conversation
+     */
+    messages: Array<{
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * Audio input details
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * File details
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * A tool call in the assistant message
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * Function call details
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * Custom tool call details
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string | unknown;
+        name: string;
+    }>;
+    /**
+     * A tool definition
+     */
+    tools?: Array<{
+        type: 'function';
+        /**
+         * A function definition for tool calling
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * The parameters the functions accepts, described as a JSON Schema object.
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    }>;
+    /**
+     * Tool choice option
+     */
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * Allowed tools configuration
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model.
+             * auto: allows the model to pick from allowed tools or generate a message.
+             * required: requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * A function definition for tool calling
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object.
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    };
+    temperature?: number | unknown;
+    max_tokens?: number | unknown;
+    stream?: boolean | unknown;
+    top_p?: number | unknown;
+    frequency_penalty?: number | unknown;
+    presence_penalty?: number | unknown;
+    stop?: string | Array<string>;
+    seed?: number | unknown;
+    n?: number | unknown;
+};
+
+export type OllamaChatCompletionResponseInput = {
+    id: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * The assistant message in the response
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * A tool call in the assistant message
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * Function call details
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    system_fingerprint?: string | unknown;
+    /**
+     * Token usage statistics for the completion
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        completion_tokens_details?: unknown;
+        prompt_tokens_details?: unknown;
+    };
+};
+
 export type WebSocketMessageInput = {
-    type: 'hello-world';
+    type: string;
     payload: {
         [key: string]: unknown;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        tabIndex?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        url: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        text: string;
+        element?: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        key: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        zoomPercent: number;
     };
 };
 
@@ -1400,7 +2134,7 @@ export type OpenAiChatCompletionRequest = {
              */
             image_url: {
                 url: string;
-                detail: 'auto' | 'low' | 'high';
+                detail?: 'auto' | 'low' | 'high';
             };
         } | {
             type: 'input_audio';
@@ -1474,6 +2208,15 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
         }>;
         tool_call_id: string;
     } | {
@@ -2612,6 +3355,14 @@ export type AnthropicMessagesRequest = {
             cache_control?: unknown;
             citations?: Array<unknown> | unknown;
         } | {
+            type: 'image';
+            source: {
+                type: 'base64';
+                media_type: string;
+                data: string;
+            };
+            cache_control?: unknown;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -2626,6 +3377,14 @@ export type AnthropicMessagesRequest = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | unknown;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                };
+                cache_control?: unknown;
             }>;
             is_error?: boolean;
         }>;
@@ -2729,10 +3488,719 @@ export type AnthropicMessagesResponse = {
     };
 };
 
+export type VllmChatCompletionRequest = {
+    model: string;
+    /**
+     * A message in the conversation
+     */
+    messages: Array<{
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * Audio input details
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * File details
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * A tool call in the assistant message
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * Function call details
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * Custom tool call details
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning?: string | unknown;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string | unknown;
+        name: string;
+    }>;
+    /**
+     * A tool definition
+     */
+    tools?: Array<{
+        type: 'function';
+        /**
+         * A function definition for tool calling
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * The parameters the functions accepts, described as a JSON Schema object.
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    }>;
+    /**
+     * Tool choice option
+     */
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * Allowed tools configuration
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model.
+             * auto: allows the model to pick from allowed tools or generate a message.
+             * required: requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * A function definition for tool calling
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object.
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    };
+    temperature?: number | unknown;
+    max_tokens?: number | unknown;
+    stream?: boolean | unknown;
+    top_p?: number | unknown;
+    top_k?: number | unknown;
+    frequency_penalty?: number | unknown;
+    presence_penalty?: number | unknown;
+    repetition_penalty?: number | unknown;
+    stop?: string | Array<string>;
+    seed?: number | unknown;
+    n?: number | unknown;
+    best_of?: number | unknown;
+    logprobs?: boolean | unknown;
+    top_logprobs?: number | unknown;
+};
+
+export type VllmChatCompletionResponse = {
+    id: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * The assistant message in the response
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * A tool call in the assistant message
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * Function call details
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+            reasoning?: string | unknown;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    system_fingerprint?: string | unknown;
+    /**
+     * Token usage statistics for the completion
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        completion_tokens_details?: unknown;
+        prompt_tokens_details?: unknown;
+    };
+};
+
+export type OllamaChatCompletionRequest = {
+    model: string;
+    /**
+     * A message in the conversation
+     */
+    messages: Array<{
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'developer';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        }>;
+        role: 'system';
+        name?: string;
+    } | {
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        } | {
+            type: 'input_audio';
+            /**
+             * Audio input details
+             */
+            input_audio: {
+                data: string;
+                format: 'wav' | 'mp3';
+            };
+        } | {
+            type: 'file';
+            /**
+             * File details
+             */
+            file: {
+                file_data?: string;
+                file_id?: string;
+                filename?: string;
+            };
+        }>;
+        role: 'user';
+        name?: string;
+    } | {
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | unknown;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | unknown;
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | unknown;
+        name?: string;
+        refusal?: string | unknown;
+        /**
+         * A tool call in the assistant message
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * Function call details
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * Custom tool call details
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+    } | {
+        role: 'tool';
+        content: string | Array<{
+            type: 'text';
+            text: string;
+        } | {
+            type: 'image_url';
+            /**
+             * Image URL details
+             */
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
+        }>;
+        tool_call_id: string;
+    } | {
+        role: 'function';
+        content: string | unknown;
+        name: string;
+    }>;
+    /**
+     * A tool definition
+     */
+    tools?: Array<{
+        type: 'function';
+        /**
+         * A function definition for tool calling
+         */
+        function: {
+            name: string;
+            description?: string;
+            /**
+             *
+             * The parameters the functions accepts, described as a JSON Schema object.
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | unknown;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    }>;
+    /**
+     * Tool choice option
+     */
+    tool_choice?: 'none' | 'auto' | 'required' | {
+        type: 'allowed_tools';
+        /**
+         * Allowed tools configuration
+         */
+        allowed_tools: {
+            /**
+             *
+             * Constrains the tools available to the model.
+             * auto: allows the model to pick from allowed tools or generate a message.
+             * required: requires the model to call one or more of the allowed tools.
+             *
+             */
+            mode: 'auto' | 'required';
+            tools: Array<{
+                [key: string]: {
+                    type: 'function';
+                    /**
+                     * A function definition for tool calling
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object.
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | unknown;
+                    };
+                };
+            }>;
+        };
+    } | {
+        type: 'function';
+        function: {
+            name: string;
+        };
+    } | {
+        type: 'custom';
+        custom: {
+            /**
+             * The name of the custom tool
+             */
+            name: string;
+            /**
+             * Description of the tool
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool
+             */
+            format?: {
+                /**
+                 * Unconstrained text format
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                grammar: {
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            };
+        };
+    };
+    temperature?: number | unknown;
+    max_tokens?: number | unknown;
+    stream?: boolean | unknown;
+    top_p?: number | unknown;
+    frequency_penalty?: number | unknown;
+    presence_penalty?: number | unknown;
+    stop?: string | Array<string>;
+    seed?: number | unknown;
+    n?: number | unknown;
+};
+
+export type OllamaChatCompletionResponse = {
+    id: string;
+    choices: Array<{
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        index: number;
+        logprobs: unknown;
+        /**
+         * The assistant message in the response
+         */
+        message: {
+            content: string | unknown;
+            refusal?: string | unknown;
+            role: 'assistant';
+            annotations?: Array<unknown>;
+            audio?: unknown;
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | unknown;
+            /**
+             * A tool call in the assistant message
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * Function call details
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * Custom tool call details
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        };
+    }>;
+    created: number;
+    model: string;
+    object: 'chat.completion';
+    system_fingerprint?: string | unknown;
+    /**
+     * Token usage statistics for the completion
+     */
+    usage?: {
+        completion_tokens: number;
+        prompt_tokens: number;
+        total_tokens: number;
+        completion_tokens_details?: unknown;
+        prompt_tokens_details?: unknown;
+    };
+};
+
 export type WebSocketMessage = {
-    type: 'hello-world';
+    type: string;
     payload: {
         [key: string]: never;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        tabIndex?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        url: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        text: string;
+        element?: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        key: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        zoomPercent: number;
     };
 };
 
@@ -3857,8 +5325,9 @@ export type GetAllAgentToolsData = {
          * For test isolation
          */
         excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
+        skipPagination?: boolean;
         limit?: number;
         offset?: number;
     };
@@ -3931,8 +5400,6 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            allowUsageWhenUntrustedDataIsPresent: boolean;
-            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
@@ -4247,88 +5714,6 @@ export type BulkAssignToolsResponses = {
 
 export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
 
-export type BulkUpdateAgentToolsData = {
-    body: {
-        ids: Array<string>;
-        field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
-        value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        clearAutoConfigured?: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agent-tools/bulk-update';
-};
-
-export type BulkUpdateAgentToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
-
-export type BulkUpdateAgentToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        updatedCount: number;
-    };
-};
-
-export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
-
 export type AutoConfigureAgentToolPoliciesData = {
     body: {
         agentToolIds: Array<string>;
@@ -4407,7 +5792,6 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             agentToolId: string;
             success: boolean;
             config?: {
-                allowUsageWhenUntrustedDataIsPresent: boolean;
                 toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
                 reasoning: string;
             };
@@ -4423,7 +5807,9 @@ export type GetAgentToolsData = {
     path: {
         agentId: string;
     };
-    query?: never;
+    query?: {
+        excludeLlmProxyOrigin?: boolean;
+    };
     url: '/api/agents/{agentId}/tools';
 };
 
@@ -4522,8 +5908,6 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body?: {
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
@@ -4604,8 +5988,6 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
@@ -5021,11 +6403,13 @@ export type GetToolInvocationPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        agentToolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
+        toolId: string;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5036,11 +6420,13 @@ export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesRespons
 
 export type CreateToolInvocationPolicyData = {
     body: {
-        agentToolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
+        toolId: string;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
         reason?: string | null;
     };
     path?: never;
@@ -5113,11 +6499,13 @@ export type CreateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
+        toolId: string;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5279,11 +6667,13 @@ export type GetToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
+        toolId: string;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5294,11 +6684,13 @@ export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[k
 
 export type UpdateToolInvocationPolicyData = {
     body?: {
-        agentToolId?: string;
-        argumentName?: string;
-        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value?: string;
-        action?: 'allow_when_context_is_untrusted' | 'block_always';
+        toolId?: string;
+        conditions?: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
         reason?: string | null;
     };
     path: {
@@ -5373,11 +6765,13 @@ export type UpdateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
+        toolId: string;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
         reason: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5458,12 +6852,14 @@ export type GetTrustedDataPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -5473,12 +6869,14 @@ export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[key
 
 export type CreateTrustedDataPolicyData = {
     body: {
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        toolId: string;
+        description?: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;
@@ -5550,12 +6948,14 @@ export type CreateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -5716,12 +7116,14 @@ export type GetTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -5731,12 +7133,14 @@ export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof G
 
 export type UpdateTrustedDataPolicyData = {
     body?: {
-        agentToolId?: string;
-        description?: string;
-        attributePath?: string;
-        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value?: string;
-        action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        toolId?: string;
+        description?: string | null;
+        conditions?: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
     };
     path: {
         id: string;
@@ -5810,18 +7214,182 @@ export type UpdateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        toolId: string;
+        description: string | null;
+        conditions: Array<{
+            key: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+        }>;
+        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
 };
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
+
+export type BulkUpsertDefaultCallPolicyData = {
+    body: {
+        toolIds: Array<string>;
+        action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/tool-invocation/bulk-default';
+};
+
+export type BulkUpsertDefaultCallPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpsertDefaultCallPolicyError = BulkUpsertDefaultCallPolicyErrors[keyof BulkUpsertDefaultCallPolicyErrors];
+
+export type BulkUpsertDefaultCallPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: number;
+        created: number;
+    };
+};
+
+export type BulkUpsertDefaultCallPolicyResponse = BulkUpsertDefaultCallPolicyResponses[keyof BulkUpsertDefaultCallPolicyResponses];
+
+export type BulkUpsertDefaultResultPolicyData = {
+    body: {
+        toolIds: Array<string>;
+        action: 'mark_as_trusted' | 'mark_as_untrusted' | 'block_always' | 'sanitize_with_dual_llm';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/trusted-data-policies/bulk-default';
+};
+
+export type BulkUpsertDefaultResultPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpsertDefaultResultPolicyError = BulkUpsertDefaultResultPolicyErrors[keyof BulkUpsertDefaultResultPolicyErrors];
+
+export type BulkUpsertDefaultResultPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: number;
+        created: number;
+    };
+};
+
+export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
 
 export type GetChatApiKeysData = {
     body?: never;
@@ -5897,7 +7465,7 @@ export type GetChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -5917,7 +7485,7 @@ export type GetChatApiKeysResponse = GetChatApiKeysResponses[keyof GetChatApiKey
 export type CreateChatApiKeyData = {
     body: {
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         apiKey?: string;
         scope?: 'personal' | 'team' | 'org_wide';
         teamId?: string;
@@ -5996,7 +7564,7 @@ export type CreateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6012,7 +7580,7 @@ export type GetAvailableChatApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'openai' | 'gemini';
+        provider?: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
     };
     url: '/api/chat-api-keys/available';
 };
@@ -6084,7 +7652,7 @@ export type GetAvailableChatApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6256,7 +7824,7 @@ export type GetChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6356,7 +7924,7 @@ export type UpdateChatApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org_wide';
         userId: string | null;
@@ -6372,7 +7940,7 @@ export type GetChatModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'anthropic' | 'openai' | 'gemini';
+        provider?: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
     };
     url: '/api/chat/models';
 };
@@ -6443,7 +8011,7 @@ export type GetChatModelsResponses = {
     200: Array<{
         id: string;
         displayName: string;
-        provider: 'anthropic' | 'openai' | 'gemini';
+        provider: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         createdAt?: string;
     }>;
 };
@@ -6599,6 +8167,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -6622,6 +8191,7 @@ export type CreateChatConversationData = {
         promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
+        selectedProvider?: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         chatApiKeyId?: string | null;
     };
     path?: never;
@@ -6701,6 +8271,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -6878,6 +8449,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -6899,6 +8471,7 @@ export type UpdateChatConversationData = {
     body?: {
         title?: string | null;
         selectedModel?: string;
+        selectedProvider?: 'anthropic' | 'openai' | 'gemini' | 'vllm' | 'ollama';
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
@@ -6982,6 +8555,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -7168,6 +8742,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -7270,6 +8845,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
+        selectedProvider: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
@@ -8231,6 +9807,10 @@ export type GetFeaturesResponses = {
         byosEnabled: boolean;
         byosVaultKvVersion: '1' | '2';
         geminiVertexAiEnabled: boolean;
+        vllmEnabled: boolean;
+        ollamaEnabled: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
+        browserStreamingEnabled: boolean;
     };
 };
 
@@ -8722,6 +10302,42 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            request: VllmChatCompletionRequest;
+            processedRequest?: VllmChatCompletionRequest | null;
+            response: VllmChatCompletionResponse;
+            type: 'vllm:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            createdAt: string;
+        } | {
+            id: string;
+            profileId: string;
+            externalAgentId: string | null;
+            userId: string | null;
+            request: OllamaChatCompletionRequest;
+            processedRequest?: OllamaChatCompletionRequest | null;
+            response: OllamaChatCompletionResponse;
+            type: 'ollama:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            createdAt: string;
         }>;
         pagination: {
             currentPage: number;
@@ -9006,6 +10622,42 @@ export type GetInteractionResponses = {
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        createdAt: string;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        request: VllmChatCompletionRequest;
+        processedRequest?: VllmChatCompletionRequest | null;
+        response: VllmChatCompletionResponse;
+        type: 'vllm:chatCompletions';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        createdAt: string;
+    } | {
+        id: string;
+        profileId: string;
+        externalAgentId: string | null;
+        userId: string | null;
+        request: OllamaChatCompletionRequest;
+        processedRequest?: OllamaChatCompletionRequest | null;
+        response: OllamaChatCompletionResponse;
+        type: 'ollama:chatCompletions';
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
@@ -13080,6 +14732,178 @@ export type HandleOAuthCallbackResponses = {
 
 export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
 
+export type OllamaChatCompletionsWithDefaultAgentData = {
+    body?: OllamaChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Ollama (typically not required)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/ollama/chat/completions';
+};
+
+export type OllamaChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type OllamaChatCompletionsWithDefaultAgentError = OllamaChatCompletionsWithDefaultAgentErrors[keyof OllamaChatCompletionsWithDefaultAgentErrors];
+
+export type OllamaChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OllamaChatCompletionResponse;
+};
+
+export type OllamaChatCompletionsWithDefaultAgentResponse = OllamaChatCompletionsWithDefaultAgentResponses[keyof OllamaChatCompletionsWithDefaultAgentResponses];
+
+export type OllamaChatCompletionsWithAgentData = {
+    body?: OllamaChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Ollama (typically not required)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/ollama/{agentId}/chat/completions';
+};
+
+export type OllamaChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type OllamaChatCompletionsWithAgentError = OllamaChatCompletionsWithAgentErrors[keyof OllamaChatCompletionsWithAgentErrors];
+
+export type OllamaChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OllamaChatCompletionResponse;
+};
+
+export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
+
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;
     headers: {
@@ -13331,7 +15155,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13351,7 +15175,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -13434,7 +15258,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13533,7 +15357,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -13618,7 +15442,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -13707,11 +15531,12 @@ export type GetOrganizationResponses = {
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
-        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 
@@ -13719,10 +15544,11 @@ export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganiza
 
 export type UpdateOrganizationData = {
     body?: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        theme?: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
         compressionScope?: 'organization' | 'team';
+        globalToolPolicy?: 'permissive' | 'restrictive';
         logo?: string | null;
         onboardingComplete?: boolean;
         convertToolResultsToToon?: boolean;
@@ -13805,11 +15631,12 @@ export type UpdateOrganizationResponses = {
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
-        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         autoConfigureNewTools: boolean;
+        globalToolPolicy: 'permissive' | 'restrictive';
     };
 };
 
@@ -13893,6 +15720,85 @@ export type GetOnboardingStatusResponses = {
 
 export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof GetOnboardingStatusResponses];
 
+export type GetPublicAppearanceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type GetPublicAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPublicAppearanceError = GetPublicAppearanceErrors[keyof GetPublicAppearanceErrors];
+
+export type GetPublicAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        logo: string | null;
+    };
+};
+
+export type GetPublicAppearanceResponse = GetPublicAppearanceResponses[keyof GetPublicAppearanceResponses];
+
 export type GetPolicyConfigSubagentPromptData = {
     body?: never;
     path?: never;
@@ -13969,6 +15875,85 @@ export type GetPolicyConfigSubagentPromptResponses = {
 };
 
 export type GetPolicyConfigSubagentPromptResponse = GetPolicyConfigSubagentPromptResponses[keyof GetPolicyConfigSubagentPromptResponses];
+
+export type GetAllPromptAgentConnectionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/prompt-agents';
+};
+
+export type GetAllPromptAgentConnectionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAllPromptAgentConnectionsError = GetAllPromptAgentConnectionsErrors[keyof GetAllPromptAgentConnectionsErrors];
+
+export type GetAllPromptAgentConnectionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        promptId: string;
+        agentPromptId: string;
+    }>;
+};
+
+export type GetAllPromptAgentConnectionsResponse = GetAllPromptAgentConnectionsResponses[keyof GetAllPromptAgentConnectionsResponses];
 
 export type GetPromptAgentsData = {
     body?: never;
@@ -14296,8 +16281,9 @@ export type GetPromptsResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -14312,8 +16298,6 @@ export type CreatePromptData = {
         userPrompt?: string | null;
         systemPrompt?: string | null;
         version?: number;
-        parentPromptId?: string | null;
-        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -14391,8 +16375,9 @@ export type CreatePromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14559,8 +16544,9 @@ export type GetPromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14653,8 +16639,9 @@ export type UpdatePromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14734,19 +16721,28 @@ export type GetPromptVersionsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        agentId: string;
-        userPrompt: string | null;
-        systemPrompt: string | null;
-        version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
-        createdAt: string;
-        updatedAt: string;
-    }>;
+    200: {
+        current: {
+            id: string;
+            organizationId: string;
+            name: string;
+            agentId: string;
+            userPrompt: string | null;
+            systemPrompt: string | null;
+            version: number;
+            history: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown>;
+            createdAt: string;
+            updatedAt: string;
+        };
+        history: Array<{
+            version: number;
+            userPrompt: string | null;
+            systemPrompt: string | null;
+            createdAt: string;
+        }>;
+    };
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
@@ -14848,6 +16844,7 @@ export type GetPromptToolsResponses = {
         description: string | null;
         createdAt: string;
         updatedAt: string;
+        agentPromptId: string;
     }>;
 };
 
@@ -14855,7 +16852,7 @@ export type GetPromptToolsResponse = GetPromptToolsResponses[keyof GetPromptTool
 
 export type RollbackPromptData = {
     body: {
-        versionId: string;
+        version: number;
     };
     path: {
         id: string;
@@ -14935,8 +16932,9 @@ export type RollbackPromptResponses = {
         userPrompt: string | null;
         systemPrompt: string | null;
         version: number;
-        parentPromptId: string | null;
-        isActive: boolean;
+        history: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -16738,7 +18736,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16751,7 +18749,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16826,7 +18824,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -16990,7 +18988,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17003,7 +19001,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: 'openai' | 'gemini' | 'anthropic';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -17080,7 +19078,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
-        provider: 'openai' | 'gemini' | 'anthropic';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'vllm' | 'ollama';
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -17462,6 +19460,144 @@ export type GetToolsResponses = {
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 
+export type GetToolsWithAssignmentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        search?: string;
+        /**
+         * Can be 'llm-proxy' or a catalogId
+         */
+        origin?: string;
+        /**
+         * Hide built-in Archestra tools
+         */
+        excludeArchestraTools?: boolean;
+        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
+        sortDirection?: 'asc' | 'desc';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/tools/with-assignments';
+};
+
+export type GetToolsWithAssignmentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetToolsWithAssignmentsError = GetToolsWithAssignmentsErrors[keyof GetToolsWithAssignmentsErrors];
+
+export type GetToolsWithAssignmentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            catalogId: string | null;
+            mcpServerId: string | null;
+            mcpServerName: string | null;
+            mcpServerCatalogId: string | null;
+            createdAt: string;
+            updatedAt: string;
+            assignmentCount: number;
+            assignments: Array<{
+                agentToolId: string;
+                agent: {
+                    id: string;
+                    name: string;
+                };
+                credentialSourceMcpServerId: string | null;
+                credentialOwnerEmail: string | null;
+                executionSourceMcpServerId: string | null;
+                executionOwnerEmail: string | null;
+                useDynamicTeamCredential: boolean;
+                responseModifierTemplate: string | null;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetToolsWithAssignmentsResponse = GetToolsWithAssignmentsResponses[keyof GetToolsWithAssignmentsResponses];
+
 export type GetUserTokenData = {
     body?: never;
     path?: never;
@@ -17701,6 +19837,178 @@ export type RotateUserTokenResponses = {
 };
 
 export type RotateUserTokenResponse = RotateUserTokenResponses[keyof RotateUserTokenResponses];
+
+export type VllmChatCompletionsWithDefaultAgentData = {
+    body?: VllmChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for vLLM (often not required)
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/vllm/chat/completions';
+};
+
+export type VllmChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type VllmChatCompletionsWithDefaultAgentError = VllmChatCompletionsWithDefaultAgentErrors[keyof VllmChatCompletionsWithDefaultAgentErrors];
+
+export type VllmChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: VllmChatCompletionResponse;
+};
+
+export type VllmChatCompletionsWithDefaultAgentResponse = VllmChatCompletionsWithDefaultAgentResponses[keyof VllmChatCompletionsWithDefaultAgentResponses];
+
+export type VllmChatCompletionsWithAgentData = {
+    body?: VllmChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for vLLM (often not required)
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/vllm/{agentId}/chat/completions';
+};
+
+export type VllmChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type VllmChatCompletionsWithAgentError = VllmChatCompletionsWithAgentErrors[keyof VllmChatCompletionsWithAgentErrors];
+
+export type VllmChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: VllmChatCompletionResponse;
+};
+
+export type VllmChatCompletionsWithAgentResponse = VllmChatCompletionsWithAgentResponses[keyof VllmChatCompletionsWithAgentResponses];
 
 export type GetRolesData = {
     body?: never;

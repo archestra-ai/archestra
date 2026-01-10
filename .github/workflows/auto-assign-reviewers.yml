@@ -14,7 +14,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Randomly assign reviewer from core team
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const coreTeam = ['ashlkv', 'iskhakov', 'Konstantinov-Innokentii', 'joeyorlando', 'brojd'];
@@ -41,4 +41,18 @@ jobs:
               console.error(`Failed to assign reviewer: ${error.message}`);
               // Don't fail the workflow if reviewer assignment fails
               // (e.g., if the reviewer doesn't have access to the repo)
+            }
+
+            // Also assign the PR to the selected reviewer
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                assignees: [selectedReviewer]
+              });
+              console.log(`Successfully assigned ${selectedReviewer} as PR assignee`);
+            } catch (error) {
+              console.error(`Failed to assign PR assignee: ${error.message}`);
+              // Don't fail the workflow if assignee assignment fails
             }

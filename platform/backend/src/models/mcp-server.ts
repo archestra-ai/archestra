@@ -337,26 +337,33 @@ class McpServerModel {
       return false;
     }
 
+    // Clean up agent_tools that reference this server
+    // Must be done before deletion to ensure agents do not retain unusable tool assignments
+    // FK constraint would only null out the reference, not remove the assignment
+    try {
+      let deletedAgentTools = 0;
+      if (mcpServer.serverType === "local") {
+        deletedAgentTools =
+          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
+      } else {
+        deletedAgentTools =
+          await AgentToolModel.deleteByCredentialSourceMcpServerId(id);
+      }
+      if (deletedAgentTools > 0) {
+        logger.info(
+          `Deleted ${deletedAgentTools} agent tool assignments for MCP server: ${mcpServer.name}`,
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
+      );
+      // Continue with deletion even if agent tool cleanup fails
+    }
+
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
-      // Clean up agent_tools that use this server as execution source
-      // Must be done before deletion to ensure agents do not retain unusable tool assignments; FK constraint would only null out the reference, not remove the assignment
-      try {
-        const deletedAgentTools =
-          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
-        if (deletedAgentTools > 0) {
-          logger.info(
-            `Deleted ${deletedAgentTools} agent tool assignments for local MCP server: ${mcpServer.name}`,
-          );
-        }
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
-        );
-        // Continue with deletion even if agent tool cleanup fails
-      }
-
       try {
         await McpServerRuntimeManager.removeMcpServer(id);
         logger.info(

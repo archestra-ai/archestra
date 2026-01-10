@@ -48,6 +48,11 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  // Cerebras models (llama, qwen served by Cerebras)
+  if (lowerModel.includes("llama") || lowerModel.includes("qwen")) {
+    return "cerebras";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -110,6 +115,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "ollama" && config.chat.ollama.apiKey) {
       providerApiKey = config.chat.ollama.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "cerebras" && config.chat.cerebras.apiKey) {
+      providerApiKey = config.chat.cerebras.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -210,6 +218,18 @@ export function createLLMModel(params: {
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
       baseURL: `http://localhost:${config.api.port}/v1/ollama/${agentId}`,
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  }
+
+  if (provider === "cerebras") {
+    // URL format: /v1/cerebras/:agentId (SDK appends /chat/completions)
+    // Cerebras uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/cerebras/${agentId}`,
       headers,
     });
     // Use .chat() to force Chat Completions API

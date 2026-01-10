@@ -233,19 +233,10 @@ export default function ChatPage() {
     }
   }, [searchParams, conversationId]);
 
-  // Handle pending_message URL param for deep-linking with auto-send
-  useEffect(() => {
-    const pendingMessage = searchParams.get("pending_message");
-    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
-
-    if (pendingMessage && conversationParam) {
-      // Store message to be sent when conversation loads
-      pendingPromptRef.current = pendingMessage;
-
-      // Clear pending_message from URL to prevent re-sending on refresh
-      router.replace(`${pathname}?${CONVERSATION_QUERY_PARAM}=${conversationParam}`);
-    }
-  }, [searchParams, pathname, router]);
+  // Get user_prompt from URL for pre-filling the input
+  const initialUserPrompt = useMemo(() => {
+    return searchParams.get("user_prompt") || undefined;
+  }, [searchParams]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
@@ -1074,6 +1065,11 @@ export default function ChatPage() {
                     conversationId && conversation?.agent.id
                       ? (conversation?.promptId ?? null)
                       : initialPromptId
+                  }
+                  initialInput={
+                    conversationId && conversation?.agent.id
+                      ? undefined
+                      : initialUserPrompt
                   }
                 />
                 <div className="text-center">

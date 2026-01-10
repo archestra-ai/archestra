@@ -431,55 +431,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/chat/agents/:agentId/conversation",
-    {
-      schema: {
-        operationId: RouteId.CreateAgentConversation,
-        description: "Create a new conversation with an agent via URL",
-        tags: ["Chat"],
-        params: z.object({ agentId: UuidIdSchema }),
-        response: constructResponseSchema(SelectConversationSchema),
-      },
-    },
-    async ({ params: { agentId }, user, organizationId, headers }, reply) => {
-      // Check if user is an agent admin
-      const { success: isAgentAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
-
-      // Validate that the agent exists and user has access to it
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
-
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Use smart defaults for model and provider
-      const { model, provider } = await getSmartDefaultModel(
-        user.id,
-        organizationId,
-      );
-
-      logger.info(
-        { agentId, organizationId, model, provider },
-        "Creating conversation via GET",
-      );
-
-      // Create conversation with agent
-      const conversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId,
-        agentId,
-        selectedModel: model,
-        selectedProvider: provider,
-      });
-
-      return reply.send(conversation);
-    },
-  );
-
-  fastify.get(
     "/api/chat/conversations/:id",
     {
       schema: {

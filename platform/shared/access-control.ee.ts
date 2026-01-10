@@ -30,6 +30,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Start with better-auth defaults
   ...defaultStatements,
   // Override with Archestra-specific actions
+  user: ["create", "read", "update", "delete"],
   profile: ["create", "read", "update", "delete", "admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
@@ -101,11 +102,11 @@ export const memberPermissions: Permissions = {
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
-  {
-    [ADMIN_ROLE_NAME]: allAvailableActions,
-    [EDITOR_ROLE_NAME]: editorPermissions,
-    [MEMBER_ROLE_NAME]: memberPermissions,
-  };
+{
+  [ADMIN_ROLE_NAME]: allAvailableActions,
+  [EDITOR_ROLE_NAME]: editorPermissions,
+  [MEMBER_ROLE_NAME]: memberPermissions,
+};
 
 /**
  * Available resources and actions
@@ -122,6 +123,9 @@ export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
   [RouteId.GetAgents]: {
+    profile: ["read"],
+  },
+  [RouteId.GetUser]: {
     profile: ["read"],
   },
   [RouteId.GetAllAgents]: {

@@ -6,6 +6,10 @@ import { betterAuth } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { AccountModel, MemberModel, UserModel, UserTokenModel } from "@/models";
+import {
+  constructResponseSchema,
+  UserSchema,
+} from "@/types";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -164,6 +168,33 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       reply.send(response.body ? await response.text() : null);
+    },
+  });
+
+  // Explicit route for getUser to ensure routeOptions (operationId) are populated
+  // This is critical for downstream middleware/logging that relies on routeOptions
+  fastify.route({
+    method: "GET",
+    url: "/api/auth/admin/get-user",
+    schema: {
+      operationId: RouteId.GetUser,
+      description: "Get user by ID",
+      tags: ["Get User"],
+      querystring: z.object({
+        id: z.string(),
+      }),
+      response: constructResponseSchema(UserSchema),
+    },
+    async handler(request, reply) {
+      try {
+        // Check if a user with the default email exists
+        const user = await UserModel.getById(request.query.id);
+
+        return reply.send({ ...user });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send();
+      }
     },
   });
 

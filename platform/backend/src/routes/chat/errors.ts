@@ -14,9 +14,7 @@ import {
 import { APICallError } from "ai";
 import logger from "@/logging";
 
-// =============================================================================
 // Safe Serialization
-// =============================================================================
 
 /**
  * Safely stringify an object, handling circular references.
@@ -66,9 +64,7 @@ function safeSerialize(obj: unknown): unknown {
   }
 }
 
-// =============================================================================
 // Parsed Error Types
-// =============================================================================
 
 interface ParsedOpenAIError {
   type?: string;
@@ -105,9 +101,7 @@ interface ParsedGeminiError {
   errorInfo?: GeminiErrorInfo;
 }
 
-// =============================================================================
 // Provider-Specific Error Parsers
-// =============================================================================
 
 /**
  * Parse OpenAI error response body.
@@ -367,9 +361,7 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
   }
 }
 
-// =============================================================================
 // Provider-Specific Error Mappers
-// =============================================================================
 
 /**
  * Map OpenAI error to ChatErrorCode.
@@ -618,9 +610,7 @@ function mapStatusCodeToErrorCode(
   }
 }
 
-// =============================================================================
 // Provider Parser/Mapper Registry
-// =============================================================================
 
 /** Union type of all parsed error types */
 type ParsedProviderError =
@@ -824,6 +814,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   gemini: parseGeminiError,
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  zai: parseOpenAIError, // Z.ai uses OpenAI-compatible API
 };
 
 /**
@@ -837,11 +828,10 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   gemini: mapGeminiErrorWrapper,
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  zai: mapOpenAIErrorWrapper, // Z.ai uses OpenAI-compatible API
 };
 
-// =============================================================================
 // Message Extraction
-// =============================================================================
 
 /**
  * Recursively find the deepest string message in a parsed object
@@ -929,9 +919,7 @@ function extractErrorMessage(
   return "Unknown error";
 }
 
-// =============================================================================
 // Main Error Mapper
-// =============================================================================
 
 /**
  * Create a ChatErrorResponse from the determined error code.

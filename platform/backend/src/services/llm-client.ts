@@ -48,6 +48,11 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     return "openai";
   }
 
+  // Z.ai (Zhipu AI) models
+  if (lowerModel.includes("glm") || lowerModel.includes("zhipu")) {
+    return "zai";
+  }
+
   // Default to anthropic for backwards compatibility
   // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
   return "anthropic";
@@ -110,6 +115,8 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "ollama" && config.chat.ollama.apiKey) {
       providerApiKey = config.chat.ollama.apiKey;
+    } else if (provider === "zai" && config.chat.zai.apiKey) {
+      providerApiKey = config.chat.zai.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -210,6 +217,12 @@ export function createLLMModel(params: {
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
       baseURL: `http://localhost:${config.api.port}/v1/ollama/${agentId}`,
+  if (provider === "zai") {
+    // Z.ai uses OpenAI-compatible API
+    // URL format: /v1/zai/:agentId (SDK appends /chat/completions)
+    const client = createOpenAI({
+      apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/zai/${agentId}`,
       headers,
     });
     // Use .chat() to force Chat Completions API

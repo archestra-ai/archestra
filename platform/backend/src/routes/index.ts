@@ -7,6 +7,7 @@ import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
+import zaiProxyRoutesV2 from "./proxy/routesv2/zai";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -54,6 +55,10 @@ export const vllmProxyRoutes = config.llm.vllm.useV2Routes
 export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
   ? ollamaProxyRoutesV2
   : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
+// Z.ai proxy routes - V2 (unified handler) only, no V1 legacy
+export const zaiProxyRoutes = config.llm.zai.useV2Routes
+  ? zaiProxyRoutesV2
+  : zaiProxyRoutesV2; // Z.ai only has V2 implementation
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

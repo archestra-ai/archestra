@@ -151,6 +151,9 @@ export const RouteId = {
   OllamaChatCompletionsWithDefaultAgent:
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+  // Proxy Routes - Z.ai
+  ZaiChatCompletionsWithDefaultAgent: "zaiChatCompletionsWithDefaultAgent",
+  ZaiChatCompletionsWithAgent: "zaiChatCompletionsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",

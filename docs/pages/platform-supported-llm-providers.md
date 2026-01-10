@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Archestra Platform
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2025-12-11
+lastUpdated: 2026-01-09
 ---
 
 <!--
@@ -178,3 +178,23 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+## Z.ai (Zhipu AI)
+
+Z.ai is China's leading AI platform, offering powerful language models including the GLM series. Archestra supports Z.ai's OpenAI-compatible Chat Completions API.
+
+### Supported Z.ai APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+
+### Z.ai Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/zai/{agent-id}`
+- **Authentication**: Pass your Z.ai API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- **API Compatibility**: Z.ai uses an OpenAI-compatible API format, making it easy to integrate with existing OpenAI-based applications.
+- **Default Model**: The default model is `glm-4-flash`. Other available models include `glm-4`, `glm-4-plus`, and `glm-4v` (vision).
+- **Obtaining an API Key**: Get your API key from the [Z.ai Platform](https://open.bigmodel.cn/) (requires registration).
+- **Tool Support**: Function calling (tool use) is fully supported, including tool invocation policies and trusted data policies.
+

@@ -272,6 +272,10 @@ export default {
       enabled: Boolean(process.env.ARCHESTRA_OLLAMA_BASE_URL),
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
+    zai: {
+      baseUrl:
+        process.env.ARCHESTRA_ZAI_BASE_URL || "https://open.bigmodel.cn/api/paas/v4",
+      useV2Routes: process.env.ARCHESTRA_ZAI_USE_V2_ROUTES !== "false",
     },
   },
   chat: {
@@ -289,6 +293,8 @@ export default {
     },
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    zai: {
+      apiKey: process.env.ARCHESTRA_CHAT_ZAI_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
@@ -300,11 +306,15 @@ export default {
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
     defaultProvider: ((): SupportedProvider => {
       const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
+    defaultProvider: ((): "anthropic" | "openai" | "gemini" | "zai" => {
+      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
+      const validProviders = ["anthropic", "openai", "gemini", "zai"] as const;
       if (
         provider &&
         SupportedProviders.includes(provider as SupportedProvider)
       ) {
         return provider as SupportedProvider;
+        return provider as "anthropic" | "openai" | "gemini" | "zai";
       }
       return "anthropic";
     })(),

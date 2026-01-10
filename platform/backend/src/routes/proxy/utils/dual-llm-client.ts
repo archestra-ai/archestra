@@ -49,11 +49,11 @@ export class OpenAiDualLlmClient implements DualLlmClient {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "gpt-4o") {
+  constructor(apiKey: string, model = "gpt-4o", baseUrl?: string) {
     logger.debug({ model }, "[dualLlmClient] OpenAI: initializing client");
     this.client = new OpenAI({
       apiKey,
-      baseURL: config.llm.openai.baseUrl,
+      baseURL: baseUrl ?? config.llm.openai.baseUrl,
     });
     this.model = model;
   }
@@ -612,6 +612,16 @@ export function createDualLlmClient(
         throw new Error("Model name required for Ollama dual LLM");
       }
       return new OllamaDualLlmClient(apiKey, model);
+    case "zai":
+      // Z.ai uses OpenAI-compatible API
+      if (!apiKey) {
+        throw new Error("API key required for Z.ai dual LLM");
+      }
+      return new OpenAiDualLlmClient(
+        apiKey,
+        "glm-4-flash", // Default Z.ai model
+        config.llm.zai.baseUrl,
+      );
     default:
       logger.debug(
         { provider },

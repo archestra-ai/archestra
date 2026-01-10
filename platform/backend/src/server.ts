@@ -47,6 +47,7 @@ import {
   OpenAi,
   Vllm,
   WebSocketMessageSchema,
+  Zai,
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
@@ -105,6 +106,11 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
+  z.globalRegistry.add(Zai.API.ChatCompletionRequestSchema, {
+    id: "ZaiChatCompletionRequest",
+  });
+  z.globalRegistry.add(Zai.API.ChatCompletionResponseSchema, {
+    id: "ZaiChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

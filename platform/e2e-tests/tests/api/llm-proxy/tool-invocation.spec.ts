@@ -3,9 +3,7 @@ import { expect, test } from "../fixtures";
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;
 
-// =============================================================================
 // Test Configuration Interface
-// =============================================================================
 
 interface ToolDefinition {
   name: string;
@@ -50,9 +48,7 @@ interface ToolInvocationTestConfig {
   ) => AnyResponse | undefined;
 }
 
-// =============================================================================
 // Shared Tool Definition
-// =============================================================================
 
 const READ_FILE_TOOL: ToolDefinition = {
   name: "read_file",
@@ -69,9 +65,7 @@ const READ_FILE_TOOL: ToolDefinition = {
   },
 };
 
-// =============================================================================
 // Test Configurations
-// =============================================================================
 
 const openaiConfig: ToolInvocationTestConfig = {
   providerName: "OpenAI",
@@ -320,6 +314,11 @@ const vllmConfig: ToolInvocationTestConfig = {
   providerName: "vLLM",
 
   endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+// Z.ai uses OpenAI-compatible API, so same structure as openaiConfig
+const zaiConfig: ToolInvocationTestConfig = {
+  providerName: "Zai",
+
+  endpoint: (agentId) => `/v1/zai/${agentId}/chat/completions`,
 
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -404,6 +403,7 @@ const ollamaConfig: ToolInvocationTestConfig = {
 
   buildRequest: (content, tools) => ({
     model: "qwen2:0.5b",
+    model: "glm-4-flash",
     messages: [{ role: "user", content }],
     tools: tools.map((t) => ({
       type: "function",
@@ -468,9 +468,7 @@ const ollamaConfig: ToolInvocationTestConfig = {
     ),
 };
 
-// =============================================================================
 // Test Suite
-// =============================================================================
 
 const testConfigs: ToolInvocationTestConfig[] = [
   openaiConfig,
@@ -478,6 +476,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   geminiConfig,
   vllmConfig,
   ollamaConfig,
+  zaiConfig,
 ];
 
 for (const config of testConfigs) {

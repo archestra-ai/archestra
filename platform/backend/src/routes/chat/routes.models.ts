@@ -22,6 +22,7 @@ import {
   type Gemini,
   type OpenAi,
   SupportedChatProviderSchema,
+  type Zai,
 } from "@/types";
 
 /** TTL for caching chat models from provider APIs */
@@ -356,6 +357,49 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Z.ai (Zhipu AI) API
+ * Z.ai uses an OpenAI-compatible API format
+ * @see https://docs.z.ai/api-reference/llm/chat-completion
+ */
+async function fetchZaiModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.zai.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Z.ai models",
+    );
+    throw new Error(`Failed to fetch Z.ai models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    data: Zai.Types.Model[];
+  };
+
+  // Filter to chat-capable models
+  return data.data
+    .filter((model) => {
+      const id = model.id.toLowerCase();
+      // Z.ai GLM models are chat models
+      return id.includes("glm") || id.includes("chatglm");
+    })
+    .map((model) => ({
+      id: model.id,
+      displayName: model.id,
+      provider: "zai" as const,
+      createdAt: new Date(model.created * 1000).toISOString(),
+    }));
+}
+
+/**
  * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
 async function getProviderApiKey({
@@ -400,6 +444,8 @@ async function getProviderApiKey({
     case "ollama":
       // Ollama typically doesn't require API keys, return empty or configured key
       return config.chat.ollama.apiKey || "";
+    case "zai":
+      return config.chat.zai.apiKey || null;
     default:
       return null;
   }
@@ -415,6 +461,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  zai: fetchZaiModels,
 };
 
 /**
@@ -473,7 +520,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "zai"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

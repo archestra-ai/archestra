@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
+import CohereChatInteraction from "./llmProviders/cohere";
 import type {
   DualLlmResult,
   Interaction,
@@ -121,6 +122,8 @@ export class DynamicInteraction implements InteractionUtils {
     }
     if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
+    } else if (this.type === "cohere:chat") {
+      return new CohereChatInteraction(interaction);
     }
     if (type === "vllm:chatCompletions") {
       return new VllmChatCompletionInteraction(interaction);

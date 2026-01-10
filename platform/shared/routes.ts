@@ -151,6 +151,9 @@ export const RouteId = {
   OllamaChatCompletionsWithDefaultAgent:
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+  // Proxy Routes - Cohere
+  CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
+  CohereChatWithAgent: "cohereChatWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",

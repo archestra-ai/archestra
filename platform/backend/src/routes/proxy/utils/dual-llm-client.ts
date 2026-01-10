@@ -347,6 +347,18 @@ export class VllmDualLlmClient implements DualLlmClient {
       baseURL: config.llm.vllm.baseUrl,
     });
     this.model = model;
+ * Cohere implementation of DualLlmClient
+ */
+export class CohereDualLlmClient implements DualLlmClient {
+  private apiKey: string;
+  private model: string;
+  private baseUrl: string;
+
+  constructor(apiKey: string, model = "command-r-plus") {
+    logger.debug({ model }, "[dualLlmClient] Cohere: initializing client");
+    this.apiKey = apiKey;
+    this.model = model;
+    this.baseUrl = config.llm.cohere?.baseUrl ?? "https://api.cohere.ai";
   }
 
   async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
@@ -364,6 +376,42 @@ export class VllmDualLlmClient implements DualLlmClient {
     logger.debug(
       { model: this.model, responseLength: content.length },
       "[dualLlmClient] vLLM: chat completion complete",
+      "[dualLlmClient] Cohere: starting chat completion",
+    );
+
+    // Convert DualLlmMessage format to Cohere message format
+    const cohereMessages = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+    }));
+
+    const response = await fetch(`${this.baseUrl}/v2/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: cohereMessages,
+        temperature,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Cohere API error: ${response.status} ${errorText}`);
+    }
+
+    const data = (await response.json()) as {
+      message?: { content?: Array<{ type: string; text?: string }> };
+    };
+    const textContent = data.message?.content?.find((c) => c.type === "text");
+    const content = textContent?.text?.trim() || "";
+
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Cohere: chat completion complete",
     );
     return content;
   }
@@ -418,6 +466,11 @@ export class VllmDualLlmClient implements DualLlmClient {
       );
 
       const systemPrompt = `You must respond with valid JSON matching this schema:
+      "[dualLlmClient] Cohere: starting chat with schema",
+    );
+
+    // Cohere supports JSON mode via response_format
+    const systemPrompt = `You must respond with valid JSON matching this schema:
 ${JSON.stringify(schema.schema, null, 2)}
 
 Return only the JSON object, no other text.`;
@@ -566,6 +619,33 @@ Return only the JSON object, no other text.`;
 
       return JSON.parse(jsonText) as T;
     }
+    // Prepend the schema instruction to the first user message
+    const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+      if (idx === 0 && msg.role === "user") {
+        return {
+          ...msg,
+          content: `${systemPrompt}\n\n${msg.content}`,
+        };
+      }
+      return msg;
+    });
+
+    const content = await this.chat(enhancedMessages, temperature);
+
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Cohere: chat with schema complete, parsing response",
+    );
+
+    // Parse JSON response
+    // Try to extract JSON from markdown code blocks if present
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+      null,
+      content,
+    ];
+    const jsonText = jsonMatch[1].trim();
+
+    return JSON.parse(jsonText) as T;
   }
 }
 
@@ -612,6 +692,11 @@ export function createDualLlmClient(
         throw new Error("Model name required for Ollama dual LLM");
       }
       return new OllamaDualLlmClient(apiKey, model);
+    case "cohere":
+      if (!apiKey) {
+        throw new Error("API key required for Cohere dual LLM");
+      }
+      return new CohereDualLlmClient(apiKey);
     default:
       logger.debug(
         { provider },

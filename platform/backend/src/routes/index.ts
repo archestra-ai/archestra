@@ -3,6 +3,7 @@ import anthropicProxyRoutesV1 from "./proxy/anthropic";
 import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
+import cohereProxyRoutesV2 from "./proxy/routesv2/cohere";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
@@ -38,6 +39,10 @@ export { default as promptRoutes } from "./prompts";
 export const anthropicProxyRoutes = config.llm.anthropic.useV2Routes
   ? anthropicProxyRoutesV2
   : anthropicProxyRoutesV1;
+// Cohere proxy routes - V2 (unified handler) only, no legacy routes
+export const cohereProxyRoutes = config.llm.cohere?.useV2Routes !== false
+  ? cohereProxyRoutesV2
+  : cohereProxyRoutesV2; // Cohere only has V2 routes
 // Gemini proxy routes - V1 (legacy) by default, V2 (unified handler) via env var
 export const geminiProxyRoutes = config.llm.gemini.useV2Routes
   ? geminiProxyRoutesV2

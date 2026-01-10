@@ -18,6 +18,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   type Anthropic,
+  type Cohere,
   constructResponseSchema,
   type Gemini,
   type OpenAi,
@@ -356,6 +357,45 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Cohere API
+ */
+async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.cohere?.baseUrl ?? "https://api.cohere.ai";
+  const url = `${baseUrl}/v1/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Cohere models",
+    );
+    throw new Error(`Failed to fetch Cohere models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    models: Cohere.Types.Model[];
+  };
+
+  // Filter to models that support chat endpoint
+  return data.models
+    .filter((model) => model.endpoints?.includes("chat"))
+    .map((model) => ({
+      id: model.name,
+      displayName: model.name
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" "),
+      provider: "cohere" as const,
+    }));
+}
+
+/**
  * Get API key for a provider using resolution priority: personal → team → org_wide → env
  */
 async function getProviderApiKey({
@@ -400,6 +440,8 @@ async function getProviderApiKey({
     case "ollama":
       // Ollama typically doesn't require API keys, return empty or configured key
       return config.chat.ollama.apiKey || "";
+    case "cohere":
+      return config.chat.cohere?.apiKey || null;
     default:
       return null;
   }
@@ -415,6 +457,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  cohere: fetchCohereModels,
 };
 
 /**
@@ -473,7 +516,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "cohere"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

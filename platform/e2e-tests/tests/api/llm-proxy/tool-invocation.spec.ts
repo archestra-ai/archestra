@@ -3,9 +3,7 @@ import { expect, test } from "../fixtures";
 // biome-ignore lint/suspicious/noExplicitAny: test file uses dynamic response structures
 type AnyResponse = any;
 
-// =============================================================================
 // Test Configuration Interface
-// =============================================================================
 
 interface ToolDefinition {
   name: string;
@@ -50,9 +48,7 @@ interface ToolInvocationTestConfig {
   ) => AnyResponse | undefined;
 }
 
-// =============================================================================
 // Shared Tool Definition
-// =============================================================================
 
 const READ_FILE_TOOL: ToolDefinition = {
   name: "read_file",
@@ -69,9 +65,7 @@ const READ_FILE_TOOL: ToolDefinition = {
   },
 };
 
-// =============================================================================
 // Test Configurations
-// =============================================================================
 
 const openaiConfig: ToolInvocationTestConfig = {
   providerName: "OpenAI",
@@ -320,6 +314,10 @@ const vllmConfig: ToolInvocationTestConfig = {
   providerName: "vLLM",
 
   endpoint: (agentId) => `/v1/vllm/${agentId}/chat/completions`,
+const cohereConfig: ToolInvocationTestConfig = {
+  providerName: "Cohere",
+
+  endpoint: (agentId) => `/v1/cohere/${agentId}/v2/chat`,
 
   headers: (wiremockStub) => ({
     Authorization: `Bearer ${wiremockStub}`,
@@ -328,6 +326,7 @@ const vllmConfig: ToolInvocationTestConfig = {
 
   buildRequest: (content, tools) => ({
     model: "meta-llama/Llama-3.1-8B-Instruct",
+    model: "command-r-plus",
     messages: [{ role: "user", content }],
     tools: tools.map((t) => ({
       type: "function",
@@ -355,6 +354,20 @@ const vllmConfig: ToolInvocationTestConfig = {
 
     if (message.tool_calls) {
       expect(refusalOrContent).toContain("tool invocation policy");
+    expect(response.message).toBeDefined();
+    expect(response.message.content).toBeDefined();
+    expect(response.message.content.length).toBeGreaterThan(0);
+
+    const textContent = response.message.content.find(
+      (c: { type: string }) => c.type === "text",
+    );
+    expect(textContent).toBeDefined();
+    expect(textContent.text).toContain("read_file");
+    expect(textContent.text).toContain("denied");
+
+    // Tool calls should not be present or empty
+    if (response.message.tool_calls) {
+      expect(response.message.tool_calls.length).toBe(0);
     }
   },
 
@@ -369,6 +382,12 @@ const vllmConfig: ToolInvocationTestConfig = {
 
     for (const toolName of expectedTools) {
       const found = toolCalls.find(
+    expect(response.message).toBeDefined();
+    expect(response.message.tool_calls).toBeDefined();
+    expect(response.message.tool_calls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = response.message.tool_calls.find(
         (tc: { function: { name: string } }) => tc.function.name === toolName,
       );
       expect(found).toBeDefined();
@@ -453,6 +472,7 @@ const ollamaConfig: ToolInvocationTestConfig = {
 
   assertToolArgument: (response, toolName, argName, matcher) => {
     const toolCalls = response.choices[0].message.tool_calls;
+    const toolCalls = response.message.tool_calls;
     const toolCall = toolCalls.find(
       (tc: { function: { name: string } }) => tc.function.name === toolName,
     );
@@ -468,9 +488,7 @@ const ollamaConfig: ToolInvocationTestConfig = {
     ),
 };
 
-// =============================================================================
 // Test Suite
-// =============================================================================
 
 const testConfigs: ToolInvocationTestConfig[] = [
   openaiConfig,
@@ -478,6 +496,7 @@ const testConfigs: ToolInvocationTestConfig[] = [
   geminiConfig,
   vllmConfig,
   ollamaConfig,
+  cohereConfig,
 ];
 
 for (const config of testConfigs) {

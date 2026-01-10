@@ -178,3 +178,22 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+## Cohere
+
+### Supported Cohere APIs
+
+- **Chat API** (`/v2/chat`) - ✅ Fully supported
+- **Streaming** - ✅ Fully supported via SSE
+
+### Cohere Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/cohere/{agent-id}/v2`
+- **Authentication**: Pass your Cohere API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Important Notes
+
+- **API Version**: Archestra uses the Cohere V2 Chat API. The V1 Generate API was deprecated on August 26, 2025.
+- **Tool Support**: Function calling (tool use) is fully supported, including tool invocation policies and trusted data policies.
+- **Obtaining an API Key**: Visit [Cohere Dashboard](https://dashboard.cohere.com/) to create an account and generate an API key.
+- **Available Models**: Popular models include `command-r-plus`, `command-r`, `command-nightly`, and others. Use the Chat models API to list available models.
+

@@ -9,6 +9,7 @@ export const SupportedProvidersSchema = z.enum([
   "anthropic",
   "vllm",
   "ollama",
+  "groq",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -17,6 +18,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "anthropic:messages",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
+  "groq:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -31,4 +33,5 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   gemini: "Gemini",
   vllm: "vLLM",
   ollama: "Ollama",
+  groq: "Groq",
 };

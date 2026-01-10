@@ -178,3 +178,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+
+## Groq
+
+[Groq](https://groq.com/) is an AI inference company that offers ultra-fast inference for popular open-source LLMs. Groq's LPU (Language Processing Unit) technology delivers industry-leading inference speeds for models like Llama, Mixtral, and Gemma.
+
+### Supported Groq APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Groq Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                 | Required | Description                                                  |
+| ------------------------ | -------- | ------------------------------------------------------------ |
+| `ARCHESTRA_GROQ_BASE_URL` | No       | Groq API base URL (defaults to `https://api.groq.com/openai/v1`) |
+| `ARCHESTRA_CHAT_GROQ_API_KEY` | No  | API key for Groq Chat integration                            |
+
+### Getting a Groq API Key
+
+1. Visit [console.groq.com](https://console.groq.com/)
+2. Sign up or log in to your account
+3. Navigate to **API Keys** in the console
+4. Create a new API key and copy it
+
+### Important Notes
+
+- **Fast inference**: Groq is known for extremely fast inference speeds, making it ideal for applications requiring low latency.
+- **OpenAI-compatible**: Groq uses the OpenAI API format, so existing OpenAI-compatible code works with minimal changes.
+- **Available models**: Groq supports popular open-source models including Llama 3.3, Llama 3.1, Mixtral, and Gemma. Check the [Groq documentation](https://console.groq.com/docs/models) for the current list of supported models.

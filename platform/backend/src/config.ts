@@ -273,6 +273,13 @@ export default {
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
+    groq: {
+      enabled: Boolean(process.env.ARCHESTRA_GROQ_BASE_URL),
+      baseUrl:
+        process.env.ARCHESTRA_GROQ_BASE_URL ||
+        "https://api.groq.com/openai/v1",
+      useV2Routes: process.env.ARCHESTRA_GROQ_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -289,6 +296,9 @@ export default {
     },
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
+    groq: {
+      apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

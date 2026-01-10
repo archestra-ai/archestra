@@ -435,20 +435,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateAgentConversation,
-        description:
-          "Create a new conversation with an agent and an initial user message via URL parameters",
+        description: "Create a new conversation with an agent via URL",
         tags: ["Chat"],
         params: z.object({ agentId: UuidIdSchema }),
-        querystring: z.object({
-          message: z.string().min(1).describe("The initial user message"),
-        }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (
-      { params: { agentId }, query: { message }, user, organizationId, headers },
-      reply,
-    ) => {
+    async ({ params: { agentId }, user, organizationId, headers }, reply) => {
       // Check if user is an agent admin
       const { success: isAgentAdmin } = await hasPermission(
         { profile: ["admin"] },
@@ -470,7 +463,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       logger.info(
         { agentId, organizationId, model, provider },
-        "Creating conversation with initial message via GET",
+        "Creating conversation via GET",
       );
 
       // Create conversation with agent
@@ -482,31 +475,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         selectedProvider: provider,
       });
 
-      // Create initial user message with UIMessage structure
-      const userMessage: UIMessage = {
-        id: crypto.randomUUID(),
-        role: "user",
-        parts: [{ type: "text", text: message }],
-      };
-
-      await MessageModel.create({
-        conversationId: conversation.id,
-        role: "user",
-        content: userMessage,
-      });
-
-      // Fetch the conversation again to include the message
-      const conversationWithMessage = await ConversationModel.findById({
-        id: conversation.id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (!conversationWithMessage) {
-        throw new ApiError(500, "Failed to retrieve created conversation");
-      }
-
-      return reply.send(conversationWithMessage);
+      return reply.send(conversation);
     },
   );
 

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Chat New Page - Creates a conversation with an agent and initial message via URL params
+ * Chat New Page - Creates a conversation with an agent and sends initial message
  *
  * URL format: /chat/new?agent_id=<uuid>&user_prompt=<message>
  */
@@ -17,7 +17,6 @@ export default function ChatNewPage() {
   const hasStartedRef = useRef(false);
 
   useEffect(() => {
-    // Prevent double execution in strict mode
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
 
@@ -38,7 +37,7 @@ export default function ChatNewPage() {
       setIsCreating(true);
       try {
         const response = await fetch(
-          `/api/chat/agents/${agentId}/conversation?message=${encodeURIComponent(userPrompt as string)}`,
+          `/api/chat/agents/${agentId}/conversation`,
           {
             method: "GET",
             credentials: "include",
@@ -53,7 +52,11 @@ export default function ChatNewPage() {
         }
 
         const conversation = await response.json();
-        router.replace(`/chat?conversation=${conversation.id}`);
+
+        // Redirect with pending_message to trigger auto-send
+        router.replace(
+          `/chat?conversation=${conversation.id}&pending_message=${encodeURIComponent(userPrompt as string)}`,
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create conversation");
         setIsCreating(false);

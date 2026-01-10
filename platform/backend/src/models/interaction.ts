@@ -6,8 +6,11 @@ import {
   eq,
   inArray,
   isNotNull,
+  max,
+  min,
   type SQL,
   sql,
+  sum,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
@@ -54,7 +57,12 @@ class InteractionModel {
     sorting?: SortingQuery,
     requestingUserId?: string,
     isAgentAdmin?: boolean,
-    filters?: { profileId?: string; externalAgentId?: string; userId?: string },
+    filters?: {
+      profileId?: string;
+      externalAgentId?: string;
+      userId?: string;
+      sessionId?: string;
+    },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
@@ -95,6 +103,13 @@ class InteractionModel {
     // User ID filter (from X-Archestra-User-Id header)
     if (filters?.userId) {
       conditions.push(eq(schema.interactionsTable.userId, filters.userId));
+    }
+
+    // Session ID filter
+    if (filters?.sessionId) {
+      conditions.push(
+        eq(schema.interactionsTable.sessionId, filters.sessionId),
+      );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -441,6 +456,119 @@ class InteractionModel {
       logger.error({ error }, "Error updating usage limits after interaction");
       // Don't throw - usage tracking should not break interaction creation
     }
+  }
+
+  /**
+   * Session summary returned by getSessions
+   */
+  static async getSessions(
+    pagination: PaginationQuery,
+    requestingUserId?: string,
+    isAgentAdmin?: boolean,
+    filters?: { profileId?: string },
+  ): Promise<
+    PaginatedResult<{
+      sessionId: string | null;
+      sessionSource: string | null;
+      interactionId: string | null; // Only set for single interactions (null session)
+      requestCount: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      firstRequest: Date;
+      lastRequest: Date;
+      models: string[];
+      profileId: string;
+      profileName: string | null;
+    }>
+  > {
+    // Build where clauses for access control
+    const conditions: SQL[] = [];
+
+    if (requestingUserId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        requestingUserId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+
+      conditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
+      );
+    }
+
+    // Profile filter
+    if (filters?.profileId) {
+      conditions.push(
+        eq(schema.interactionsTable.profileId, filters.profileId),
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // For sessions, we use COALESCE to give null sessionIds a unique identifier
+    // based on the interaction ID so they appear as individual "sessions"
+    // Cast id to text since session_id is VARCHAR and id is UUID
+    const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
+
+    // Get sessions grouped by sessionId (with null sessions as individual entries)
+    // Use MAX for session_id and session_source to avoid grouping NULL values together
+    // The sessionGroupExpr (COALESCE) ensures each NULL session_id row gets a unique group
+    // For single interactions (null session), we include the interaction ID for direct navigation
+    const [sessionsData, [{ total }]] = await Promise.all([
+      db
+        .select({
+          sessionId: max(schema.interactionsTable.sessionId),
+          sessionSource: max(schema.interactionsTable.sessionSource),
+          // For single interactions (no session), return the interaction ID for direct navigation
+          interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
+          requestCount: count(),
+          totalInputTokens: sum(schema.interactionsTable.inputTokens),
+          totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+          firstRequest: min(schema.interactionsTable.createdAt),
+          lastRequest: max(schema.interactionsTable.createdAt),
+          models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
+          profileId: schema.interactionsTable.profileId,
+          profileName: schema.agentsTable.name,
+        })
+        .from(schema.interactionsTable)
+        .leftJoin(
+          schema.agentsTable,
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        )
+        .where(whereClause)
+        .groupBy(
+          sessionGroupExpr,
+          schema.interactionsTable.profileId,
+          schema.agentsTable.name,
+        )
+        .orderBy(desc(max(schema.interactionsTable.createdAt)))
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: sql<number>`COUNT(DISTINCT ${sessionGroupExpr})` })
+        .from(schema.interactionsTable)
+        .where(whereClause),
+    ]);
+
+    // Transform the data to the expected format
+    const sessions = sessionsData.map((s) => ({
+      sessionId: s.sessionId,
+      sessionSource: s.sessionSource,
+      interactionId: s.interactionId, // Only set for single interactions (null session)
+      requestCount: Number(s.requestCount),
+      totalInputTokens: Number(s.totalInputTokens) || 0,
+      totalOutputTokens: Number(s.totalOutputTokens) || 0,
+      firstRequest: s.firstRequest ?? new Date(),
+      lastRequest: s.lastRequest ?? new Date(),
+      models: s.models ? s.models.split(",").filter(Boolean) : [],
+      profileId: s.profileId,
+      profileName: s.profileName,
+    }));
+
+    return createPaginatedResult(sessions, Number(total), pagination);
   }
 }
 

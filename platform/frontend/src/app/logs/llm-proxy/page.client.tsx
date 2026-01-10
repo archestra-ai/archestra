@@ -1,16 +1,21 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
-import { Savings } from "@/components/savings";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -19,87 +24,295 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import {
+  useInteractionSessions,
   useInteractions,
-  useUniqueExternalAgentIds,
-  useUniqueUserIds,
 } from "@/lib/interaction.query";
 
-import {
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@/lib/interaction.utils";
+import { DynamicInteraction } from "@/lib/interaction.utils";
 
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
-type InteractionData =
-  archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
+type SessionData =
+  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
 
-type ToolBadgeProps = {
-  toolName: string;
-  type: "requested" | "used" | "blocked";
-};
+function SessionSourceBadge({
+  sessionSource,
+  sessionId,
+}: {
+  sessionSource: string | null;
+  sessionId: string | null;
+}) {
+  if (!sessionId) {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        Single
+      </Badge>
+    );
+  }
 
-function ToolBadge({ toolName, type }: ToolBadgeProps) {
-  const getVariantAndClasses = () => {
-    switch (type) {
-      case "requested":
-        return {
-          variant: "outline" as const,
-          className: "border-amber-500 text-amber-600 dark:text-amber-400",
-          prefix: "?",
-        };
-      case "used":
-        return {
-          variant: "default" as const,
-          className: "",
-          prefix: "✓",
-        };
-      case "blocked":
-        return {
-          variant: "destructive" as const,
-          className: "",
-          prefix: "✗",
-        };
-    }
-  };
+  switch (sessionSource) {
+    case "claude_code":
+      return (
+        <Badge
+          variant="secondary"
+          className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+        >
+          Claude Code
+        </Badge>
+      );
+    case "header":
+      return (
+        <Badge variant="secondary" className="text-xs">
+          Custom
+        </Badge>
+      );
+    case "openai_user":
+      return (
+        <Badge variant="secondary" className="text-xs">
+          OpenAI User
+        </Badge>
+      );
+    default:
+      return (
+        <Badge variant="outline" className="text-xs">
+          Session
+        </Badge>
+      );
+  }
+}
 
-  const { variant, className, prefix } = getVariantAndClasses();
-  const displayText = `${prefix} ${toolName}`;
+function Pagination({
+  pageIndex,
+  pageSize,
+  total,
+  onPaginationChange,
+}: {
+  pageIndex: number;
+  pageSize: number;
+  total: number;
+  onPaginationChange: (params: { pageIndex: number; pageSize: number }) => void;
+}) {
+  const totalPages = Math.ceil(total / pageSize);
+  const canPrevious = pageIndex > 0;
+  const canNext = pageIndex < totalPages - 1;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge
-            variant={variant}
-            className={`inline-block max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap text-xs cursor-default ${className}`}
-          >
-            {displayText}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{toolName}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div className="flex items-center justify-between px-2 py-4">
+      <div className="text-sm text-muted-foreground">
+        Showing {pageIndex * pageSize + 1} to{" "}
+        {Math.min((pageIndex + 1) * pageSize, total)} of {total} results
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onPaginationChange({ pageIndex: pageIndex - 1, pageSize })
+          }
+          disabled={!canPrevious}
+        >
+          Previous
+        </Button>
+        <span className="text-sm">
+          Page {pageIndex + 1} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onPaginationChange({ pageIndex: pageIndex + 1, pageSize })
+          }
+          disabled={!canNext}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
-  const upArrow = <ChevronUp className="h-3 w-3" />;
-  const downArrow = <ChevronDown className="h-3 w-3" />;
-  if (isSorted === "asc") {
-    return upArrow;
+function SessionInteractionsTable({
+  sessionId,
+  profileId,
+}: {
+  sessionId: string | null;
+  profileId: string;
+}) {
+  const router = useRouter();
+  // Fetch interactions for this session
+  const { data: interactionsResponse } = useInteractions({
+    sessionId: sessionId ?? undefined,
+    profileId,
+    limit: 100, // Get all interactions for this session
+    offset: 0,
+  });
+
+  const interactions = interactionsResponse?.data ?? [];
+
+  if (interactions.length === 0) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        No interactions found
+      </div>
+    );
   }
-  if (isSorted === "desc") {
-    return downArrow;
-  }
+
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
-      {upArrow}
-      <span className="mt-[-4px]">{downArrow}</span>
+    <div className="bg-muted/30 rounded-md mx-4 mb-4">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="w-[140px] text-xs">Time</TableHead>
+            <TableHead className="w-[120px] text-xs">Model</TableHead>
+            <TableHead className="w-[100px] text-xs">Tokens</TableHead>
+            <TableHead className="text-xs">User Message</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {interactions.map((interaction) => {
+            const dynamicInteraction = new DynamicInteraction(interaction);
+            const userMessage = dynamicInteraction.getLastUserMessage();
+
+            return (
+              <TableRow
+                key={interaction.id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => router.push(`/logs/${interaction.id}`)}
+              >
+                <TableCell className="font-mono text-xs py-2">
+                  {formatDate({ date: dynamicInteraction.createdAt })}
+                </TableCell>
+                <TableCell className="text-xs py-2">
+                  <Badge variant="outline" className="text-xs">
+                    {dynamicInteraction.modelName}
+                  </Badge>
+                </TableCell>
+                <TableCell className="font-mono text-xs py-2">
+                  {(interaction.inputTokens ?? 0).toLocaleString()} /{" "}
+                  {(interaction.outputTokens ?? 0).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-xs py-2">
+                  <TruncatedText message={userMessage} maxLength={100} />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
+  );
+}
+
+function SessionRow({
+  session,
+  agents,
+}: {
+  session: SessionData;
+  agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
+
+  const agent = agents?.find((a) => a.id === session.profileId);
+  const isSingleInteraction =
+    session.sessionId === null && session.interactionId;
+
+  // For single interactions (no session), navigate directly to detail page
+  // For sessions, expand to show interactions
+  const handleRowClick = () => {
+    if (isSingleInteraction) {
+      router.push(`/logs/${session.interactionId}`);
+    } else {
+      setIsExpanded(!isExpanded);
+    }
+  };
+
+  // Format session ID for display (show first 8 chars of UUID)
+  const displaySessionId = session.sessionId
+    ? `${session.sessionId.slice(0, 8)}...`
+    : "—";
+
+  return (
+    <>
+      <TableRow
+        className={cn("cursor-pointer", isExpanded && "bg-muted/50")}
+        onClick={handleRowClick}
+      >
+        <TableCell className="w-[30px] py-3">
+          {/* Show expand icon only for sessions (not single interactions) */}
+          {session.sessionId ? (
+            isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )
+          ) : null}
+        </TableCell>
+        <TableCell className="py-3">
+          <SessionSourceBadge
+            sessionSource={session.sessionSource}
+            sessionId={session.sessionId}
+          />
+        </TableCell>
+        <TableCell className="font-mono text-xs py-3">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>{displaySessionId}</span>
+              </TooltipTrigger>
+              {session.sessionId && (
+                <TooltipContent>
+                  <p className="font-mono text-xs">{session.sessionId}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </TableCell>
+        <TableCell className="py-3">
+          <TruncatedText
+            message={agent?.name ?? session.profileName ?? "Unknown"}
+            maxLength={25}
+          />
+        </TableCell>
+        <TableCell className="font-mono text-xs py-3">
+          {session.requestCount.toLocaleString()}
+        </TableCell>
+        <TableCell className="py-3">
+          <div className="flex flex-wrap gap-1">
+            {session.models.map((model) => (
+              <Badge
+                key={model}
+                variant="secondary"
+                className="text-xs whitespace-nowrap"
+              >
+                {model}
+              </Badge>
+            ))}
+          </div>
+        </TableCell>
+        <TableCell className="font-mono text-xs py-3">
+          {session.totalInputTokens.toLocaleString()} /{" "}
+          {session.totalOutputTokens.toLocaleString()}
+        </TableCell>
+        <TableCell className="font-mono text-xs py-3">
+          {formatDate({ date: session.firstRequest })}
+        </TableCell>
+        <TableCell className="font-mono text-xs py-3">
+          {formatDate({ date: session.lastRequest })}
+        </TableCell>
+      </TableRow>
+      {isExpanded && session.sessionId && (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={9} className="p-0">
+            <SessionInteractionsTable
+              sessionId={session.sessionId}
+              profileId={session.profileId}
+            />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }
 
@@ -114,13 +327,13 @@ export default function LlmProxyLogsPage({
   return (
     <div>
       <ErrorBoundary>
-        <LogsTable initialData={initialData} />
+        <SessionsTable initialData={initialData} />
       </ErrorBoundary>
     </div>
   );
 }
 
-function LogsTable({
+function SessionsTable({
   initialData,
 }: {
   initialData?: {
@@ -136,25 +349,11 @@ function LogsTable({
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
-  const externalAgentIdFromUrl = searchParams.get("externalAgentId");
-  const userIdFromUrl = searchParams.get("userId");
-  const sortByFromUrl = searchParams.get("sortBy");
-  const sortDirectionFromUrl = searchParams.get("sortDirection");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
-  const [externalAgentIdFilter, setExternalAgentIdFilter] = useState(
-    externalAgentIdFromUrl || "",
-  );
-  const [userIdFilter, setUserIdFilter] = useState(userIdFromUrl || "");
-  const [sorting, setSorting] = useState<SortingState>([
-    {
-      id: sortByFromUrl || "createdAt",
-      desc: sortDirectionFromUrl !== "asc",
-    },
-  ]);
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -193,365 +392,20 @@ function LogsTable({
     [updateUrlParams],
   );
 
-  const handleExternalAgentIdFilterChange = useCallback(
-    (value: string) => {
-      setExternalAgentIdFilter(value);
-      updateUrlParams({
-        externalAgentId: value || null,
-        page: "1", // Reset to first page
-      });
-    },
-    [updateUrlParams],
-  );
-
-  const handleUserIdFilterChange = useCallback(
-    (value: string) => {
-      setUserIdFilter(value);
-      updateUrlParams({
-        userId: value || null,
-        page: "1", // Reset to first page
-      });
-    },
-    [updateUrlParams],
-  );
-
-  const handleSortingChange = useCallback(
-    (newSorting: SortingState) => {
-      setSorting(newSorting);
-      if (newSorting.length > 0) {
-        updateUrlParams({
-          sortBy: newSorting[0].id,
-          sortDirection: newSorting[0].desc ? "desc" : "asc",
-        });
-      }
-    },
-    [updateUrlParams],
-  );
-
-  // Convert TanStack sorting to API format
-  const sortBy = sorting[0]?.id;
-  const sortDirection = sorting[0]?.desc ? "desc" : "asc";
-
-  // Map UI column ids to API sort fields
-  // Note: userId is added as a valid sort field but type may need codegen update
-  const sortByMapping: Record<string, string> = {
-    agent: "profileId",
-    externalAgentId: "externalAgentId",
-    user: "userId",
-    "request.model": "model",
-    createdAt: "createdAt",
-  };
-  const apiSortBy = sortBy
-    ? (sortByMapping[sortBy] as NonNullable<
-        archestraApiTypes.GetInteractionsData["query"]
-      >["sortBy"])
-    : undefined;
-
-  const { data: interactionsResponse } = useInteractions({
+  const { data: sessionsResponse } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
-    sortBy: apiSortBy,
-    sortDirection,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
-    externalAgentId: externalAgentIdFilter || undefined,
-    userId: userIdFilter || undefined,
-    initialData: initialData?.interactions,
   });
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
 
-  const { data: uniqueExternalAgentIds } = useUniqueExternalAgentIds();
+  const sessions = sessionsResponse?.data ?? [];
+  const paginationMeta = sessionsResponse?.pagination;
 
-  const { data: uniqueUserIds } = useUniqueUserIds();
-
-  const interactions = interactionsResponse?.data ?? [];
-  const paginationMeta = interactionsResponse?.pagination;
-
-  const columns: ColumnDef<InteractionData>[] = [
-    {
-      id: "createdAt",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Date
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: new DynamicInteraction(row.original).createdAt })}
-        </div>
-      ),
-    },
-    {
-      id: "agent",
-      accessorFn: (row) => {
-        const agent = agents?.find((a) => a.id === row.profileId);
-        return agent?.name ?? "Unknown";
-      },
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Profile
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        const interaction = new DynamicInteraction(row.original);
-        const externalAgentId = row.original.externalAgentId;
-
-        // Hide profile for subagent interactions
-        if (externalAgentId === "policy-configuration-subagent") {
-          return <span className="text-xs text-muted-foreground">—</span>;
-        }
-
-        const agent = agents?.find((a) => a.id === interaction.profileId);
-        return (
-          <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
-        );
-      },
-    },
-    {
-      id: "user",
-      accessorKey: "userId",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            User
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        // Cast to access userId - types will be updated after codegen
-        const userId = (row.original as { userId?: string | null }).userId;
-        if (!userId) {
-          return <span className="text-xs text-muted-foreground">—</span>;
-        }
-        // Find user name from unique user IDs
-        const userInfo = uniqueUserIds?.find(
-          (u: { id: string }) => u.id === userId,
-        );
-        return (
-          <TruncatedText
-            message={userInfo?.name ?? userId}
-            maxLength={20}
-            className="text-xs"
-          />
-        );
-      },
-    },
-    {
-      id: "externalAgentId",
-      accessorKey: "externalAgentId",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            External Agent ID
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        const externalAgentId = row.original.externalAgentId;
-        if (!externalAgentId) {
-          return <span className="text-xs text-muted-foreground">—</span>;
-        }
-
-        // Check if this is a PolicyConfigSubagent interaction
-        if (externalAgentId === "policy-configuration-subagent") {
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="font-mono text-xs text-purple-700 dark:text-purple-300 cursor-default">
-                    Policy Configuration Subagent
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs text-muted-foreground">
-                    Automated tool policy analysis subagent
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        }
-
-        return (
-          <TruncatedText
-            message={externalAgentId}
-            maxLength={20}
-            className="font-mono text-xs"
-          />
-        );
-      },
-    },
-    {
-      accessorKey: "request.model",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Provider + Model
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        const interaction = new DynamicInteraction(row.original);
-        return (
-          <Badge variant="secondary" className="text-xs whitespace-normal">
-            {interaction.provider} ({interaction.modelName})
-          </Badge>
-        );
-      },
-    },
-    {
-      id: "costSavings",
-      header: "Cost Savings",
-      cell: ({ row }) => {
-        const savings = calculateCostSavings(row.original);
-
-        // Show dash if there are no actual savings
-        if (!savings.hasSavings) {
-          return <span className="text-xs text-muted-foreground">–</span>;
-        }
-
-        // If no cost optimization but has TOON compression, use cost as baseline
-        const effectiveCost = row.original.cost || "0";
-        const effectiveBaselineCost =
-          row.original.baselineCost || row.original.cost || "0";
-
-        return (
-          <div className="text-xs">
-            <Savings
-              cost={effectiveCost}
-              baselineCost={effectiveBaselineCost}
-              toonCostSavings={row.original.toonCostSavings}
-              toonTokensSaved={savings.toonTokensSaved}
-              format="percent"
-              tooltip="hover"
-              showUnifiedTooltip={true}
-            />
-          </div>
-        );
-      },
-    },
-    {
-      id: "userMessage",
-      header: "User Message",
-      cell: ({ row }) => {
-        const userMessage = new DynamicInteraction(
-          row.original,
-        ).getLastUserMessage();
-        return (
-          <div className="text-xs">
-            <TruncatedText message={userMessage} maxLength={80} />
-          </div>
-        );
-      },
-    },
-    {
-      id: "assistantResponse",
-      header: "Assistant Response",
-      cell: ({ row }) => {
-        const interaction = new DynamicInteraction(row.original);
-        const assistantResponse = interaction.getLastAssistantResponse();
-        const toolsRequested = interaction.getToolNamesRequested();
-
-        // If there's no text response but tools are requested, show that
-        if (
-          (!assistantResponse || assistantResponse.trim() === "") &&
-          toolsRequested.length > 0
-        ) {
-          return (
-            <div className="text-xs text-muted-foreground italic">
-              Requesting tool execution: {toolsRequested.join(", ")}
-            </div>
-          );
-        }
-
-        return (
-          <div className="text-xs">
-            <TruncatedText message={assistantResponse} maxLength={80} />
-          </div>
-        );
-      },
-    },
-    {
-      id: "tools",
-      header: "Tools",
-      cell: ({ row }) => {
-        const interaction = new DynamicInteraction(row.original);
-        const toolsUsed = interaction.getToolNamesUsed();
-        const toolsBlocked = interaction.getToolNamesRefused();
-        const toolsRequested = interaction.getToolNamesRequested();
-
-        if (
-          toolsUsed.length === 0 &&
-          toolsBlocked.length === 0 &&
-          toolsRequested.length === 0
-        ) {
-          return <span className="text-xs text-muted-foreground">None</span>;
-        }
-
-        return (
-          <div className="flex flex-wrap gap-1">
-            {toolsRequested.map((toolName) => (
-              <ToolBadge
-                key={`requested-${toolName}`}
-                toolName={toolName}
-                type="requested"
-              />
-            ))}
-            {toolsUsed.map((toolName) => (
-              <ToolBadge
-                key={`used-${toolName}`}
-                toolName={toolName}
-                type="used"
-              />
-            ))}
-            {toolsBlocked.map((toolName) => (
-              <ToolBadge
-                key={`blocked-${toolName}`}
-                toolName={toolName}
-                type="blocked"
-              />
-            ))}
-          </div>
-        );
-      },
-    },
-  ];
-
-  const hasFilters =
-    profileFilter !== "all" ||
-    externalAgentIdFilter.length > 0 ||
-    userIdFilter.length > 0;
+  const hasFilters = profileFilter !== "all";
 
   return (
     <div className="space-y-4">
@@ -570,46 +424,12 @@ function LogsTable({
           className="w-[200px]"
         />
 
-        <SearchableSelect
-          value={userIdFilter || "all"}
-          onValueChange={(value) =>
-            handleUserIdFilterChange(value === "all" ? "" : value)
-          }
-          placeholder="Filter by User"
-          items={[
-            { value: "all", label: "All Users" },
-            ...(uniqueUserIds?.map((user: { id: string; name: string }) => ({
-              value: user.id,
-              label: user.name,
-            })) || []),
-          ]}
-          className="w-[200px]"
-        />
-
-        <SearchableSelect
-          value={externalAgentIdFilter || "all"}
-          onValueChange={(value) =>
-            handleExternalAgentIdFilterChange(value === "all" ? "" : value)
-          }
-          placeholder="Filter by External Agent ID"
-          items={[
-            { value: "all", label: "All External Agent IDs" },
-            ...(uniqueExternalAgentIds?.map((id) => ({
-              value: id,
-              label: id,
-            })) || []),
-          ]}
-          className="w-[250px]"
-        />
-
         {hasFilters && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               handleProfileFilterChange("all");
-              handleUserIdFilterChange("");
-              handleExternalAgentIdFilterChange("");
             }}
           >
             Clear filters
@@ -617,35 +437,47 @@ function LogsTable({
         )}
       </div>
 
-      {!interactions || interactions.length === 0 ? (
+      {!sessions || sessions.length === 0 ? (
         <p className="text-muted-foreground">
           {hasFilters
-            ? "No logs match your filters. Try adjusting your search."
-            : "No logs found"}
+            ? "No sessions match your filters. Try adjusting your search."
+            : "No sessions found"}
         </p>
       ) : (
-        <DataTable
-          columns={columns}
-          data={interactions}
-          pagination={
-            paginationMeta
-              ? {
-                  pageIndex,
-                  pageSize,
-                  total: paginationMeta.total,
-                }
-              : undefined
-          }
-          manualPagination
-          onPaginationChange={handlePaginationChange}
-          manualSorting
-          sorting={sorting}
-          onSortingChange={handleSortingChange}
-          onRowClick={(row) => {
-            const interaction = new DynamicInteraction(row);
-            router.push(`/logs/${interaction.id}`);
-          }}
-        />
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[30px]" />
+                <TableHead className="w-[100px]">Source</TableHead>
+                <TableHead className="w-[100px]">Session ID</TableHead>
+                <TableHead className="w-[150px]">Profile</TableHead>
+                <TableHead className="w-[80px]">Requests</TableHead>
+                <TableHead className="w-[200px]">Models</TableHead>
+                <TableHead className="w-[140px]">Tokens (In/Out)</TableHead>
+                <TableHead className="w-[160px]">First Request</TableHead>
+                <TableHead className="w-[160px]">Last Request</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sessions.map((session, index) => (
+                <SessionRow
+                  key={`${session.sessionId ?? "single"}-${session.profileId}-${index}`}
+                  session={session}
+                  agents={agents}
+                />
+              ))}
+            </TableBody>
+          </Table>
+          {paginationMeta && (
+            <Pagination
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              total={paginationMeta.total}
+              onPaginationChange={handlePaginationChange}
+            />
+          )}
+        </div>
       )}
     </div>
   );

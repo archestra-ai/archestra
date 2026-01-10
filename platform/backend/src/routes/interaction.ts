@@ -14,6 +14,23 @@ import {
   UuidIdSchema,
 } from "@/types";
 
+/**
+ * Session summary schema for the sessions endpoint
+ */
+const SessionSummarySchema = z.object({
+  sessionId: z.string().nullable(),
+  sessionSource: z.string().nullable(),
+  interactionId: z.string().nullable(), // Only set for single interactions (null session)
+  requestCount: z.number(),
+  totalInputTokens: z.number(),
+  totalOutputTokens: z.number(),
+  firstRequest: z.date(),
+  lastRequest: z.date(),
+  models: z.array(z.string()),
+  profileId: z.string(),
+  profileName: z.string().nullable(),
+});
+
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/interactions",
@@ -37,6 +54,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
+            sessionId: z.string().optional().describe("Filter by session ID"),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -59,6 +77,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           externalAgentId,
           userId,
+          sessionId,
           limit,
           offset,
           sortBy,
@@ -85,6 +104,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId,
           externalAgentId,
           filterUserId: userId,
+          sessionId,
           pagination,
           sorting,
         },
@@ -96,7 +116,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sorting,
         user.id,
         isAgentAdmin,
-        { profileId, externalAgentId, userId },
+        { profileId, externalAgentId, userId, sessionId },
       );
 
       fastify.log.info(
@@ -105,6 +125,66 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           total: result.pagination.total,
         },
         "GetInteractions result",
+      );
+
+      return reply.send(result);
+    },
+  );
+
+  // Note: This specific route must come before the :interactionId param route
+  // to prevent Fastify from matching "sessions" as an interactionId
+  fastify.get(
+    "/api/interactions/sessions",
+    {
+      schema: {
+        operationId: RouteId.GetInteractionSessions,
+        description:
+          "Get all interaction sessions grouped by session ID with aggregated stats",
+        tags: ["Interaction"],
+        querystring: z
+          .object({
+            profileId: UuidIdSchema.optional().describe(
+              "Filter by profile ID (internal Archestra profile)",
+            ),
+          })
+          .merge(PaginationQuerySchema),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SessionSummarySchema),
+        ),
+      },
+    },
+    async ({ query: { profileId, limit, offset }, user, headers }, reply) => {
+      const pagination = { limit, offset };
+
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      fastify.log.info(
+        {
+          userId: user.id,
+          email: user.email,
+          isAgentAdmin,
+          profileId,
+          pagination,
+        },
+        "GetInteractionSessions request",
+      );
+
+      const result = await InteractionModel.getSessions(
+        pagination,
+        user.id,
+        isAgentAdmin,
+        { profileId },
+      );
+
+      fastify.log.info(
+        {
+          resultCount: result.data.length,
+          total: result.pagination.total,
+        },
+        "GetInteractionSessions result",
       );
 
       return reply.send(result);

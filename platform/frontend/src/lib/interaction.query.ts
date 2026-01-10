@@ -7,6 +7,7 @@ import { DEFAULT_TABLE_LIMIT } from "./utils";
 const {
   getInteraction,
   getInteractions,
+  getInteractionSessions,
   getUniqueExternalAgentIds,
   getUniqueUserIds,
 } = archestraApiSdk;
@@ -15,6 +16,7 @@ export function useInteractions({
   profileId,
   externalAgentId,
   userId,
+  sessionId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -24,6 +26,7 @@ export function useInteractions({
   profileId?: string;
   externalAgentId?: string;
   userId?: string;
+  sessionId?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
@@ -38,6 +41,7 @@ export function useInteractions({
       profileId,
       externalAgentId,
       userId,
+      sessionId,
       limit,
       offset,
       sortBy,
@@ -49,6 +53,7 @@ export function useInteractions({
           ...(profileId ? { profileId } : {}),
           ...(externalAgentId ? { externalAgentId } : {}),
           ...(userId ? { userId } : {}),
+          ...(sessionId ? { sessionId } : {}),
           limit,
           offset,
           ...(sortBy ? { sortBy } : {}),
@@ -65,7 +70,8 @@ export function useInteractions({
       sortDirection === "desc" &&
       !profileId &&
       !externalAgentId &&
-      !userId
+      !userId &&
+      !sessionId
         ? initialData
         : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
@@ -109,5 +115,35 @@ export function useUniqueUserIds() {
       const response = await getUniqueUserIds();
       return response.data;
     },
+  });
+}
+
+export function useInteractionSessions({
+  profileId,
+  limit = DEFAULT_TABLE_LIMIT,
+  offset = 0,
+  initialData,
+}: {
+  profileId?: string;
+  limit?: number;
+  offset?: number;
+  initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+} = {}) {
+  return useSuspenseQuery({
+    queryKey: ["interactions", "sessions", profileId, limit, offset],
+    queryFn: async () => {
+      const response = await getInteractionSessions({
+        query: {
+          ...(profileId ? { profileId } : {}),
+          limit,
+          offset,
+        },
+      });
+      return response.data;
+    },
+    initialData:
+      offset === 0 && limit === DEFAULT_TABLE_LIMIT && !profileId
+        ? initialData
+        : undefined,
   });
 }

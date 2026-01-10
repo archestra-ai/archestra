@@ -28893,6 +28893,15 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sessionId",
+            "required": false,
+            "description": "Filter by session ID"
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -28975,6 +28984,14 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "$ref": "#/components/schemas/OpenAiChatCompletionRequest"
                               },
@@ -29045,6 +29062,8 @@
                               "profileId",
                               "externalAgentId",
                               "userId",
+                              "sessionId",
+                              "sessionSource",
                               "request",
                               "response",
                               "type",
@@ -29078,6 +29097,14 @@
                                 "type": "string"
                               },
                               "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -29151,6 +29178,8 @@
                               "profileId",
                               "externalAgentId",
                               "userId",
+                              "sessionId",
+                              "sessionSource",
                               "request",
                               "response",
                               "type",
@@ -29184,6 +29213,14 @@
                                 "type": "string"
                               },
                               "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -29257,6 +29294,8 @@
                               "profileId",
                               "externalAgentId",
                               "userId",
+                              "sessionId",
+                              "sessionSource",
                               "request",
                               "response",
                               "type",
@@ -29273,6 +29312,383 @@
                             "additionalProperties": false
                           }
                         ]
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/interactions/sessions": {
+      "get": {
+        "operationId": "getInteractionSessions",
+        "tags": [
+          "Interaction"
+        ],
+        "description": "Get all interaction sessions grouped by session ID with aggregated stats",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "profileId",
+            "required": false,
+            "description": "Filter by profile ID (internal Archestra profile)"
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sessionId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "sessionSource": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "interactionId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "requestCount": {
+                            "type": "number"
+                          },
+                          "totalInputTokens": {
+                            "type": "number"
+                          },
+                          "totalOutputTokens": {
+                            "type": "number"
+                          },
+                          "firstRequest": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastRequest": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "models": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "profileId": {
+                            "type": "string"
+                          },
+                          "profileName": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "sessionId",
+                          "sessionSource",
+                          "interactionId",
+                          "requestCount",
+                          "totalInputTokens",
+                          "totalOutputTokens",
+                          "firstRequest",
+                          "lastRequest",
+                          "models",
+                          "profileId",
+                          "profileName"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "pagination": {
@@ -30066,6 +30482,14 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "$ref": "#/components/schemas/OpenAiChatCompletionRequest"
                         },
@@ -30136,6 +30560,8 @@
                         "profileId",
                         "externalAgentId",
                         "userId",
+                        "sessionId",
+                        "sessionSource",
                         "request",
                         "response",
                         "type",
@@ -30169,6 +30595,14 @@
                           "type": "string"
                         },
                         "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -30242,6 +30676,8 @@
                         "profileId",
                         "externalAgentId",
                         "userId",
+                        "sessionId",
+                        "sessionSource",
                         "request",
                         "response",
                         "type",
@@ -30275,6 +30711,14 @@
                           "type": "string"
                         },
                         "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -30348,6 +30792,8 @@
                         "profileId",
                         "externalAgentId",
                         "userId",
+                        "sessionId",
+                        "sessionSource",
                         "request",
                         "response",
                         "type",

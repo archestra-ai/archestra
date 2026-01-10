@@ -8864,6 +8864,10 @@ export type GetInteractionsData = {
          * Filter by user ID (from X-Archestra-User-Id header)
          */
         userId?: string;
+        /**
+         * Filter by session ID
+         */
+        sessionId?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
@@ -8941,6 +8945,8 @@ export type GetInteractionsResponses = {
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -8959,6 +8965,8 @@ export type GetInteractionsResponses = {
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -8977,6 +8985,8 @@ export type GetInteractionsResponses = {
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -9003,6 +9013,110 @@ export type GetInteractionsResponses = {
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetInteractionSessionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by profile ID (internal Archestra profile)
+         */
+        profileId?: string;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/interactions/sessions';
+};
+
+export type GetInteractionSessionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetInteractionSessionsError = GetInteractionSessionsErrors[keyof GetInteractionSessionsErrors];
+
+export type GetInteractionSessionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            sessionId: string | null;
+            sessionSource: string | null;
+            interactionId: string | null;
+            requestCount: number;
+            totalInputTokens: number;
+            totalOutputTokens: number;
+            firstRequest: string;
+            lastRequest: string;
+            models: Array<string>;
+            profileId: string;
+            profileName: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInteractionSessionsResponse = GetInteractionSessionsResponses[keyof GetInteractionSessionsResponses];
 
 export type GetUniqueExternalAgentIdsData = {
     body?: never;
@@ -9234,6 +9348,8 @@ export type GetInteractionResponses = {
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -9252,6 +9368,8 @@ export type GetInteractionResponses = {
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -9270,6 +9388,8 @@ export type GetInteractionResponses = {
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;

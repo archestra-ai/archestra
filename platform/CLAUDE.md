@@ -304,7 +304,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
-- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts`
+- **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing

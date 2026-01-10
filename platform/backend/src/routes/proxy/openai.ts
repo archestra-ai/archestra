@@ -123,6 +123,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     externalAgentId?: string,
     userId?: string,
+    sessionId?: string | null,
+    sessionSource?: string | null,
   ) => {
     const { messages, tools, stream } = body;
 
@@ -812,6 +814,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: resolvedAgentId,
             externalAgentId,
             userId,
+            sessionId,
+            sessionSource,
             type: "openai:chatCompletions",
             request: body,
             processedRequest: {
@@ -966,6 +970,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: resolvedAgentId,
           externalAgentId,
           userId,
+          sessionId,
+          sessionSource,
           type: "openai:chatCompletions",
           request: body,
           processedRequest: {
@@ -1027,6 +1033,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // OpenAI requests use the header for session tracking
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1035,6 +1046,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1066,6 +1079,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // OpenAI requests use the header for session tracking
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        undefined,
+      );
       return handleChatCompletion(
         request.body,
         request.headers,
@@ -1074,6 +1092,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );

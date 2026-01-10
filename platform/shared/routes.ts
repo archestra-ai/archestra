@@ -152,6 +152,15 @@ export const RouteId = {
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
 
+  // Proxy Routes - x.ai (Grok)
+  XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
+  XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+
+  // Proxy Routes - MiniMax
+  MiniMaxChatCompletionsWithDefaultAgent:
+    "miniMaxChatCompletionsWithDefaultAgent",
+  MiniMaxChatCompletionsWithAgent: "miniMaxChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

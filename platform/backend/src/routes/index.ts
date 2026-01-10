@@ -4,9 +4,11 @@ import geminiProxyRoutesV1 from "./proxy/gemini";
 import openAiProxyRoutesV1 from "./proxy/openai";
 import anthropicProxyRoutesV2 from "./proxy/routesv2/anthropic";
 import geminiProxyRoutesV2 from "./proxy/routesv2/gemini";
+import minimaxProxyRoutesV2 from "./proxy/routesv2/minimax";
 import ollamaProxyRoutesV2 from "./proxy/routesv2/ollama";
 import openAiProxyRoutesV2 from "./proxy/routesv2/openai";
 import vllmProxyRoutesV2 from "./proxy/routesv2/vllm";
+import xaiProxyRoutesV2 from "./proxy/routesv2/xai";
 
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
@@ -54,6 +56,14 @@ export const vllmProxyRoutes = config.llm.vllm.useV2Routes
 export const ollamaProxyRoutes = config.llm.ollama.useV2Routes
   ? ollamaProxyRoutesV2
   : ollamaProxyRoutesV2; // Ollama only has V2 since it was added after the unified handler
+// x.ai proxy routes - V2 only (no legacy implementation)
+export const xaiProxyRoutes = config.llm.xai?.useV2Routes !== false
+  ? xaiProxyRoutesV2
+  : xaiProxyRoutesV2; // No V1 implementation, always use V2
+// MiniMax proxy routes - V2 only (no legacy implementation)
+export const minimaxProxyRoutes = config.llm.minimax?.useV2Routes !== false
+  ? minimaxProxyRoutesV2
+  : minimaxProxyRoutesV2; // No V1 implementation, always use V2
 export { default as secretsRoutes } from "./secrets";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

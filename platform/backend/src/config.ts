@@ -273,6 +273,15 @@ export default {
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
+    xai: {
+      baseUrl: process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+      useV2Routes: process.env.ARCHESTRA_XAI_USE_V2_ROUTES !== "false",
+    },
+    minimax: {
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.chat/v1",
+      useV2Routes: process.env.ARCHESTRA_MINIMAX_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {

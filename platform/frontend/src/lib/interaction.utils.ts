@@ -7,9 +7,11 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import MiniMaxChatCompletionInteraction from "./llmProviders/minimax";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
+import XaiChatCompletionInteraction from "./llmProviders/xai";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -121,6 +123,10 @@ export class DynamicInteraction implements InteractionUtils {
     }
     if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
+    } else if (this.type === "xai:chatCompletions") {
+      return new XaiChatCompletionInteraction(interaction);
+    } else if (this.type === "minimax:chatCompletions") {
+      return new MiniMaxChatCompletionInteraction(interaction);
     }
     if (type === "vllm:chatCompletions") {
       return new VllmChatCompletionInteraction(interaction);

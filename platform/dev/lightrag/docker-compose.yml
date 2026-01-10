@@ -31,12 +31,12 @@ services:
       - LIGHTRAG_GRAPH_STORAGE=Neo4JStorage
       - LIGHTRAG_VECTOR_STORAGE=QdrantVectorDBStorage
 
-      # Neo4j (cloud)
+      # Neo4j - graph storage
       - NEO4J_URI=${LIGHTRAG_NEO4J_URI}
       - NEO4J_USERNAME=${LIGHTRAG_NEO4J_USERNAME:-neo4j}
       - NEO4J_PASSWORD=${LIGHTRAG_NEO4J_PASSWORD}
 
-      # Qdrant (cloud)
+      # Qdrant - vector storage
       - QDRANT_URL=${LIGHTRAG_QDRANT_URL}
       - QDRANT_API_KEY=${LIGHTRAG_QDRANT_API_KEY}
 

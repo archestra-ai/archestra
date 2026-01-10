@@ -41,6 +41,7 @@ import {
   InsertConversationSchema,
   SelectConversationSchema,
   type SupportedChatProvider,
+  SupportedChatProviderSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
@@ -426,6 +427,133 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           request.organizationId,
         ),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/chat/agents/:agentId/conversation",
+    {
+      schema: {
+        operationId: RouteId.CreateAgentConversation,
+        description:
+          "Create a new conversation with an agent and an initial user message via URL parameters",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        querystring: z.object({
+          message: z.string().min(1).describe("The initial user message"),
+          title: z.string().optional().describe("Optional conversation title"),
+          selectedModel: z.string().optional().describe("Optional model name"),
+          selectedProvider: SupportedChatProviderSchema.optional().describe(
+            "Optional provider (anthropic, openai, gemini)",
+          ),
+          promptId: UuidIdSchema.optional().describe("Optional prompt ID"),
+          chatApiKeyId: UuidIdSchema.optional().describe("Optional API key ID"),
+        }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async (
+      {
+        params: { agentId },
+        query: {
+          message,
+          title,
+          selectedModel,
+          selectedProvider,
+          promptId,
+          chatApiKeyId,
+        },
+        user,
+        organizationId,
+        headers,
+      },
+      reply,
+    ) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Validate that the agent exists and user has access to it
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Validate chatApiKeyId if provided
+      if (chatApiKeyId) {
+        await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
+      }
+
+      // Determine model and provider to use
+      let modelToUse = selectedModel;
+      let providerToUse = selectedProvider;
+
+      if (!selectedModel) {
+        const smartDefault = await getSmartDefaultModel(
+          user.id,
+          organizationId,
+        );
+        modelToUse = smartDefault.model;
+        providerToUse = smartDefault.provider;
+      } else if (!selectedProvider) {
+        providerToUse = detectProviderFromModel(selectedModel);
+      }
+
+      logger.info(
+        {
+          agentId,
+          organizationId,
+          selectedModel,
+          selectedProvider,
+          modelToUse,
+          providerToUse,
+          chatApiKeyId,
+          hasMessage: !!message,
+          wasSmartDefault: !selectedModel,
+        },
+        "Creating conversation with initial message via GET",
+      );
+
+      // Create conversation with agent
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId,
+        agentId,
+        promptId,
+        title,
+        selectedModel: modelToUse,
+        selectedProvider: providerToUse,
+        chatApiKeyId,
+      });
+
+      // Create initial user message with UIMessage structure
+      const userMessage: UIMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", text: message }],
+      };
+
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: userMessage,
+      });
+
+      // Fetch the conversation again to include the message
+      const conversationWithMessage = await ConversationModel.findById({
+        id: conversation.id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversationWithMessage) {
+        throw new ApiError(500, "Failed to retrieve created conversation");
+      }
+
+      return reply.send(conversationWithMessage);
     },
   );
 

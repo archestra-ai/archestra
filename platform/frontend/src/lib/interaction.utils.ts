@@ -7,6 +7,7 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
@@ -127,6 +128,9 @@ export class DynamicInteraction implements InteractionUtils {
     }
     if (type === "ollama:chatCompletions") {
       return new OllamaChatCompletionInteraction(interaction);
+    }
+    if (type === "mistral:chatCompletions") {
+      return new MistralChatCompletionInteraction(interaction);
     }
     // Default to Gemini for any other provider
     return new GeminiGenerateContentInteraction(interaction);

@@ -268,8 +268,9 @@ Existing provider implementations for reference:
 
 - vLLM: `backend/src/routes/proxy/routesv2/vllm.ts`, `backend/src/routes/proxy/adapterV2/vllm.ts`
 - Ollama: `backend/src/routes/proxy/routesv2/ollama.ts`, `backend/src/routes/proxy/adapterV2/ollama.ts`
+- Mistral: `backend/src/routes/proxy/routesv2/mistral.ts`, `backend/src/routes/proxy/adapterV2/mistral.ts`
 
-> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI, Groq), use the vLLM/Ollama implementations as starting points - they reuse OpenAI's type definitions and adapters.
+> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Azure OpenAI, Together AI, Groq), use the vLLM/Ollama/Mistral implementations as starting points - they reuse OpenAI's type definitions and adapters.
 
 ## Smoke Testing
 

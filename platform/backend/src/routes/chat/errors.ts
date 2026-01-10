@@ -5,6 +5,7 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  MistralErrorTypes,
   OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
@@ -814,6 +815,83 @@ function mapOllamaErrorWrapper(
 }
 
 /**
+ * Parse Mistral error response body.
+ * Mistral uses OpenAI-compatible error format: { error: { type, code, message } }
+ *
+ * @see https://docs.mistral.ai/api/
+ */
+function parseMistralError(responseBody: string): ParsedOpenAIError | null {
+  // Mistral uses the same error format as OpenAI
+  return parseOpenAIError(responseBody);
+}
+
+/**
+ * Map Mistral error to ChatErrorCode.
+ * Mistral uses OpenAI-compatible error format with some additional codes.
+ *
+ * @see https://docs.mistral.ai/api/
+ */
+function mapMistralErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorCode = parsedError?.code;
+
+  // First check error.code for specific error codes
+  if (errorCode) {
+    if (
+      errorCode === MistralErrorTypes.INVALID_API_KEY ||
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY_CODE
+    ) {
+      return ChatErrorCode.Authentication;
+    }
+    if (
+      errorCode === MistralErrorTypes.CONTEXT_LENGTH_EXCEEDED ||
+      errorCode === OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
+      return ChatErrorCode.ContextTooLong;
+    }
+    if (errorCode === MistralErrorTypes.MODEL_NOT_FOUND) {
+      return ChatErrorCode.NotFound;
+    }
+  }
+
+  // Then check error.type
+  if (errorType) {
+    switch (errorType) {
+      case MistralErrorTypes.AUTHENTICATION:
+      case MistralErrorTypes.INVALID_API_KEY:
+        return ChatErrorCode.Authentication;
+      case MistralErrorTypes.RATE_LIMIT:
+        return ChatErrorCode.RateLimit;
+      case MistralErrorTypes.PERMISSION_DENIED:
+        return ChatErrorCode.PermissionDenied;
+      case MistralErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case MistralErrorTypes.SERVER_ERROR:
+      case MistralErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case MistralErrorTypes.INVALID_REQUEST:
+        return ChatErrorCode.InvalidRequest;
+    }
+  }
+
+  // Fall back to OpenAI error mapping (since Mistral is OpenAI-compatible)
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+function mapMistralErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapMistralErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
+/**
  * Registry of provider-specific error parsers.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -824,6 +902,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   gemini: parseGeminiError,
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  mistral: parseMistralError,
 };
 
 /**
@@ -837,6 +916,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   gemini: mapGeminiErrorWrapper,
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  mistral: mapMistralErrorWrapper,
 };
 
 // =============================================================================

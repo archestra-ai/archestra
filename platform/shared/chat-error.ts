@@ -94,6 +94,25 @@ export const OllamaErrorTypes = {
 } as const;
 
 /**
+ * Mistral AI API error types
+ * Mistral uses OpenAI-compatible error format, so types are similar to OpenAI.
+ * @see https://docs.mistral.ai/api/
+ */
+export const MistralErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  PERMISSION_DENIED: "permission_denied",
+  NOT_FOUND: "not_found_error",
+  RATE_LIMIT: "rate_limit_exceeded",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  // Mistral-specific error codes
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+} as const;
+
+/**
  * Gemini/Vertex AI ErrorInfo reason codes (from `error.details[].reason` field)
  * These provide more specific error reasons extracted from google.rpc.ErrorInfo.
  *

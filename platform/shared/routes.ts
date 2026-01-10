@@ -152,6 +152,11 @@ export const RouteId = {
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
 
+  // Proxy Routes - Mistral
+  MistralChatCompletionsWithDefaultAgent:
+    "mistralChatCompletionsWithDefaultAgent",
+  MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

@@ -2,7 +2,14 @@ import { SupportedProvidersDiscriminatorSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { Anthropic, Gemini, Ollama, OpenAi, Vllm } from "./llm-providers";
+import {
+  Anthropic,
+  Gemini,
+  Mistral,
+  Ollama,
+  OpenAi,
+  Vllm,
+} from "./llm-providers";
 
 export const UserInfoSchema = z.object({
   id: z.string(),
@@ -19,6 +26,7 @@ export const InteractionRequestSchema = z.union([
   Anthropic.API.MessagesRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
+  Mistral.API.ChatCompletionRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -27,6 +35,7 @@ export const InteractionResponseSchema = z.union([
   Anthropic.API.MessagesResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
+  Mistral.API.ChatCompletionResponseSchema,
 ]);
 
 /**
@@ -75,6 +84,13 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Ollama.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Ollama.API.ChatCompletionResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["mistral:chatCompletions"]),
+    request: Mistral.API.ChatCompletionRequestSchema,
+    processedRequest:
+      Mistral.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: Mistral.API.ChatCompletionResponseSchema,
   }),
 ]);
 

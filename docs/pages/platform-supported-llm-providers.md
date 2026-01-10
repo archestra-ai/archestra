@@ -178,3 +178,29 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+
+## Mistral
+
+[Mistral AI](https://mistral.ai/) provides powerful large language models including Mistral Large, Mixtral, Pixtral, and more. Mistral's API is OpenAI-compatible, making integration straightforward.
+
+### Supported Mistral APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### Mistral Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/mistral/{profile-id}`
+- **Authentication**: Pass your Mistral API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                        |
+| --------------------------------- | -------- | ------------------------------------------------------------------ |
+| `ARCHESTRA_MISTRAL_BASE_URL`      | No       | Mistral API base URL (default: `https://api.mistral.ai/v1`)        |
+| `ARCHESTRA_CHAT_MISTRAL_API_KEY`  | No       | API key for built-in Chat feature (optional, users can add their own) |
+
+### Important Notes
+
+- **OpenAI-compatible API**: Mistral uses an OpenAI-compatible API format, so it works with most OpenAI client libraries by changing the base URL.
+- **Available models**: Mistral offers various models including `mistral-large-latest`, `mistral-small-latest`, `mixtral-8x7b-instruct`, `pixtral-large-latest`, and more.
+- **Get API keys**: Create API keys at [Mistral Console](https://console.mistral.ai/api-keys).

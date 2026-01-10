@@ -570,6 +570,123 @@ Return only the JSON object, no other text.`;
 }
 
 /**
+ * Mistral implementation of DualLlmClient
+ * Mistral exposes an OpenAI-compatible API, so we use the OpenAI SDK with Mistral's base URL
+ */
+export class MistralDualLlmClient implements DualLlmClient {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model = "mistral-large-latest") {
+    logger.debug({ model }, "[dualLlmClient] Mistral: initializing client");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.mistral.baseUrl,
+    });
+    this.model = model;
+  }
+
+  async chat(messages: DualLlmMessage[], temperature = 0): Promise<string> {
+    logger.debug(
+      { model: this.model, messageCount: messages.length, temperature },
+      "[dualLlmClient] Mistral: starting chat completion",
+    );
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      temperature,
+    });
+
+    const content = response.choices[0].message.content?.trim() || "";
+    logger.debug(
+      { model: this.model, responseLength: content.length },
+      "[dualLlmClient] Mistral: chat completion complete",
+    );
+    return content;
+  }
+
+  async chatWithSchema<T>(
+    messages: DualLlmMessage[],
+    schema: {
+      name: string;
+      schema: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        additionalProperties: boolean;
+      };
+    },
+    temperature = 0,
+  ): Promise<T> {
+    logger.debug(
+      {
+        model: this.model,
+        schemaName: schema.name,
+        messageCount: messages.length,
+        temperature,
+      },
+      "[dualLlmClient] Mistral: starting chat with schema",
+    );
+
+    // Mistral supports JSON mode via response_format
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages,
+        response_format: {
+          type: "json_schema",
+          json_schema: schema,
+        },
+        temperature,
+      });
+
+      const content = response.choices[0].message.content || "";
+      logger.debug(
+        { model: this.model, responseLength: content.length },
+        "[dualLlmClient] Mistral: chat with schema complete, parsing response",
+      );
+      return JSON.parse(content) as T;
+    } catch {
+      // Fallback to prompt-based approach if structured output not supported
+      logger.debug(
+        { model: this.model },
+        "[dualLlmClient] Mistral: structured output not supported, using prompt fallback",
+      );
+
+      const systemPrompt = `You must respond with valid JSON matching this schema:
+${JSON.stringify(schema.schema, null, 2)}
+
+Return only the JSON object, no other text.`;
+
+      const enhancedMessages: DualLlmMessage[] = messages.map((msg, idx) => {
+        if (idx === 0 && msg.role === "user") {
+          return {
+            ...msg,
+            content: `${systemPrompt}\n\n${msg.content}`,
+          };
+        }
+        return msg;
+      });
+
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: enhancedMessages,
+        temperature,
+      });
+
+      const content = response.choices[0].message.content || "";
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [
+        null,
+        content,
+      ];
+      const jsonText = jsonMatch[1].trim();
+
+      return JSON.parse(jsonText) as T;
+    }
+  }
+}
+
+/**
  * Factory function to create the appropriate LLM client
  *
  * @param provider - The LLM provider
@@ -612,6 +729,11 @@ export function createDualLlmClient(
         throw new Error("Model name required for Ollama dual LLM");
       }
       return new OllamaDualLlmClient(apiKey, model);
+    case "mistral":
+      if (!apiKey) {
+        throw new Error("API key required for Mistral dual LLM");
+      }
+      return new MistralDualLlmClient(apiKey, model);
     default:
       logger.debug(
         { provider },

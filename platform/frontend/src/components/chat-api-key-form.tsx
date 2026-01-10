@@ -106,6 +106,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
   },
+  mistral: {
+    name: "Mistral",
+    icon: "/icons/mistral.png",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://console.mistral.ai/api-keys",
+    consoleName: "Mistral Console",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

@@ -43,6 +43,7 @@ import {
   Anthropic,
   ApiError,
   Gemini,
+  Mistral,
   Ollama,
   OpenAi,
   Vllm,
@@ -105,6 +106,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
+  });
+  z.globalRegistry.add(Mistral.API.ChatCompletionRequestSchema, {
+    id: "MistralChatCompletionRequest",
+  });
+  z.globalRegistry.add(Mistral.API.ChatCompletionResponseSchema, {
+    id: "MistralChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

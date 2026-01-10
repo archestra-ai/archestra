@@ -11,8 +11,8 @@ import { secretManager } from "@/secrets-manager";
 import { ApiError, type SupportedChatProvider } from "@/types";
 
 /**
- * Note: vLLM and Ollama use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
- * When creating a vLLM/Ollama model, we use createOpenAI with the respective base URL.
+ * Note: vLLM, Ollama, and Mistral use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
+ * When creating a vLLM/Ollama/Mistral model, we use createOpenAI with the respective base URL.
  */
 
 /**
@@ -46,6 +46,16 @@ export function detectProviderFromModel(model: string): SupportedChatProvider {
     lowerModel.includes("o3")
   ) {
     return "openai";
+  }
+
+  if (
+    lowerModel.includes("mistral") ||
+    lowerModel.includes("mixtral") ||
+    lowerModel.includes("pixtral") ||
+    lowerModel.includes("codestral") ||
+    lowerModel.includes("ministral")
+  ) {
+    return "mistral";
   }
 
   // Default to anthropic for backwards compatibility
@@ -110,6 +120,9 @@ export async function resolveProviderApiKey(params: {
       apiKeySource = "environment";
     } else if (provider === "ollama" && config.chat.ollama.apiKey) {
       providerApiKey = config.chat.ollama.apiKey;
+      apiKeySource = "environment";
+    } else if (provider === "mistral" && config.chat.mistral.apiKey) {
+      providerApiKey = config.chat.mistral.apiKey;
       apiKeySource = "environment";
     }
   }
@@ -210,6 +223,18 @@ export function createLLMModel(params: {
     const client = createOpenAI({
       apiKey: apiKey || "EMPTY", // Ollama typically doesn't require API keys
       baseURL: `http://localhost:${config.api.port}/v1/ollama/${agentId}`,
+      headers,
+    });
+    // Use .chat() to force Chat Completions API
+    return client.chat(modelName);
+  }
+
+  if (provider === "mistral") {
+    // URL format: /v1/mistral/:agentId (SDK appends /chat/completions)
+    // Mistral uses OpenAI-compatible API, so we use the OpenAI SDK
+    const client = createOpenAI({
+      apiKey: apiKey,
+      baseURL: `http://localhost:${config.api.port}/v1/mistral/${agentId}`,
       headers,
     });
     // Use .chat() to force Chat Completions API

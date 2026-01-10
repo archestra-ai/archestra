@@ -1,60 +1,95 @@
-import { instrumentDrizzleClient } from "@kubiks/otel-drizzle";
-import { drizzle } from "drizzle-orm/node-postgres";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import pg from "pg";
-import config from "@/config";
-import logger from "@/logging";
+
+import config from "../config";
+import logger from "../logging";
 import * as schema from "./schemas";
 
-/**
- * Create a connection pool with proper keepalive settings to prevent
- * "Connection terminated unexpectedly" errors.
- *
- * This addresses an issue where connections were being
- * terminated by network infrastructure (load balancers, NAT gateways) due to
- * idle timeouts.
- *
- * Pool configuration:
- * - max: 20 connections (reasonable default for Node.js)
- * - idleTimeoutMillis: 30s (close idle connections after 30s)
- * - connectionTimeoutMillis: 10s (fail if can't get connection in 10s)
- *
- * Connection keepalive configuration:
- * - keepAlive: true (enable TCP keepalive probes)
- * - keepAliveInitialDelayMillis: 10s (start probes after 10s of idle)
- *
- * The keepalive settings help prevent load balancers and NAT gateways from
- * terminating idle connections, which is a common cause of the
- * "Connection terminated unexpectedly" error in cloud environments.
- */
-const pool = new pg.Pool({
-  connectionString: config.database.url,
-  // Pool configuration
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-  // Keepalive configuration to prevent "Connection terminated unexpectedly"
-  keepAlive: true,
-  keepAliveInitialDelayMillis: 10000,
+const { Pool } = pg;
+
+const pool = new Pool({
+  connectionString: config.databaseUrl,
 });
 
 /**
- * Handle errors on idle clients in the pool.
- * Without this handler, connection errors on idle clients would cause
- * an unhandled 'error' event and crash the process.
- * The pool will automatically remove the errored client and create a new one.
+ * ARCHESTRA_DATABASE_USE_PGLITE
+ *
+ * If this environment variable is set to true, we use a PGlite in-memory database instead of a network Postgres.
+ * This is useful for development when a local Postgres instance is not available.
  */
-pool.on("error", (err) => {
-  logger.error({ err }, "Unexpected error on idle database client");
-});
+const usePglite = process.env.ARCHESTRA_DATABASE_USE_PGLITE === "true";
 
-const db = drizzle({
-  client: pool,
-  schema,
-});
+let db: any;
+let dbInitializationPromise: Promise<void> = Promise.resolve();
 
-instrumentDrizzleClient(db, { dbSystem: "postgresql" });
+if (usePglite) {
+  logger.info("Using PGlite (in-memory) database for development");
 
-export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+  // @ts-ignore
+  const client = new PGlite("memory://");
 
+  db = drizzlePglite({
+    client,
+    schema,
+  });
+
+  dbInitializationPromise = (async () => {
+    try {
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const migrationsDir = path.resolve(__dirname, "migrations");
+
+      console.log(`[DEBUG] PGlite: loading migrations from ${migrationsDir}`);
+
+      if (!fs.existsSync(migrationsDir)) {
+        throw new Error(`Migrations directory not found: ${migrationsDir}`);
+      }
+
+      const migrationFiles = fs
+        .readdirSync(migrationsDir)
+        .filter((file) => file.endsWith(".sql"))
+        .sort();
+
+      console.log(`[DEBUG] PGlite: found ${migrationFiles.length} migration files`);
+
+      for (const file of migrationFiles) {
+        const fullPath = path.resolve(migrationsDir, file);
+        const sql = fs.readFileSync(fullPath, "utf8");
+        process.stdout.write(` [${file}]`);
+
+        try {
+          // Drizzle migrations use '--> statement-breakpoint' to separate statements
+          const statements = sql.split(/--> statement-breakpoint/);
+          for (const statement of statements) {
+            const trimmed = statement.trim();
+            if (trimmed) {
+              await client.exec(trimmed);
+            }
+          }
+        } catch (err: any) {
+          console.error(`\n[DEBUG] ❌ Error in migration script ${file}:`, err.message);
+          throw err;
+        }
+      }
+      process.stdout.write("\n");
+      console.log("[DEBUG] ✓ PGlite migrations completed successfully");
+    } catch (err: any) {
+      console.error("[DEBUG] ❌ Failed to run PGlite migrations:", err.message);
+      throw err;
+    }
+  })();
+} else {
+  db = drizzlePg({
+    client: pool,
+    schema,
+  });
+}
+
+export type Transaction = any; // Simplified for dual-client support
+export { dbInitializationPromise };
 export default db;
 export { schema };

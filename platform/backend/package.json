@@ -7,9 +7,10 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsdown && pnpm run sentry:sourcemaps",
+    "build": "tsdown",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
-    "dev": "rm -rf dist && tsdown --watch",
+    "dev": "tsdown --watch",
+    "dev:pglite": "set ARCHESTRA_DATABASE_USE_PGLITE=true&& tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
     "lint": "biome check",

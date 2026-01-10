@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId, type SupportedProvider } from "@shared";
 import { Building2, CheckCircle2, User, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -56,7 +56,7 @@ export type ChatApiKeyResponse =
   archestraApiTypes.GetChatApiKeysResponses["200"][number];
 
 const PROVIDER_CONFIG: Record<
-  CreateChatApiKeyBody["provider"],
+  SupportedProvider,
   {
     name: string;
     icon: string;
@@ -90,21 +90,13 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
   },
-  vllm: {
-    name: "vLLM",
-    icon: "/icons/vllm.png",
-    placeholder: "optional-api-key",
-    enabled: true,
-    consoleUrl: "https://docs.vllm.ai/",
-    consoleName: "vLLM Docs",
-  },
   ollama: {
     name: "Ollama",
-    icon: "/icons/ollama.png",
-    placeholder: "optional-api-key",
+    icon: "/icons/ollama.svg",
+    placeholder: "http://localhost:11434/v1",
     enabled: true,
-    consoleUrl: "https://ollama.ai/",
-    consoleName: "Ollama",
+    consoleUrl: "https://ollama.com/",
+    consoleName: "Ollama.com",
   },
 } as const;
 
@@ -456,7 +448,7 @@ export function ChatApiKeyForm({
         ) : (
           <div className="space-y-2">
             <Label htmlFor="chat-api-key-value">
-              API Key{" "}
+              {(provider as string) === "ollama" ? "Base URL" : "API Key"}{" "}
               {isEditMode && (
                 <span className="text-muted-foreground font-normal">
                   (leave blank to keep current)

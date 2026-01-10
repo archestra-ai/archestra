@@ -77,3 +77,12 @@ export function slugify(name: string): string {
 
   return slugified.slice(start, end);
 }
+
+/**
+ * Check if a tool name is a Playwright/browser MCP tool.
+ * Matches tools from Playwright MCP server (e.g., microsoft__playwright-mcp__browser_navigate)
+ * and tools with browser_ prefix.
+ */
+export function isBrowserMcpTool(toolName: string): boolean {
+  return toolName.includes("playwright") || toolName.startsWith("browser_");
+}

@@ -199,6 +199,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTools]: {
     tool: ["read"],
   },
+  [RouteId.GetToolsWithAssignments]: {
+    tool: ["read"],
+  },
   [RouteId.GetInteractions]: {
     interaction: ["read"],
   },
@@ -229,6 +232,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteToolInvocationPolicy]: {
     policy: ["delete"],
   },
+  [RouteId.BulkUpsertDefaultCallPolicy]: {
+    policy: ["update"],
+  },
   [RouteId.GetTrustedDataPolicies]: {
     policy: ["read"],
   },
@@ -243,6 +249,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteTrustedDataPolicy]: {
     policy: ["delete"],
+  },
+  [RouteId.BulkUpsertDefaultResultPolicy]: {
+    policy: ["update"],
   },
   [RouteId.GetPolicyConfigSubagentPrompt]: {
     organization: ["read"],
@@ -505,6 +514,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeletePrompt]: {
     prompt: ["delete"],
   },
+  [RouteId.GetAllPromptAgentConnections]: {
+    prompt: ["read"],
+  },
   [RouteId.GetPromptAgents]: {
     prompt: ["read"],
   },
@@ -554,6 +566,12 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicSsoProviders]: {},
+  /**
+   * Get public appearance settings (theme, logo, font) for login page
+   * Available to unauthenticated users
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicAppearance]: {},
   /**
    * Get all SSO providers with full config (admin only)
    * Returns sensitive data including client secrets

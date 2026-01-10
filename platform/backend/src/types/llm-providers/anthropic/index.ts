@@ -8,6 +8,7 @@
 import type { z } from "zod";
 import * as AnthropicAPI from "./api";
 import * as AnthropicMessages from "./messages";
+import type { ModelSchema } from "./models";
 import * as AnthropicTools from "./tools";
 
 namespace Anthropic {
@@ -28,6 +29,8 @@ namespace Anthropic {
     export type Usage = z.infer<typeof AnthropicAPI.UsageSchema>;
 
     export type CustomTool = z.infer<typeof AnthropicTools.CustomToolSchema>;
+
+    export type Model = z.infer<typeof ModelSchema>;
   }
 }
 

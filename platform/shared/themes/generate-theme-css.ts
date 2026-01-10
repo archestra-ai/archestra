@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Import theme configuration
-import { THEME_IDS } from "./theme-config";
+import { SUPPORTED_THEMES } from "./theme-config";
 import type { ThemeId } from "./theme-utils";
 import themeRegistry from "./tweakcn-themes.json";
 
@@ -113,13 +113,13 @@ function generateThemesCSS(): string {
  */\n`;
 
   // Filter to only supported themes
-  const supportedThemeIds = new Set(THEME_IDS);
+  const supportedThemeIds = new Set(SUPPORTED_THEMES);
   const supportedThemes = (themeRegistry.items as ThemeItem[]).filter((item) =>
     supportedThemeIds.has(item.name as ThemeId),
   );
 
-  // Sort themes by the order in THEME_IDS for consistency
-  const themeOrder = new Map(THEME_IDS.map((id, index) => [id, index]));
+  // Sort themes by the order in SUPPORTED_THEMES for consistency
+  const themeOrder = new Map(SUPPORTED_THEMES.map((id, index) => [id, index]));
   supportedThemes.sort(
     (a, b) =>
       (themeOrder.get(a.name as ThemeId) ?? 999) -
@@ -150,7 +150,7 @@ function main() {
   fs.writeFileSync(outputPath, css, "utf-8");
 
   console.log(`✅ Generated ${outputPath}`);
-  console.log(`📊 Generated ${THEME_IDS.length} themes`);
+  console.log(`📊 Generated ${SUPPORTED_THEMES.length} themes`);
 }
 
 main();

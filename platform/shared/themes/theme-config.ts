@@ -26,8 +26,6 @@ export const SUPPORTED_THEMES = [
   "boxy-minimalistic",
 ] as const;
 
-export const THEME_IDS = SUPPORTED_THEMES;
-
 /**
  * Default theme ID
  */

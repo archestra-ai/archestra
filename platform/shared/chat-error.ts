@@ -94,6 +94,24 @@ export const OllamaErrorTypes = {
 } as const;
 
 /**
+ * MiniMax API error types
+ * MiniMax uses OpenAI-compatible error format, so types are similar to OpenAI.
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+export const MiniMaxErrorTypes = {
+  INVALID_REQUEST: "invalid_request_error",
+  AUTHENTICATION: "authentication_error",
+  INVALID_API_KEY: "invalid_api_key",
+  NOT_FOUND: "not_found_error",
+  SERVER_ERROR: "server_error",
+  SERVICE_UNAVAILABLE: "service_unavailable",
+  RATE_LIMIT: "rate_limit_exceeded",
+  // MiniMax-specific error codes
+  MODEL_NOT_FOUND: "model_not_found",
+  CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+} as const;
+
+/**
  * Gemini/Vertex AI ErrorInfo reason codes (from `error.details[].reason` field)
  * These provide more specific error reasons extracted from google.rpc.ErrorInfo.
  *

@@ -273,6 +273,12 @@ export default {
       baseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
       useV2Routes: process.env.ARCHESTRA_OLLAMA_USE_V2_ROUTES !== "false",
     },
+    minimax: {
+      enabled: Boolean(process.env.ARCHESTRA_MINIMAX_BASE_URL),
+      baseUrl:
+        process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
+      useV2Routes: process.env.ARCHESTRA_MINIMAX_USE_V2_ROUTES !== "false",
+    },
   },
   chat: {
     openai: {
@@ -289,6 +295,9 @@ export default {
     },
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
+    minimax: {
+      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

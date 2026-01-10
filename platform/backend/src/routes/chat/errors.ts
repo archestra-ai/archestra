@@ -5,6 +5,7 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  MiniMaxErrorTypes,
   OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
@@ -814,6 +815,81 @@ function mapOllamaErrorWrapper(
 }
 
 /**
+ * Parse MiniMax error response body.
+ * MiniMax uses OpenAI-compatible error format: { error: { type, code, message } }
+ *
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+function parseMiniMaxError(responseBody: string): ParsedOpenAIError | null {
+  // MiniMax uses the same error format as OpenAI
+  return parseOpenAIError(responseBody);
+}
+
+/**
+ * Map MiniMax error to ChatErrorCode.
+ * MiniMax uses OpenAI-compatible error format with some additional codes.
+ *
+ * @see https://platform.minimax.io/docs/api-reference/text-openai-api
+ */
+function mapMiniMaxErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorCode = parsedError?.code;
+
+  // First check error.code for specific error codes
+  if (errorCode) {
+    if (
+      errorCode === MiniMaxErrorTypes.INVALID_API_KEY ||
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY_CODE
+    ) {
+      return ChatErrorCode.Authentication;
+    }
+    if (
+      errorCode === MiniMaxErrorTypes.CONTEXT_LENGTH_EXCEEDED ||
+      errorCode === OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
+      return ChatErrorCode.ContextTooLong;
+    }
+    if (errorCode === MiniMaxErrorTypes.MODEL_NOT_FOUND) {
+      return ChatErrorCode.NotFound;
+    }
+  }
+
+  // Then check error.type
+  if (errorType) {
+    switch (errorType) {
+      case MiniMaxErrorTypes.AUTHENTICATION:
+      case MiniMaxErrorTypes.INVALID_API_KEY:
+        return ChatErrorCode.Authentication;
+      case MiniMaxErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case MiniMaxErrorTypes.SERVER_ERROR:
+      case MiniMaxErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case MiniMaxErrorTypes.INVALID_REQUEST:
+        return ChatErrorCode.InvalidRequest;
+      case MiniMaxErrorTypes.RATE_LIMIT:
+        return ChatErrorCode.RateLimit;
+    }
+  }
+
+  // Fall back to OpenAI error mapping (since MiniMax is OpenAI-compatible)
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+function mapMiniMaxErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapMiniMaxErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
+/**
  * Registry of provider-specific error parsers.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -824,6 +900,7 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   gemini: parseGeminiError,
   vllm: parseVllmError,
   ollama: parseOllamaError,
+  minimax: parseMiniMaxError,
 };
 
 /**
@@ -837,6 +914,7 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   gemini: mapGeminiErrorWrapper,
   vllm: mapVllmErrorWrapper,
   ollama: mapOllamaErrorWrapper,
+  minimax: mapMiniMaxErrorWrapper,
 };
 
 // =============================================================================

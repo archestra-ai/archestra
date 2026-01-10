@@ -46,6 +46,7 @@ const providerToLogoProvider: Record<SupportedProvider, string> = {
   gemini: "google",
   vllm: "vllm",
   ollama: "ollama",
+  minimax: "minimax",
 };
 
 /**

@@ -178,3 +178,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+
+## MiniMax
+
+[MiniMax](https://www.minimax.io/) is an AI company providing large language models through an OpenAI-compatible API. MiniMax offers models like MiniMax-M2 and MiniMax-M2.1 that can be accessed through their cloud platform.
+
+### Supported MiniMax APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### MiniMax Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/minimax/{profile-id}`
+- **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### How to Obtain a MiniMax API Key
+
+1. Visit the [MiniMax Platform](https://platform.minimax.io/)
+2. Create an account or sign in
+3. Navigate to the API Keys section in your dashboard
+4. Create a new API key and copy it
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                                         |
+| --------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `ARCHESTRA_MINIMAX_BASE_URL`      | No       | MiniMax API base URL (defaults to `https://api.minimax.io/v1`)                      |
+| `ARCHESTRA_CHAT_MINIMAX_API_KEY`  | No       | API key for MiniMax (can also be provided per-request or configured in Chat settings) |
+
+### Important Notes
+
+- **API key required**: MiniMax requires an API key for authentication. You can configure this in Chat Settings or pass it in the Authorization header.
+- **Available models**: MiniMax offers models like `MiniMax-M2` and `MiniMax-M2.1`. Check the [MiniMax API documentation](https://platform.minimax.io/docs/api-reference/text-openai-api) for the latest available models.
+- **Streaming supported**: Both streaming and non-streaming responses are fully supported.

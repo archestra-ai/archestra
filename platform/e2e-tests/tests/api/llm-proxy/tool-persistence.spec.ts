@@ -178,6 +178,30 @@ const ollamaConfig: ToolPersistenceTestConfig = {
   }),
 };
 
+const minimaxConfig: ToolPersistenceTestConfig = {
+  providerName: "MiniMax",
+
+  endpoint: (agentId) => `/v1/minimax/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "MiniMax-M2",
+    messages: [{ role: "user", content }],
+    tools: tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    })),
+  }),
+};
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -188,6 +212,7 @@ const testConfigs: ToolPersistenceTestConfig[] = [
   geminiConfig,
   vllmConfig,
   ollamaConfig,
+  minimaxConfig,
 ];
 
 for (const config of testConfigs) {

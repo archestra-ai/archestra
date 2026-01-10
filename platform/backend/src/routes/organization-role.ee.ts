@@ -146,7 +146,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a specific role by ID",
         tags: ["Roles"],
         params: z.object({
-          roleId: PredefinedRoleNameOrCustomRoleIdSchema,
+          roleId: z.string(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },

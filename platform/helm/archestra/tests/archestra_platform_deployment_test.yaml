@@ -126,11 +126,44 @@ tests:
   - it: should configure container with correct image
     documentIndex: 1
     set:
-      archestra.image: archestra/platform:test-version
+      archestra.image: archestra/platform
+      archestra.imageTag: test-version
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: archestra/platform:test-version
+
+  # Image helper tests - ensures backward compatibility with existing deployments
+  # that set the full image:tag in archestra.image
+  - it: should use image as-is when image already contains a tag
+    documentIndex: 1
+    set:
+      archestra.image: archestra/platform:ci-test
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:ci-test
+
+  - it: should append imageTag when registry has port but image has no tag
+    documentIndex: 1
+    set:
+      archestra.image: registry.io:5000/archestra/platform
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.io:5000/archestra/platform:1.0.0
+
+  - it: should use image as-is when registry has port and image has tag
+    documentIndex: 1
+    set:
+      archestra.image: registry.io:5000/archestra/platform:v2.0.0
+      archestra.imageTag: "1.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.io:5000/archestra/platform:v2.0.0
 
   - it: should allow configuring image pull policy
     documentIndex: 1
@@ -191,6 +224,7 @@ tests:
   - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
     documentIndex: 1
     set:
+      postgresql.enabled: false
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
       - equal:
@@ -225,11 +259,38 @@ tests:
   - it: should configure init container to wait for external postgres
     documentIndex: 1
     set:
+      postgresql.enabled: false
       postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: ".*external-db.example.com.*5432.*"
+
+  - it: should configure init container to wait for external postgres with postgres:// scheme
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgres://user:pass@external-db.example.com:5433/mydb
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*external-db.example.com.*5433.*"
+
+  - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgres://external:pass@external-host:5434/externaldb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: ARCHESTRA_DATABASE_URL
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-archestra-platform-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: database-url
 
   - it: when archestra.env is empty should set a specific set of environment variables
     documentIndex: 1

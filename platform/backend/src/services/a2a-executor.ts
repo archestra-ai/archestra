@@ -44,8 +44,9 @@ export async function executeA2AMessage(
     throw new Error(`Agent not found for prompt ${promptId}`);
   }
 
-  // Use default model from config
+  // Use default model and provider from config
   const selectedModel = config.chat.defaultModel;
+  const provider = config.chat.defaultProvider;
 
   // Build system prompt from prompt's systemPrompt and userPrompt fields
   let systemPrompt: string | undefined;
@@ -88,11 +89,12 @@ export async function executeA2AMessage(
   );
 
   // Create LLM model using shared service
-  const { model, provider } = await createLLMModelForAgent({
+  const { model } = await createLLMModelForAgent({
     organizationId,
     userId,
     agentId: agent.id,
     model: selectedModel,
+    provider,
   });
 
   // Execute with AI SDK using streamText (required for long-running requests)

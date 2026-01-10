@@ -270,6 +270,8 @@ class OptimizationRuleModel {
         },
       ],
       gemini: [],
+      vllm: [], // vLLM model pricing varies by deployment, so no defaults
+      ollama: [], // Ollama model pricing varies by deployment, so no defaults
     };
 
     // Define rules per provider
@@ -297,6 +299,8 @@ class OptimizationRuleModel {
           },
         ],
         gemini: [],
+        vllm: [], // vLLM optimization rules are deployment-specific, no defaults
+        ollama: [], // Ollama optimization rules are deployment-specific, no defaults
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

@@ -107,7 +107,8 @@ The Helm chart provides extensive configuration options through values. For the 
 
 **Archestra Platform Settings**:
 
-- `archestra.image` - Docker image for the Archestra Platform (contains both backend API and frontend). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
+- `archestra.image` - Docker image repository for the Archestra Platform (default: `archestra/platform`). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
+- `archestra.imageTag` - Image tag for the Archestra Platform. New Helm releases update this value to latest available image tag.
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
 - `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options)
@@ -390,7 +391,7 @@ See the Kubernetes documentation for more details:
 **PostgreSQL Settings**:
 
 - `postgresql.external_database_url` - External PostgreSQL connection string (recommended for production)
-- `postgresql.enabled` - Enable managed PostgreSQL instance (default: true, disabled if external_database_url is set)
+- `postgresql.enabled` - Whether to deploy a self-hosted PostgreSQL instance in your Kubernetes cluster (default: true)
 
 For external PostgreSQL (recommended for production):
 
@@ -494,7 +495,7 @@ The following environment variables can be used to configure Archestra Platform:
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
 
   - Example: `https://frontend.example.com`
-  - Optional for local development
+  - Required for production deployments when accessing the frontend via a custom domain or subdomain (not localhost), optional for local development
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
 
@@ -529,6 +530,13 @@ The following environment variables can be used to configure Archestra Platform:
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
+- **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Additional trusted origins for authentication flows.
+
+  - Default: None
+  - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
+  - Use this to trust external identity providers (IdPs) for SSO OIDC discovery URL validation
+  - Required when configuring SSO with external identity providers hosted on different domains
+
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
 
   - Default: `https://api.openai.com/v1`
@@ -544,6 +552,25 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints
   - Note: This is only used when Vertex AI mode is disabled
+
+- **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your vLLM server.
+
+  - Required to enable vLLM provider support
+  - Example: `http://localhost:8000/v1` (standard vLLM)
+  - See: [vLLM setup guide](/docs/platform-supported-llm-providers#vllm)
+
+- **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
+
+  - Required to enable Ollama provider support
+  - Example: `http://localhost:11434/v1` (default Ollama)
+  - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
+- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
+
+  - Default: `permissive`
+  - Values: `permissive` or `restrictive`
+  - `permissive`: Tools are allowed, unless a specific policy is set for them.
+  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`** - Enable Vertex AI mode for Gemini.
 
@@ -589,13 +616,6 @@ The following environment variables can be used to configure Archestra Platform:
 
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
-
-- **`ARCHESTRA_ORCHESTRATOR_MCP_K8S_SERVICE_ACCOUNT_NAME`** - Kubernetes ServiceAccount name for MCP server pods that need K8s API access.
-
-  - Default: `archestra-platform-mcp-k8s-operator`
-  - The official Helm chart creates a ServiceAccount with this name pattern: `{release-name}-mcp-k8s-operator`
-    So, default value matches it when using `archestra-platform` as the release name.
-  - Customize if using a different Helm release name or managing ServiceAccounts manually
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
 
@@ -650,9 +670,10 @@ The following environment variables can be used to configure Archestra Platform:
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
 
-  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`, `ARCHESTRA_CHAT_VLLM_API_KEY`, `ARCHESTRA_CHAT_OLLAMA_API_KEY`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Please reach out to sales@archestra.ai to learn more about the license.
+  - Please reach out to <sales@archestra.ai> to learn more about the license.

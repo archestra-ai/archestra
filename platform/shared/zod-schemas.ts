@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { THEME_IDS } from "./themes/theme-config";
+import { SUPPORTED_THEMES } from "./themes/theme-config";
 
 export const OAuthConfigSchema = z.object({
   name: z.string(),
@@ -71,7 +71,7 @@ export const LocalConfigFormSchema = z.object({
   transportType: z.enum(["stdio", "streamable-http"]).optional(),
   httpPort: z.string().optional(), // UI uses string, gets parsed to number
   httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
-  serviceAccount: z.string().optional(), // Preserved from catalog item, not editable in form
+  serviceAccount: z.string().optional(), // K8s service account for the MCP server pod
 });
 
 /**
@@ -79,13 +79,14 @@ export const LocalConfigFormSchema = z.object({
  * All themes from https://github.com/jnsahaj/tweakcn
  * Theme IDs are generated from shared/themes/theme-config.ts
  */
-export const OrganizationThemeSchema = z.enum(THEME_IDS);
+export const OrganizationThemeSchema = z.enum(SUPPORTED_THEMES);
 export const OrganizationCustomFontSchema = z.enum([
   "lato",
   "inter",
   "open-sans",
   "roboto",
   "source-sans-pro",
+  "jetbrains-mono",
 ]);
 
 export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;

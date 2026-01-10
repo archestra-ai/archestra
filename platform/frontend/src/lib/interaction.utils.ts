@@ -7,7 +7,81 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
+import VllmChatCompletionInteraction from "./llmProviders/vllm";
+
+export interface CostSavingsInput {
+  cost: string | null | undefined;
+  baselineCost: string | null | undefined;
+  toonCostSavings: string | null | undefined;
+  toonTokensBefore: number | null | undefined;
+  toonTokensAfter: number | null | undefined;
+}
+
+export interface CostSavingsResult {
+  /** Savings from model optimization (baselineCost - cost) */
+  costOptimizationSavings: number;
+  /** Savings from TOON compression */
+  toonSavings: number;
+  /** Number of tokens saved by TOON compression */
+  toonTokensSaved: number | null;
+  /** Total savings (costOptimization + toon) */
+  totalSavings: number;
+  /** Baseline cost before any optimization */
+  baselineCost: number;
+  /** Actual cost after optimization */
+  actualCost: number;
+  /** Total savings as percentage of baseline */
+  savingsPercent: number;
+  /** Whether there are any savings at all */
+  hasSavings: boolean;
+}
+
+/**
+ * Calculate all cost savings from an interaction.
+ * Used by both the logs table and detail view for consistent display.
+ */
+export function calculateCostSavings(
+  input: CostSavingsInput,
+): CostSavingsResult {
+  const costNum = input.cost ? Number.parseFloat(input.cost) : 0;
+  const baselineCostNum = input.baselineCost
+    ? Number.parseFloat(input.baselineCost)
+    : 0;
+  const toonCostSavingsNum = input.toonCostSavings
+    ? Number.parseFloat(input.toonCostSavings)
+    : 0;
+
+  // Calculate tokens saved from TOON compression
+  const toonTokensSaved =
+    input.toonTokensBefore &&
+    input.toonTokensAfter &&
+    input.toonTokensBefore > input.toonTokensAfter
+      ? input.toonTokensBefore - input.toonTokensAfter
+      : null;
+
+  // Calculate cost optimization savings (from model selection)
+  const costOptimizationSavings = baselineCostNum - costNum;
+
+  // Calculate total savings
+  const totalSavings = costOptimizationSavings + toonCostSavingsNum;
+
+  // Calculate savings percentage
+  const savingsPercent =
+    baselineCostNum > 0 ? (totalSavings / baselineCostNum) * 100 : 0;
+
+  return {
+    costOptimizationSavings,
+    toonSavings: toonCostSavingsNum,
+    toonTokensSaved,
+    totalSavings,
+    baselineCost: baselineCostNum,
+    actualCost: baselineCostNum - totalSavings,
+    savingsPercent,
+    hasSavings: totalSavings !== 0,
+  };
+}
 
 export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
@@ -40,11 +114,21 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    if (this.type === "openai:chatCompletions") {
+    // Note: Type discriminator stored in database determines the interaction type
+    const type = this.type as string;
+    if (type === "openai:chatCompletions") {
       return new OpenAiChatCompletionInteraction(interaction);
-    } else if (this.type === "anthropic:messages") {
+    }
+    if (type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
     }
+    if (type === "vllm:chatCompletions") {
+      return new VllmChatCompletionInteraction(interaction);
+    }
+    if (type === "ollama:chatCompletions") {
+      return new OllamaChatCompletionInteraction(interaction);
+    }
+    // Default to Gemini for any other provider
     return new GeminiGenerateContentInteraction(interaction);
   }
 

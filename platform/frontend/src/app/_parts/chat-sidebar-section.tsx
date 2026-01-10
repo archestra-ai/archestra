@@ -85,6 +85,9 @@ export function ChatSidebarSection() {
   const [showAllChats, setShowAllChats] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
+    null,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Track conversations with recently auto-generated titles for animation
@@ -187,25 +190,32 @@ export function ChatSidebarSection() {
                   conv.id,
                 );
                 const isRegenerating = regeneratingTitles.has(conv.id);
+                const isConfirmingDelete = confirmingDeleteId === conv.id;
                 const buttons =
                   editingId !== conv.id ? (
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
-                      <PermissionButton
-                        permissions={{ conversation: ["update"] }}
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(conv.id, displayTitle);
-                        }}
-                        title="Edit chat name"
-                        className="p-1 w-fit"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </PermissionButton>
+                      {!isConfirmingDelete && (
+                        <PermissionButton
+                          permissions={{ conversation: ["update"] }}
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(conv.id, displayTitle);
+                          }}
+                          title="Edit chat name"
+                          className="p-1 w-fit"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </PermissionButton>
+                      )}
                       <WithInlineConfirm
                         onConfirm={() => handleDeleteConversation(conv.id)}
+                        replaceMode
+                        onOpenChange={(open) =>
+                          setConfirmingDeleteId(open ? conv.id : null)
+                        }
                       >
                         <Button
                           type="button"

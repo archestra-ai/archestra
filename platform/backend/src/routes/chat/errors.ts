@@ -5,9 +5,11 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
   type SupportedProvider,
+  VllmErrorTypes,
 } from "@shared";
 import { APICallError } from "ai";
 import logger from "@/logging";
@@ -666,6 +668,152 @@ function mapGeminiErrorWrapper(
 }
 
 /**
+ * Parse vLLM error response body.
+ * vLLM uses OpenAI-compatible error format: { error: { type, code, message } }
+ *
+ * @see https://docs.vllm.ai/en/latest/features/openai_api.html
+ */
+function parseVllmError(responseBody: string): ParsedOpenAIError | null {
+  // vLLM uses the same error format as OpenAI
+  return parseOpenAIError(responseBody);
+}
+
+/**
+ * Map vLLM error to ChatErrorCode.
+ * vLLM uses OpenAI-compatible error format with some additional codes.
+ *
+ * @see https://docs.vllm.ai/en/latest/features/openai_api.html
+ */
+function mapVllmErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorCode = parsedError?.code;
+
+  // First check error.code for specific error codes
+  if (errorCode) {
+    if (
+      errorCode === VllmErrorTypes.INVALID_API_KEY ||
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY_CODE
+    ) {
+      return ChatErrorCode.Authentication;
+    }
+    if (
+      errorCode === VllmErrorTypes.CONTEXT_LENGTH_EXCEEDED ||
+      errorCode === OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
+      return ChatErrorCode.ContextTooLong;
+    }
+    if (errorCode === VllmErrorTypes.MODEL_NOT_LOADED) {
+      return ChatErrorCode.NotFound;
+    }
+  }
+
+  // Then check error.type
+  if (errorType) {
+    switch (errorType) {
+      case VllmErrorTypes.AUTHENTICATION:
+      case VllmErrorTypes.INVALID_API_KEY:
+        return ChatErrorCode.Authentication;
+      case VllmErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case VllmErrorTypes.SERVER_ERROR:
+      case VllmErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case VllmErrorTypes.INVALID_REQUEST:
+        return ChatErrorCode.InvalidRequest;
+    }
+  }
+
+  // Fall back to OpenAI error mapping (since vLLM is OpenAI-compatible)
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+function mapVllmErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapVllmErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
+/**
+ * Parse Ollama error response body.
+ * Ollama uses OpenAI-compatible error format: { error: { type, code, message } }
+ *
+ * @see https://github.com/ollama/ollama/blob/main/docs/openai.md
+ */
+function parseOllamaError(responseBody: string): ParsedOpenAIError | null {
+  // Ollama uses the same error format as OpenAI
+  return parseOpenAIError(responseBody);
+}
+
+/**
+ * Map Ollama error to ChatErrorCode.
+ * Ollama uses OpenAI-compatible error format with some additional codes.
+ *
+ * @see https://github.com/ollama/ollama/blob/main/docs/openai.md
+ */
+function mapOllamaErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  const errorType = parsedError?.type;
+  const errorCode = parsedError?.code;
+
+  // First check error.code for specific error codes
+  if (errorCode) {
+    if (
+      errorCode === OllamaErrorTypes.INVALID_API_KEY ||
+      errorCode === OpenAIErrorTypes.INVALID_API_KEY_CODE
+    ) {
+      return ChatErrorCode.Authentication;
+    }
+    if (
+      errorCode === OllamaErrorTypes.CONTEXT_LENGTH_EXCEEDED ||
+      errorCode === OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
+      return ChatErrorCode.ContextTooLong;
+    }
+    if (errorCode === OllamaErrorTypes.MODEL_NOT_FOUND) {
+      return ChatErrorCode.NotFound;
+    }
+  }
+
+  // Then check error.type
+  if (errorType) {
+    switch (errorType) {
+      case OllamaErrorTypes.AUTHENTICATION:
+      case OllamaErrorTypes.INVALID_API_KEY:
+        return ChatErrorCode.Authentication;
+      case OllamaErrorTypes.NOT_FOUND:
+        return ChatErrorCode.NotFound;
+      case OllamaErrorTypes.SERVER_ERROR:
+      case OllamaErrorTypes.SERVICE_UNAVAILABLE:
+        return ChatErrorCode.ServerError;
+      case OllamaErrorTypes.INVALID_REQUEST:
+        return ChatErrorCode.InvalidRequest;
+    }
+  }
+
+  // Fall back to OpenAI error mapping (since Ollama is OpenAI-compatible)
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+function mapOllamaErrorWrapper(
+  statusCode: number | undefined,
+  parsedError: ParsedProviderError | null,
+): ChatErrorCode {
+  return mapOllamaErrorToCode(
+    statusCode,
+    parsedError as ParsedOpenAIError | null,
+  );
+}
+
+/**
  * Registry of provider-specific error parsers.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -674,6 +822,8 @@ const providerParsers: Record<SupportedProvider, ErrorParser> = {
   openai: parseOpenAIError,
   anthropic: parseAnthropicError,
   gemini: parseGeminiError,
+  vllm: parseVllmError,
+  ollama: parseOllamaError,
 };
 
 /**
@@ -685,6 +835,8 @@ const providerMappers: Record<SupportedProvider, ErrorMapper> = {
   openai: mapOpenAIErrorWrapper,
   anthropic: mapAnthropicErrorWrapper,
   gemini: mapGeminiErrorWrapper,
+  vllm: mapVllmErrorWrapper,
+  ollama: mapOllamaErrorWrapper,
 };
 
 // =============================================================================

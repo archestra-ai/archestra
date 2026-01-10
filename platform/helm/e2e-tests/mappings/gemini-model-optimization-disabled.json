@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPathPattern": "/v1beta/models/e2e-test-gemini-baseline:generateContent",
+    "urlPathPattern": "/gemini/v1beta/models/e2e-test-gemini-baseline:generateContent",
     "headers": {
       "x-goog-api-key": {
         "contains": "gemini-model-optimization-disabled"

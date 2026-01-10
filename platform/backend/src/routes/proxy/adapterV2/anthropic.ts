@@ -2,6 +2,7 @@ import AnthropicProvider from "@anthropic-ai/sdk";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
+import { getObservableFetch } from "@/llm-metrics";
 import logger from "@/logging";
 import { TokenPriceModel } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -12,6 +13,7 @@ import type {
   CommonMessage,
   CommonToolCall,
   CommonToolResult,
+  CreateClientOptions,
   LLMProvider,
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -21,6 +23,11 @@ import type {
   UsageView,
 } from "@/types";
 import { MockAnthropicClient } from "../mock-anthropic-client";
+import {
+  hasImageContent,
+  isImageTooLarge,
+  isMcpImageBlock,
+} from "../utils/mcp-image";
 import type { CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
@@ -33,6 +40,24 @@ type AnthropicResponse = Anthropic.Types.MessagesResponse;
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 type AnthropicHeaders = Anthropic.Types.MessagesHeaders;
 type AnthropicStreamChunk = AnthropicProvider.Messages.MessageStreamEvent;
+
+type AnthropicToolResultImageBlock = {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+};
+
+type AnthropicToolResultTextBlock = {
+  type: "text";
+  text: string;
+};
+
+type AnthropicToolResultContentBlock =
+  | AnthropicToolResultImageBlock
+  | AnthropicToolResultTextBlock;
 
 // =============================================================================
 // REQUEST ADAPTER
@@ -171,6 +196,43 @@ class AnthropicRequestAdapter
     };
   }
 
+  convertToolResultContent(messages: AnthropicMessages): AnthropicMessages {
+    return messages.map((message) => {
+      if (message.role !== "user" || !Array.isArray(message.content)) {
+        return message;
+      }
+
+      let updated = false;
+      const updatedContent = message.content.map((contentBlock) => {
+        if (contentBlock.type !== "tool_result") {
+          return contentBlock;
+        }
+
+        const convertedContent = convertMcpImageBlocksToAnthropic(
+          contentBlock.content,
+        );
+        if (!convertedContent) {
+          return contentBlock;
+        }
+
+        updated = true;
+        return {
+          ...contentBlock,
+          content: convertedContent,
+        };
+      });
+
+      if (!updated) {
+        return message;
+      }
+
+      return {
+        ...message,
+        content: updatedContent,
+      };
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Build Modified Request
   // ---------------------------------------------------------------------------
@@ -181,6 +243,10 @@ class AnthropicRequestAdapter
     // Apply tool result updates if any
     if (Object.keys(this.toolResultUpdates).length > 0) {
       messages = this.applyUpdates(messages, this.toolResultUpdates);
+    }
+
+    if (config.features.browserStreamingEnabled) {
+      messages = this.convertToolResultContent(messages);
     }
 
     return {
@@ -365,6 +431,85 @@ class AnthropicRequestAdapter
     );
     return result;
   }
+}
+
+function isAnthropicImageBlock(
+  item: unknown,
+): item is AnthropicToolResultImageBlock {
+  if (typeof item !== "object" || item === null) return false;
+  const candidate = item as Record<string, unknown>;
+  if (candidate.type !== "image") return false;
+  if (typeof candidate.source !== "object" || candidate.source === null) {
+    return false;
+  }
+
+  const source = candidate.source as Record<string, unknown>;
+  return (
+    source.type === "base64" &&
+    typeof source.media_type === "string" &&
+    typeof source.data === "string"
+  );
+}
+
+function isAnthropicTextBlock(
+  item: unknown,
+): item is AnthropicToolResultTextBlock {
+  if (typeof item !== "object" || item === null) return false;
+  const candidate = item as Record<string, unknown>;
+  return candidate.type === "text" && typeof candidate.text === "string";
+}
+
+function convertMcpImageBlocksToAnthropic(
+  content: unknown,
+): AnthropicToolResultContentBlock[] | null {
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  if (!hasImageContent(content)) {
+    return null;
+  }
+
+  const convertedContent: AnthropicToolResultContentBlock[] = [];
+  const imageTooLargePlaceholder = "[Image omitted due to size]";
+
+  for (const item of content) {
+    if (typeof item !== "object" || item === null) continue;
+    const candidate = item as Record<string, unknown>;
+
+    if (isMcpImageBlock(item)) {
+      if (isImageTooLarge(item)) {
+        convertedContent.push({
+          type: "text",
+          text: imageTooLargePlaceholder,
+        });
+        continue;
+      }
+      const mimeType = item.mimeType ?? "image/png";
+      convertedContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mimeType,
+          data: item.data,
+        },
+      });
+    } else if (isAnthropicImageBlock(item)) {
+      convertedContent.push(item);
+    } else if (isAnthropicTextBlock(item)) {
+      convertedContent.push(item);
+    } else if (candidate.type === "text" && "text" in candidate) {
+      convertedContent.push({
+        type: "text",
+        text:
+          typeof candidate.text === "string"
+            ? candidate.text
+            : JSON.stringify(candidate),
+      });
+    }
+  }
+
+  return convertedContent.length > 0 ? convertedContent : null;
 }
 
 // =============================================================================
@@ -682,31 +827,6 @@ class AnthropicStreamAdapter
       },
     };
   }
-
-  toProviderRefusalResponse(
-    _refusalMessage: string,
-    contentMessage: string,
-  ): AnthropicResponse {
-    return {
-      id: this.state.responseId,
-      type: "message",
-      role: "assistant",
-      content: [
-        {
-          type: "text",
-          text: contentMessage,
-          citations: null,
-        },
-      ],
-      model: this.state.model,
-      stop_reason: "end_turn",
-      stop_sequence: null,
-      usage: {
-        input_tokens: this.state.usage?.inputTokens ?? 0,
-        output_tokens: this.state.usage?.outputTokens ?? 0,
-      },
-    };
-  }
 }
 
 // =============================================================================
@@ -959,17 +1079,28 @@ export const anthropicAdapterFactory: LLMProvider<
     return config.llm.anthropic.baseUrl;
   },
 
+  getSpanName(): string {
+    return "anthropic.messages";
+  },
+
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
+    options?: CreateClientOptions,
   ): AnthropicProvider {
     if (options?.mockMode) {
       return new MockAnthropicClient() as unknown as AnthropicProvider;
     }
+
+    // Use observable fetch for request duration metrics if agent is provided
+    const customFetch = options?.agent
+      ? getObservableFetch("anthropic", options.agent, options.externalAgentId)
+      : undefined;
+
     return new AnthropicProvider({
       apiKey,
       baseURL: options?.baseUrl,
-      fetch: options?.fetch,
+      fetch: customFetch,
+      defaultHeaders: options?.defaultHeaders,
     });
   },
 

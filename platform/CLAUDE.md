@@ -136,9 +136,6 @@ ANTHROPIC_API_KEY=your-api-key-here
 ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
-# LLM Proxy Route Selection (optional)
-ARCHESTRA_ANTHROPIC_USE_V1_ROUTES=true  # Set to false to use unified V2 Anthropic routes instead of legacy V1 handler
-
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
@@ -156,6 +153,7 @@ ARCHESTRA_AUTH_DISABLE_INVITATIONS=false  # Set to true to disable user invitati
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
 ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
+ARCHESTRA_CHAT_DEFAULT_PROVIDER=anthropic  # Optional, defaults to anthropic. Options: anthropic, openai, gemini
 
 # Kubernetes (for MCP server runtime)
 # Local MCP servers require EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG OR ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER

@@ -33,6 +33,7 @@ import type {
   SupportedProviderDiscriminator,
 } from "@shared";
 
+import type { Agent } from "./agent";
 import type {
   CommonMcpToolDefinition,
   CommonMessage,
@@ -40,6 +41,22 @@ import type {
   CommonToolResult,
 } from "./common-llm-format";
 import type { ToonCompressionResult } from "./tool-result-compression";
+
+/**
+ * Options for creating an LLM provider client
+ */
+export interface CreateClientOptions {
+  /** Base URL override for the provider API */
+  baseUrl?: string;
+  /** Enable mock mode for testing */
+  mockMode?: boolean;
+  /** Agent for observability metrics (request duration, tokens) */
+  agent?: Agent;
+  /** External agent ID from X-Archestra-Agent-Id header */
+  externalAgentId?: string;
+  /** Default headers to include with every request */
+  defaultHeaders?: Record<string, string>;
+}
 
 /**
  * Adapter interface for LLM requests
@@ -113,6 +130,12 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * This keeps adapters simple (just apply updates) and makes TOON logic provider-agnostic.
    */
   applyToonCompression(model: string): Promise<ToonCompressionResult>;
+
+  /**
+   * Convert tool result content to provider-specific format (e.g., MCP image blocks)
+   * @param messages - Provider-specific messages to convert
+   */
+  convertToolResultContent(messages: TMessages): TMessages;
 
   // ---------------------------------------------------------------------------
   // Build Modified Request
@@ -282,21 +305,6 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * which is needed for saving the interaction to the database.
    */
   toProviderResponse(): TResponse;
-
-  /**
-   * Creates a provider-native response that replaces tool calls with a refusal message.
-   *
-   * When tool invocation policies block a tool call, we cannot return the original response
-   * containing the blocked tool. Instead, we return a valid response with the same metadata
-   * (id, model, usage) but with content replaced by a text message explaining the refusal.
-   *
-   * @param refusalMessage - Full message with metadata (for logging)
-   * @param contentMessage - Human-readable message (sent to client)
-   */
-  toProviderRefusalResponse(
-    refusalMessage: string,
-    contentMessage: string,
-  ): TResponse;
 }
 
 // =============================================================================
@@ -347,10 +355,16 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Get base URL for the provider (from config), undefined means use SDK default */
   getBaseUrl(): string | undefined;
 
-  /** Create provider client */
+  /** Get span name for tracing (e.g., "openai.chat.completions", "anthropic.messages") */
+  getSpanName(streaming: boolean): string;
+
+  /**
+   * Create provider client with observability.
+   * Each provider is responsible for setting up its own metrics tracking:
+   */
   createClient(
     apiKey: string | undefined,
-    options?: { baseUrl?: string; fetch?: typeof fetch; mockMode?: boolean },
+    options?: CreateClientOptions,
   ): unknown;
 
   // ---------------------------------------------------------------------------

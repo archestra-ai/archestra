@@ -461,9 +461,7 @@ if (ciMode) {
     if (filterType === "lookup") {
       if (!packageName) {
         console.error("Error: Package name required for lookup mode");
-        console.log(
-          "\nUsage: tsx license-check.ts lookup <package-name>",
-        );
+        console.log("\nUsage: tsx license-check.ts lookup <package-name>");
         process.exit(1);
       }
 

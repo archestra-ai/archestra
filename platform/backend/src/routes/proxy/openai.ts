@@ -1,3 +1,13 @@
+/**
+ * @deprecated LEGACY V1 ROUTE - LLM Proxy v2 is now the default
+ *
+ * This is the legacy v1 OpenAI proxy route handler.
+ *
+ * The new unified LLM proxy handler (./llm-proxy-handler.ts) is now the default.
+ * V2 routes are located at: ./routesv2/openai.ts
+ *
+ * This file should be removed after full migration to v2 routes.
+ */
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
@@ -204,6 +214,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       logger.debug({ resolvedAgentId }, "[OpenAIProxy] Limit check passed");
 
+      // Get global tool policy from organization (with fallback)
+      const globalToolPolicy =
+        await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
       // Persist non-MCP tools declared by client for tracking
       logger.debug(
         { toolCount: tools?.length || 0 },
@@ -385,6 +399,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toonCostSavings = stats.toonCostSavings;
       }
 
+      const openAiSdkMessages =
+        filteredMessages as OpenAIProvider.Chat.Completions.ChatCompletionMessageParam[];
+
       fastify.log.info(
         {
           shouldApplyToonCompression,
@@ -426,7 +443,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
               model,
-              messages: filteredMessages,
+              messages: openAiSdkMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: true,
               stream_options: { include_usage: true },
@@ -571,6 +588,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               resolvedAgentId,
               contextIsTrusted,
               enabledToolNames,
+              globalToolPolicy,
             );
 
           // If there are tool calls, evaluate policies and stream the result
@@ -840,7 +858,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const response = await openAiClient.chat.completions.create({
               ...body,
               model,
-              messages: filteredMessages,
+              messages: openAiSdkMessages,
               tools: mergedTools.length > 0 ? mergedTools : undefined,
               stream: false,
             });
@@ -878,6 +896,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgentId,
             contextIsTrusted,
             enabledToolNames,
+            globalToolPolicy,
           );
 
         if (toolInvocationRefusal) {

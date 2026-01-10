@@ -31,6 +31,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
+import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
 /**
  * Token authentication result
@@ -246,15 +247,13 @@ export async function createAgentServer(
           };
         }
 
+        const contentLength = estimateToolResultContentLength(result.content);
         logger.info(
           {
             agentId,
             toolName: name,
-            resultContentLength: Array.isArray(result.content)
-              ? JSON.stringify(result.content).length
-              : typeof result.content === "string"
-                ? result.content.length
-                : JSON.stringify(result.content).length,
+            resultContentLength: contentLength.length,
+            resultContentLengthEstimated: contentLength.isEstimated,
           },
           "MCP gateway tool call completed",
         );

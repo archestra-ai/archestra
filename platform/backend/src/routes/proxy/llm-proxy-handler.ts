@@ -9,7 +9,6 @@ import type { FastifyReply } from "fastify";
 import config from "@/config";
 import getDefaultPricing from "@/default-model-prices";
 import {
-  getObservableFetch,
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
@@ -23,13 +22,14 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
-import type {
-  Agent,
-  InteractionRequest,
-  InteractionResponse,
-  LLMProvider,
-  LLMStreamAdapter,
-  ToonCompressionResult,
+import {
+  type Agent,
+  ApiError,
+  type InteractionRequest,
+  type InteractionResponse,
+  type LLMProvider,
+  type LLMStreamAdapter,
+  type ToonCompressionResult,
 } from "@/types";
 import * as utils from "./utils";
 
@@ -38,6 +38,21 @@ export interface Context {
   agentId?: string;
   externalAgentId?: string;
   userId?: string;
+}
+
+function getProviderMessagesCount(messages: unknown): number | null {
+  if (Array.isArray(messages)) {
+    return messages.length;
+  }
+
+  if (messages && typeof messages === "object") {
+    const candidate = messages as Record<string, unknown>;
+    if (Array.isArray(candidate.messages)) {
+      return candidate.messages.length;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -61,13 +76,15 @@ export async function handleLLMProxy<
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
+  const providerMessages = requestAdapter.getProviderMessages();
+  const messagesCount = getProviderMessagesCount(providerMessages);
 
   logger.debug(
     {
       agentId,
       model: requestAdapter.getModel(),
       stream: requestAdapter.isStreaming(),
-      messagesCount: requestAdapter.getProviderMessages(),
+      messagesCount,
       toolsCount: requestAdapter.getTools().length,
     },
     `[${providerName}Proxy] handleLLMProxy: request received`,
@@ -293,11 +310,23 @@ export async function handleLLMProxy<
       `${providerName} proxy: tool results compression completed`,
     );
 
-    // Create client
+    // Extract provider-specific headers to forward (e.g., anthropic-beta)
+    // Type cast is necessary because this is a generic handler for multiple providers,
+    // and only Anthropic has the anthropic-beta header in its type definition
+    const headersToForward: Record<string, string> = {};
+    const headersObj = headers as Record<string, unknown>;
+    if (typeof headersObj["anthropic-beta"] === "string") {
+      headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
+    }
+
+    // Create client with observability (each provider handles metrics internally)
     const client = provider.createClient(apiKey, {
       baseUrl: provider.getBaseUrl(),
-      fetch: getObservableFetch(providerName, resolvedAgent, externalAgentId),
       mockMode: config.benchmark.mockMode,
+      agent: resolvedAgent,
+      externalAgentId,
+      defaultHeaders:
+        Object.keys(headersToForward).length > 0 ? headersToForward : undefined,
     });
 
     // Build final request
@@ -305,6 +334,10 @@ export async function handleLLMProxy<
 
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
+
+    // Get global tool policy from organization (with fallback)
+    const globalToolPolicy =
+      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
@@ -320,7 +353,9 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
+        context.userId,
       );
     } else {
       return handleNonStreaming(
@@ -335,7 +370,9 @@ export async function handleLLMProxy<
         requestAdapter.getOriginalRequest(),
         toonStats,
         enabledToolNames,
+        globalToolPolicy,
         externalAgentId,
+        context.userId,
       );
     }
   } catch (error) {
@@ -371,11 +408,14 @@ async function handleStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
+  userId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
+  let streamCompleted = false;
 
   logger.debug(
     { model: actualModel },
@@ -385,7 +425,7 @@ async function handleStreaming<
   try {
     // Execute streaming request with tracing
     const stream = await utils.tracing.startActiveLlmSpan(
-      `${providerName}.messages`,
+      provider.getSpanName(true),
       providerName,
       actualModel,
       true,
@@ -460,6 +500,7 @@ async function handleStreaming<
         agent.id,
         contextIsTrusted,
         enabledToolNames,
+        globalToolPolicy,
       );
 
       logger.info(
@@ -501,7 +542,18 @@ async function handleStreaming<
     reply.raw.write(streamAdapter.formatEndSSE());
     reply.raw.end();
 
-    // Record interaction and report metrics
+    streamCompleted = true;
+    return reply;
+  } catch (error) {
+    return handleError(error, reply, provider.extractErrorMessage, true);
+  } finally {
+    // Always record interaction (whether stream completed or was aborted)
+    if (!streamCompleted) {
+      logger.info(
+        "Stream was aborted before completion, recording partial interaction",
+      );
+    }
+
     const usage = streamAdapter.state.usage;
     if (usage) {
       reportLLMTokens(
@@ -546,6 +598,7 @@ async function handleStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        userId,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -562,10 +615,6 @@ async function handleStreaming<
         toonCostSavings: toonStats.costSavings?.toFixed(10) ?? null,
       });
     }
-
-    return reply;
-  } catch (error) {
-    return handleError(error, reply, provider.extractErrorMessage, true);
   }
 }
 
@@ -591,18 +640,20 @@ async function handleNonStreaming<
   originalRequest: TRequest,
   toonStats: ToonCompressionResult,
   enabledToolNames: Set<string>,
+  globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
+  userId?: string,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
   logger.debug(
     { model: actualModel },
-    `[${providerName}Proxy] Starting non-streaming request`,
+    `[${providerName}ProxyV2] Starting non-streaming request`,
   );
 
   // Execute request with tracing
   const response = await utils.tracing.startActiveLlmSpan(
-    `${providerName}.messages`,
+    provider.getSpanName(false),
     providerName,
     actualModel,
     false,
@@ -636,6 +687,7 @@ async function handleNonStreaming<
       agent.id,
       contextIsTrusted,
       enabledToolNames,
+      globalToolPolicy,
     );
 
     if (toolInvocationRefusal) {
@@ -682,6 +734,7 @@ async function handleNonStreaming<
       await InteractionModel.create({
         profileId: agent.id,
         externalAgentId,
+        userId,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -704,13 +757,17 @@ async function handleNonStreaming<
   // Tool calls allowed (or no tool calls) - return response
   const usage = responseAdapter.getUsage();
 
-  reportLLMTokens(
-    providerName,
-    agent,
-    { input: usage.inputTokens, output: usage.outputTokens },
-    actualModel,
-    externalAgentId,
-  );
+  // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
+  // for non-streaming requests. We only report cost here to avoid double counting.
+  // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
+  // mocked API clients can't use an observable fetch.
+  // reportLLMTokens(
+  //   providerName,
+  //   agent,
+  //   { input: usage.inputTokens, output: usage.outputTokens },
+  //   actualModel,
+  //   externalAgentId,
+  // );
 
   const baselineCost = await utils.costOptimization.calculateCost(
     baselineModel,
@@ -728,6 +785,7 @@ async function handleNonStreaming<
   await InteractionModel.create({
     profileId: agent.id,
     externalAgentId,
+    userId,
     type: provider.interactionType,
     // Cast generic types to interaction types - valid at runtime
     request: originalRequest as unknown as InteractionRequest,
@@ -756,17 +814,20 @@ function handleError(
   reply: FastifyReply,
   extractErrorMessage: (error: unknown) => string,
   isStreaming: boolean,
-): FastifyReply {
+): FastifyReply | never {
   logger.error(error);
 
   const statusCode =
     error instanceof Error && "status" in error
-      ? (error.status as 200 | 400 | 404 | 403 | 500)
+      ? (error.status as 400 | 403 | 404 | 429 | 500)
       : 500;
 
   const errorMessage = extractErrorMessage(error);
 
-  if (isStreaming) {
+  // If headers already sent (mid-stream error), write error to stream.
+  // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
+  // the status after headers are committed - so SSE error event is our only option.
+  if (isStreaming && reply.sent) {
     const errorEvent = {
       type: "error",
       error: {
@@ -774,24 +835,12 @@ function handleError(
         message: errorMessage,
       },
     };
-
-    if (reply.sent) {
-      // Headers already sent, write to stream
-      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
-      reply.raw.end();
-    } else {
-      // Headers not sent, send as SSE format
-      const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
-      return reply.status(200).send(sseError);
-    }
+    reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+    reply.raw.end();
     return reply;
   }
 
-  // Non-streaming error
-  return reply.status(statusCode).send({
-    error: {
-      message: errorMessage,
-      type: "api_error",
-    },
-  });
+  // Headers not sent yet - throw ApiError to let central handler return proper status code
+  // This matches V1 handler behavior and ensures clients receive correct HTTP status
+  throw new ApiError(statusCode, errorMessage);
 }

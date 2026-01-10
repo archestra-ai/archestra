@@ -3,6 +3,7 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 import { type APIRequestContext, test as base } from "@playwright/test";
+import type { SupportedProvider } from "@shared";
 import {
   API_BASE_URL,
   editorAuthFile,
@@ -158,10 +159,8 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createToolInvocationPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
-    argumentPath: string;
-    operator: string;
-    value: string;
+    toolId: string;
+    conditions: Array<{ key: string; operator: string; value: string }>;
     action: "allow_when_context_is_untrusted" | "block_always";
     reason?: string;
   },
@@ -171,10 +170,8 @@ const createToolInvocationPolicy = async (
     method: "post",
     urlSuffix: "/api/autonomy-policies/tool-invocation",
     data: {
-      agentToolId: policy.agentToolId,
-      argumentName: policy.argumentPath, // argumentPath maps to argumentName in the schema
-      operator: policy.operator,
-      value: policy.value,
+      toolId: policy.toolId,
+      conditions: policy.conditions,
       action: policy.action,
       reason: policy.reason,
     },
@@ -201,19 +198,22 @@ const deleteToolInvocationPolicy = async (
 const createTrustedDataPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
-    description: string;
-    attributePath: string;
-    operator: string;
-    value: string;
+    toolId: string;
+    conditions: Array<{ key: string; operator: string; value: string }>;
     action: "block_always" | "mark_as_trusted" | "sanitize_with_dual_llm";
+    description?: string;
   },
 ) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/trusted-data-policies",
-    data: policy,
+    data: {
+      toolId: policy.toolId,
+      conditions: policy.conditions,
+      action: policy.action,
+      description: policy.description,
+    },
   });
 
 /**
@@ -359,7 +359,11 @@ const waitForAgentTool = async (
     maxAttempts?: number;
     delayMs?: number;
   },
-): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
+): Promise<{
+  id: string;
+  agent: { id: string };
+  tool: { id: string; name: string };
+}> => {
   // Increased defaults for CI stability: 20 attempts × 1000ms = 20 seconds total wait
   const maxAttempts = options?.maxAttempts ?? 20;
   const delayMs = options?.delayMs ?? 1000;
@@ -378,7 +382,7 @@ const waitForAgentTool = async (
       // Defense-in-depth: validate both agentId AND toolName client-side
       // in case the API silently ignores unknown query params
       const foundTool = agentTools.data.find(
-        (at: { agent: { id: string }; tool: { name: string } }) =>
+        (at: { agent: { id: string }; tool: { id: string; name: string } }) =>
           at.agent.id === agentId && at.tool.name === toolName,
       );
 
@@ -493,7 +497,7 @@ const createOptimizationRule = async (
   rule: {
     entityType: "organization" | "team" | "agent";
     entityId: string;
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     conditions: OptimizationRuleCondition[];
     targetModel: string;
     enabled?: boolean;
@@ -604,7 +608,7 @@ const getLimits = async (
 const createTokenPrice = async (
   request: APIRequestContext,
   tokenPrice: {
-    provider: "openai" | "anthropic" | "gemini";
+    provider: SupportedProvider;
     model: string;
     pricePerMillionInput: string;
     pricePerMillionOutput: string;

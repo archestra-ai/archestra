@@ -222,7 +222,7 @@ function LogDetail({
 
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Conversation</h2>
-          <div className="border border-border rounded-lg bg-card overflow-hidden">
+          <div className="border border-border rounded-lg bg-background overflow-hidden">
             <ChatBotDemo
               messages={requestMessages}
               containerClassName="h-auto"

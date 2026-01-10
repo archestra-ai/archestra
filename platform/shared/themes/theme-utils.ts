@@ -5,9 +5,7 @@
 import {
   DEFAULT_THEME_ID,
   SUPPORTED_THEMES,
-  THEME_CATEGORY_LABELS,
   type THEME_IDS,
-  type ThemeCategory,
 } from "./theme-config";
 import themeRegistry from "./tweakcn-themes.json";
 
@@ -31,14 +29,13 @@ export interface ThemeItem {
 export interface ThemeMetadata {
   id: ThemeId;
   name: string;
-  category: ThemeCategory;
 }
 
 /**
  * Get all supported theme items from the registry
  */
 export function getSupportedThemeItems(): ThemeItem[] {
-  const supportedIds = new Set(SUPPORTED_THEMES.map((t) => t.id));
+  const supportedIds = new Set(SUPPORTED_THEMES);
 
   return (themeRegistry.items as ThemeItem[]).filter((item) =>
     supportedIds.has(item.name),
@@ -52,14 +49,13 @@ export function getThemeMetadata(): ThemeMetadata[] {
   const themeItems = getSupportedThemeItems();
   const itemsByName = new Map(themeItems.map((item) => [item.name, item]));
 
-  return SUPPORTED_THEMES.map((config) => {
-    const item = itemsByName.get(config.id);
+  return SUPPORTED_THEMES.map((id) => {
+    const item = itemsByName.get(id);
     return {
-      id: config.id,
-      name: item?.title || config.id,
-      category: config.category,
+      id,
+      name: item?.title || id,
     };
-  }).filter((theme): theme is ThemeMetadata => theme !== null);
+  });
 }
 
 /**
@@ -67,26 +63,6 @@ export function getThemeMetadata(): ThemeMetadata[] {
  */
 export function getThemeById(id: ThemeId): ThemeMetadata | undefined {
   return getThemeMetadata().find((theme) => theme.id === id);
-}
-
-/**
- * Get themes by category
- */
-export function getThemesByCategory(category: ThemeCategory): ThemeMetadata[] {
-  return getThemeMetadata().filter((theme) => theme.category === category);
-}
-
-/**
- * Get all theme categories with labels
- */
-export function getThemeCategories(): Array<{
-  id: ThemeCategory;
-  label: string;
-}> {
-  return Object.entries(THEME_CATEGORY_LABELS).map(([id, label]) => ({
-    id: id as ThemeCategory,
-    label,
-  }));
 }
 
 /**

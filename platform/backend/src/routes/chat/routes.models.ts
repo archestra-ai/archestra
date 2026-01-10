@@ -286,6 +286,44 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Fetch models from Cohere API
+ */
+async function fetchCohereModels(apiKey: string): Promise<ModelInfo[]> {
+  const baseUrl = config.llm.cohere.baseUrl;
+  const url = `${baseUrl}/models`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Cohere models",
+    );
+    throw new Error(`Failed to fetch Cohere models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    models: Array<{
+      id: string;
+      name: string;
+      created_at?: string;
+    }>;
+  };
+
+  return data.models.map((model) => ({
+    id: model.id,
+    displayName: model.name,
+    provider: "cohere" as const,
+    createdAt: model.created_at,
+  }));
+}
+
+/**
  * Fetch models from Gemini API via Vertex AI SDK
  * Uses Application Default Credentials (ADC) for authentication
  *
@@ -415,6 +453,7 @@ const modelFetchers: Record<
   gemini: fetchGeminiModels,
   vllm: fetchVllmModels,
   ollama: fetchOllamaModels,
+  cohere: fetchCohereModels,
 };
 
 /**
@@ -473,7 +512,7 @@ export async function fetchModelsForProvider({
 
   try {
     let models: ModelInfo[] = [];
-    if (["anthropic", "openai"].includes(provider)) {
+    if (["anthropic", "openai", "cohere"].includes(provider)) {
       if (apiKey) {
         models = await modelFetchers[provider](apiKey);
       }

@@ -8,13 +8,6 @@ import { useEffect, useRef, useState } from "react";
  * Chat New Page - Creates a conversation with an agent and initial message via URL params
  *
  * URL format: /chat/new?agent_id=<uuid>&user_prompt=<message>
- *
- * Optional params:
- * - title: Conversation title
- * - model: LLM model name
- * - provider: Provider (anthropic, openai, gemini)
- * - prompt_id: Prompt ID to use
- * - api_key_id: Chat API key ID to use
  */
 export default function ChatNewPage() {
   const router = useRouter();
@@ -41,30 +34,11 @@ export default function ChatNewPage() {
       return;
     }
 
-    // Build query string with optional parameters
-    const queryParams = new URLSearchParams();
-    queryParams.set("message", userPrompt);
-
-    const title = searchParams.get("title");
-    if (title) queryParams.set("title", title);
-
-    const model = searchParams.get("model");
-    if (model) queryParams.set("selectedModel", model);
-
-    const provider = searchParams.get("provider");
-    if (provider) queryParams.set("selectedProvider", provider);
-
-    const promptId = searchParams.get("prompt_id");
-    if (promptId) queryParams.set("promptId", promptId);
-
-    const apiKeyId = searchParams.get("api_key_id");
-    if (apiKeyId) queryParams.set("chatApiKeyId", apiKeyId);
-
     async function createConversation() {
       setIsCreating(true);
       try {
         const response = await fetch(
-          `/api/chat/agents/${agentId}/conversation?${queryParams.toString()}`,
+          `/api/chat/agents/${agentId}/conversation?message=${encodeURIComponent(userPrompt as string)}`,
           {
             method: "GET",
             credentials: "include",
@@ -79,8 +53,6 @@ export default function ChatNewPage() {
         }
 
         const conversation = await response.json();
-
-        // Redirect to the conversation
         router.replace(`/chat?conversation=${conversation.id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create conversation");

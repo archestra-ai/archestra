@@ -441,32 +441,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ agentId: UuidIdSchema }),
         querystring: z.object({
           message: z.string().min(1).describe("The initial user message"),
-          title: z.string().optional().describe("Optional conversation title"),
-          selectedModel: z.string().optional().describe("Optional model name"),
-          selectedProvider: SupportedChatProviderSchema.optional().describe(
-            "Optional provider (anthropic, openai, gemini)",
-          ),
-          promptId: UuidIdSchema.optional().describe("Optional prompt ID"),
-          chatApiKeyId: UuidIdSchema.optional().describe("Optional API key ID"),
         }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
-      {
-        params: { agentId },
-        query: {
-          message,
-          title,
-          selectedModel,
-          selectedProvider,
-          promptId,
-          chatApiKeyId,
-        },
-        user,
-        organizationId,
-        headers,
-      },
+      { params: { agentId }, query: { message }, user, organizationId, headers },
       reply,
     ) => {
       // Check if user is an agent admin
@@ -482,38 +462,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Validate chatApiKeyId if provided
-      if (chatApiKeyId) {
-        await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
-      }
-
-      // Determine model and provider to use
-      let modelToUse = selectedModel;
-      let providerToUse = selectedProvider;
-
-      if (!selectedModel) {
-        const smartDefault = await getSmartDefaultModel(
-          user.id,
-          organizationId,
-        );
-        modelToUse = smartDefault.model;
-        providerToUse = smartDefault.provider;
-      } else if (!selectedProvider) {
-        providerToUse = detectProviderFromModel(selectedModel);
-      }
+      // Use smart defaults for model and provider
+      const { model, provider } = await getSmartDefaultModel(
+        user.id,
+        organizationId,
+      );
 
       logger.info(
-        {
-          agentId,
-          organizationId,
-          selectedModel,
-          selectedProvider,
-          modelToUse,
-          providerToUse,
-          chatApiKeyId,
-          hasMessage: !!message,
-          wasSmartDefault: !selectedModel,
-        },
+        { agentId, organizationId, model, provider },
         "Creating conversation with initial message via GET",
       );
 
@@ -522,11 +478,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         agentId,
-        promptId,
-        title,
-        selectedModel: modelToUse,
-        selectedProvider: providerToUse,
-        chatApiKeyId,
+        selectedModel: model,
+        selectedProvider: provider,
       });
 
       // Create initial user message with UIMessage structure

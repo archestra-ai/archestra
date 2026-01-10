@@ -6,24 +6,12 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Search,
-  Sparkles,
-  Unplug,
-  Wand2,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Search, Wand2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
-import {
-  DYNAMIC_CREDENTIAL_VALUE,
-  TokenSelect,
-} from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,15 +34,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfiles } from "@/lib/agent.query";
-import {
-  useAllProfileTools,
-  useAutoConfigurePolicies,
-  useProfileToolPatchMutation,
-  useUnassignTool,
-} from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useAutoConfigurePolicies } from "@/lib/agent-tools.query";
+import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
 import {
   useBulkCallPolicyMutation,
   useBulkResultPolicyMutation,
@@ -67,7 +48,11 @@ import {
   getAllowUsageFromPolicies,
   getResultTreatmentFromPolicies,
 } from "@/lib/policy.utils";
-import { isMcpTool } from "@/lib/tool.utils";
+import {
+  type ToolWithAssignmentsData,
+  useToolsWithAssignments,
+} from "@/lib/tool.query";
+import { isMcpToolByProperties } from "@/lib/tool.utils";
 import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
@@ -75,24 +60,22 @@ import {
 } from "@/lib/utils";
 import type { ToolsInitialData } from "../page";
 
-type GetAllProfileToolsQueryParams = NonNullable<
-  archestraApiTypes.GetAllAgentToolsData["query"]
+type GetToolsWithAssignmentsQueryParams = NonNullable<
+  archestraApiTypes.GetToolsWithAssignmentsData["query"]
 >;
-type ProfileToolsSortByValues = NonNullable<
-  GetAllProfileToolsQueryParams["sortBy"]
+type ToolsSortByValues = NonNullable<
+  GetToolsWithAssignmentsQueryParams["sortBy"]
 > | null;
-type ProfileToolsSortDirectionValues = NonNullable<
-  GetAllProfileToolsQueryParams["sortDirection"]
+type ToolsSortDirectionValues = NonNullable<
+  GetToolsWithAssignmentsQueryParams["sortDirection"]
 > | null;
 
-type ProfileToolData =
-  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 // These fields were moved to policies in the new schema
 // Define the type directly since it's no longer on ProfileToolData
 type ToolResultTreatment = "trusted" | "untrusted" | "sanitize_with_dual_llm";
 
 interface AssignedToolsTableProps {
-  onToolClick: (tool: ProfileToolData) => void;
+  onToolClick: (tool: ToolWithAssignmentsData) => void;
   initialData?: ToolsInitialData;
 }
 
@@ -114,27 +97,19 @@ export function AssignedToolsTable({
   onToolClick,
   initialData,
 }: AssignedToolsTableProps) {
-  const agentToolPatchMutation = useProfileToolPatchMutation();
   const callPolicyMutation = useCallPolicyMutation();
   const resultPolicyMutation = useResultPolicyMutation();
   const bulkCallPolicyMutation = useBulkCallPolicyMutation();
   const bulkResultPolicyMutation = useBulkResultPolicyMutation();
   const autoConfigureMutation = useAutoConfigurePolicies();
-  const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies(
     initialData?.toolInvocationPolicies,
   );
   const { data: resultPolicies } = useToolResultPolicies(
     initialData?.toolResultPolicies,
   );
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalogSuspense({
     initialData: initialData?.internalMcpCatalog,
-  });
-  const { data: agents } = useProfiles({
-    initialData: initialData?.agents,
-  });
-  const { data: mcpServers } = useMcpServers({
-    initialData: initialData?.mcpServers,
   });
 
   const searchParams = useSearchParams();
@@ -145,27 +120,19 @@ export function AssignedToolsTable({
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
   const searchFromUrl = searchParams.get("search");
-  const agentIdFromUrl = searchParams.get("agentId");
   const originFromUrl = searchParams.get("origin");
-  const credentialFromUrl = searchParams.get("credential");
-  const sortByFromUrl = searchParams.get("sortBy") as ProfileToolsSortByValues;
+  const sortByFromUrl = searchParams.get("sortBy") as ToolsSortByValues;
   const sortDirectionFromUrl = searchParams.get(
     "sortDirection",
-  ) as ProfileToolsSortDirectionValues;
+  ) as ToolsSortDirectionValues;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TOOLS_PAGE_SIZE);
 
   // State
   const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
-  const [agentFilter, setProfileFilter] = useState(
-    agentIdFromUrl || DEFAULT_FILTER_ALL,
-  );
   const [originFilter, setOriginFilter] = useState(
     originFromUrl || DEFAULT_FILTER_ALL,
-  );
-  const [credentialFilter, setCredentialFilter] = useState(
-    credentialFromUrl || DEFAULT_FILTER_ALL,
   );
   const [sorting, setSorting] = useState<SortingState>([
     {
@@ -174,79 +141,41 @@ export function AssignedToolsTable({
     },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<ProfileToolData[]>([]);
+  const [selectedTools, setSelectedTools] = useState<ToolWithAssignmentsData[]>(
+    [],
+  );
   const [updatingRows, setUpdatingRows] = useState<
     Set<{ id: string; field: string }>
   >(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
-  // Fetch agent tools with server-side pagination, filtering, and sorting
+  // Fetch tools with assignments with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
   const useInitialData =
     pageIndex === 0 &&
     pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
     !searchQuery &&
-    agentFilter === DEFAULT_FILTER_ALL &&
     originFilter === DEFAULT_FILTER_ALL &&
-    credentialFilter === DEFAULT_FILTER_ALL &&
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
-  const {
-    data: agentToolsData,
-    isLoading,
-    refetch,
-  } = useAllProfileTools({
-    initialData: useInitialData ? initialData?.agentTools : undefined,
+  const { data: toolsData, isLoading } = useToolsWithAssignments({
+    initialData: useInitialData ? initialData?.toolsWithAssignments : undefined,
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,
     },
     sorting: {
-      sortBy: (sorting[0]?.id as ProfileToolsSortByValues) || "createdAt",
+      sortBy: (sorting[0]?.id as ToolsSortByValues) || "createdAt",
       sortDirection: sorting[0]?.desc ? "desc" : "asc",
     },
     filters: {
       search: searchQuery || undefined,
-      agentId: agentFilter !== "all" ? agentFilter : undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
-      mcpServerOwnerId:
-        credentialFilter !== "all" ? credentialFilter : undefined,
     },
   });
 
-  const agentTools = agentToolsData?.data ?? [];
-
-  // Poll for updates when tools are auto-configuring
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    // Always clear existing interval first to prevent race conditions
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-
-    // Check if any tools are currently auto-configuring
-    const hasAutoConfiguringTools = agentTools.some(
-      (tool) => tool.policiesAutoConfiguringStartedAt,
-    );
-
-    // Only create new interval if needed
-    if (hasAutoConfiguringTools) {
-      pollingIntervalRef.current = setInterval(() => {
-        refetch();
-      }, 2000);
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, [agentTools, refetch]);
+  const tools = toolsData?.data ?? [];
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -282,12 +211,12 @@ export function AssignedToolsTable({
       setRowSelection(newRowSelection);
 
       const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => agentTools[Number(index)])
+        .map((index) => tools[Number(index)])
         .filter(Boolean);
 
       setSelectedTools(newSelectedTools);
     },
-    [agentTools],
+    [tools],
   );
 
   const handleSearchChange = useCallback(
@@ -303,37 +232,11 @@ export function AssignedToolsTable({
     [updateUrlParams],
   );
 
-  const handleProfileFilterChange = useCallback(
-    (value: string) => {
-      setProfileFilter(value);
-      updateUrlParams({
-        agentId: value === "all" ? null : value,
-        page: "1", // Reset to first page
-      });
-      setRowSelection({});
-      setSelectedTools([]);
-    },
-    [updateUrlParams],
-  );
-
   const handleOriginFilterChange = useCallback(
     (value: string) => {
       setOriginFilter(value);
       updateUrlParams({
         origin: value === "all" ? null : value,
-        page: "1", // Reset to first page
-      });
-      setRowSelection({});
-      setSelectedTools([]);
-    },
-    [updateUrlParams],
-  );
-
-  const handleCredentialFilterChange = useCallback(
-    (value: string) => {
-      setCredentialFilter(value);
-      updateUrlParams({
-        credential: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
       setRowSelection({});
@@ -365,8 +268,8 @@ export function AssignedToolsTable({
         .filter((tool) => {
           const policies =
             field === "allowUsageWhenUntrustedDataIsPresent"
-              ? invocationPolicies?.byProfileToolId[tool.tool.id] || []
-              : resultPolicies?.byProfileToolId[tool.tool.id] || [];
+              ? invocationPolicies?.byProfileToolId[tool.id] || []
+              : resultPolicies?.byProfileToolId[tool.id] || [];
 
           // Check if tool has custom policies (non-empty conditions array)
           const hasCustomPolicy = policies.some(
@@ -375,7 +278,7 @@ export function AssignedToolsTable({
 
           return !hasCustomPolicy;
         })
-        .map((tool) => tool.tool.id);
+        .map((tool) => tool.id);
 
       if (toolIds.length === 0) {
         return;
@@ -408,9 +311,13 @@ export function AssignedToolsTable({
   );
 
   const handleAutoConfigurePolicies = useCallback(async () => {
-    const agentToolIds = selectedTools.map((tool) => tool.id);
+    // Get the first agentToolId from each selected tool's assignments for auto-configure
+    const agentToolIds = selectedTools
+      .flatMap((tool) => tool.assignments.map((a) => a.agentToolId))
+      .filter(Boolean);
 
     if (agentToolIds.length === 0) {
+      toast.error("No tool assignments found to configure");
       return;
     }
 
@@ -494,7 +401,7 @@ export function AssignedToolsTable({
     [callPolicyMutation, resultPolicyMutation],
   );
 
-  const columns: ColumnDef<ProfileToolData>[] = useMemo(
+  const columns: ColumnDef<ToolWithAssignmentsData>[] = useMemo(
     () => [
       {
         id: "select",
@@ -514,14 +421,14 @@ export function AssignedToolsTable({
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.tool.name}`}
+            aria-label={`Select ${row.original.name}`}
           />
         ),
         size: 30,
       },
       {
         id: "name",
-        accessorFn: (row) => row.tool.name,
+        accessorFn: (row) => row.name,
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -534,7 +441,7 @@ export function AssignedToolsTable({
         ),
         cell: ({ row }) => (
           <TruncatedText
-            message={row.original.tool.name}
+            message={row.original.name}
             className="break-all"
             maxLength={60}
           />
@@ -544,68 +451,9 @@ export function AssignedToolsTable({
         maxSize: 200,
       },
       {
-        id: "agent",
-        accessorFn: (row) => row.agent?.name || "",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Profile
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
-        cell: ({ row }) => {
-          const agentName = row.original.agent?.name || "-";
-
-          const TruncatedProfileName = (
-            <TruncatedText message={agentName} maxLength={30} />
-          );
-
-          if (!isMcpTool(row.original.tool)) {
-            return TruncatedProfileName;
-          }
-
-          const handleUnassign = async (e: React.MouseEvent) => {
-            e.stopPropagation();
-
-            try {
-              await unassignToolMutation.mutateAsync({
-                agentId: row.original.agent.id,
-                toolId: row.original.tool.id,
-              });
-              toast.success("Tool unassigned from agent");
-            } catch (error) {
-              toast.error("Failed to unassign tool");
-              console.error("Unassign error:", error);
-            }
-          };
-
-          return (
-            <div className="flex items-center gap-2">
-              {TruncatedProfileName}
-              <PermissionButton
-                permissions={{ tool: ["delete"] }}
-                variant="ghost"
-                size="icon-sm"
-                tooltip="Unassign from profile"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleUnassign(e);
-                }}
-                disabled={unassignToolMutation.isPending}
-              >
-                <Unplug className="h-4 w-4" />
-              </PermissionButton>
-            </div>
-          );
-        },
-        size: 150,
-      },
-      {
         id: "origin",
-        accessorFn: (row) => (isMcpTool(row.tool) ? "1-mcp" : "2-intercepted"),
+        accessorFn: (row) =>
+          isMcpToolByProperties(row) ? "1-mcp" : "2-intercepted",
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -617,7 +465,7 @@ export function AssignedToolsTable({
           </Button>
         ),
         cell: ({ row }) => {
-          const catalogItemId = row.original.tool.catalogId;
+          const catalogItemId = row.original.catalogId;
           const catalogItem = internalMcpCatalogItems?.find(
             (item) => item.id === catalogItemId,
           );
@@ -663,51 +511,17 @@ export function AssignedToolsTable({
         size: 100,
       },
       {
-        id: "token",
-        header: "Credential",
+        id: "assignmentCount",
+        header: "Profiles",
         cell: ({ row }) => {
-          // Only show selector for MCP tools
-          if (!isMcpTool(row.original.tool)) {
-            return <span className="text-sm text-muted-foreground">—</span>;
-          }
-
-          // Determine if tool is from local server using catalog
-          const mcpCatalogItem = internalMcpCatalogItems?.find(
-            (item) => item.id === row.original.tool.catalogId,
-          );
-          const isLocalServer = mcpCatalogItem?.serverType === "local";
-
-          // Show dynamic value if useDynamicTeamCredential is true
-          const currentValue = row.original.useDynamicTeamCredential
-            ? DYNAMIC_CREDENTIAL_VALUE
-            : isLocalServer
-              ? row.original.executionSourceMcpServerId
-              : row.original.credentialSourceMcpServerId;
-
+          const count = row.original.assignmentCount;
           return (
-            <TokenSelect
-              value={currentValue}
-              onValueChange={(value) => {
-                if (value === null) return;
-
-                const isDynamic = value === DYNAMIC_CREDENTIAL_VALUE;
-                agentToolPatchMutation.mutate({
-                  id: row.original.id,
-                  ...(isLocalServer
-                    ? { executionSourceMcpServerId: isDynamic ? null : value }
-                    : {
-                        credentialSourceMcpServerId: isDynamic ? null : value,
-                      }),
-                  useDynamicTeamCredential: isDynamic,
-                });
-              }}
-              catalogId={row.original.tool.catalogId ?? ""}
-              className="h-8 w-[200px] text-xs"
-              shouldSetDefaultValue={false}
-            />
+            <Badge variant="outline" className="text-xs">
+              {count} {count === 1 ? "profile" : "profiles"}
+            </Badge>
           );
         },
-        size: 120,
+        size: 100,
       },
       {
         id: "allowUsageWhenUntrustedDataIsPresent",
@@ -723,7 +537,7 @@ export function AssignedToolsTable({
         ),
         cell: ({ row }) => {
           const policies =
-            invocationPolicies?.byProfileToolId[row.original.tool.id] || [];
+            invocationPolicies?.byProfileToolId[row.original.id] || [];
           // A custom policy has non-empty conditions array
           const hasCustomPolicy = policies.some(
             (policy) => policy.conditions.length > 0,
@@ -740,12 +554,8 @@ export function AssignedToolsTable({
             "allowUsageWhenUntrustedDataIsPresent",
           );
 
-          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
-          const isAutoConfiguring =
-            !!row.original.policiesAutoConfiguringStartedAt;
-
           const allowUsage = getAllowUsageFromPolicies(
-            row.original.tool.id,
+            row.original.id,
             invocationPolicies,
           );
 
@@ -759,46 +569,16 @@ export function AssignedToolsTable({
                   // Only update if value actually changed
                   if (checked === allowUsage) return;
                   handleSingleRowUpdate(
-                    row.original.tool.id,
+                    row.original.id,
                     "allowUsageWhenUntrustedDataIsPresent",
                     checked,
                   );
                 }}
-                aria-label={`Allow ${row.original.tool.name} in untrusted context`}
+                aria-label={`Allow ${row.original.name} in untrusted context`}
               />
               <span className="text-xs text-muted-foreground">
                 {allowUsage ? "Allowed" : "Blocked"}
               </span>
-              {isAutoConfiguring ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Policy Configuration Subagent is analyzing...</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : isAutoConfigured ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Sparkles className="h-3 w-3 text-purple-500" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">
-                        Configured by Policy Configuration Subagent
-                      </p>
-                      {row.original.policiesAutoConfiguredReasoning && (
-                        <p className="text-xs text-muted-foreground">
-                          {row.original.policiesAutoConfiguredReasoning}
-                        </p>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : null}
               {isUpdating && (
                 <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
               )}
@@ -812,7 +592,7 @@ export function AssignedToolsTable({
         header: "Results are",
         cell: ({ row }) => {
           const policies =
-            resultPolicies?.byProfileToolId[row.original.tool.id] || [];
+            resultPolicies?.byProfileToolId[row.original.id] || [];
           // A custom policy has non-empty conditions array
           const hasCustomPolicy = policies.some(
             (policy) => policy.conditions.length > 0,
@@ -835,12 +615,8 @@ export function AssignedToolsTable({
             "toolResultTreatment",
           );
 
-          const isAutoConfigured = !!row.original.policiesAutoConfiguredAt;
-          const isAutoConfiguring =
-            !!row.original.policiesAutoConfiguringStartedAt;
-
           const treatment = getResultTreatmentFromPolicies(
-            row.original.tool.id,
+            row.original.id,
             resultPolicies,
           );
 
@@ -853,7 +629,7 @@ export function AssignedToolsTable({
                   // Only update if value actually changed
                   if (value === treatment) return;
                   handleSingleRowUpdate(
-                    row.original.tool.id,
+                    row.original.id,
                     "toolResultTreatment",
                     value as ToolResultTreatment,
                   );
@@ -874,36 +650,6 @@ export function AssignedToolsTable({
                   ))}
                 </SelectContent>
               </Select>
-              {isAutoConfiguring ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Loader2 className="h-3 w-3 text-purple-500 animate-spin" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Policy Configuration Subagent is analyzing...</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : isAutoConfigured ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Sparkles className="h-3 w-3 text-purple-500" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-md">
-                      <p className="font-semibold mb-1">
-                        Configured by Policy Configuration Subagent
-                      </p>
-                      {row.original.policiesAutoConfiguredReasoning && (
-                        <p className="text-xs text-muted-foreground">
-                          {row.original.policiesAutoConfiguredReasoning}
-                        </p>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : null}
               {isUpdating && (
                 <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
               )}
@@ -916,8 +662,6 @@ export function AssignedToolsTable({
     [
       invocationPolicies,
       resultPolicies,
-      agentToolPatchMutation,
-      unassignToolMutation,
       internalMcpCatalogItems,
       isRowFieldUpdating,
       handleSingleRowUpdate,
@@ -935,23 +679,6 @@ export function AssignedToolsTable({
     return Array.from(origins);
   }, [internalMcpCatalogItems]);
 
-  // Get unique credentials (MCP servers) deduplicated by owner email
-  const uniqueCredentials = useMemo(() => {
-    if (!mcpServers) return [];
-
-    // Create a map of ownerEmail -> mcpServer to deduplicate
-    const ownerToMcpServerMap = new Map<string, (typeof mcpServers)[0]>();
-
-    for (const server of mcpServers) {
-      const key = server.ownerEmail || `__no_owner_${server.id}__`;
-      if (!ownerToMcpServerMap.has(key)) {
-        ownerToMcpServerMap.set(key, server);
-      }
-    }
-
-    return Array.from(ownerToMcpServerMap.values());
-  }, [mcpServers]);
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-4">
@@ -966,20 +693,6 @@ export function AssignedToolsTable({
         </div>
 
         <SearchableSelect
-          value={agentFilter}
-          onValueChange={handleProfileFilterChange}
-          placeholder="Filter by Profile"
-          items={[
-            { value: "all", label: "All Profiles" },
-            ...(agents?.map((agent) => ({
-              value: agent.id,
-              label: agent.name,
-            })) || []),
-          ]}
-          className="w-[200px]"
-        />
-
-        <SearchableSelect
           value={originFilter}
           onValueChange={handleOriginFilterChange}
           placeholder="Filter by Origin"
@@ -989,20 +702,6 @@ export function AssignedToolsTable({
             ...uniqueOrigins.map((origin) => ({
               value: origin.id,
               label: origin.name,
-            })),
-          ]}
-          className="w-[200px]"
-        />
-
-        <SearchableSelect
-          value={credentialFilter}
-          onValueChange={handleCredentialFilterChange}
-          placeholder="Filter by Credential"
-          items={[
-            { value: "all", label: "All Credentials" },
-            ...uniqueCredentials.map((credential) => ({
-              value: credential.ownerId || "",
-              label: credential.ownerEmail || credential.name,
             })),
           ]}
           className="w-[200px]"
@@ -1160,29 +859,21 @@ export function AssignedToolsTable({
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <LoadingSpinner />
         </div>
-      ) : agentTools.length === 0 ? (
+      ) : tools.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
-            {searchQuery ||
-            agentFilter !== DEFAULT_FILTER_ALL ||
-            originFilter !== DEFAULT_FILTER_ALL ||
-            credentialFilter !== DEFAULT_FILTER_ALL
+            {searchQuery || originFilter !== DEFAULT_FILTER_ALL
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
-          {(searchQuery ||
-            agentFilter !== DEFAULT_FILTER_ALL ||
-            originFilter !== DEFAULT_FILTER_ALL ||
-            credentialFilter !== DEFAULT_FILTER_ALL) && (
+          {(searchQuery || originFilter !== DEFAULT_FILTER_ALL) && (
             <Button
               variant="outline"
               onClick={() => {
                 handleSearchChange("");
-                handleProfileFilterChange(DEFAULT_FILTER_ALL);
                 handleOriginFilterChange(DEFAULT_FILTER_ALL);
-                handleCredentialFilterChange(DEFAULT_FILTER_ALL);
               }}
             >
               Clear all filters
@@ -1192,7 +883,7 @@ export function AssignedToolsTable({
       ) : (
         <DataTable
           columns={columns}
-          data={agentTools}
+          data={tools}
           onRowClick={(tool, event) => {
             const target = event.target as HTMLElement;
             const isCheckboxClick =
@@ -1211,7 +902,7 @@ export function AssignedToolsTable({
           pagination={{
             pageIndex,
             pageSize,
-            total: agentToolsData?.pagination?.total ?? 0,
+            total: toolsData?.pagination?.total ?? 0,
           }}
           onPaginationChange={handlePaginationChange}
           rowSelection={rowSelection}

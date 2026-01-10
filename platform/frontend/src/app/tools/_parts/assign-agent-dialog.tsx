@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProfiles } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useInternalMcpCatalogSuspense } from "@/lib/internal-mcp-catalog.query";
 
 interface AssignProfileDialogProps {
   tool:
@@ -39,7 +39,7 @@ export function AssignProfileDialog({
 }: AssignProfileDialogProps) {
   const { data: agents } = useProfiles();
   const assignMutation = useAssignTool();
-  const { data: mcpCatalog } = useInternalMcpCatalog();
+  const { data: mcpCatalog } = useInternalMcpCatalogSuspense();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =

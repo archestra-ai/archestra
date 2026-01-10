@@ -17904,6 +17904,144 @@ export type GetToolsResponses = {
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 
+export type GetToolsWithAssignmentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        search?: string;
+        /**
+         * Can be 'llm-proxy' or a catalogId
+         */
+        origin?: string;
+        /**
+         * Hide built-in Archestra tools
+         */
+        excludeArchestraTools?: boolean;
+        sortBy?: 'name' | 'origin' | 'createdAt' | 'assignmentCount';
+        sortDirection?: 'asc' | 'desc';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/tools/with-assignments';
+};
+
+export type GetToolsWithAssignmentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetToolsWithAssignmentsError = GetToolsWithAssignmentsErrors[keyof GetToolsWithAssignmentsErrors];
+
+export type GetToolsWithAssignmentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            catalogId: string | null;
+            mcpServerId: string | null;
+            mcpServerName: string | null;
+            mcpServerCatalogId: string | null;
+            createdAt: string;
+            updatedAt: string;
+            assignmentCount: number;
+            assignments: Array<{
+                agentToolId: string;
+                agent: {
+                    id: string;
+                    name: string;
+                };
+                credentialSourceMcpServerId: string | null;
+                credentialOwnerEmail: string | null;
+                executionSourceMcpServerId: string | null;
+                executionOwnerEmail: string | null;
+                useDynamicTeamCredential: boolean;
+                responseModifierTemplate: string | null;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetToolsWithAssignmentsResponse = GetToolsWithAssignmentsResponses[keyof GetToolsWithAssignmentsResponses];
+
 export type GetUserTokenData = {
     body?: never;
     path?: never;

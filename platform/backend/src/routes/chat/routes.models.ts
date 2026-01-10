@@ -5,6 +5,7 @@ import {
   TimeInMs,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -103,19 +104,20 @@ async function fetchOpenAiModels(apiKey: string): Promise<ModelInfo[]> {
   const data = (await response.json()) as {
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   };
-
-  // Filter to only chat-compatible models
-  const chatModelPrefixes = ["gpt-", "o1-", "o3-", "o4-"];
-  const excludePatterns = ["-instruct", "-embedding", "-tts", "-whisper"];
+  const excludePatterns = [
+    "instruct",
+    "embedding",
+    "tts",
+    "whisper",
+    "image",
+    "audio",
+    "sora",
+    "dall-e",
+  ];
 
   return data.data
     .filter((model) => {
       const id = model.id.toLowerCase();
-      // Must start with a chat model prefix
-      const hasValidPrefix = chatModelPrefixes.some((prefix) =>
-        id.startsWith(prefix),
-      );
-      if (!hasValidPrefix) return false;
 
       // Must not contain excluded patterns
       const hasExcludedPattern = excludePatterns.some((pattern) =>
@@ -432,7 +434,7 @@ const chatModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning chat models",
       );
 
-      return reply.send(models);
+      return reply.send(uniqBy(models, (model) => model.id));
     },
   );
 };

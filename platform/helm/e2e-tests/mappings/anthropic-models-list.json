@@ -1,7 +1,12 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1/models.*"
+    "urlPathPattern": "/v1/models.*",
+    "headers": {
+      "x-api-key": {
+        "matches": ".*"
+      }
+    }
   },
   "response": {
     "status": 200,

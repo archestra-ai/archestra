@@ -2,8 +2,8 @@
 
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { use } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { use, useCallback } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useInteractions } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
-import { formatDate } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({
   paramsPromise,
@@ -26,18 +26,40 @@ export default function SessionDetailPage({
 }) {
   const params = use(paramsPromise);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const pageFromUrl = searchParams.get("page");
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = DEFAULT_TABLE_LIMIT;
 
   const { data: interactionsResponse } = useInteractions({
     sessionId: params.sessionId,
-    limit: 500, // Get all interactions for this session
-    offset: 0,
+    limit: pageSize,
+    offset: pageIndex * pageSize,
     sortBy: "createdAt",
     sortDirection: "desc",
   });
 
   const interactions = interactionsResponse?.data ?? [];
+  const paginationMeta = interactionsResponse?.pagination;
 
-  // Calculate session summary
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      const newParams = new URLSearchParams(searchParams.toString());
+      if (newPage === 0) {
+        newParams.delete("page");
+      } else {
+        newParams.set("page", String(newPage + 1));
+      }
+      router.push(
+        `/logs/llm-proxy/session/${params.sessionId}?${newParams.toString()}`,
+        { scroll: false },
+      );
+    },
+    [searchParams, router, params.sessionId],
+  );
+
+  // Calculate session summary from current page (stats are approximated from visible data)
   const totalInputTokens = interactions.reduce(
     (sum, i) => sum + (i.inputTokens ?? 0),
     0,
@@ -53,6 +75,7 @@ export default function SessionDetailPage({
       : null;
   const lastRequest =
     interactions.length > 0 ? interactions[0].createdAt : null;
+  const totalRequests = paginationMeta?.total ?? interactions.length;
 
   return (
     <div className="space-y-6">
@@ -78,7 +101,7 @@ export default function SessionDetailPage({
           </div>
           <div>
             <div className="text-muted-foreground">Total Requests</div>
-            <div className="font-semibold">{interactions.length}</div>
+            <div className="font-semibold">{totalRequests}</div>
           </div>
           <div>
             <div className="text-muted-foreground">Total Tokens</div>
@@ -178,6 +201,39 @@ export default function SessionDetailPage({
             )}
           </TableBody>
         </Table>
+        {paginationMeta && paginationMeta.total > pageSize && (
+          <div className="flex items-center justify-between px-2 py-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {pageIndex * pageSize + 1} to{" "}
+              {Math.min((pageIndex + 1) * pageSize, paginationMeta.total)} of{" "}
+              {paginationMeta.total} requests
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(pageIndex - 1)}
+                disabled={pageIndex === 0}
+              >
+                Previous
+              </Button>
+              <span className="text-sm">
+                Page {pageIndex + 1} of{" "}
+                {Math.ceil(paginationMeta.total / pageSize)}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(pageIndex + 1)}
+                disabled={
+                  pageIndex >= Math.ceil(paginationMeta.total / pageSize) - 1
+                }
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

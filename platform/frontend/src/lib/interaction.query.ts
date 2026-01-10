@@ -60,6 +60,14 @@ export function useInteractions({
           sortDirection,
         },
       });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch interactions",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch interactions");
+      }
       return response.data;
     },
     // Only use initialData for the first page (offset 0) with default sorting and default limit
@@ -91,6 +99,14 @@ export function useInteraction({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch interaction",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch interaction");
+      }
       return response.data;
     },
     initialData,
@@ -103,6 +119,14 @@ export function useUniqueExternalAgentIds() {
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
+      if (response.error) {
+        const msg =
+          response.error.error?.message ?? "Failed to fetch external agent IDs";
+        throw new Error(msg);
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch external agent IDs");
+      }
       return response.data;
     },
   });
@@ -113,6 +137,14 @@ export function useUniqueUserIds() {
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
       const response = await getUniqueUserIds();
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch user IDs",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch user IDs");
+      }
       return response.data;
     },
   });
@@ -139,6 +171,14 @@ export function useInteractionSessions({
           offset,
         },
       });
+      if (response.error) {
+        throw new Error(
+          response.error.error?.message ?? "Failed to fetch sessions",
+        );
+      }
+      if (!response.data) {
+        throw new Error("Failed to fetch sessions");
+      }
       return response.data;
     },
     initialData:

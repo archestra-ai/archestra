@@ -15,17 +15,46 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import { useInteractionSessions } from "@/lib/interaction.query";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
+
+function formatDuration(start: Date | string, end: Date | string): string {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffMs = endDate.getTime() - startDate.getTime();
+
+  if (diffMs < 1000) {
+    return `${diffMs}ms`;
+  }
+
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0
+      ? `${minutes}m ${remainingSeconds}s`
+      : `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) {
+    return remainingMinutes > 0
+      ? `${hours}h ${remainingMinutes}m`
+      : `${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+}
 
 type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
@@ -149,33 +178,8 @@ function SessionRow({
     }
   };
 
-  // Format session ID for display (show first 8 chars of UUID)
-  const displaySessionId = session.sessionId
-    ? `${session.sessionId.slice(0, 8)}...`
-    : "—";
-
   return (
     <TableRow className="cursor-pointer" onClick={handleRowClick}>
-      <TableCell className="py-3">
-        <SessionSourceBadge
-          sessionSource={session.sessionSource}
-          sessionId={session.sessionId}
-        />
-      </TableCell>
-      <TableCell className="font-mono text-xs py-3">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>{displaySessionId}</span>
-            </TooltipTrigger>
-            {session.sessionId && (
-              <TooltipContent>
-                <p className="font-mono text-xs">{session.sessionId}</p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-      </TableCell>
       <TableCell className="py-3">
         <TruncatedText
           message={agent?.name ?? session.profileName ?? "Unknown"}
@@ -203,10 +207,20 @@ function SessionRow({
         {session.totalOutputTokens.toLocaleString()}
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        {formatDate({ date: session.firstRequest })}
+        <div className="flex flex-col gap-0.5">
+          <span>{formatDate({ date: session.lastRequest })}</span>
+          {session.requestCount > 1 && (
+            <span className="text-muted-foreground">
+              {formatDuration(session.firstRequest, session.lastRequest)}
+            </span>
+          )}
+        </div>
       </TableCell>
-      <TableCell className="font-mono text-xs py-3">
-        {formatDate({ date: session.lastRequest })}
+      <TableCell className="py-3">
+        <SessionSourceBadge
+          sessionSource={session.sessionSource}
+          sessionId={session.sessionId}
+        />
       </TableCell>
     </TableRow>
   );
@@ -344,14 +358,12 @@ function SessionsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[100px]">Source</TableHead>
-                <TableHead className="w-[100px]">Session ID</TableHead>
                 <TableHead className="w-[150px]">Profile</TableHead>
                 <TableHead className="w-[80px]">Requests</TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px]">Tokens (In/Out)</TableHead>
-                <TableHead className="w-[160px]">First Request</TableHead>
-                <TableHead className="w-[160px]">Last Request</TableHead>
+                <TableHead className="w-[200px]">Time</TableHead>
+                <TableHead className="w-[100px]">Source</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

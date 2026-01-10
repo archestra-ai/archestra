@@ -2,7 +2,11 @@
  * Theme utilities - processes tweakcn-themes.json to extract theme data
  */
 
-import { DEFAULT_THEME_ID, SUPPORTED_THEMES, type THEME_IDS } from "./theme-config";
+import {
+  DEFAULT_THEME_ID,
+  SUPPORTED_THEMES,
+  type THEME_IDS,
+} from "./theme-config";
 import themeRegistry from "./tweakcn-themes.json";
 
 // Re-export for convenience

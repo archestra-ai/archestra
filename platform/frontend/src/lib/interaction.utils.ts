@@ -7,9 +7,8 @@ import type {
   InteractionUtils,
 } from "./llmProviders/common";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
-import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
-import VllmChatCompletionInteraction from "./llmProviders/vllm";
+import OllamaChatCompletionInteraction from "./llmProviders/ollama";
 
 export interface CostSavingsInput {
   cost: string | null | undefined;
@@ -56,8 +55,8 @@ export function calculateCostSavings(
   // Calculate tokens saved from TOON compression
   const toonTokensSaved =
     input.toonTokensBefore &&
-    input.toonTokensAfter &&
-    input.toonTokensBefore > input.toonTokensAfter
+      input.toonTokensAfter &&
+      input.toonTokensBefore > input.toonTokensAfter
       ? input.toonTokensBefore - input.toonTokensAfter
       : null;
 
@@ -102,7 +101,7 @@ export class DynamicInteraction implements InteractionUtils {
     this.interaction = interaction;
     this.id = interaction.id;
     this.profileId = interaction.profileId;
-    this.externalAgentId = interaction.externalAgentId;
+    this.externalAgentId = interaction.externalAgentId as string | null;
     this.type = interaction.type;
     this.provider = provider as SupportedProvider;
     this.endpoint = endpoint;
@@ -114,21 +113,13 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    // Note: Type discriminator stored in database determines the interaction type
-    const type = this.type as string;
-    if (type === "openai:chatCompletions") {
+    if (interaction.type === "openai:chatCompletions") {
       return new OpenAiChatCompletionInteraction(interaction);
-    }
-    if (type === "anthropic:messages") {
+    } else if (interaction.type === "anthropic:messages") {
       return new AnthropicMessagesInteraction(interaction);
-    }
-    if (type === "vllm:chatCompletions") {
-      return new VllmChatCompletionInteraction(interaction);
-    }
-    if (type === "ollama:chatCompletions") {
+    } else if (interaction.type === "ollama:chatCompletions") {
       return new OllamaChatCompletionInteraction(interaction);
     }
-    // Default to Gemini for any other provider
     return new GeminiGenerateContentInteraction(interaction);
   }
 
@@ -199,12 +190,12 @@ export class DynamicInteraction implements InteractionUtils {
       return null;
     }
 
-    const savedCharacters = toonTokensBefore - toonTokensAfter;
-    const percentageSaved = (savedCharacters / toonTokensBefore) * 100;
+    const savedCharacters = (toonTokensBefore as number) - (toonTokensAfter as number);
+    const percentageSaved = (savedCharacters / (toonTokensBefore as number)) * 100;
 
     return {
-      originalSize: toonTokensBefore,
-      compressedSize: toonTokensAfter,
+      originalSize: toonTokensBefore as number,
+      compressedSize: toonTokensAfter as number,
       savedCharacters,
       percentageSaved,
     };

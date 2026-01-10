@@ -7,7 +7,7 @@ export const SupportedProvidersSchema = z.enum([
   "openai",
   "gemini",
   "anthropic",
-  "vllm",
+  "anthropic",
   "ollama",
 ]);
 
@@ -15,7 +15,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
   "gemini:generateContent",
   "anthropic:messages",
-  "vllm:chatCompletions",
+  "anthropic:messages",
   "ollama:chatCompletions",
 ]);
 
@@ -25,10 +25,8 @@ export type SupportedProviderDiscriminator = z.infer<
   typeof SupportedProvidersDiscriminatorSchema
 >;
 
-export const providerDisplayNames: Record<SupportedProvider, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
+anthropic: "Anthropic",
   gemini: "Gemini",
-  vllm: "vLLM",
-  ollama: "Ollama",
+    ollama: "Ollama",
 };
+

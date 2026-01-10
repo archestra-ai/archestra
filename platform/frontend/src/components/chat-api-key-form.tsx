@@ -32,7 +32,7 @@ const InlineVaultSecretSelector = lazy(
 
 const WithPermissions = lazy(() =>
   // biome-ignore lint/style/noRestrictedImports: dynamic import
-  import("./roles/with-permissions.ee").then((mod) => ({
+  import("@/components/roles/with-permissions.ee").then((mod) => ({
     default: mod.WithPermissions,
   })),
 );
@@ -97,6 +97,7 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://dashboard.cohere.com/api-keys",
     consoleName: "Cohere Dashboard",
+  },
   vllm: {
     name: "vLLM",
     icon: "/icons/vllm.png",

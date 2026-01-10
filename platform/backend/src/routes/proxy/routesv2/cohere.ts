@@ -24,6 +24,9 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
 
   logger.info("[UnifiedProxy] Registering unified Cohere routes");
 
+  // Ensure proxy upstream is always a string to satisfy fastify-http-proxy types
+  const cohereBaseUrl = config.llm.cohere.baseUrl ?? "https://api.cohere.ai";
+
   /**
    * Register HTTP proxy for Cohere routes
    * Handles both patterns:
@@ -33,7 +36,7 @@ const cohereProxyRoutesV2: FastifyPluginAsyncZod = async (fastify) => {
    * Chat endpoints are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.cohere.baseUrl,
+    upstream: cohereBaseUrl,
     prefix: COHERE_PREFIX,
     rewritePrefix: "",
     preHandler: (request, _reply, next) => {

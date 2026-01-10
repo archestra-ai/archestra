@@ -152,6 +152,11 @@ export const RouteId = {
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
 
+  // Proxy Routes - DeepSeek
+  DeepSeekChatCompletionsWithDefaultAgent:
+    "deepSeekChatCompletionsWithDefaultAgent",
+  DeepSeekChatCompletionsWithAgent: "deepSeekChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

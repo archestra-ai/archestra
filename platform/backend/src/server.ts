@@ -42,6 +42,7 @@ import AgentLabelModel from "@/models/agent-label";
 import {
   Anthropic,
   ApiError,
+  DeepSeek,
   Gemini,
   Ollama,
   OpenAi,
@@ -105,6 +106,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionRequestSchema, {
+    id: "DeepSeekChatCompletionRequest",
+  });
+  z.globalRegistry.add(DeepSeek.API.ChatCompletionResponseSchema, {
+    id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(WebSocketMessageSchema, {
     id: "WebSocketMessage",

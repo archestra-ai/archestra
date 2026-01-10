@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/deepseek/v1/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "deepseek-chat",
+          "name": "DeepSeek Chat"
+        },
+        {
+          "id": "deepseek-coder",
+          "name": "DeepSeek Coder"
+        }
+      ]
+    }
+  }
+}

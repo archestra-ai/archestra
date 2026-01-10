@@ -178,3 +178,36 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 - **Default Ollama port**: Ollama runs on port `11434` by default. The OpenAI-compatible API is available at `http://localhost:11434/v1`.
 - **No API key required**: Ollama typically doesn't require authentication for local deployments.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+
+## DeepSeek
+
+[DeepSeek](https://deepseek.com/) is an AI research company that provides powerful language models including DeepSeek-V3 and DeepSeek-R1 (reasoning model). The API is OpenAI-compatible, making it easy to integrate.
+
+### Supported DeepSeek APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+
+### DeepSeek Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/deepseek/{profile-id}`
+- **Authentication**: Pass your DeepSeek API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                          | Required | Description                                                |
+| --------------------------------- | -------- | ---------------------------------------------------------- |
+| `ARCHESTRA_DEEPSEEK_BASE_URL`     | No       | DeepSeek API base URL (default: `https://api.deepseek.com`)|
+| `ARCHESTRA_CHAT_DEEPSEEK_API_KEY` | No       | DeepSeek API key for Archestra Chat (optional)             |
+
+### How to Obtain an API Key
+
+1. Visit [DeepSeek Platform](https://platform.deepseek.com/)
+2. Sign up or log in to your account
+3. Navigate to API Keys section
+4. Create a new API key
+
+### Important Notes
+
+- **OpenAI-compatible**: DeepSeek uses an OpenAI-compatible API format, so you can use the OpenAI SDK with DeepSeek by changing the base URL and API key.
+- **Reasoning models**: DeepSeek-R1 models may include a `reasoning_content` field in responses that shows the model's chain-of-thought reasoning.
+- **Streaming**: Streaming responses are fully supported, including with tool calls.

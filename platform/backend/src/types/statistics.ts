@@ -69,7 +69,6 @@ const BaseTimeSeriesDataSchema = z.object({
   requests: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
-  cost: z.number(), // Stored cost from interactions (already calculated per-model)
 });
 
 export const StatisticsTeamTimeSeriesDataSchema =

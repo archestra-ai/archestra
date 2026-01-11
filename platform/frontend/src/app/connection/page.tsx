@@ -32,7 +32,10 @@ export default function ConnectionPage() {
         <div>
           <div className="grid grid-cols-2 gap-8">
             <div>
-              <ArchestraArchitectureDiagram activeTab={activeTab} />
+              <ArchestraArchitectureDiagram
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
             </div>
             <div>
               <ConnectionOptions

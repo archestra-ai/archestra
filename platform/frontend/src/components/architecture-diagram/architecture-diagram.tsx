@@ -52,21 +52,52 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
   const { resolvedTheme } = useTheme();
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const initializedRef = useRef(false);
 
-  // Re-fit view when container resizes
-  const handleResize = useCallback(() => {
-    fitView({ padding: 0.1, minZoom: 0.01, maxZoom: 2, duration: 200 });
-  }, [fitView]);
-
+  // Re-fit view only when container actually changes size (not on re-renders)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const resizeObserver = new ResizeObserver(handleResize);
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+
+      const { width, height } = entry.contentRect;
+      const lastSize = lastSizeRef.current;
+
+      // Only refit if size actually changed significantly (>5px difference)
+      if (
+        lastSize &&
+        Math.abs(lastSize.width - width) < 5 &&
+        Math.abs(lastSize.height - height) < 5
+      ) {
+        return;
+      }
+
+      lastSizeRef.current = { width, height };
+
+      // Skip first resize event - let onInit handle initial fit
+      if (!initializedRef.current) {
+        return;
+      }
+
+      fitView({ padding: 0.1, minZoom: 0.01, maxZoom: 2, duration: 200 });
+    });
     resizeObserver.observe(container);
 
     return () => resizeObserver.disconnect();
-  }, [handleResize]);
+  }, [fitView]);
+
+  // Handle initial fit after ReactFlow is ready
+  const onInit = useCallback(() => {
+    initializedRef.current = true;
+    // Small delay to ensure container has final size
+    setTimeout(() => {
+      fitView({ padding: 0.1, minZoom: 0.01, maxZoom: 2, duration: 0 });
+    }, 50);
+  }, [fitView]);
 
   const nodes: Node<ArchitectureNodeData | ArchitectureGroupNodeData>[] =
     useMemo(() => {
@@ -714,8 +745,8 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         edges={edges}
         nodeTypes={nodeTypes}
         colorMode={resolvedTheme === "dark" ? "dark" : "light"}
-        fitView
-        fitViewOptions={{ padding: 0.1, minZoom: 0.01, maxZoom: 2 }}
+        onInit={onInit}
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         proOptions={{ hideAttribution: true }}
         panOnDrag={true}
         zoomOnScroll={false}
@@ -776,14 +807,14 @@ export function ArchitectureDiagram({
 
       <Dialog open={isExpanded} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-[90vw] w-[90vw] h-[85vh] flex flex-col">
-          <DialogHeader className="flex flex-row items-center justify-between">
-            <DialogTitle>Architecture Diagram</DialogTitle>
-            <div className="flex gap-1 mr-8">
+          <DialogHeader className="flex flex-row items-center justify-end">
+            <DialogTitle className="sr-only">Architecture Diagram</DialogTitle>
+            <div className="inline-flex -space-x-px rounded-md shadow-sm mr-8">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleDialogTabChange("proxy")}
-                className={dialogTab === "proxy" ? "text-white" : ""}
+                className={`rounded-none rounded-l-md ${dialogTab === "proxy" ? "text-white z-10" : ""}`}
                 style={
                   dialogTab === "proxy"
                     ? {
@@ -799,7 +830,7 @@ export function ArchitectureDiagram({
                 variant="outline"
                 size="sm"
                 onClick={() => handleDialogTabChange("mcp")}
-                className={dialogTab === "mcp" ? "text-white" : ""}
+                className={`rounded-none ${dialogTab === "mcp" ? "text-white z-10" : ""}`}
                 style={
                   dialogTab === "mcp"
                     ? {
@@ -815,7 +846,7 @@ export function ArchitectureDiagram({
                 variant="outline"
                 size="sm"
                 onClick={() => handleDialogTabChange("a2a")}
-                className={dialogTab === "a2a" ? "text-white" : ""}
+                className={`rounded-none rounded-r-md ${dialogTab === "a2a" ? "text-white z-10" : ""}`}
                 style={
                   dialogTab === "a2a"
                     ? {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, User } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, User } from "lucide-react";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -197,9 +197,10 @@ export function ToolDetailsDialog({
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <span className="font-medium text-sm">
+                                <Badge variant="secondary" className="gap-1">
+                                  <Layers className="h-3 w-3" />
                                   {assignment.agent.name}
-                                </span>
+                                </Badge>
                                 <span className="text-muted-foreground">→</span>
                                 <span className="text-sm text-muted-foreground">
                                   {getCredentialDisplay(assignment)}

@@ -51,7 +51,7 @@ export function ConnectionOptions({
         <button
           type="button"
           onClick={() => onTabChange("proxy")}
-          className="flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
+          className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
           style={
             activeTab === "proxy"
               ? {
@@ -103,7 +103,7 @@ export function ConnectionOptions({
         <button
           type="button"
           onClick={() => onTabChange("mcp")}
-          className="flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
+          className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
           style={
             activeTab === "mcp"
               ? {
@@ -148,7 +148,7 @@ export function ConnectionOptions({
         <button
           type="button"
           onClick={() => onTabChange("a2a")}
-          className="flex-1 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
+          className="flex-1 min-w-0 flex flex-col gap-2 p-3 rounded-lg transition-all duration-200 border-2 hover:bg-muted/50"
           style={
             activeTab === "a2a"
               ? {

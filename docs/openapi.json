@@ -34837,6 +34837,14 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "$ref": "#/components/schemas/VllmChatCompletionRequest"
                               },
@@ -34907,6 +34915,8 @@
                               "profileId",
                               "externalAgentId",
                               "userId",
+                              "sessionId",
+                              "sessionSource",
                               "request",
                               "response",
                               "type",
@@ -34940,6 +34950,14 @@
                                 "type": "string"
                               },
                               "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -35013,6 +35031,8 @@
                               "profileId",
                               "externalAgentId",
                               "userId",
+                              "sessionId",
+                              "sessionSource",
                               "request",
                               "response",
                               "type",
@@ -35315,6 +35335,24 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "userId",
+            "required": false,
+            "description": "Filter by user ID (from X-Archestra-User-Id header)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sessionId",
+            "required": false,
+            "description": "Filter by session ID"
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -35405,6 +35443,13 @@
                               "type": "string"
                             }
                           },
+                          "externalAgentIdLabels": {
+                            "type": "array",
+                            "items": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
                           "userNames": {
                             "type": "array",
                             "items": {
@@ -35442,6 +35487,7 @@
                           "profileId",
                           "profileName",
                           "externalAgentIds",
+                          "externalAgentIdLabels",
                           "userNames",
                           "lastInteractionRequest",
                           "lastInteractionType",
@@ -36623,6 +36669,14 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "$ref": "#/components/schemas/VllmChatCompletionRequest"
                         },
@@ -36693,6 +36747,8 @@
                         "profileId",
                         "externalAgentId",
                         "userId",
+                        "sessionId",
+                        "sessionSource",
                         "request",
                         "response",
                         "type",
@@ -36726,6 +36782,14 @@
                           "type": "string"
                         },
                         "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -36799,6 +36863,8 @@
                         "profileId",
                         "externalAgentId",
                         "userId",
+                        "sessionId",
+                        "sessionSource",
                         "request",
                         "response",
                         "type",

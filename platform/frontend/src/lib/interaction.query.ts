@@ -153,23 +153,34 @@ export function useUniqueUserIds() {
 export function useInteractionSessions({
   profileId,
   userId,
+  sessionId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
 }: {
   profileId?: string;
   userId?: string;
+  sessionId?: string;
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
-    queryKey: ["interactions", "sessions", profileId, userId, limit, offset],
+    queryKey: [
+      "interactions",
+      "sessions",
+      profileId,
+      userId,
+      sessionId,
+      limit,
+      offset,
+    ],
     queryFn: async () => {
       const response = await getInteractionSessions({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
+          ...(sessionId ? { sessionId } : {}),
           limit,
           offset,
         },
@@ -185,7 +196,11 @@ export function useInteractionSessions({
       return response.data;
     },
     initialData:
-      offset === 0 && limit === DEFAULT_TABLE_LIMIT && !profileId && !userId
+      offset === 0 &&
+      limit === DEFAULT_TABLE_LIMIT &&
+      !profileId &&
+      !userId &&
+      !sessionId
         ? initialData
         : undefined,
   });

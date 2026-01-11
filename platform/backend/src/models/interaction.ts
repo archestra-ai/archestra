@@ -644,7 +644,12 @@ class InteractionModel {
     pagination: PaginationQuery,
     requestingUserId?: string,
     isAgentAdmin?: boolean,
-    filters?: { profileId?: string; userId?: string; externalAgentId?: string },
+    filters?: {
+      profileId?: string;
+      userId?: string;
+      externalAgentId?: string;
+      sessionId?: string;
+    },
   ): Promise<
     PaginatedResult<{
       sessionId: string | null;
@@ -703,6 +708,13 @@ class InteractionModel {
     if (filters?.externalAgentId) {
       conditions.push(
         eq(schema.interactionsTable.externalAgentId, filters.externalAgentId),
+      );
+    }
+
+    // Session ID filter
+    if (filters?.sessionId) {
+      conditions.push(
+        eq(schema.interactionsTable.sessionId, filters.sessionId),
       );
     }
 

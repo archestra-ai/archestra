@@ -159,6 +159,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
+            sessionId: z.string().optional().describe("Filter by session ID"),
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
@@ -167,7 +168,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { profileId, userId, limit, offset }, user, headers },
+      { query: { profileId, userId, sessionId, limit, offset }, user, headers },
       reply,
     ) => {
       const pagination = { limit, offset };
@@ -184,6 +185,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isAgentAdmin,
           profileId,
           filterUserId: userId,
+          sessionId,
           pagination,
         },
         "GetInteractionSessions request",
@@ -193,7 +195,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pagination,
         user.id,
         isAgentAdmin,
-        { profileId, userId },
+        { profileId, userId, sessionId },
       );
 
       fastify.log.info(

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bot } from "lucide-react";
+import { ArrowLeft, Bot, Layers, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
@@ -17,7 +17,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useInteractions } from "@/lib/interaction.query";
+import {
+  useInteractionSessions,
+  useInteractions,
+} from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 
@@ -42,8 +45,15 @@ export default function SessionDetailPage({
     sortDirection: "desc",
   });
 
+  // Fetch session metadata (profile name, user names, etc.)
+  const { data: sessionResponse } = useInteractionSessions({
+    sessionId: params.sessionId,
+    limit: 1,
+  });
+
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
+  const sessionData = sessionResponse?.data?.[0];
 
   const handlePageChange = useCallback(
     (newPage: number) => {
@@ -61,23 +71,54 @@ export default function SessionDetailPage({
     [searchParams, router, params.sessionId],
   );
 
-  // Calculate session summary from current page (stats are approximated from visible data)
-  const totalInputTokens = interactions.reduce(
-    (sum, i) => sum + (i.inputTokens ?? 0),
-    0,
-  );
-  const totalOutputTokens = interactions.reduce(
-    (sum, i) => sum + (i.outputTokens ?? 0),
-    0,
-  );
-  const models = [...new Set(interactions.map((i) => i.model).filter(Boolean))];
-  const firstRequest =
-    interactions.length > 0
-      ? interactions[interactions.length - 1].createdAt
-      : null;
-  const lastRequest =
-    interactions.length > 0 ? interactions[0].createdAt : null;
-  const totalRequests = paginationMeta?.total ?? interactions.length;
+  // Use session data from API for accurate totals, fall back to page data
+  const totalInputTokens =
+    sessionData?.totalInputTokens ??
+    interactions.reduce((sum, i) => sum + (i.inputTokens ?? 0), 0);
+  const totalOutputTokens =
+    sessionData?.totalOutputTokens ??
+    interactions.reduce((sum, i) => sum + (i.outputTokens ?? 0), 0);
+  const models = sessionData?.models ?? [
+    ...new Set(interactions.map((i) => i.model).filter(Boolean)),
+  ];
+  const firstRequest = sessionData?.firstRequestTime ?? null;
+  const lastRequest = sessionData?.lastRequestTime ?? null;
+  const totalRequests =
+    sessionData?.requestCount ?? paginationMeta?.total ?? interactions.length;
+
+  // Session metadata from API
+  const sessionSource = sessionData?.sessionSource;
+  const profileName = sessionData?.profileName;
+  const userNames = sessionData?.userNames ?? [];
+
+  // Session title: prefer claudeCodeTitle or conversationTitle, fall back to first user message
+  const getSessionTitle = () => {
+    if (sessionData?.claudeCodeTitle) return sessionData.claudeCodeTitle;
+    if (sessionData?.conversationTitle) return sessionData.conversationTitle;
+
+    // Fall back to first meaningful user message from current page
+    const sortedInteractions = [...interactions].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+
+    for (const interaction of sortedInteractions) {
+      const dynamicInteraction = new DynamicInteraction(interaction);
+      const userMessage = dynamicInteraction.getLastUserMessage();
+      if (
+        userMessage &&
+        !userMessage.includes("Please write a 5-10 word title") &&
+        userMessage.length > 10
+      ) {
+        return userMessage.length > 100
+          ? `${userMessage.slice(0, 100)}...`
+          : userMessage;
+      }
+    }
+    return null;
+  };
+
+  const sessionTitle = getSessionTitle();
 
   return (
     <div className="space-y-6">
@@ -93,14 +134,36 @@ export default function SessionDetailPage({
 
       {/* Session Summary */}
       <div className="rounded-lg border p-4 space-y-4">
-        <h2 className="text-lg font-semibold">Session Details</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <div className="text-muted-foreground">Session ID</div>
-            <div className="font-mono text-xs break-all">
-              {params.sessionId}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1 min-w-0 flex-1">
+            <h2 className="text-lg font-semibold truncate">
+              {sessionTitle || "Session"}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {sessionSource === "claude_code" && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                >
+                  Claude Code
+                </Badge>
+              )}
+              {profileName && (
+                <Badge variant="secondary" className="text-xs">
+                  <Layers className="h-3 w-3 mr-1" />
+                  {profileName}
+                </Badge>
+              )}
+              {userNames.map((userName) => (
+                <Badge key={userName} variant="outline" className="text-xs">
+                  <User className="h-3 w-3 mr-1" />
+                  {userName}
+                </Badge>
+              ))}
             </div>
           </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <div className="text-muted-foreground">Total Requests</div>
             <div className="font-semibold">{totalRequests}</div>
@@ -147,8 +210,8 @@ export default function SessionDetailPage({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[160px]">Time</TableHead>
-              <TableHead className="w-[80px]">Agent</TableHead>
-              <TableHead className="w-[180px]">Model</TableHead>
+              <TableHead className="w-[120px]">Agent</TableHead>
+              <TableHead className="w-[220px]">Model</TableHead>
               <TableHead className="w-[120px]">Tokens (In/Out)</TableHead>
               <TableHead className="w-[80px]">Savings</TableHead>
               <TableHead>User Message</TableHead>

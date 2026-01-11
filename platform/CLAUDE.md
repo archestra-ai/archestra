@@ -16,6 +16,7 @@
 6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
 8. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseLicenseActivated` checks instead to avoid bundling enterprise code into free builds
+9. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
 
 ## Docs
 

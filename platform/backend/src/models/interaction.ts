@@ -474,13 +474,13 @@ class InteractionModel {
       requestCount: number;
       totalInputTokens: number;
       totalOutputTokens: number;
+      totalCost: string | null;
+      totalBaselineCost: string | null;
       firstRequest: Date;
       lastRequest: Date;
       models: string[];
       profileId: string;
       profileName: string | null;
-      userId: string | null;
-      userName: string | null;
     }>
   > {
     // Build where clauses for access control
@@ -529,22 +529,18 @@ class InteractionModel {
           requestCount: count(),
           totalInputTokens: sum(schema.interactionsTable.inputTokens),
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+          totalCost: sum(schema.interactionsTable.cost),
+          totalBaselineCost: sum(schema.interactionsTable.baselineCost),
           firstRequest: min(schema.interactionsTable.createdAt),
           lastRequest: max(schema.interactionsTable.createdAt),
           models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
           profileId: schema.interactionsTable.profileId,
           profileName: schema.agentsTable.name,
-          userId: max(schema.interactionsTable.userId),
-          userName: max(schema.usersTable.name),
         })
         .from(schema.interactionsTable)
         .leftJoin(
           schema.agentsTable,
           eq(schema.interactionsTable.profileId, schema.agentsTable.id),
-        )
-        .leftJoin(
-          schema.usersTable,
-          eq(schema.interactionsTable.userId, schema.usersTable.id),
         )
         .where(whereClause)
         .groupBy(
@@ -569,13 +565,13 @@ class InteractionModel {
       requestCount: Number(s.requestCount),
       totalInputTokens: Number(s.totalInputTokens) || 0,
       totalOutputTokens: Number(s.totalOutputTokens) || 0,
+      totalCost: s.totalCost,
+      totalBaselineCost: s.totalBaselineCost,
       firstRequest: s.firstRequest ?? new Date(),
       lastRequest: s.lastRequest ?? new Date(),
       models: s.models ? s.models.split(",").filter(Boolean) : [],
       profileId: s.profileId,
       profileName: s.profileName,
-      userId: s.userId,
-      userName: s.userName,
     }));
 
     return createPaginatedResult(sessions, Number(total), pagination);

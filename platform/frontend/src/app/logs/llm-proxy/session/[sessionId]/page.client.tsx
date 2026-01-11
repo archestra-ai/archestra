@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
+import { Savings } from "@/components/savings";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInteractions } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
@@ -147,6 +149,7 @@ export default function SessionDetailPage({
               <TableHead className="w-[160px]">Time</TableHead>
               <TableHead className="w-[180px]">Model</TableHead>
               <TableHead className="w-[120px]">Tokens (In/Out)</TableHead>
+              <TableHead className="w-[80px]">Savings</TableHead>
               <TableHead>User Message</TableHead>
               <TableHead className="w-[200px]">Assistant Response</TableHead>
             </TableRow>
@@ -155,7 +158,7 @@ export default function SessionDetailPage({
             {interactions.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="text-center text-muted-foreground"
                 >
                   No interactions found for this session
@@ -185,6 +188,20 @@ export default function SessionDetailPage({
                     <TableCell className="font-mono text-xs">
                       {(interaction.inputTokens ?? 0).toLocaleString()} /{" "}
                       {(interaction.outputTokens ?? 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {interaction.cost && interaction.baselineCost ? (
+                        <TooltipProvider>
+                          <Savings
+                            cost={interaction.cost}
+                            baselineCost={interaction.baselineCost}
+                            format="percent"
+                            tooltip="hover"
+                          />
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">
                       <TruncatedText message={userMessage} maxLength={100} />

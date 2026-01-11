@@ -29653,6 +29653,14 @@
                           "totalOutputTokens": {
                             "type": "number"
                           },
+                          "totalCost": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "totalBaselineCost": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "firstRequest": {
                             "type": "string",
                             "format": "date-time"
@@ -29673,14 +29681,6 @@
                           "profileName": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "userId": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "userName": {
-                            "nullable": true,
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -29690,13 +29690,13 @@
                           "requestCount",
                           "totalInputTokens",
                           "totalOutputTokens",
+                          "totalCost",
+                          "totalBaselineCost",
                           "firstRequest",
                           "lastRequest",
                           "models",
                           "profileId",
-                          "profileName",
-                          "userId",
-                          "userName"
+                          "profileName"
                         ],
                         "additionalProperties": false
                       }

@@ -9099,13 +9099,13 @@ export type GetInteractionSessionsResponses = {
             requestCount: number;
             totalInputTokens: number;
             totalOutputTokens: number;
+            totalCost: string | null;
+            totalBaselineCost: string | null;
             firstRequest: string;
             lastRequest: string;
             models: Array<string>;
             profileId: string;
             profileName: string | null;
-            userId: string | null;
-            userName: string | null;
         }>;
         pagination: {
             currentPage: number;

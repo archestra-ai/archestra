@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { Savings } from "@/components/savings";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import { useInteractionSessions } from "@/lib/interaction.query";
 
@@ -186,9 +188,6 @@ function SessionRow({
           maxLength={25}
         />
       </TableCell>
-      <TableCell className="py-3">
-        <TruncatedText message={session.userName ?? "—"} maxLength={20} />
-      </TableCell>
       <TableCell className="font-mono text-xs py-3">
         {session.requestCount.toLocaleString()}
       </TableCell>
@@ -208,6 +207,20 @@ function SessionRow({
       <TableCell className="font-mono text-xs py-3">
         {session.totalInputTokens.toLocaleString()} /{" "}
         {session.totalOutputTokens.toLocaleString()}
+      </TableCell>
+      <TableCell className="font-mono text-xs py-3">
+        {session.totalCost && session.totalBaselineCost ? (
+          <TooltipProvider>
+            <Savings
+              cost={session.totalCost}
+              baselineCost={session.totalBaselineCost}
+              format="percent"
+              tooltip="hover"
+            />
+          </TooltipProvider>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
@@ -362,10 +375,10 @@ function SessionsTable({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[150px]">Profile</TableHead>
-                <TableHead className="w-[120px]">User</TableHead>
                 <TableHead className="w-[80px]">Requests</TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px]">Tokens (In/Out)</TableHead>
+                <TableHead className="w-[100px]">Savings</TableHead>
                 <TableHead className="w-[200px]">Time</TableHead>
                 <TableHead className="w-[100px]">Source</TableHead>
               </TableRow>

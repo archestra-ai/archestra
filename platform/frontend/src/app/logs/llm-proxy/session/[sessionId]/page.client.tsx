@@ -122,12 +122,18 @@ export default function SessionDetailPage({
 
   // Find the last main request (requestType === "main" or first in delegation chain)
   const lastMainRequest = interactions.find((interaction) => {
-    const requestType = interaction.requestType ?? "main";
+    const requestType =
+      "requestType" in interaction
+        ? (interaction.requestType ?? "main")
+        : "main";
+    const externalAgentIdLabel =
+      "externalAgentIdLabel" in interaction
+        ? interaction.externalAgentIdLabel
+        : undefined;
     // Main request or has no delegation (externalAgentIdLabel without "→")
     return (
       requestType === "main" ||
-      (interaction.externalAgentIdLabel &&
-        !interaction.externalAgentIdLabel.includes("→"))
+      (externalAgentIdLabel && !externalAgentIdLabel.includes("→"))
     );
   });
 
@@ -251,10 +257,17 @@ export default function SessionDetailPage({
                 const dynamicInteraction = new DynamicInteraction(interaction);
                 const userMessage = dynamicInteraction.getLastUserMessage();
                 const toolsUsed = dynamicInteraction.getToolNamesUsed();
-                const requestType = interaction.requestType ?? "main";
+                const requestType =
+                  "requestType" in interaction
+                    ? (interaction.requestType ?? "main")
+                    : "main";
+                const externalAgentIdLabel =
+                  "externalAgentIdLabel" in interaction
+                    ? interaction.externalAgentIdLabel
+                    : undefined;
                 // Show prompt name if available, otherwise fall back to Main/Subagent
                 const typeLabel =
-                  interaction.externalAgentIdLabel ||
+                  externalAgentIdLabel ||
                   (requestType === "main" ? "Main" : "Subagent");
 
                 return (
@@ -271,7 +284,7 @@ export default function SessionDetailPage({
                         variant="outline"
                         className="text-xs max-w-full inline-flex truncate"
                       >
-                        {interaction.externalAgentIdLabel && (
+                        {externalAgentIdLabel && (
                           <Bot className="h-3 w-3 mr-1 shrink-0" />
                         )}
                         <span className="truncate">{typeLabel}</span>

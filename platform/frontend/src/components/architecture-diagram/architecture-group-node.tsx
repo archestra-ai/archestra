@@ -32,7 +32,7 @@ export const ArchitectureGroupNode = memo(
             : highlighted && highlightColor === "green"
               ? "border-emerald-500/50 bg-emerald-500/10"
               : highlighted && highlightColor === "orange"
-                ? "border-amber-500/50 bg-amber-500/10"
+                ? "border-orange-500/50 bg-orange-500/10"
                 : "border-border/50",
         )}
         style={{ width, height }}

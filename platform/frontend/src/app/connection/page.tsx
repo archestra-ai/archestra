@@ -14,11 +14,11 @@ export default function ConnectionPage() {
   const tabParam = searchParams.get("tab");
 
   const [activeTab, setActiveTab] = useState<ArchitectureTabType>(
-    tabParam === "mcp" ? "mcp" : "proxy",
+    tabParam === "mcp" ? "mcp" : tabParam === "a2a" ? "a2a" : "proxy",
   );
 
   useEffect(() => {
-    if (tabParam === "mcp" || tabParam === "proxy") {
+    if (tabParam === "mcp" || tabParam === "proxy" || tabParam === "a2a") {
       setActiveTab(tabParam);
     }
   }, [tabParam]);

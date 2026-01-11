@@ -34,13 +34,13 @@ export const ArchitectureNode = memo(
     return (
       <div
         className={cn(
-          "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors min-w-[90px] text-center",
+          "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors min-w-[90px] text-center whitespace-pre-line",
           highlighted && highlightColor === "blue"
             ? "bg-blue-500 border-blue-600 text-white"
             : highlighted && highlightColor === "green"
               ? "bg-emerald-500 border-emerald-600 text-white"
               : highlighted && highlightColor === "orange"
-                ? "bg-amber-500 border-amber-600 text-white"
+                ? "bg-orange-500 border-orange-600 text-white"
                 : "bg-card border-border text-card-foreground",
         )}
       >

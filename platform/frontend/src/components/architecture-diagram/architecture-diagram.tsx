@@ -40,16 +40,15 @@ const nodeTypes = {
   architectureGroup: ArchitectureGroupNode,
 };
 
-// Define base positions
-const EXTERNAL_GROUP_X = 0;
-const ARCHESTRA_GROUP_X = 180;
-const KUBERNETES_GROUP_X = 540;
+// Define base positions (40px gap between groups)
+// Agents: 0-160, Archestra: 200-500, Kubernetes: 540-690, Remote/LLM: 730+
+const AGENTS_GROUP_X = 0;
+const ARCHESTRA_GROUP_X = 200;
+const KUBERNETES_GROUP_X = 620;
 const REMOTE_GROUP_X = 730;
 const LLM_GROUP_X = 730;
 
-function ArchitectureDiagramInner({
-  activeTab,
-}: Pick<ArchitectureDiagramProps, "activeTab">) {
+function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
   const { resolvedTheme } = useTheme();
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -74,62 +73,79 @@ function ArchitectureDiagramInner({
       const isProxy = activeTab === "proxy";
       const isMcp = activeTab === "mcp";
       const isA2a = activeTab === "a2a";
-
-      const getHighlightColor = () => {
-        if (isProxy) return "blue";
-        if (isMcp) return "green";
-        if (isA2a) return "orange";
-        return "blue";
-      };
-      const highlightColor = getHighlightColor();
+      const highlightColor = isProxy ? "blue" : isMcp ? "green" : "orange";
 
       return [
-        // External sources group
+        // Agents group
         {
-          id: "external-group",
+          id: "agents-group",
           type: "architectureGroup",
-          position: { x: EXTERNAL_GROUP_X, y: 0 },
-          data: {
-            label: "External Sources",
-            width: 150,
-            height: 190,
-            highlighted: isProxy || isMcp || isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        // External source nodes
-        {
-          id: "ms-teams",
-          type: "architecture",
-          position: { x: EXTERNAL_GROUP_X + 15, y: 32 },
-          data: {
-            label: "MS Teams",
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        {
-          id: "slack",
-          type: "architecture",
-          position: { x: EXTERNAL_GROUP_X + 15, y: 80 },
-          data: {
-            label: "Slack",
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        {
-          id: "external-agents",
-          type: "architecture",
-          position: { x: EXTERNAL_GROUP_X + 15, y: 128 },
+          position: { x: AGENTS_GROUP_X, y: -50 },
           data: {
             label: "External Agents",
+            width: 160,
+            height: 280,
+            highlighted: isProxy || isMcp,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        // Agent nodes
+        {
+          id: "agent-cursor",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: 52 },
+          data: {
+            label: "Developer's Cursor",
+            highlighted: isMcp,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "agent-n8n",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: 87 },
+          data: {
+            label: "n8n",
+            highlighted: isProxy || isMcp,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "agent-support",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: 122 },
+          data: {
+            label: "Support Agent",
+            highlighted: isProxy,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "agent-claude-code",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: 157 },
+          data: {
+            label: "Claude Code",
+            highlighted: isProxy || isMcp,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "agent-ms-foundry",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: 192 },
+          data: {
+            label: "MS Foundry",
             highlighted: isProxy || isMcp,
             highlightColor,
           },
@@ -141,11 +157,11 @@ function ArchitectureDiagramInner({
         {
           id: "archestra-group",
           type: "architectureGroup",
-          position: { x: ARCHESTRA_GROUP_X, y: -80 },
+          position: { x: ARCHESTRA_GROUP_X, y: -230 },
           data: {
             label: "Archestra.AI",
-            width: 320,
-            height: 340,
+            width: 380,
+            height: 450,
             logo: "/logo.png",
             highlighted: isProxy || isMcp || isA2a,
             highlightColor,
@@ -153,89 +169,23 @@ function ArchitectureDiagramInner({
           draggable: false,
           selectable: false,
         },
-        // A2A Gateway
-        {
-          id: "a2a-gateway",
-          type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 15, y: -45 },
-          data: {
-            label: "A2A Gateway",
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        // Internal A2A Agents group
-        {
-          id: "internal-agents-group",
-          type: "architectureGroup",
-          position: { x: ARCHESTRA_GROUP_X + 15, y: 10 },
-          data: {
-            label: "Internal A2A Agents",
-            width: 290,
-            height: 100,
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        // Internal agent nodes
-        {
-          id: "internal-agent-1",
-          type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 30, y: 45 },
-          data: {
-            label: "Agent 1",
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        {
-          id: "internal-agent-2",
-          type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 120, y: 45 },
-          data: {
-            label: "Agent 2",
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        {
-          id: "internal-agent-more",
-          type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 210, y: 45 },
-          data: {
-            label: "...",
-            highlighted: isA2a,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        // MCP Gateway
+        // Archestra nodes
         {
           id: "mcp-gateway",
           type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 15, y: 140 },
+          position: { x: ARCHESTRA_GROUP_X + 15, y: 50 },
           data: {
             label: "MCP Gateway",
-            highlighted: isMcp || isA2a,
+            highlighted: isMcp,
             highlightColor,
           },
           draggable: false,
           selectable: false,
         },
-        // MCP Orchestrator
         {
           id: "mcp-orchestrator",
           type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 165, y: 140 },
+          position: { x: ARCHESTRA_GROUP_X + 145, y: 0 },
           data: {
             label: "MCP Orchestrator",
             highlighted: isMcp,
@@ -244,14 +194,37 @@ function ArchitectureDiagramInner({
           draggable: false,
           selectable: false,
         },
-        // LLM Gateway
         {
           id: "llm-gateway",
           type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 90, y: 210 },
+          position: { x: ARCHESTRA_GROUP_X + 15, y: 130 },
           data: {
             label: "LLM Gateway",
-            highlighted: isProxy || isA2a,
+            highlighted: isProxy,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "security-policies",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 145, y: 130 },
+          data: {
+            label: "Security Policies\nand Subagents",
+            highlighted: isProxy,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "a2a-gateway",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 15, y: -60 },
+          data: {
+            label: "A2A Gateway",
+            highlighted: isA2a,
             highlightColor,
           },
           draggable: false,
@@ -315,7 +288,7 @@ function ArchitectureDiagramInner({
         {
           id: "remote-group",
           type: "architectureGroup",
-          position: { x: REMOTE_GROUP_X, y: 40 },
+          position: { x: REMOTE_GROUP_X, y: 50 },
           data: {
             label: "Remote MCP Servers",
             width: 140,
@@ -330,7 +303,7 @@ function ArchitectureDiagramInner({
         {
           id: "github-mcp",
           type: "architecture",
-          position: { x: REMOTE_GROUP_X + 15, y: 70 },
+          position: { x: REMOTE_GROUP_X + 15, y: 80 },
           data: {
             label: "GitHub MCP",
             highlighted: isMcp,
@@ -344,12 +317,12 @@ function ArchitectureDiagramInner({
         {
           id: "llm-group",
           type: "architectureGroup",
-          position: { x: LLM_GROUP_X, y: 120 },
+          position: { x: LLM_GROUP_X, y: 140 },
           data: {
             label: "LLM Providers",
             width: 140,
             height: 185,
-            highlighted: isProxy || isA2a,
+            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -359,10 +332,10 @@ function ArchitectureDiagramInner({
         {
           id: "openai",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 150 },
+          position: { x: LLM_GROUP_X + 15, y: 170 },
           data: {
             label: "OpenAI",
-            highlighted: isProxy || isA2a,
+            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -371,10 +344,10 @@ function ArchitectureDiagramInner({
         {
           id: "gemini",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 185 },
+          position: { x: LLM_GROUP_X + 15, y: 205 },
           data: {
             label: "Gemini",
-            highlighted: isProxy || isA2a,
+            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -383,10 +356,10 @@ function ArchitectureDiagramInner({
         {
           id: "claude",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 220 },
+          position: { x: LLM_GROUP_X + 15, y: 240 },
           data: {
             label: "Claude",
-            highlighted: isProxy || isA2a,
+            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -395,10 +368,134 @@ function ArchitectureDiagramInner({
         {
           id: "more-llm",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 255 },
+          position: { x: LLM_GROUP_X + 15, y: 275 },
           data: {
             label: "and more...",
-            highlighted: isProxy || isA2a,
+            highlighted: isProxy,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+
+        // External A2A clients (standalone nodes on the left)
+        {
+          id: "slack",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: -200 },
+          data: {
+            label: "Slack",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "ms-teams",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: -165 },
+          data: {
+            label: "MS Teams",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "webhook",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: -130 },
+          data: {
+            label: "Webhook",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "agent-langgraph",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: -18 },
+          data: {
+            label: "Langgraph",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "agent-bedrock",
+          type: "architecture",
+          position: { x: AGENTS_GROUP_X + 15, y: 17 },
+          data: {
+            label: "Bedrock AgentCore",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+
+        // Internal agents (inside Archestra, stacked with MCP Orchestrator)
+        {
+          id: "chat-agent",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 145, y: -200 },
+          data: {
+            label: "Chat",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "ai-sre-agent",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 145, y: -155 },
+          data: {
+            label: "AI SRE",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "accountant-agent",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 145, y: -110 },
+          data: {
+            label: "AI Accountant",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "observability-agent",
+          type: "architecture",
+          position: { x: 470, y: -185 },
+          data: {
+            label: "Observability",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "coding-agent",
+          type: "architecture",
+          position: { x: 470, y: -140 },
+          data: {
+            label: "Coding",
+            highlighted: isA2a,
             highlightColor,
           },
           draggable: false,
@@ -424,69 +521,37 @@ function ArchitectureDiagramInner({
           ? "#3b82f6"
           : color === "green"
             ? "#10b981"
-            : "#f59e0b",
+            : "#f97316",
       strokeDasharray: "0",
     });
 
     return [
-      // External to A2A Gateway (A2A flow)
+      // Agent to MCP Gateway connections
       {
-        id: "teams-a2a",
-        source: "ms-teams",
-        target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        id: "cursor-gw",
+        source: "agent-cursor",
+        target: "mcp-gateway",
+        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
       },
       {
-        id: "slack-a2a",
-        source: "slack",
-        target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
-      },
-
-      // External agents to MCP Gateway
-      {
-        id: "external-mcp",
-        source: "external-agents",
+        id: "n8n-gw",
+        source: "agent-n8n",
         target: "mcp-gateway",
         style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
       },
 
-      // External agents to LLM Gateway
+      // Agent to LLM Gateway connections
       {
-        id: "external-llm",
-        source: "external-agents",
+        id: "n8n-llm",
+        source: "agent-n8n",
         target: "llm-gateway",
         style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
       },
-
-      // A2A Gateway to Internal Agents
       {
-        id: "a2a-internal1",
-        source: "a2a-gateway",
-        target: "internal-agent-1",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
-      },
-      {
-        id: "a2a-internal2",
-        source: "a2a-gateway",
-        target: "internal-agent-2",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
-      },
-
-      // Internal Agents to MCP Gateway
-      {
-        id: "internal1-mcp",
-        source: "internal-agent-1",
-        target: "mcp-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
-      },
-
-      // Internal Agents to LLM Gateway
-      {
-        id: "internal2-llm",
-        source: "internal-agent-2",
+        id: "support-llm",
+        source: "agent-support",
         target: "llm-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
       },
 
       // MCP Gateway to Orchestrator
@@ -525,33 +590,97 @@ function ArchitectureDiagramInner({
         style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
       },
 
-      // LLM Gateway to LLM Providers
+      // LLM Gateway to Security Policies
       {
-        id: "llm-openai",
+        id: "llm-security",
         source: "llm-gateway",
+        target: "security-policies",
+        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+      },
+
+      // Security Policies to LLM Providers
+      {
+        id: "security-openai",
+        source: "security-policies",
         target: "openai",
-        style:
-          isProxy || isA2a
-            ? highlightedEdgeStyle(isA2a ? "orange" : "blue")
-            : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
       },
       {
-        id: "llm-gemini",
-        source: "llm-gateway",
+        id: "security-gemini",
+        source: "security-policies",
         target: "gemini",
-        style:
-          isProxy || isA2a
-            ? highlightedEdgeStyle(isA2a ? "orange" : "blue")
-            : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
       },
       {
-        id: "llm-claude",
-        source: "llm-gateway",
+        id: "security-claude",
+        source: "security-policies",
         target: "claude",
-        style:
-          isProxy || isA2a
-            ? highlightedEdgeStyle(isA2a ? "orange" : "blue")
-            : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+      },
+
+      // External A2A clients to A2A Gateway
+      {
+        id: "slack-a2a",
+        source: "slack",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "ms-teams-a2a",
+        source: "ms-teams",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "webhook-a2a",
+        source: "webhook",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "langgraph-a2a",
+        source: "agent-langgraph",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "bedrock-a2a",
+        source: "agent-bedrock",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+
+      // A2A Gateway to Internal agents
+      {
+        id: "a2a-chat",
+        source: "a2a-gateway",
+        target: "chat-agent",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "a2a-accountant",
+        source: "a2a-gateway",
+        target: "accountant-agent",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "a2a-ai-sre",
+        source: "a2a-gateway",
+        target: "ai-sre-agent",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      // AI SRE to Observability and Coding
+      {
+        id: "sre-observability",
+        source: "ai-sre-agent",
+        target: "observability-agent",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "sre-coding",
+        source: "ai-sre-agent",
+        target: "coding-agent",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
       },
     ];
   }, [activeTab]);
@@ -658,7 +787,7 @@ export function ArchitectureDiagram({
                 onClick={() => handleDialogTabChange("a2a")}
                 className={
                   dialogTab === "a2a"
-                    ? "bg-amber-500 border-amber-600 text-white hover:bg-amber-600 hover:text-white"
+                    ? "bg-orange-500 border-orange-600 text-white hover:bg-orange-600 hover:text-white"
                     : ""
                 }
               >

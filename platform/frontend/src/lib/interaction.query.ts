@@ -82,7 +82,7 @@ export function useInteractions({
       !sessionId
         ? initialData
         : undefined,
-    // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
+    // Note: Using polling for now, could be optimized with websockets or SSE later
   });
 }
 
@@ -110,7 +110,7 @@ export function useInteraction({
       return response.data;
     },
     initialData,
-    ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
+    ...(refetchInterval ? { refetchInterval } : {}), // Polling interval for auto-refresh
   });
 }
 
@@ -201,7 +201,8 @@ export function useInteractionSessions({
       !profileId &&
       !userId &&
       !sessionId
-        ? initialData
-        : undefined,
+      ? initialData
+      : undefined,
+    refetchInterval: 10_000, // Auto-refresh logs every 10 seconds
   });
 }

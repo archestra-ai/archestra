@@ -144,6 +144,15 @@ export const RouteId = {
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
+  // Proxy Routes - vLLM
+  VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
+  VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
+
+  // Proxy Routes - Ollama
+  OllamaChatCompletionsWithDefaultAgent:
+    "ollamaChatCompletionsWithDefaultAgent",
+  OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+
   // Chat Routes
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",

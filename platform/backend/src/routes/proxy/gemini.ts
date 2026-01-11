@@ -313,6 +313,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           resolvedAgentId,
           considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
         },
         "[GeminiProxy] Evaluating trusted data policies",
       );
@@ -323,6 +324,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           geminiApiKey,
           "gemini",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -343,10 +345,14 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             : undefined,
           stream
-            ? (progress) => {
+            ? (progress: {
+                question: string;
+                options: string[];
+                answer: string;
+              }) => {
                 // Stream Q&A progress with options
                 const optionsText = progress.options
-                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                   .join("\n");
                 const progressChunk: Gemini.Types.GenerateContentResponse = {
                   candidates: [

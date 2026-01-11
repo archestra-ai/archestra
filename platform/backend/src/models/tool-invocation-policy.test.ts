@@ -200,7 +200,7 @@ describe("ToolInvocationPolicyModel", () => {
       );
     });
 
-    test("allows tool when no policies exist and globalToolPolicy is permissive", async ({
+    test("YOLO mode: allows all tools when globalToolPolicy is permissive", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
@@ -208,8 +208,6 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "lenient-tool" });
       await makeAgentTool(agent.id, tool.id);
-      // Delete auto-created default policies to test global policy fallback
-      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
@@ -218,6 +216,35 @@ describe("ToolInvocationPolicyModel", () => {
         "permissive",
       );
 
+      expect(result.isAllowed).toBe(true);
+      expect(result.reason).toBe("");
+    });
+
+    test("YOLO mode: ignores block policies when globalToolPolicy is permissive", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ agentId: agent.id, name: "blocked-tool" });
+      await makeAgentTool(agent.id, tool.id);
+
+      // Create a block policy - should be ignored in YOLO mode
+      await makeToolPolicy(tool.id, {
+        conditions: [{ key: "action", operator: "equal", value: "delete" }],
+        action: "block_always",
+        reason: "Delete blocked",
+      });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "blocked-tool", toolInput: { action: "delete" } }],
+        true, // trusted context
+        "permissive", // YOLO mode
+      );
+
+      // YOLO mode ignores all policies including block policies
       expect(result.isAllowed).toBe(true);
       expect(result.reason).toBe("");
     });

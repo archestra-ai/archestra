@@ -8,13 +8,18 @@ archestra:
   # Environment variables for e2e testing
   env:
     # LLM Proxy base URLs (for LLM proxy routes)
-    ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/v1"
-    ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080"
-    ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080"
+    # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
+    ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/openai/v1"
+    ARCHESTRA_ANTHROPIC_BASE_URL: "http://e2e-tests-wiremock:8080/anthropic"
+    ARCHESTRA_GEMINI_BASE_URL: "http://e2e-tests-wiremock:8080/gemini"
+    ARCHESTRA_VLLM_BASE_URL: "http://e2e-tests-wiremock:8080/vllm/v1"
+    ARCHESTRA_OLLAMA_BASE_URL: "http://e2e-tests-wiremock:8080/ollama/v1"
     # Chat API keys (for e2e testing)
     ARCHESTRA_CHAT_OPENAI_API_KEY: test-key
     ARCHESTRA_CHAT_ANTHROPIC_API_KEY: test-key
     ARCHESTRA_CHAT_GEMINI_API_KEY: test-key
+    ARCHESTRA_CHAT_VLLM_API_KEY: test-key
+    ARCHESTRA_CHAT_OLLAMA_API_KEY: test-key
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret-must-be-32-chars-long"

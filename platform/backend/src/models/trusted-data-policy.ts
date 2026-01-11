@@ -4,7 +4,11 @@ import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
-import type { AutonomyPolicyOperator, TrustedData } from "@/types";
+import type {
+  AutonomyPolicyOperator,
+  GlobalToolPolicy,
+  TrustedData,
+} from "@/types";
 
 /**
  * Check if a policy is a default policy (applies to all results)
@@ -277,7 +281,7 @@ class TrustedDataPolicyModel {
   /**
    * Evaluate trusted data policies for a chat
    *
-   * KEY SECURITY PRINCIPLE: Data is UNTRUSTED by default.
+   * KEY SECURITY PRINCIPLE: Data is UNTRUSTED by default (when globalToolPolicy is "restrictive").
    * - Only data that explicitly matches a trusted data policy is considered safe
    * - If no policy matches, the data is considered untrusted
    * - This implements an allowlist approach for maximum security
@@ -289,6 +293,7 @@ class TrustedDataPolicyModel {
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
+    globalToolPolicy: GlobalToolPolicy = "restrictive",
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -296,9 +301,11 @@ class TrustedDataPolicyModel {
     reason: string;
   }> {
     // Use bulk evaluation for single tool
-    const results = await TrustedDataPolicyModel.evaluateBulk(agentId, [
-      { toolName, toolOutput },
-    ]);
+    const results = await TrustedDataPolicyModel.evaluateBulk(
+      agentId,
+      [{ toolName, toolOutput }],
+      globalToolPolicy,
+    );
     return (
       results.get("0") || {
         isTrusted: false,
@@ -320,6 +327,7 @@ class TrustedDataPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
     }>,
+    globalToolPolicy: GlobalToolPolicy = "restrictive",
   ): Promise<
     Map<
       string,
@@ -340,6 +348,19 @@ class TrustedDataPolicyModel {
         reason: string;
       }
     >();
+
+    // YOLO mode: trust all data immediately, skip policy evaluation
+    if (globalToolPolicy === "permissive") {
+      for (let i = 0; i < toolCalls.length; i++) {
+        results.set(i.toString(), {
+          isTrusted: true,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: "Trusted by permissive global policy",
+        });
+      }
+      return results;
+    }
 
     // Handle Archestra MCP server tools
     for (let i = 0; i < toolCalls.length; i++) {
@@ -560,7 +581,7 @@ class TrustedDataPolicyModel {
         continue;
       }
 
-      // No policies match and no default - data is untrusted
+      // No policies match and no default - data is untrusted (restrictive mode only reaches here)
       results.set(i.toString(), {
         isTrusted: false,
         isBlocked: false,

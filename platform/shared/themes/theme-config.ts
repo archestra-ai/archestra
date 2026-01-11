@@ -23,9 +23,8 @@ export const SUPPORTED_THEMES = [
   "vercel",
   "claude",
   "vintage-paper",
+  "boxy-minimalistic",
 ] as const;
-
-export const THEME_IDS = SUPPORTED_THEMES;
 
 /**
  * Default theme ID

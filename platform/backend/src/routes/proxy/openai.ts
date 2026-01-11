@@ -309,6 +309,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           resolvedAgentId,
           considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
         },
         "[OpenAIProxy] Evaluating trusted data policies",
       );
@@ -319,6 +320,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           openAiApiKey,
           "openai",
           resolvedAgent.considerContextUntrusted,
+          globalToolPolicy,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -343,10 +345,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             : undefined,
           stream
-            ? (progress) => {
+            ? (progress: {
+                question: string;
+                options: string[];
+                answer: string;
+              }) => {
                 // Stream Q&A progress with options
                 const optionsText = progress.options
-                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
                   .join("\n");
                 const progressChunk = {
                   id: "chatcmpl-sanitizing",

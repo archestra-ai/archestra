@@ -109,6 +109,15 @@
   .font-sans {
     font-family: var(--font-sans) !important;
   }
+  /* Fix autofill styles for dark theme - browsers apply light backgrounds on autofill */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px var(--background) inset !important;
+    -webkit-text-fill-color: var(--foreground) !important;
+    caret-color: var(--foreground) !important;
+  }
 }
 
 button, div[role="menuitem"] {

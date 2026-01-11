@@ -553,6 +553,18 @@ The following environment variables can be used to configure Archestra Platform:
   - Use this to point to your own proxy or other custom endpoints
   - Note: This is only used when Vertex AI mode is disabled
 
+- **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your vLLM server.
+
+  - Required to enable vLLM provider support
+  - Example: `http://localhost:8000/v1` (standard vLLM)
+  - See: [vLLM setup guide](/docs/platform-supported-llm-providers#vllm)
+
+- **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
+
+  - Required to enable Ollama provider support
+  - Example: `http://localhost:11434/v1` (default Ollama)
+  - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
 
   - Default: `permissive`
@@ -658,9 +670,10 @@ The following environment variables can be used to configure Archestra Platform:
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
 
-  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`
+  - Pattern: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY`, `ARCHESTRA_CHAT_OPENAI_API_KEY`, `ARCHESTRA_CHAT_GEMINI_API_KEY`, `ARCHESTRA_CHAT_VLLM_API_KEY`, `ARCHESTRA_CHAT_OLLAMA_API_KEY`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
+  - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Please reach out to sales@archestra.ai to learn more about the license.
+  - Please reach out to <sales@archestra.ai> to learn more about the license.

@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/v1/chat/completions",
+    "urlPath": "/openai/v1/chat/completions",
     "headers": {
       "Authorization": {
         "contains": "openai-model-optimization-short"

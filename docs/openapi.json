@@ -29673,6 +29673,14 @@
                           "profileName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "userId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "userName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -29686,7 +29694,9 @@
                           "lastRequest",
                           "models",
                           "profileId",
-                          "profileName"
+                          "profileName",
+                          "userId",
+                          "userName"
                         ],
                         "additionalProperties": false
                       }

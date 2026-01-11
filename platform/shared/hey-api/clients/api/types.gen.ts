@@ -9104,6 +9104,8 @@ export type GetInteractionSessionsResponses = {
             models: Array<string>;
             profileId: string;
             profileName: string | null;
+            userId: string | null;
+            userName: string | null;
         }>;
         pagination: {
             currentPage: number;

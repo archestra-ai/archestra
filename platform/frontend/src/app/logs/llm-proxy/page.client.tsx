@@ -186,6 +186,9 @@ function SessionRow({
           maxLength={25}
         />
       </TableCell>
+      <TableCell className="py-3">
+        <TruncatedText message={session.userName ?? "—"} maxLength={20} />
+      </TableCell>
       <TableCell className="font-mono text-xs py-3">
         {session.requestCount.toLocaleString()}
       </TableCell>
@@ -359,6 +362,7 @@ function SessionsTable({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[150px]">Profile</TableHead>
+                <TableHead className="w-[120px]">User</TableHead>
                 <TableHead className="w-[80px]">Requests</TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px]">Tokens (In/Out)</TableHead>

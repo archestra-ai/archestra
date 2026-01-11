@@ -29,6 +29,8 @@ const SessionSummarySchema = z.object({
   models: z.array(z.string()),
   profileId: z.string(),
   profileName: z.string().nullable(),
+  userId: z.string().nullable(),
+  userName: z.string().nullable(),
 });
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {

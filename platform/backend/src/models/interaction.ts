@@ -479,6 +479,8 @@ class InteractionModel {
       models: string[];
       profileId: string;
       profileName: string | null;
+      userId: string | null;
+      userName: string | null;
     }>
   > {
     // Build where clauses for access control
@@ -532,11 +534,17 @@ class InteractionModel {
           models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
           profileId: schema.interactionsTable.profileId,
           profileName: schema.agentsTable.name,
+          userId: max(schema.interactionsTable.userId),
+          userName: max(schema.usersTable.name),
         })
         .from(schema.interactionsTable)
         .leftJoin(
           schema.agentsTable,
           eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        )
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.interactionsTable.userId, schema.usersTable.id),
         )
         .where(whereClause)
         .groupBy(
@@ -566,6 +574,8 @@ class InteractionModel {
       models: s.models ? s.models.split(",").filter(Boolean) : [],
       profileId: s.profileId,
       profileName: s.profileName,
+      userId: s.userId,
+      userName: s.userName,
     }));
 
     return createPaginatedResult(sessions, Number(total), pagination);

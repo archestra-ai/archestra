@@ -74,7 +74,7 @@ export type ArchestraMcpServerManifest = {
     };
     instructions?: string;
     readme: string | null;
-    category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General';
+    category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | null;
     quality_score: number | null;
     archestra_config?: {
         client_config_permutations: {
@@ -88,7 +88,7 @@ export type ArchestraMcpServerManifest = {
             };
         } | null;
         oauth: {
-            provider: 'google' | 'slack' | 'linkedin';
+            provider: 'google' | 'slack' | 'linkedin' | null;
             required: boolean;
         };
         browser_based?: {

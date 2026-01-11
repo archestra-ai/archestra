@@ -22,6 +22,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-2", toolInput: { arg: "value2" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -64,6 +65,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "tool-2", toolInput: { email: "bad@evil.com" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -84,6 +86,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "archestra__get_profile", toolInput: { id: "123" } },
         ],
         false, // untrusted context
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -115,6 +118,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "regular-tool", toolInput: { action: "delete" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -131,6 +135,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [],
         false,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -150,6 +155,8 @@ describe("ToolInvocationPolicyModel", () => {
         name: "permissive-tool",
       });
       await makeAgentTool(agent.id, tool.id);
+      // Delete auto-created default policies to set up our own
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
       // Create default policy (empty conditions) that allows untrusted context
       await makeToolPolicy(tool.id, {
@@ -162,13 +169,14 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [{ toolCallName: "permissive-tool", toolInput: { arg: "value" } }],
         false, // untrusted context
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
       expect(result.reason).toBe("");
     });
 
-    test("blocks tool when context is untrusted and no allow rule exists", async ({
+    test("blocks tool when no policies exist and globalToolPolicy is restrictive", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
@@ -176,17 +184,42 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ agentId: agent.id, name: "strict-tool" });
       await makeAgentTool(agent.id, tool.id);
-      // No policies, so blocked in untrusted context by default
+      // Delete auto-created default policies to test global policy fallback
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
         [{ toolCallName: "strict-tool", toolInput: { arg: "value" } }],
         false, // untrusted context
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
-      expect(result.toolCallName).toBe("strict-tool");
-      expect(result.reason).toContain("context contains untrusted data");
+      expect(result.reason).toContain(
+        "forbidden in untrusted context by default",
+      );
+    });
+
+    test("allows tool when no policies exist and globalToolPolicy is permissive", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ agentId: agent.id, name: "lenient-tool" });
+      await makeAgentTool(agent.id, tool.id);
+      // Delete auto-created default policies to test global policy fallback
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "lenient-tool", toolInput: { arg: "value" } }],
+        false, // untrusted context
+        "permissive",
+      );
+
+      expect(result.isAllowed).toBe(true);
+      expect(result.reason).toBe("");
     });
 
     test("allows tool when explicit allow rule matches in untrusted context", async ({
@@ -215,6 +248,7 @@ describe("ToolInvocationPolicyModel", () => {
           },
         ],
         false,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(true);
@@ -254,6 +288,7 @@ describe("ToolInvocationPolicyModel", () => {
           },
         ],
         false,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -312,6 +347,7 @@ describe("ToolInvocationPolicyModel", () => {
           { toolCallName: "another-blocked", toolInput: { bad: "yes" } },
         ],
         true,
+        "restrictive",
       );
 
       expect(result.isAllowed).toBe(false);
@@ -340,6 +376,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { status: "active" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -347,6 +384,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { status: "inactive" } }],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -373,6 +411,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { env: "development" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -380,6 +419,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { env: "production" } }],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -411,6 +451,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -423,6 +464,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -454,6 +496,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -466,6 +509,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -490,6 +534,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { path: "/tmp/file.txt" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -502,6 +547,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -526,6 +572,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { file: "malware.exe" } }],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -533,6 +580,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { file: "document.pdf" } }],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -568,6 +616,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -580,6 +629,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -615,6 +665,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(blockedResult.isAllowed).toBe(false);
 
@@ -627,6 +678,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           true,
+          "restrictive",
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -642,6 +694,8 @@ describe("ToolInvocationPolicyModel", () => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to test global policy fallback
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
         // A specific policy that requires an argument
         await makeToolPolicy(tool.id, {
@@ -651,15 +705,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Since the condition doesn't match (missing argument), the specific policy doesn't apply
-        // Fall back to default behavior - blocked in untrusted context
+        // No default policy exists, so falls back to globalToolPolicy (restrictive = blocked)
         const result = await ToolInvocationPolicyModel.evaluateBatch(
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
           false, // context is untrusted
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("context contains untrusted data");
+        expect(result.reason).toContain(
+          "forbidden in untrusted context by default",
+        );
       });
 
       test("block policy does not apply when argument is missing", async ({
@@ -682,6 +739,7 @@ describe("ToolInvocationPolicyModel", () => {
           agent.id,
           [{ toolCallName: "test-tool", toolInput: { other: "value" } }],
           true, // context is trusted
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(true);
@@ -726,6 +784,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           false, // untrusted context
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(true);
@@ -740,6 +799,8 @@ describe("ToolInvocationPolicyModel", () => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         await makeAgentTool(agent.id, tool.id);
+        // Delete auto-created default policies to set up our own
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
 
         // Default policy: allow in untrusted context
         await makeToolPolicy(tool.id, {
@@ -767,6 +828,7 @@ describe("ToolInvocationPolicyModel", () => {
             },
           ],
           false, // untrusted context
+          "restrictive",
         );
 
         expect(result.isAllowed).toBe(true);

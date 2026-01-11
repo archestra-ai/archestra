@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.0.13](https://github.com/archestra-ai/archestra/compare/platform-v1.0.12...platform-v1.0.13) (2026-01-09)
+
+
+### Bug Fixes
+
+* fix preact CVE ([#1969](https://github.com/archestra-ai/archestra/issues/1969)) ([f121d45](https://github.com/archestra-ai/archestra/commit/f121d4542102c4ebf5ad30873f5d1aa89f45c056))
+
+## [1.0.12](https://github.com/archestra-ai/archestra/compare/platform-v1.0.11...platform-v1.0.12) (2026-01-09)
+
+
+### Features
+
+* archestra-coding-agent mcp server ([#1888](https://github.com/archestra-ai/archestra/issues/1888)) ([19ecd01](https://github.com/archestra-ai/archestra/commit/19ecd01a072d97870a5629d94d74fd9058868c07))
+* permissive tool policy by default ([#1911](https://github.com/archestra-ai/archestra/issues/1911)) ([b136fc3](https://github.com/archestra-ai/archestra/commit/b136fc383726690c51b40653a7cd51462fdfa33b))
+
+
+### Bug Fixes
+
+* add Public Appearance Endpoint for Unauthenticated Pages ([#1807](https://github.com/archestra-ai/archestra/issues/1807)) ([acf3641](https://github.com/archestra-ai/archestra/commit/acf364166b08a34900186b4e2d7846698f07ec1d))
+* address data display issue in Assign Tools dialog ([#1887](https://github.com/archestra-ai/archestra/issues/1887)) ([8a05788](https://github.com/archestra-ai/archestra/commit/8a057880337cbd18da8075ad9374fb428994abc8))
+* address LLM proxy SSE connectivity issues ([#1886](https://github.com/archestra-ai/archestra/issues/1886)) ([cc9a477](https://github.com/archestra-ai/archestra/commit/cc9a4771d2007607f9ce4efc732af92ba4b202d9))
+* chat model selector empty when using Gemini Vertex AI API ([#1946](https://github.com/archestra-ai/archestra/issues/1946)) ([81d01fc](https://github.com/archestra-ai/archestra/commit/81d01fc00743469397ed85933c67e83402cdfffc))
+* default result policy migration ([#1936](https://github.com/archestra-ai/archestra/issues/1936)) ([bbb187f](https://github.com/archestra-ai/archestra/commit/bbb187f5f13f02ad02e14b607e07495ab1d4a2f4))
+* deprecate `chat.<provider>.baseUrl` in favor to `llm.<provider>.baseUrl` ([#1943](https://github.com/archestra-ai/archestra/issues/1943)) ([fdeefb7](https://github.com/archestra-ai/archestra/commit/fdeefb7b1b1f367b4d619d9da43feeed3aded0dd))
+* **frontend:** dark theme readability ([#1767](https://github.com/archestra-ai/archestra/issues/1767)) ([d2fa3c3](https://github.com/archestra-ai/archestra/commit/d2fa3c3f9be94671d7d3ba76d8d5a16040b0f5e0))
+* refactor agent versioning and pending tool state ([#1900](https://github.com/archestra-ai/archestra/issues/1900)) ([a8f1f19](https://github.com/archestra-ai/archestra/commit/a8f1f191475fe2168c6c49d7ba2a86cf43720f80))
+* remove unneeded tooltips from mcp card and change side for neede… ([#1927](https://github.com/archestra-ai/archestra/issues/1927)) ([2d009f6](https://github.com/archestra-ai/archestra/commit/2d009f6084fd4e90834ee2ba684cfa1f1bb7bed7))
+* restore missing policy behaviors ([#1940](https://github.com/archestra-ai/archestra/issues/1940)) ([736ee32](https://github.com/archestra-ai/archestra/commit/736ee32e3b0b96e1577edf780897b395c4029c17))
+* unassign tools from the profile if used credentials are removed ([#1942](https://github.com/archestra-ai/archestra/issues/1942)) ([643caaf](https://github.com/archestra-ai/archestra/commit/643caaf6ebda6cd28cf2cc5ccd688f2307f91359))
+
+
+### Miscellaneous Chores
+
+* address peer dep override 🐛 in `experiments/pnpm-lock.yaml` ([a4e6b83](https://github.com/archestra-ai/archestra/commit/a4e6b833920a956f2f414c495cd3a473c935ab21))
+* dev to main ([#1961](https://github.com/archestra-ai/archestra/issues/1961)) ([28d9a58](https://github.com/archestra-ai/archestra/commit/28d9a58ec7f76b1363edbe90a28974a5ae826d2d))
+* make chat and a2a support same models hosted by different providers ([#1931](https://github.com/archestra-ai/archestra/issues/1931)) ([8372fc0](https://github.com/archestra-ai/archestra/commit/8372fc08ceec0982e3308426253344a9b32124e3))
+
 ## [1.0.11](https://github.com/archestra-ai/archestra/compare/platform-v1.0.10...platform-v1.0.11) (2026-01-07)
 
 

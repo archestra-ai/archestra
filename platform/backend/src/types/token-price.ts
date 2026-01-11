@@ -22,11 +22,13 @@ export const InsertTokenPriceSchema = createInsertSchema(
 /**
  * Refined types for better type safety and validation
  */
-export const CreateTokenPriceSchema = InsertTokenPriceSchema.omit({
+const BaseCreateTokenPriceSchema = InsertTokenPriceSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-}).refine(
+});
+
+export const CreateTokenPriceSchema = BaseCreateTokenPriceSchema.refine(
   (data) => {
     // Validation: prices must be positive
     const inputPrice = parseFloat(data.pricePerMillionInput);
@@ -38,7 +40,24 @@ export const CreateTokenPriceSchema = InsertTokenPriceSchema.omit({
   },
 );
 
-export const UpdateTokenPriceSchema = CreateTokenPriceSchema.partial();
+export const UpdateTokenPriceSchema =
+  BaseCreateTokenPriceSchema.partial().refine(
+    (data) => {
+      // Only validate prices if provided
+      if (data.pricePerMillionInput !== undefined) {
+        const inputPrice = parseFloat(data.pricePerMillionInput);
+        if (inputPrice < 0) return false;
+      }
+      if (data.pricePerMillionOutput !== undefined) {
+        const outputPrice = parseFloat(data.pricePerMillionOutput);
+        if (outputPrice < 0) return false;
+      }
+      return true;
+    },
+    {
+      message: "Prices must be non-negative",
+    },
+  );
 
 /**
  * Exported types

@@ -148,12 +148,7 @@ class PromptAgentModel {
         schema.agentsTable,
         eq(schema.promptsTable.agentId, schema.agentsTable.id),
       )
-      .where(
-        and(
-          eq(schema.promptAgentsTable.promptId, promptId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      );
+      .where(eq(schema.promptAgentsTable.promptId, promptId));
 
     return results;
   }

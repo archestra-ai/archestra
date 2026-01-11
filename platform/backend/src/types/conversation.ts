@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SupportedChatProviderSchema } from "./chat-api-key";
 
 export const SelectConversationSchema = createSelectSchema(
   schema.conversationsTable,
@@ -18,6 +19,10 @@ export const SelectConversationSchema = createSelectSchema(
 
 export const InsertConversationSchema = createInsertSchema(
   schema.conversationsTable,
+  {
+    // Override selectedProvider to use the proper enum type
+    selectedProvider: SupportedChatProviderSchema.nullable().optional(),
+  },
 ).omit({
   id: true,
   createdAt: true,
@@ -26,9 +31,14 @@ export const InsertConversationSchema = createInsertSchema(
 
 export const UpdateConversationSchema = createUpdateSchema(
   schema.conversationsTable,
+  {
+    // Override selectedProvider to use the proper enum type
+    selectedProvider: SupportedChatProviderSchema.nullable().optional(),
+  },
 ).pick({
   title: true,
   selectedModel: true,
+  selectedProvider: true,
   chatApiKeyId: true,
   agentId: true,
   artifact: true,

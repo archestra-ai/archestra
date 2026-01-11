@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import config from "@/config";
 import {
   AgentModel,
   AgentToolModel,
@@ -456,6 +457,163 @@ describe("McpClient", () => {
       });
     });
 
+    describe("Concurrency limiter", () => {
+      test("bypasses limiter when browser streaming is disabled", async () => {
+        const originalBrowserStreaming =
+          config.features.browserStreamingEnabled;
+        config.features.browserStreamingEnabled = false;
+
+        const clientWithInternals = mcpClient as unknown as {
+          connectionLimiter: {
+            runWithLimit: (
+              connectionKey: string,
+              limit: number,
+              fn: () => Promise<unknown>,
+            ) => Promise<unknown>;
+          };
+          getTransport: (
+            catalogItem: unknown,
+            targetLocalMcpServerId: string,
+            secrets: Record<string, unknown>,
+          ) => Promise<unknown>;
+          getTransportWithKind: (
+            catalogItem: unknown,
+            targetLocalMcpServerId: string,
+            secrets: Record<string, unknown>,
+            transportKind: "stdio" | "http",
+          ) => Promise<unknown>;
+        };
+
+        const runWithLimitSpy = vi.spyOn(
+          clientWithInternals.connectionLimiter,
+          "runWithLimit",
+        );
+        const getTransportSpy = vi.spyOn(clientWithInternals, "getTransport");
+
+        try {
+          const tool = await ToolModel.createToolIfNotExists({
+            name: "github-mcp-server__limiter_disabled",
+            description: "Limiter disabled tool",
+            parameters: {},
+            catalogId,
+            mcpServerId,
+          });
+
+          await AgentToolModel.create(agentId, tool.id, {
+            credentialSourceMcpServerId: mcpServerId,
+          });
+
+          mockCallTool.mockResolvedValueOnce({
+            content: [{ type: "text", text: "Limiter disabled" }],
+            isError: false,
+          });
+
+          const toolCall = {
+            id: "call_limiter_disabled",
+            name: "github-mcp-server__limiter_disabled",
+            arguments: {},
+          };
+
+          const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+          expect(runWithLimitSpy).not.toHaveBeenCalled();
+          expect(getTransportSpy).toHaveBeenCalled();
+
+          expect(result).toEqual({
+            id: "call_limiter_disabled",
+            content: [{ type: "text", text: "Limiter disabled" }],
+            isError: false,
+            name: "github-mcp-server__limiter_disabled",
+          });
+        } finally {
+          config.features.browserStreamingEnabled = originalBrowserStreaming;
+          runWithLimitSpy.mockRestore();
+          getTransportSpy.mockRestore();
+        }
+      });
+
+      test("limits HTTP concurrency to 4 when browser streaming is enabled", async () => {
+        const originalBrowserStreaming =
+          config.features.browserStreamingEnabled;
+        config.features.browserStreamingEnabled = true;
+
+        const clientWithInternals = mcpClient as unknown as {
+          connectionLimiter: {
+            runWithLimit: (
+              connectionKey: string,
+              limit: number,
+              fn: () => Promise<unknown>,
+            ) => Promise<unknown>;
+          };
+          getTransport: (
+            catalogItem: unknown,
+            targetLocalMcpServerId: string,
+            secrets: Record<string, unknown>,
+          ) => Promise<unknown>;
+          getTransportWithKind: (
+            catalogItem: unknown,
+            targetLocalMcpServerId: string,
+            secrets: Record<string, unknown>,
+            transportKind: "stdio" | "http",
+          ) => Promise<unknown>;
+        };
+
+        const runWithLimitSpy = vi.spyOn(
+          clientWithInternals.connectionLimiter,
+          "runWithLimit",
+        );
+        const getTransportSpy = vi.spyOn(clientWithInternals, "getTransport");
+        const getTransportWithKindSpy = vi.spyOn(
+          clientWithInternals,
+          "getTransportWithKind",
+        );
+
+        try {
+          const tool = await ToolModel.createToolIfNotExists({
+            name: "github-mcp-server__limiter_http",
+            description: "Limiter http tool",
+            parameters: {},
+            catalogId,
+            mcpServerId,
+          });
+
+          await AgentToolModel.create(agentId, tool.id, {
+            credentialSourceMcpServerId: mcpServerId,
+          });
+
+          mockCallTool.mockResolvedValueOnce({
+            content: [{ type: "text", text: "Limiter http" }],
+            isError: false,
+          });
+
+          const toolCall = {
+            id: "call_limiter_http",
+            name: "github-mcp-server__limiter_http",
+            arguments: {},
+          };
+
+          const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+          expect(runWithLimitSpy).toHaveBeenCalled();
+          expect(runWithLimitSpy.mock.calls[0]?.[1]).toBe(4);
+          expect(getTransportSpy).not.toHaveBeenCalled();
+          expect(getTransportWithKindSpy).toHaveBeenCalled();
+
+          expect(result).toEqual({
+            id: "call_limiter_http",
+            content: [{ type: "text", text: "Limiter http" }],
+            isError: false,
+            name: "github-mcp-server__limiter_http",
+          });
+        } finally {
+          config.features.browserStreamingEnabled = originalBrowserStreaming;
+          runWithLimitSpy.mockRestore();
+          getTransportSpy.mockRestore();
+          getTransportWithKindSpy.mockRestore();
+        }
+      });
+    });
+
     describe("Streamable HTTP Transport (Local Servers)", () => {
       let localMcpServerId: string;
       let localCatalogId: string;
@@ -585,6 +743,59 @@ describe("McpClient", () => {
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
           name: "local-streamable-http-server__test_tool",
+        });
+      });
+
+      test("strips catalogName prefix when mcpServerName includes userId suffix (Issue #1179)", async () => {
+        // This test verifies the fix for Issue #1179:
+        // Local servers have mcpServerName like "n8n-lidar-{userId}" but tools are
+        // created with catalogName prefix like "n8n-lidar__tool_name".
+        // The prefix stripping should fall back to catalogName when mcpServerName doesn't match.
+
+        // Create tool with catalogName prefix (how local server tools are actually created)
+        // Note: The mcpServerId here will have name = "local-streamable-http-server-{userId}"
+        // but the tool name uses the catalog name "local-streamable-http-server"
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__prefix_test_tool",
+          description: "Tool for testing prefix stripping fallback",
+          parameters: {},
+          catalogId: localCatalogId,
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
+
+        // Mock runtime manager responses
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Mock successful tool call
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Prefix stripping works!" }],
+          isError: false,
+        });
+
+        const toolCall = {
+          id: "call_prefix_test",
+          name: "local-streamable-http-server__prefix_test_tool",
+          arguments: {},
+        };
+
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+        // The key assertion: verify the tool was called with just the tool name
+        // (prefix stripped using catalogName fallback)
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "prefix_test_tool",
+          arguments: {},
+        });
+
+        expect(result).toMatchObject({
+          id: "call_prefix_test",
+          content: [{ type: "text", text: "Prefix stripping works!" }],
+          isError: false,
         });
       });
 
@@ -743,6 +954,76 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "Prefix stripping works!" }],
           isError: false,
         });
+      });
+
+      test("limits stdio concurrency to 1 when browser streaming is enabled", async () => {
+        const originalBrowserStreaming =
+          config.features.browserStreamingEnabled;
+        config.features.browserStreamingEnabled = true;
+
+        const clientWithInternals = mcpClient as unknown as {
+          connectionLimiter: {
+            runWithLimit: (
+              connectionKey: string,
+              limit: number,
+              fn: () => Promise<unknown>,
+            ) => Promise<unknown>;
+          };
+        };
+
+        const runWithLimitSpy = vi.spyOn(
+          clientWithInternals.connectionLimiter,
+          "runWithLimit",
+        );
+
+        try {
+          const tool = await ToolModel.createToolIfNotExists({
+            name: "local-streamable-http-server__limiter_stdio",
+            description: "Limiter stdio tool",
+            parameters: {},
+            catalogId: localCatalogId,
+            mcpServerId: localMcpServerId,
+          });
+
+          await AgentToolModel.create(agentId, tool.id, {
+            executionSourceMcpServerId: localMcpServerId,
+          });
+
+          mockUsesStreamableHttp.mockResolvedValue(false);
+
+          const mockK8sDeployment = {
+            k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
+            k8sNamespace: "default",
+            deploymentName: "mcp-test-deployment",
+            getRunningPodName: vi.fn().mockResolvedValue("mcp-test-pod-actual"),
+          };
+          mockGetDeployment.mockReturnValue(mockK8sDeployment);
+
+          mockCallTool.mockResolvedValue({
+            content: [{ type: "text", text: "Limiter stdio" }],
+            isError: false,
+          });
+
+          const toolCall = {
+            id: "call_limiter_stdio",
+            name: "local-streamable-http-server__limiter_stdio",
+            arguments: {},
+          };
+
+          const result = await mcpClient.executeToolCall(toolCall, agentId);
+
+          expect(runWithLimitSpy).toHaveBeenCalled();
+          expect(runWithLimitSpy.mock.calls[0]?.[1]).toBe(1);
+
+          expect(result).toMatchObject({
+            id: "call_limiter_stdio",
+            content: [{ type: "text", text: "Limiter stdio" }],
+            isError: false,
+          });
+        } finally {
+          config.features.browserStreamingEnabled = originalBrowserStreaming;
+          runWithLimitSpy.mockRestore();
+        }
       });
     });
   });

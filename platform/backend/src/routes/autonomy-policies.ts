@@ -285,7 +285,11 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Tool Invocation Policies"],
         body: z.object({
           toolIds: z.array(UuidIdSchema),
-          action: z.enum(["allow_when_context_is_untrusted", "block_always"]),
+          action: z.enum([
+            "allow_when_context_is_untrusted",
+            "block_when_context_is_untrusted",
+            "block_always",
+          ]),
         }),
         response: constructResponseSchema(
           z.object({
@@ -316,6 +320,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolIds: z.array(UuidIdSchema),
           action: z.enum([
             "mark_as_trusted",
+            "mark_as_untrusted",
             "block_always",
             "sanitize_with_dual_llm",
           ]),

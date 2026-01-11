@@ -92,7 +92,10 @@ export function useToolInvocationPolicyUpdateMutation() {
         argumentName?: string;
         operator?: string;
         value?: string;
-        action?: "allow_when_context_is_untrusted" | "block_always";
+        action?:
+          | "allow_when_context_is_untrusted"
+          | "block_when_context_is_untrusted"
+          | "block_always";
         reason?: string | null;
       } & Record<string, unknown>,
     ) => {
@@ -179,7 +182,11 @@ export function useToolResultPoliciesUpdateMutation() {
         attributePath?: string;
         operator?: string;
         value?: string;
-        action?: "mark_as_trusted" | "block_always" | "sanitize_with_dual_llm";
+        action?:
+          | "mark_as_trusted"
+          | "mark_as_untrusted"
+          | "block_always"
+          | "sanitize_with_dual_llm";
       } & Record<string, unknown>,
     ) => {
       const { id, attributePath, operator, value, action, ...rest } =
@@ -255,7 +262,7 @@ export function useCallPolicyMutation() {
 
       const action = allowUsage
         ? "allow_when_context_is_untrusted"
-        : "block_always";
+        : "block_when_context_is_untrusted";
 
       if (defaultPolicy) {
         // Update existing default policy
@@ -307,7 +314,7 @@ export function useResultPolicyMutation() {
       // Map treatment to action
       const actionMap = {
         trusted: "mark_as_trusted",
-        untrusted: "block_always",
+        untrusted: "mark_as_untrusted",
         sanitize_with_dual_llm: "sanitize_with_dual_llm",
       } as const;
       const action = actionMap[treatment];
@@ -348,7 +355,7 @@ export function useBulkCallPolicyMutation() {
     }) => {
       const action = allowUsage
         ? "allow_when_context_is_untrusted"
-        : "block_always";
+        : "block_when_context_is_untrusted";
       const result = await bulkUpsertDefaultCallPolicy({
         body: { toolIds, action },
       });
@@ -374,7 +381,7 @@ export function useBulkResultPolicyMutation() {
     }) => {
       const actionMap = {
         trusted: "mark_as_trusted",
-        untrusted: "block_always",
+        untrusted: "mark_as_untrusted",
         sanitize_with_dual_llm: "sanitize_with_dual_llm",
       } as const;
       const action = actionMap[treatment];

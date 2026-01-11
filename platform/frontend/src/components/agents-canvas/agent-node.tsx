@@ -76,7 +76,7 @@ export const AgentNode = memo(({ data }: NodeProps<AgentNodeType>) => {
       </BaseNodeHeader>
       <BaseNodeContent className="py-2">
         <Button variant="outline" size="sm" className="nodrag h-7" asChild>
-          <Link href={`/chat?agentId=${data.promptId}`}>
+          <Link href={`/chat?promptId=${data.promptId}`}>
             <MessageSquare className="size-3" />
             Chat
           </Link>

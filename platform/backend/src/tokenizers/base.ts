@@ -1,9 +1,11 @@
-import type { Anthropic, Gemini, OpenAi } from "@/types";
+import type { Anthropic, Gemini, Ollama, OpenAi, Vllm } from "@/types";
 
 export type ProviderMessage =
   | OpenAi.Types.ChatCompletionsRequest["messages"][number]
   | Anthropic.Types.MessagesRequest["messages"][number]
-  | Gemini.Types.GenerateContentRequest["contents"][number];
+  | Gemini.Types.GenerateContentRequest["contents"][number]
+  | Vllm.Types.ChatCompletionsRequest["messages"][number]
+  | Ollama.Types.ChatCompletionsRequest["messages"][number];
 
 /**
  * Base interface for tokenizers
@@ -51,12 +53,15 @@ export abstract class BaseTokenizer implements Tokenizer {
       }
 
       if (Array.isArray(message.content)) {
-        const text = message.content.reduce((text, block) => {
-          if (block.type === "text" && typeof block.text === "string") {
-            text += block.text;
-          }
-          return text;
-        }, "");
+        const text = message.content.reduce(
+          (acc: string, block: { type?: string; text?: string }) => {
+            if (block.type === "text" && typeof block.text === "string") {
+              acc += block.text;
+            }
+            return acc;
+          },
+          "",
+        );
 
         return text;
       }
@@ -64,7 +69,8 @@ export abstract class BaseTokenizer implements Tokenizer {
 
     // Gemini format: parts property
     if ("parts" in message && Array.isArray(message.parts)) {
-      const text = message.parts.reduce((text, part) => {
+      let text = "";
+      for (const part of message.parts) {
         if ("text" in part && typeof part.text === "string") {
           text += part.text;
         }
@@ -74,7 +80,7 @@ export abstract class BaseTokenizer implements Tokenizer {
           part.functionCall &&
           typeof part.functionCall === "object"
         ) {
-          const fc = part.functionCall;
+          const fc = part.functionCall as { name?: string; args?: unknown };
           text += `function_call:${fc.name || "unknown"}(${JSON.stringify(fc.args || {})})`;
         }
         if (
@@ -82,12 +88,13 @@ export abstract class BaseTokenizer implements Tokenizer {
           part.functionResponse &&
           typeof part.functionResponse === "object"
         ) {
-          const fr = part.functionResponse;
+          const fr = part.functionResponse as {
+            name?: string;
+            response?: unknown;
+          };
           text += `function_response:${fr.name || "unknown"}(${JSON.stringify(fr.response || {})})`;
         }
-        return text;
-      }, "");
-
+      }
       return text;
     }
 

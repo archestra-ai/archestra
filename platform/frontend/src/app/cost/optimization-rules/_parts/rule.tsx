@@ -1,6 +1,10 @@
 /** The component to display an editable optimization rule */
 
-import { type SupportedProvider, SupportedProviders } from "@shared";
+import {
+  providerDisplayNames,
+  type SupportedProvider,
+  SupportedProviders,
+} from "@shared";
 import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
@@ -45,12 +49,6 @@ function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
   });
 }
 
-const providerDictionary: Record<SupportedProvider, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  gemini: "Gemini",
-};
-
 // Helper to get entity display name
 function getEntityName(
   entityType: EntityType,
@@ -78,7 +76,7 @@ export function ProviderSelect({
   if (!editable) {
     return (
       <Badge variant="outline" className="text-sm">
-        {providerDictionary[provider]}
+        {providerDisplayNames[provider]}
       </Badge>
     );
   }
@@ -92,7 +90,7 @@ export function ProviderSelect({
         {providers.map((providerItem) => {
           return (
             <SelectItem key={providerItem} value={providerItem}>
-              {providerDictionary[providerItem]}
+              {providerDisplayNames[providerItem]}
             </SelectItem>
           );
         })}
@@ -130,7 +128,7 @@ function ModelSelect({
     return (
       <div className="px-2 text-sm">
         <span className="text-muted-foreground">
-          No pricing configured for {providerDictionary[provider]} models.
+          No pricing configured for {providerDisplayNames[provider]} models.
         </span>{" "}
         <Link
           href="/cost/token-price"

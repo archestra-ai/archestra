@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/vllm/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "vllm-compression"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "files[5]{name,size,type}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-vllm-compression-enabled",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "meta-llama/Llama-3.1-8B-Instruct",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "I have processed the TOON-compressed tool result.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
+        "total_tokens": 110
+      }
+    }
+  }
+}

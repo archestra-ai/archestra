@@ -62,6 +62,7 @@ class ConversationEnabledToolModel {
   /**
    * Set enabled tools for a conversation (replaces all existing)
    * Pass empty array to disable all tools (custom selection with zero tools)
+   * Invalid tool IDs (not in tools table) are silently filtered out.
    */
   static async setEnabledTools(
     conversationId: string,
@@ -71,6 +72,25 @@ class ConversationEnabledToolModel {
       { conversationId, toolCount: toolIds.length },
       "ConversationEnabledToolModel.setEnabledTools: setting enabled tools",
     );
+
+    // Filter to only valid tool IDs that exist in the tools table
+    let validToolIds: string[] = [];
+    if (toolIds.length > 0) {
+      const existingTools = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(inArray(schema.toolsTable.id, toolIds));
+
+      validToolIds = existingTools.map((t) => t.id);
+
+      if (validToolIds.length < toolIds.length) {
+        const invalidIds = toolIds.filter((id) => !validToolIds.includes(id));
+        logger.warn(
+          { conversationId, invalidIds },
+          "ConversationEnabledToolModel.setEnabledTools: filtered out invalid tool IDs",
+        );
+      }
+    }
 
     await db.transaction(async (tx) => {
       // Update the conversation to mark it as having custom tool selection
@@ -89,10 +109,10 @@ class ConversationEnabledToolModel {
           ),
         );
 
-      // Insert new enabled tool entries (only if there are tools to insert)
-      if (toolIds.length > 0) {
+      // Insert new enabled tool entries (only if there are valid tools to insert)
+      if (validToolIds.length > 0) {
         await tx.insert(schema.conversationEnabledToolsTable).values(
-          toolIds.map((toolId) => ({
+          validToolIds.map((toolId) => ({
             conversationId,
             toolId,
           })),
@@ -101,7 +121,7 @@ class ConversationEnabledToolModel {
     });
 
     logger.debug(
-      { conversationId, enabledCount: toolIds.length },
+      { conversationId, enabledCount: validToolIds.length },
       "ConversationEnabledToolModel.setEnabledTools: completed",
     );
   }

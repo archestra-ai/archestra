@@ -32,7 +32,15 @@ const TextBlockParamSchema = z.object({
   citations: z.array(z.any()).nullable().optional(),
 });
 
-// const ImageBlockParamSchema = z.any();
+const ImageBlockParamSchema = z.object({
+  type: z.enum(["image"]),
+  source: z.object({
+    type: z.enum(["base64"]),
+    media_type: z.string(),
+    data: z.string(),
+  }),
+  cache_control: z.any().nullable().optional(),
+});
 // const DocumentBlockParamSchema = z.any();
 // const SearchResultBlockParamSchema = z.any();
 const ToolUseBlockParamSchema = z.object({
@@ -52,7 +60,7 @@ const ToolResultBlockParamSchema = z.object({
       z.array(
         z.union([
           TextBlockParamSchema,
-          // ImageBlockParamSchema,
+          ImageBlockParamSchema,
           // SearchResultBlockParamSchema,
           // DocumentBlockParamSchema,
         ]),
@@ -66,7 +74,7 @@ const ToolResultBlockParamSchema = z.object({
 
 const ContentBlockParamSchema = z.union([
   TextBlockParamSchema,
-  // ImageBlockParamSchema,
+  ImageBlockParamSchema,
   // DocumentBlockParamSchema,
   // SearchResultBlockParamSchema,
   ToolUseBlockParamSchema,

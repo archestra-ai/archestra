@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/ollama/v1/chat/completions",
+    "headers": {
+      "Authorization": {
+        "contains": "ollama-tool-persistence"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-ollama-tool-persistence-test",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "meta-llama/Llama-3.1-8B-Instruct",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Tool persistence test response.",
+            "refusal": null
+          },
+          "finish_reason": "stop",
+          "logprobs": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 10,
+        "total_tokens": 60
+      }
+    }
+  }
+}

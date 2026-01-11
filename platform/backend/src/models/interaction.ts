@@ -486,6 +486,7 @@ class InteractionModel {
       lastInteractionRequest: unknown | null;
       lastInteractionType: string | null;
       conversationTitle: string | null;
+      claudeCodeTitle: string | null;
     }>
   > {
     // Build where clauses for access control
@@ -548,6 +549,12 @@ class InteractionModel {
           lastInteractionType: sql<string>`(ARRAY_AGG(${schema.interactionsTable.type} ORDER BY ${schema.interactionsTable.createdAt} DESC))[1]`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
+          // For Claude Code sessions, extract title from the response to the title generation request
+          // Claude Code sends "Please write a 5-10 word title..." and the response contains the title
+          claudeCodeTitle: sql<string>`(ARRAY_AGG(
+            ${schema.interactionsTable.response}->'content'->0->>'text'
+            ORDER BY ${schema.interactionsTable.createdAt} DESC
+          ) FILTER (WHERE ${schema.interactionsTable.request}::text LIKE '%Please write a 5-10 word title%'))[1]`,
         })
         .from(schema.interactionsTable)
         .leftJoin(
@@ -599,6 +606,7 @@ class InteractionModel {
       lastInteractionRequest: s.lastInteractionRequest,
       lastInteractionType: s.lastInteractionType,
       conversationTitle: s.conversationTitle,
+      claudeCodeTitle: s.claudeCodeTitle,
     }));
 
     return createPaginatedResult(sessions, Number(total), pagination);

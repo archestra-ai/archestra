@@ -9111,6 +9111,7 @@ export type GetInteractionSessionsResponses = {
             lastInteractionRequest: unknown;
             lastInteractionType: string | null;
             conversationTitle: string | null;
+            claudeCodeTitle: string | null;
         }>;
         pagination: {
             currentPage: number;

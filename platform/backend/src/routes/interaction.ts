@@ -36,6 +36,7 @@ const SessionSummarySchema = z.object({
   lastInteractionRequest: z.unknown().nullable(),
   lastInteractionType: z.string().nullable(),
   conversationTitle: z.string().nullable(),
+  claudeCodeTitle: z.string().nullable(),
 });
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {

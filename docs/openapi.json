@@ -29704,6 +29704,10 @@
                           "conversationTitle": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "claudeCodeTitle": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -29724,7 +29728,8 @@
                           "userNames",
                           "lastInteractionRequest",
                           "lastInteractionType",
-                          "conversationTitle"
+                          "conversationTitle",
+                          "claudeCodeTitle"
                         ],
                         "additionalProperties": false
                       }

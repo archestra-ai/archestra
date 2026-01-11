@@ -65,11 +65,13 @@ type SessionData =
 
 function SessionSourceBadge({
   sessionSource,
+  hasClaudeCodeTitle,
 }: {
   sessionSource: string | null;
+  hasClaudeCodeTitle: boolean;
 }) {
-  // Only show badge for Claude Code sessions
-  if (sessionSource === "claude_code") {
+  // Show Claude Code badge only if there's no title (title is shown in Session column with badge)
+  if (sessionSource === "claude_code" && !hasClaudeCodeTitle) {
     return (
       <Badge
         variant="secondary"
@@ -181,6 +183,11 @@ function SessionRow({
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
 
+  // Check if this is a Claude Code session with a title
+  const claudeCodeTitle = session.claudeCodeTitle;
+  const isClaudeCode =
+    session.sessionSource === "claude_code" && claudeCodeTitle;
+
   return (
     <TableRow className="cursor-pointer" onClick={handleRowClick}>
       <TableCell className="py-3 text-xs">
@@ -204,6 +211,20 @@ function SessionRow({
                   Chat
                 </Badge>
               </Link>
+            </>
+          ) : isClaudeCode ? (
+            <>
+              <span>
+                {claudeCodeTitle.length > 80
+                  ? `${claudeCodeTitle.slice(0, 80)}...`
+                  : claudeCodeTitle}
+              </span>
+              <Badge
+                variant="secondary"
+                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+              >
+                Claude Code
+              </Badge>
             </>
           ) : lastUserMessage ? (
             <span>
@@ -273,7 +294,10 @@ function SessionRow({
             <Layers className="h-3 w-3 mr-1" />
             {agent?.name ?? session.profileName ?? "Unknown"}
           </Badge>
-          <SessionSourceBadge sessionSource={session.sessionSource} />
+          <SessionSourceBadge
+            sessionSource={session.sessionSource}
+            hasClaudeCodeTitle={!!session.claudeCodeTitle}
+          />
           {session.userNames.map((userName) => (
             <Badge key={userName} variant="outline" className="text-xs">
               <User className="h-3 w-3 mr-1" />

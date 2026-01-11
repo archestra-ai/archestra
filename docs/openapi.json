@@ -54627,11 +54627,11 @@
                       "vintage-paper",
                       "boxy-minimalistic",
                       "catppuccin",
-                        "solarized-dark",
-                        "gruvbox-dark",
-                        "dracula-dark",
-                        "monokai-dark",
-                        "moonlight-dark"
+                      "solarized-dark",
+                      "gruvbox-dark",
+                      "dracula-dark",
+                      "monokai-dark",
+                      "moonlight-dark"
                     ]
                   },
                   "customFont": {

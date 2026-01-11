@@ -29661,11 +29661,11 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "firstRequest": {
+                          "firstRequestTime": {
                             "type": "string",
                             "format": "date-time"
                           },
-                          "lastRequest": {
+                          "lastRequestTime": {
                             "type": "string",
                             "format": "date-time"
                           },
@@ -29693,6 +29693,17 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "lastInteractionRequest": {
+                            "nullable": true
+                          },
+                          "lastInteractionType": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "conversationTitle": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -29704,13 +29715,16 @@
                           "totalOutputTokens",
                           "totalCost",
                           "totalBaselineCost",
-                          "firstRequest",
-                          "lastRequest",
+                          "firstRequestTime",
+                          "lastRequestTime",
                           "models",
                           "profileId",
                           "profileName",
                           "externalAgentIds",
-                          "userNames"
+                          "userNames",
+                          "lastInteractionRequest",
+                          "lastInteractionType",
+                          "conversationTitle"
                         ],
                         "additionalProperties": false
                       }

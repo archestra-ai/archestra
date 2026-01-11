@@ -176,6 +176,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationId: conversation.id,
         promptId: conversation.promptId ?? undefined,
         organizationId,
+        // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
+        sessionId: conversation.id,
       });
 
       // Build system prompt from prompts' systemPrompt and userPrompt fields
@@ -226,6 +228,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Create LLM model using shared service
+      // Pass conversationId as sessionId to group all requests in this chat session
       const { model } = await createLLMModelForAgent({
         organizationId,
         userId: user.id,
@@ -234,6 +237,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         conversationId,
         externalAgentId,
+        sessionId: conversationId,
       });
 
       // Strip images and large browser tool results from messages before sending to LLM

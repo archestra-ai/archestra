@@ -1,9 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Layers, User } from "lucide-react";
+import { Layers, MessageSquare, User } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Savings } from "@/components/savings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import { useInteractionSessions } from "@/lib/interaction.query";
+import { DynamicInteraction } from "@/lib/interaction.utils";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -63,44 +65,22 @@ type SessionData =
 
 function SessionSourceBadge({
   sessionSource,
-  sessionId,
 }: {
   sessionSource: string | null;
-  sessionId: string | null;
 }) {
-  if (!sessionId) {
-    return null;
+  // Only show badge for Claude Code sessions
+  if (sessionSource === "claude_code") {
+    return (
+      <Badge
+        variant="secondary"
+        className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+      >
+        Claude Code
+      </Badge>
+    );
   }
 
-  switch (sessionSource) {
-    case "claude_code":
-      return (
-        <Badge
-          variant="secondary"
-          className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-        >
-          Claude Code
-        </Badge>
-      );
-    case "header":
-      return (
-        <Badge variant="secondary" className="text-xs">
-          Custom
-        </Badge>
-      );
-    case "openai_user":
-      return (
-        <Badge variant="secondary" className="text-xs">
-          OpenAI User
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="outline" className="text-xs">
-          Session
-        </Badge>
-      );
-  }
+  return null;
 }
 
 function Pagination({
@@ -166,6 +146,27 @@ function SessionRow({
   const isSingleInteraction =
     session.sessionId === null && session.interactionId;
 
+  // Extract last user message from the last interaction's request
+  const lastUserMessage = useMemo(() => {
+    if (!session.lastInteractionRequest || !session.lastInteractionType) {
+      return "";
+    }
+    try {
+      // Create a mock interaction object for DynamicInteraction
+      const mockInteraction = {
+        request: session.lastInteractionRequest,
+        response: {},
+        type: session.lastInteractionType,
+      };
+      const interaction = new DynamicInteraction(
+        mockInteraction as archestraApiTypes.GetInteractionResponses["200"],
+      );
+      return interaction.getLastUserMessage();
+    } catch {
+      return "";
+    }
+  }, [session.lastInteractionRequest, session.lastInteractionType]);
+
   // For single interactions (no session), navigate directly to interaction detail page
   // For sessions, navigate to session detail page
   const handleRowClick = () => {
@@ -176,8 +177,45 @@ function SessionRow({
     }
   };
 
+  // Check if this is an Archestra Chat session (has conversation title)
+  const conversationTitle = session.conversationTitle;
+  const isArchestraChat = conversationTitle && session.sessionId;
+
   return (
     <TableRow className="cursor-pointer" onClick={handleRowClick}>
+      <TableCell className="py-3 text-xs">
+        <div className="flex items-center gap-1">
+          {isArchestraChat ? (
+            <>
+              <span>
+                {conversationTitle.length > 60
+                  ? `${conversationTitle.slice(0, 60)}...`
+                  : conversationTitle}
+              </span>
+              <Link
+                href={`/chat?conversation=${session.sessionId}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Badge
+                  variant="outline"
+                  className="text-xs hover:bg-accent cursor-pointer"
+                >
+                  <MessageSquare className="h-3 w-3 mr-1" />
+                  Chat
+                </Badge>
+              </Link>
+            </>
+          ) : lastUserMessage ? (
+            <span>
+              {lastUserMessage.length > 80
+                ? `${lastUserMessage.slice(0, 80)}...`
+                : lastUserMessage}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">No message</span>
+          )}
+        </div>
+      </TableCell>
       <TableCell className="font-mono text-xs py-3">
         {session.requestCount.toLocaleString()}
       </TableCell>
@@ -195,31 +233,38 @@ function SessionRow({
         </div>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
-        {session.totalInputTokens.toLocaleString()} /{" "}
-        {session.totalOutputTokens.toLocaleString()}
-      </TableCell>
-      <TableCell className="font-mono text-xs py-3">
-        {session.totalCost && session.totalBaselineCost ? (
-          <TooltipProvider>
-            <Savings
-              cost={session.totalCost}
-              baselineCost={session.totalBaselineCost}
-              format="percent"
-              tooltip="hover"
-            />
-          </TooltipProvider>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        <div className="flex flex-col gap-0.5">
+          <span>
+            {session.totalInputTokens.toLocaleString()} /{" "}
+            {session.totalOutputTokens.toLocaleString()}
+          </span>
+          {session.totalCost && session.totalBaselineCost && (
+            <TooltipProvider>
+              <Savings
+                cost={session.totalCost}
+                baselineCost={session.totalBaselineCost}
+                format="percent"
+                tooltip="hover"
+              />
+            </TooltipProvider>
+          )}
+        </div>
       </TableCell>
       <TableCell className="font-mono text-xs py-3">
         <div className="flex flex-col gap-0.5">
-          <span>{formatDate({ date: session.lastRequest })}</span>
-          {session.requestCount > 1 && (
-            <span className="text-muted-foreground">
-              {formatDuration(session.firstRequest, session.lastRequest)}
-            </span>
+          {session.lastRequestTime && (
+            <span>{formatDate({ date: String(session.lastRequestTime) })}</span>
           )}
+          {session.requestCount > 1 &&
+            session.firstRequestTime &&
+            session.lastRequestTime && (
+              <span className="text-muted-foreground">
+                {formatDuration(
+                  session.firstRequestTime,
+                  session.lastRequestTime,
+                )}
+              </span>
+            )}
         </div>
       </TableCell>
       <TableCell className="py-3">
@@ -228,25 +273,24 @@ function SessionRow({
             <Layers className="h-3 w-3 mr-1" />
             {agent?.name ?? session.profileName ?? "Unknown"}
           </Badge>
-          <SessionSourceBadge
-            sessionSource={session.sessionSource}
-            sessionId={session.sessionId}
-          />
+          <SessionSourceBadge sessionSource={session.sessionSource} />
           {session.userNames.map((userName) => (
             <Badge key={userName} variant="outline" className="text-xs">
               <User className="h-3 w-3 mr-1" />
               {userName}
             </Badge>
           ))}
-          {session.externalAgentIds.map((agentId) => (
-            <Badge
-              key={agentId}
-              variant="outline"
-              className="text-xs font-mono"
-            >
-              {agentId}
-            </Badge>
-          ))}
+          {session.externalAgentIds
+            .filter((agentId) => agentId !== "Archestra Chat")
+            .map((agentId) => (
+              <Badge
+                key={agentId}
+                variant="outline"
+                className="text-xs font-mono"
+              >
+                {agentId}
+              </Badge>
+            ))}
         </div>
       </TableCell>
     </TableRow>
@@ -385,11 +429,11 @@ function SessionsTable({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Session</TableHead>
                 <TableHead className="w-[80px]">Requests</TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
-                <TableHead className="w-[140px]">Tokens (In/Out)</TableHead>
-                <TableHead className="w-[100px]">Savings</TableHead>
-                <TableHead className="w-[200px]">Time</TableHead>
+                <TableHead className="w-[140px]">Tokens / Savings</TableHead>
+                <TableHead className="w-[160px]">Time</TableHead>
                 <TableHead>Details</TableHead>
               </TableRow>
             </TableHeader>

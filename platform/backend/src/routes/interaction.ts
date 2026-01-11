@@ -26,13 +26,16 @@ const SessionSummarySchema = z.object({
   totalOutputTokens: z.number(),
   totalCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
-  firstRequest: z.date(),
-  lastRequest: z.date(),
+  firstRequestTime: z.date(),
+  lastRequestTime: z.date(),
   models: z.array(z.string()),
   profileId: z.string(),
   profileName: z.string().nullable(),
   externalAgentIds: z.array(z.string()),
   userNames: z.array(z.string()),
+  lastInteractionRequest: z.unknown().nullable(),
+  lastInteractionType: z.string().nullable(),
+  conversationTitle: z.string().nullable(),
 });
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {

@@ -476,13 +476,16 @@ class InteractionModel {
       totalOutputTokens: number;
       totalCost: string | null;
       totalBaselineCost: string | null;
-      firstRequest: Date;
-      lastRequest: Date;
+      firstRequestTime: Date;
+      lastRequestTime: Date;
       models: string[];
       profileId: string;
       profileName: string | null;
       externalAgentIds: string[];
       userNames: string[];
+      lastInteractionRequest: unknown | null;
+      lastInteractionType: string | null;
+      conversationTitle: string | null;
     }>
   > {
     // Build where clauses for access control
@@ -533,13 +536,18 @@ class InteractionModel {
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
           totalCost: sum(schema.interactionsTable.cost),
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
-          firstRequest: min(schema.interactionsTable.createdAt),
-          lastRequest: max(schema.interactionsTable.createdAt),
+          firstRequestTime: min(schema.interactionsTable.createdAt),
+          lastRequestTime: max(schema.interactionsTable.createdAt),
           models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
           profileId: schema.interactionsTable.profileId,
           profileName: schema.agentsTable.name,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
           userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
+          // Get the request from the most recent interaction in this session
+          lastInteractionRequest: sql<unknown>`(ARRAY_AGG(${schema.interactionsTable.request} ORDER BY ${schema.interactionsTable.createdAt} DESC))[1]`,
+          lastInteractionType: sql<string>`(ARRAY_AGG(${schema.interactionsTable.type} ORDER BY ${schema.interactionsTable.createdAt} DESC))[1]`,
+          // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
+          conversationTitle: max(schema.conversationsTable.title),
         })
         .from(schema.interactionsTable)
         .leftJoin(
@@ -549,6 +557,10 @@ class InteractionModel {
         .leftJoin(
           schema.usersTable,
           eq(schema.interactionsTable.userId, schema.usersTable.id),
+        )
+        .leftJoin(
+          schema.conversationsTable,
+          sql`${schema.interactionsTable.sessionId}::uuid = ${schema.conversationsTable.id}`,
         )
         .where(whereClause)
         .groupBy(
@@ -575,8 +587,8 @@ class InteractionModel {
       totalOutputTokens: Number(s.totalOutputTokens) || 0,
       totalCost: s.totalCost,
       totalBaselineCost: s.totalBaselineCost,
-      firstRequest: s.firstRequest ?? new Date(),
-      lastRequest: s.lastRequest ?? new Date(),
+      firstRequestTime: s.firstRequestTime ?? new Date(),
+      lastRequestTime: s.lastRequestTime ?? new Date(),
       models: s.models ? s.models.split(",").filter(Boolean) : [],
       profileId: s.profileId,
       profileName: s.profileName,
@@ -584,6 +596,9 @@ class InteractionModel {
         ? s.externalAgentIds.split(",").filter(Boolean)
         : [],
       userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
+      lastInteractionRequest: s.lastInteractionRequest,
+      lastInteractionType: s.lastInteractionType,
+      conversationTitle: s.conversationTitle,
     }));
 
     return createPaginatedResult(sessions, Number(total), pagination);

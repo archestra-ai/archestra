@@ -448,6 +448,7 @@ export async function getChatMcpTools({
   conversationId,
   promptId,
   organizationId,
+  sessionId,
 }: {
   agentName: string;
   agentId: string;
@@ -457,6 +458,8 @@ export async function getChatMcpTools({
   conversationId?: string;
   promptId?: string;
   organizationId?: string;
+  /** Session ID for grouping related LLM requests in logs */
+  sessionId?: string;
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(
     agentId,
@@ -602,6 +605,7 @@ export async function getChatMcpTools({
                     userId,
                     promptId,
                     organizationId,
+                    sessionId,
                   },
                 );
 
@@ -716,6 +720,8 @@ export async function getChatMcpTools({
           profile: { id: agentId, name: agentName },
           promptId,
           organizationId,
+          conversationId,
+          sessionId,
           tokenAuth: mcpGwToken
             ? {
                 tokenId: mcpGwToken.tokenId,

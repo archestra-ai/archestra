@@ -10,6 +10,8 @@ export interface A2AExecuteParams {
   message: string;
   organizationId: string;
   userId: string;
+  /** Session ID to group related LLM requests together in logs */
+  sessionId?: string;
 }
 
 export interface A2AExecuteResult {
@@ -30,7 +32,7 @@ export interface A2AExecuteResult {
 export async function executeA2AMessage(
   params: A2AExecuteParams,
 ): Promise<A2AExecuteResult> {
-  const { promptId, message, organizationId, userId } = params;
+  const { promptId, message, organizationId, userId, sessionId } = params;
 
   // Fetch prompt
   const prompt = await PromptModel.findById(promptId);
@@ -89,12 +91,14 @@ export async function executeA2AMessage(
   );
 
   // Create LLM model using shared service
+  // Pass sessionId to group A2A requests with the calling session
   const { model } = await createLLMModelForAgent({
     organizationId,
     userId,
     agentId: agent.id,
     model: selectedModel,
     provider,
+    sessionId,
   });
 
   // Execute with AI SDK using streamText (required for long-running requests)

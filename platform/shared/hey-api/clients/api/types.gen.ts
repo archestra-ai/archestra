@@ -9101,13 +9101,16 @@ export type GetInteractionSessionsResponses = {
             totalOutputTokens: number;
             totalCost: string | null;
             totalBaselineCost: string | null;
-            firstRequest: string;
-            lastRequest: string;
+            firstRequestTime: string;
+            lastRequestTime: string;
             models: Array<string>;
             profileId: string;
             profileName: string | null;
             externalAgentIds: Array<string>;
             userNames: Array<string>;
+            lastInteractionRequest: unknown;
+            lastInteractionType: string | null;
+            conversationTitle: string | null;
         }>;
         pagination: {
             currentPage: number;

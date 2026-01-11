@@ -1,3 +1,4 @@
+import { SESSION_ID_HEADER } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -274,12 +275,20 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       try {
+        // Extract session ID from headers to group A2A requests with calling session
+        const sessionId =
+          (request.headers[SESSION_ID_HEADER.toLowerCase()] as
+            | string
+            | undefined) ||
+          (request.headers[SESSION_ID_HEADER] as string | undefined);
+
         // Execute using shared A2A service
         const result = await executeA2AMessage({
           promptId,
           message: userMessage,
           organizationId,
           userId,
+          sessionId,
         });
 
         return reply.send({

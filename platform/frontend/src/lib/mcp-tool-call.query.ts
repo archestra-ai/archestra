@@ -2,6 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
+import { useSmartPolling } from "./smart-polling";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
@@ -23,6 +24,8 @@ export function useMcpToolCalls({
   sortDirection?: "asc" | "desc";
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
+  const smartPollingInterval = useSmartPolling();
+
   return useSuspenseQuery({
     queryKey: ["mcpToolCalls", agentId, limit, offset, sortBy, sortDirection],
     queryFn: async () => {
@@ -45,6 +48,8 @@ export function useMcpToolCalls({
       sortDirection === "desc"
         ? initialData
         : undefined,
+    // Auto-refresh MCP Gateway logs every 10 seconds (smart polling)
+    refetchInterval: smartPollingInterval,
   });
 }
 

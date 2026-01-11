@@ -2,6 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
+import { useSmartPolling } from "./smart-polling";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 const {
@@ -165,6 +166,8 @@ export function useInteractionSessions({
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
+  const smartPollingInterval = useSmartPolling();
+
   return useSuspenseQuery({
     queryKey: [
       "interactions",
@@ -201,8 +204,8 @@ export function useInteractionSessions({
       !profileId &&
       !userId &&
       !sessionId
-      ? initialData
-      : undefined,
-    refetchInterval: 10_000, // Auto-refresh logs every 10 seconds
+        ? initialData
+        : undefined,
+    refetchInterval: smartPollingInterval,
   });
 }

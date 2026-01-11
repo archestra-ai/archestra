@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export type ArchitectureNodeData = {
   label: string;
   highlighted?: boolean;
-  highlightColor?: "blue" | "green";
+  highlightColor?: "blue" | "green" | "orange";
   isGroup?: boolean;
   groupLabel?: string;
 };
@@ -39,7 +39,9 @@ export const ArchitectureNode = memo(
             ? "bg-blue-500 border-blue-600 text-white"
             : highlighted && highlightColor === "green"
               ? "bg-emerald-500 border-emerald-600 text-white"
-              : "bg-card border-border text-card-foreground",
+              : highlighted && highlightColor === "orange"
+                ? "bg-amber-500 border-amber-600 text-white"
+                : "bg-card border-border text-card-foreground",
         )}
       >
         <Handle

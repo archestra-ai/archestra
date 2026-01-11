@@ -1,13 +1,14 @@
 "use client";
 
 import { DollarSign, Eye, Lock, Network, Server, Shield } from "lucide-react";
+import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 
 interface ConnectionOptionsProps {
   agentId?: string;
-  activeTab: "proxy" | "mcp";
-  onTabChange: (tab: "proxy" | "mcp") => void;
+  activeTab: ArchitectureTabType;
+  onTabChange: (tab: ArchitectureTabType) => void;
 }
 
 export function ConnectionOptions({

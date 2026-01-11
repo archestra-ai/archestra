@@ -28,9 +28,11 @@ import {
   type ArchitectureNodeData,
 } from "./architecture-node";
 
+export type ArchitectureTabType = "proxy" | "mcp" | "a2a";
+
 interface ArchitectureDiagramProps {
-  activeTab?: "proxy" | "mcp";
-  onTabChange?: (tab: "proxy" | "mcp") => void;
+  activeTab?: ArchitectureTabType;
+  onTabChange?: (tab: ArchitectureTabType) => void;
 }
 
 const nodeTypes = {
@@ -38,15 +40,16 @@ const nodeTypes = {
   architectureGroup: ArchitectureGroupNode,
 };
 
-// Define base positions (40px gap between groups)
-// Agents: 0-160, Archestra: 200-500, Kubernetes: 540-690, Remote/LLM: 730+
-const AGENTS_GROUP_X = 0;
-const ARCHESTRA_GROUP_X = 200;
+// Define base positions
+const EXTERNAL_GROUP_X = 0;
+const ARCHESTRA_GROUP_X = 180;
 const KUBERNETES_GROUP_X = 540;
 const REMOTE_GROUP_X = 730;
 const LLM_GROUP_X = 730;
 
-function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
+function ArchitectureDiagramInner({
+  activeTab,
+}: Pick<ArchitectureDiagramProps, "activeTab">) {
   const { resolvedTheme } = useTheme();
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,56 +73,64 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
     useMemo(() => {
       const isProxy = activeTab === "proxy";
       const isMcp = activeTab === "mcp";
-      const highlightColor = isProxy ? "blue" : "green";
+      const isA2a = activeTab === "a2a";
+
+      const getHighlightColor = () => {
+        if (isProxy) return "blue";
+        if (isMcp) return "green";
+        if (isA2a) return "orange";
+        return "blue";
+      };
+      const highlightColor = getHighlightColor();
 
       return [
-        // Agents group
+        // External sources group
         {
-          id: "agents-group",
+          id: "external-group",
           type: "architectureGroup",
-          position: { x: AGENTS_GROUP_X, y: 0 },
+          position: { x: EXTERNAL_GROUP_X, y: 0 },
+          data: {
+            label: "External Sources",
+            width: 150,
+            height: 190,
+            highlighted: isProxy || isMcp || isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        // External source nodes
+        {
+          id: "ms-teams",
+          type: "architecture",
+          position: { x: EXTERNAL_GROUP_X + 15, y: 32 },
+          data: {
+            label: "MS Teams",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "slack",
+          type: "architecture",
+          position: { x: EXTERNAL_GROUP_X + 15, y: 80 },
+          data: {
+            label: "Slack",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "external-agents",
+          type: "architecture",
+          position: { x: EXTERNAL_GROUP_X + 15, y: 128 },
           data: {
             label: "External Agents",
-            width: 160,
-            height: 190,
             highlighted: isProxy || isMcp,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        // Agent nodes
-        {
-          id: "agent-cursor",
-          type: "architecture",
-          position: { x: AGENTS_GROUP_X + 15, y: 32 },
-          data: {
-            label: "Developer's Cursor",
-            highlighted: isMcp,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        {
-          id: "agent-n8n",
-          type: "architecture",
-          position: { x: AGENTS_GROUP_X + 15, y: 80 },
-          data: {
-            label: "n8n",
-            highlighted: isProxy || isMcp,
-            highlightColor,
-          },
-          draggable: false,
-          selectable: false,
-        },
-        {
-          id: "agent-support",
-          type: "architecture",
-          position: { x: AGENTS_GROUP_X + 15, y: 128 },
-          data: {
-            label: "Support Agent",
-            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -130,35 +141,101 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "archestra-group",
           type: "architectureGroup",
-          position: { x: ARCHESTRA_GROUP_X, y: -40 },
+          position: { x: ARCHESTRA_GROUP_X, y: -80 },
           data: {
             label: "Archestra.AI",
-            width: 300,
-            height: 260,
+            width: 320,
+            height: 340,
             logo: "/logo.png",
-            highlighted: isProxy || isMcp,
+            highlighted: isProxy || isMcp || isA2a,
             highlightColor,
           },
           draggable: false,
           selectable: false,
         },
-        // Archestra nodes
+        // A2A Gateway
+        {
+          id: "a2a-gateway",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 15, y: -45 },
+          data: {
+            label: "A2A Gateway",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        // Internal A2A Agents group
+        {
+          id: "internal-agents-group",
+          type: "architectureGroup",
+          position: { x: ARCHESTRA_GROUP_X + 15, y: 10 },
+          data: {
+            label: "Internal A2A Agents",
+            width: 290,
+            height: 100,
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        // Internal agent nodes
+        {
+          id: "internal-agent-1",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 30, y: 45 },
+          data: {
+            label: "Agent 1",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "internal-agent-2",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 120, y: 45 },
+          data: {
+            label: "Agent 2",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        {
+          id: "internal-agent-more",
+          type: "architecture",
+          position: { x: ARCHESTRA_GROUP_X + 210, y: 45 },
+          data: {
+            label: "...",
+            highlighted: isA2a,
+            highlightColor,
+          },
+          draggable: false,
+          selectable: false,
+        },
+        // MCP Gateway
         {
           id: "mcp-gateway",
           type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 15, y: 50 },
+          position: { x: ARCHESTRA_GROUP_X + 15, y: 140 },
           data: {
             label: "MCP Gateway",
-            highlighted: isMcp,
+            highlighted: isMcp || isA2a,
             highlightColor,
           },
           draggable: false,
           selectable: false,
         },
+        // MCP Orchestrator
         {
           id: "mcp-orchestrator",
           type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 145, y: 0 },
+          position: { x: ARCHESTRA_GROUP_X + 165, y: 140 },
           data: {
             label: "MCP Orchestrator",
             highlighted: isMcp,
@@ -167,13 +244,14 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           draggable: false,
           selectable: false,
         },
+        // LLM Gateway
         {
           id: "llm-gateway",
           type: "architecture",
-          position: { x: ARCHESTRA_GROUP_X + 80, y: 130 },
+          position: { x: ARCHESTRA_GROUP_X + 90, y: 210 },
           data: {
             label: "LLM Gateway",
-            highlighted: isProxy,
+            highlighted: isProxy || isA2a,
             highlightColor,
           },
           draggable: false,
@@ -237,7 +315,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "remote-group",
           type: "architectureGroup",
-          position: { x: REMOTE_GROUP_X, y: 0 },
+          position: { x: REMOTE_GROUP_X, y: 40 },
           data: {
             label: "Remote MCP Servers",
             width: 140,
@@ -252,7 +330,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "github-mcp",
           type: "architecture",
-          position: { x: REMOTE_GROUP_X + 15, y: 30 },
+          position: { x: REMOTE_GROUP_X + 15, y: 70 },
           data: {
             label: "GitHub MCP",
             highlighted: isMcp,
@@ -266,12 +344,12 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "llm-group",
           type: "architectureGroup",
-          position: { x: LLM_GROUP_X, y: 140 },
+          position: { x: LLM_GROUP_X, y: 120 },
           data: {
             label: "LLM Providers",
             width: 140,
             height: 185,
-            highlighted: isProxy,
+            highlighted: isProxy || isA2a,
             highlightColor,
           },
           draggable: false,
@@ -281,10 +359,10 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "openai",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 170 },
+          position: { x: LLM_GROUP_X + 15, y: 150 },
           data: {
             label: "OpenAI",
-            highlighted: isProxy,
+            highlighted: isProxy || isA2a,
             highlightColor,
           },
           draggable: false,
@@ -293,10 +371,10 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "gemini",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 205 },
+          position: { x: LLM_GROUP_X + 15, y: 185 },
           data: {
             label: "Gemini",
-            highlighted: isProxy,
+            highlighted: isProxy || isA2a,
             highlightColor,
           },
           draggable: false,
@@ -305,10 +383,10 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "claude",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 240 },
+          position: { x: LLM_GROUP_X + 15, y: 220 },
           data: {
             label: "Claude",
-            highlighted: isProxy,
+            highlighted: isProxy || isA2a,
             highlightColor,
           },
           draggable: false,
@@ -317,10 +395,10 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         {
           id: "more-llm",
           type: "architecture",
-          position: { x: LLM_GROUP_X + 15, y: 275 },
+          position: { x: LLM_GROUP_X + 15, y: 255 },
           data: {
             label: "and more...",
-            highlighted: isProxy,
+            highlighted: isProxy || isA2a,
             highlightColor,
           },
           draggable: false,
@@ -332,45 +410,83 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
   const edges: Edge[] = useMemo(() => {
     const isProxy = activeTab === "proxy";
     const isMcp = activeTab === "mcp";
+    const isA2a = activeTab === "a2a";
 
     const baseEdgeStyle = {
       strokeWidth: 1.5,
       strokeDasharray: "5,5",
     };
 
-    const highlightedEdgeStyle = (color: "blue" | "green") => ({
+    const highlightedEdgeStyle = (color: "blue" | "green" | "orange") => ({
       strokeWidth: 2,
-      stroke: color === "blue" ? "#3b82f6" : "#10b981",
+      stroke:
+        color === "blue"
+          ? "#3b82f6"
+          : color === "green"
+            ? "#10b981"
+            : "#f59e0b",
       strokeDasharray: "0",
     });
 
     return [
-      // Agent to MCP Gateway connections
+      // External to A2A Gateway (A2A flow)
       {
-        id: "cursor-gw",
-        source: "agent-cursor",
-        target: "mcp-gateway",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        id: "teams-a2a",
+        source: "ms-teams",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
       },
       {
-        id: "n8n-gw",
-        source: "agent-n8n",
+        id: "slack-a2a",
+        source: "slack",
+        target: "a2a-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+
+      // External agents to MCP Gateway
+      {
+        id: "external-mcp",
+        source: "external-agents",
         target: "mcp-gateway",
         style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
       },
 
-      // Agent to LLM Gateway connections
+      // External agents to LLM Gateway
       {
-        id: "n8n-llm",
-        source: "agent-n8n",
+        id: "external-llm",
+        source: "external-agents",
         target: "llm-gateway",
         style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
       },
+
+      // A2A Gateway to Internal Agents
       {
-        id: "support-llm",
-        source: "agent-support",
+        id: "a2a-internal1",
+        source: "a2a-gateway",
+        target: "internal-agent-1",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+      {
+        id: "a2a-internal2",
+        source: "a2a-gateway",
+        target: "internal-agent-2",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+
+      // Internal Agents to MCP Gateway
+      {
+        id: "internal1-mcp",
+        source: "internal-agent-1",
+        target: "mcp-gateway",
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+      },
+
+      // Internal Agents to LLM Gateway
+      {
+        id: "internal2-llm",
+        source: "internal-agent-2",
         target: "llm-gateway",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
       },
 
       // MCP Gateway to Orchestrator
@@ -414,19 +530,28 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "llm-openai",
         source: "llm-gateway",
         target: "openai",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style:
+          isProxy || isA2a
+            ? highlightedEdgeStyle(isA2a ? "orange" : "blue")
+            : baseEdgeStyle,
       },
       {
         id: "llm-gemini",
         source: "llm-gateway",
         target: "gemini",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style:
+          isProxy || isA2a
+            ? highlightedEdgeStyle(isA2a ? "orange" : "blue")
+            : baseEdgeStyle,
       },
       {
         id: "llm-claude",
         source: "llm-gateway",
         target: "claude",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style:
+          isProxy || isA2a
+            ? highlightedEdgeStyle(isA2a ? "orange" : "blue")
+            : baseEdgeStyle,
       },
     ];
   }, [activeTab]);
@@ -465,7 +590,7 @@ export function ArchitectureDiagram({
   onTabChange,
 }: ArchitectureDiagramProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [dialogTab, setDialogTab] = useState<"proxy" | "mcp">(
+  const [dialogTab, setDialogTab] = useState<ArchitectureTabType>(
     activeTab || "proxy",
   );
 
@@ -477,7 +602,7 @@ export function ArchitectureDiagram({
     setIsExpanded(open);
   };
 
-  const handleDialogTabChange = (tab: "proxy" | "mcp") => {
+  const handleDialogTabChange = (tab: ArchitectureTabType) => {
     setDialogTab(tab);
     onTabChange?.(tab);
   };
@@ -526,6 +651,18 @@ export function ArchitectureDiagram({
                 }
               >
                 MCP Gateway
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDialogTabChange("a2a")}
+                className={
+                  dialogTab === "a2a"
+                    ? "bg-amber-500 border-amber-600 text-white hover:bg-amber-600 hover:text-white"
+                    : ""
+                }
+              >
+                A2A Gateway
               </Button>
             </div>
           </DialogHeader>

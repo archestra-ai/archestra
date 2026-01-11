@@ -1,10 +1,13 @@
 "use client";
 
-import { ArchitectureDiagram } from "@/components/architecture-diagram/architecture-diagram";
+import {
+  ArchitectureDiagram,
+  type ArchitectureTabType,
+} from "@/components/architecture-diagram/architecture-diagram";
 
 interface ArchestraArchitectureDiagramProps {
-  activeTab?: "proxy" | "mcp";
-  onTabChange?: (tab: "proxy" | "mcp") => void;
+  activeTab?: ArchitectureTabType;
+  onTabChange?: (tab: ArchitectureTabType) => void;
 }
 
 export function ArchestraArchitectureDiagram({

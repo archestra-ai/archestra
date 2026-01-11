@@ -10,7 +10,7 @@ export type ArchitectureGroupNodeData = {
   width: number;
   height: number;
   highlighted?: boolean;
-  highlightColor?: "blue" | "green";
+  highlightColor?: "blue" | "green" | "orange";
   logo?: string;
 };
 
@@ -31,7 +31,9 @@ export const ArchitectureGroupNode = memo(
             ? "border-blue-500/50 bg-blue-500/10"
             : highlighted && highlightColor === "green"
               ? "border-emerald-500/50 bg-emerald-500/10"
-              : "border-border/50",
+              : highlighted && highlightColor === "orange"
+                ? "border-amber-500/50 bg-amber-500/10"
+                : "border-border/50",
         )}
         style={{ width, height }}
       >

@@ -23,6 +23,7 @@ export const SUPPORTED_THEMES = [
   "vercel",
   "claude",
   "vintage-paper",
+  "boxy-minimalistic",
 ] as const;
 
 /**

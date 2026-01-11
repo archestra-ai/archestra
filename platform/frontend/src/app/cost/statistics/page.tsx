@@ -1,40 +1,23 @@
 "use client";
 
-import {
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  type TooltipItem,
-} from "chart.js";
+import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Line } from "react-chartjs-2";
 import type { DateRange } from "react-day-picker";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-);
-
-import type { archestraApiTypes } from "@shared";
-import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import {
   Dialog,
   DialogContent,
@@ -67,81 +50,6 @@ import {
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
-// Type aliases for better readability
-type TeamStatisticsData =
-  archestraApiTypes.GetTeamStatisticsResponses["200"][number];
-type ProfileStatisticsData =
-  archestraApiTypes.GetAgentStatisticsResponses["200"][number];
-type ModelStatisticsData =
-  archestraApiTypes.GetModelStatisticsResponses["200"][number];
-type StatisticsData =
-  | TeamStatisticsData
-  | ProfileStatisticsData
-  | ModelStatisticsData;
-
-// Type guards
-function isTeamStatistics(data: StatisticsData): data is TeamStatisticsData {
-  return "teamName" in data;
-}
-
-function isProfileStatistics(
-  data: StatisticsData,
-): data is ProfileStatisticsData {
-  return "agentName" in data;
-}
-
-function isModelStatistics(data: StatisticsData): data is ModelStatisticsData {
-  return "model" in data && "percentage" in data;
-}
-
-const colors = [
-  "#3b82f6", // blue
-  "#10b981", // green
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#8b5cf6", // violet
-];
-
-type ChartInstance = {
-  data: {
-    datasets: unknown[];
-  };
-  isDatasetVisible: (index: number) => boolean;
-};
-
-type ChartEventArgs = {
-  event: {
-    type: string;
-  };
-};
-
-function createVisibilitySyncPlugin<T>(
-  id: string,
-  data: T[],
-  getKey: (item: T) => string,
-  setHidden: React.Dispatch<React.SetStateAction<Set<string>>>,
-) {
-  return {
-    id,
-    afterEvent: (chart: ChartInstance, args: ChartEventArgs) => {
-      if (args.event.type === "click") {
-        setTimeout(() => {
-          const newHidden = new Set<string>();
-          chart.data.datasets.forEach((_, index: number) => {
-            if (!chart.isDatasetVisible(index)) {
-              const item = data[index];
-              if (item) {
-                newHidden.add(getKey(item));
-              }
-            }
-          });
-          setHidden(newHidden);
-        }, 10);
-      }
-    },
-  };
-}
-
 export default function StatisticsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,11 +59,6 @@ export default function StatisticsPage() {
   const [fromTime, setFromTime] = useState("00:00");
   const [toTime, setToTime] = useState("23:59");
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
-
-  // Track hidden items for each category
-  const [hiddenTeams, setHiddenTeams] = useState<Set<string>>(new Set());
-  const [hiddenProfiles, setHiddenProfiles] = useState<Set<string>>(new Set());
-  const [hiddenModels, setHiddenModels] = useState<Set<string>>(new Set());
 
   // Statistics data fetching hooks
   const currentTimeframe = timeframe.startsWith("custom:") ? "all" : timeframe;
@@ -174,8 +77,6 @@ export default function StatisticsPage() {
 
   /**
    * Initialize from URL parameters
-   *
-   * NOTE: may need to do validation here.. could use StatisticsTimeFrameSchema
    */
   useEffect(() => {
     const { success, data } = StatisticsTimeFrameSchema.safeParse(
@@ -218,11 +119,9 @@ export default function StatisticsPage() {
     const fromDateTime = new Date(dateRange.from);
     const toDateTime = new Date(dateRange.to);
 
-    // Set time for from date
     const [fromHours, fromMinutes] = fromTime.split(":").map(Number);
     fromDateTime.setHours(fromHours, fromMinutes, 0, 0);
 
-    // Set time for to date
     const [toHours, toMinutes] = toTime.split(":").map(Number);
     toDateTime.setHours(toHours, toMinutes, 59, 999);
 
@@ -239,7 +138,6 @@ export default function StatisticsPage() {
       const fromDateTime = new Date(fromDate);
       const toDateTime = new Date(toDate);
 
-      // Check if times are different from default (00:00 to 23:59)
       const hasCustomTime =
         fromDateTime.getHours() !== 0 ||
         fromDateTime.getMinutes() !== 0 ||
@@ -272,442 +170,171 @@ export default function StatisticsPage() {
     }
   }, []);
 
-  // Helper function to convert statistics to chart format
-  const convertStatsToChartData = useCallback(
-    <T extends StatisticsData>(
-      statistics: T[],
-      labelKey:
-        | keyof Pick<TeamStatisticsData, "teamName">
-        | keyof Pick<ProfileStatisticsData, "agentName">
-        | keyof Pick<ModelStatisticsData, "model">,
-      colors: string[],
-      hiddenIds: Set<string>,
-      getKey: (stat: T) => string,
-    ) => {
-      // Get unique time points across all datasets
-      const allTimestamps = [
-        ...new Set(
-          statistics.flatMap((stat) =>
-            stat.timeSeries.map((point) => point.timestamp),
-          ),
-        ),
-      ].sort();
-
-      const datasets = statistics.slice(0, 5).map((stat, index) => {
-        // Limit to top 5 for readability
-        const data = allTimestamps.map((timestamp) => {
-          const point = stat.timeSeries.find((p) => p.timestamp === timestamp);
-          return point ? point.value : 0;
-        });
-
-        let label: string;
-        if (labelKey === "teamName" && isTeamStatistics(stat)) {
-          label = stat.teamName;
-        } else if (labelKey === "agentName" && isProfileStatistics(stat)) {
-          label = stat.agentName;
-        } else if (labelKey === "model" && isModelStatistics(stat)) {
-          label = stat.model;
-        } else {
-          label = "Unknown";
-        }
-
-        return {
-          label,
-          data,
-          borderColor: colors[index % colors.length],
-          backgroundColor: colors[index % colors.length]
-            .replace(")", ", 0.1)")
-            .replace("rgb", "rgba"),
-          borderWidth: 3,
-          fill: false,
-          tension: 0.4,
-          pointBackgroundColor: colors[index % colors.length],
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 8,
-          hidden: hiddenIds.has(getKey(stat)),
-        };
-      });
-
-      // Format timestamps for display
-      const labels = allTimestamps.map((timestamp) => {
-        const date = new Date(timestamp);
-        if (timeframe === "1h") {
-          return format(date, "HH:mm");
-        } else if (timeframe === "24h") {
-          return format(date, "HH:mm");
-        } else if (timeframe === "7d" || timeframe === "30d") {
-          return format(date, "MMM d");
-        } else {
-          return format(date, "MMM d");
-        }
-      });
-
-      return { labels, datasets };
+  // Format timestamp for display based on timeframe
+  const formatTimestamp = useCallback(
+    (timestamp: string) => {
+      const date = new Date(timestamp);
+      if (timeframe === "1h" || timeframe === "24h") {
+        return format(date, "HH:mm");
+      }
+      return format(date, "MMM d");
     },
     [timeframe],
   );
 
-  // Filter statistics based on hidden items (for table only)
-  const visibleTeamStatistics = teamStatistics.filter(
-    (team) => !hiddenTeams.has(team.teamId),
-  );
-  const visibleProfileStatistics = agentStatistics.filter(
-    (agent) => !hiddenProfiles.has(agent.agentId),
-  );
-  const visibleModelStatistics = modelStatistics.filter(
-    (model) => !hiddenModels.has(model.model),
-  );
+  // Convert team statistics to recharts format
+  const teamChartData = useMemo(() => {
+    if (teamStatistics.length === 0) return [];
 
-  // Chart.js data configuration - use ALL statistics, let Chart.js handle visibility
-  const teamChartData =
-    teamStatistics.length > 0
-      ? convertStatsToChartData<TeamStatisticsData>(
-          teamStatistics,
-          "teamName",
-          colors,
-          hiddenTeams,
-          (stat) => stat.teamId,
-        )
-      : {
-          labels: ["No Data"],
-          datasets: [
-            {
-              label: "No teams found",
-              data: [0],
-              borderColor: "#9ca3af",
-              backgroundColor: "rgba(156, 163, 175, 0.1)",
-              borderWidth: 3,
-              fill: false,
-              tension: 0.4,
-            },
-          ],
-        };
-
-  const agentChartData =
-    agentStatistics.length > 0
-      ? convertStatsToChartData<ProfileStatisticsData>(
-          agentStatistics,
-          "agentName",
-          colors,
-          hiddenProfiles,
-          (stat) => stat.agentId,
-        )
-      : {
-          labels: ["No Data"],
-          datasets: [
-            {
-              label: "No profiles found",
-              data: [0],
-              borderColor: "#9ca3af",
-              backgroundColor: "rgba(156, 163, 175, 0.1)",
-              borderWidth: 3,
-              fill: false,
-              tension: 0.4,
-            },
-          ],
-        };
-
-  const modelChartData =
-    modelStatistics.length > 0
-      ? convertStatsToChartData<ModelStatisticsData>(
-          modelStatistics,
-          "model",
-          colors,
-          hiddenModels,
-          (stat) => stat.model,
-        )
-      : {
-          labels: ["No Data"],
-          datasets: [
-            {
-              label: "No models found",
-              data: [0],
-              borderColor: "#9ca3af",
-              backgroundColor: "rgba(156, 163, 175, 0.1)",
-              borderWidth: 3,
-              fill: false,
-              tension: 0.4,
-            },
-          ],
-        };
-
-  // Chart keys to force remount when data changes
-  const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;
-  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenProfiles.size}`;
-  const modelChartKey = `model-${timeframe}-${modelStatistics.length}-${hiddenModels.size}`;
-
-  // Chart options with default legend behavior (strikethrough on click)
-  const chartOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: true,
-          position: "top" as const,
-          align: "end" as const,
-          labels: {
-            usePointStyle: true,
-            pointStyle: "circle",
-            padding: 20,
-            font: {
-              size: 12,
-              weight: "normal" as const,
-            },
-            color: "#64748b",
-          },
-        },
-        tooltip: {
-          backgroundColor: "#ffffff",
-          titleColor: "#1f2937",
-          bodyColor: "#374151",
-          borderColor: "#e5e7eb",
-          borderWidth: 1,
-          cornerRadius: 12,
-          padding: 16,
-          displayColors: true,
-          titleFont: {
-            size: 14,
-            weight: "bold" as const,
-          },
-          bodyFont: {
-            size: 13,
-            weight: "normal" as const,
-          },
-          boxShadow:
-            "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-          callbacks: {
-            label: (context: TooltipItem<"line">) =>
-              `${context.dataset.label}: $${context.parsed.y?.toFixed(2) || "0"}`,
-            title: (context: TooltipItem<"line">[]) =>
-              `Time: ${context[0].label}`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: {
-            color: "rgba(148, 163, 184, 0.2)",
-            drawBorder: false,
-            lineWidth: 1,
-          },
-          ticks: {
-            color: "#64748b",
-            font: {
-              size: 12,
-              weight: "normal" as const,
-            },
-            padding: 10,
-          },
-          border: {
-            display: false,
-          },
-        },
-        y: {
-          grid: {
-            color: "rgba(148, 163, 184, 0.2)",
-            drawBorder: false,
-            lineWidth: 1,
-          },
-          ticks: {
-            color: "#64748b",
-            font: {
-              size: 12,
-              weight: "normal" as const,
-            },
-            padding: 10,
-            callback: (value: string | number) => `$${value}`,
-          },
-          border: {
-            display: false,
-          },
-          beginAtZero: true,
-        },
-      },
-      elements: {
-        point: {
-          hoverRadius: 8,
-        },
-      },
-      interaction: {
-        intersect: false,
-        mode: "index" as const,
-      },
-    }),
-    [],
-  );
-
-  // Custom plugins to sync legend visibility with table
-  const teamChartPlugin = useMemo(
-    () =>
-      createVisibilitySyncPlugin(
-        "teamVisibilitySync",
-        teamStatistics,
-        (team) => team.teamId,
-        setHiddenTeams,
+    const allTimestamps = [
+      ...new Set(
+        teamStatistics.flatMap((stat) =>
+          stat.timeSeries.map((point) => point.timestamp),
+        ),
       ),
-    [teamStatistics],
-  );
+    ].sort();
 
-  const agentChartPlugin = useMemo(
-    () =>
-      createVisibilitySyncPlugin(
-        "agentVisibilitySync",
-        agentStatistics,
-        (agent) => agent.agentId,
-        setHiddenProfiles,
+    return allTimestamps.map((timestamp) => {
+      const dataPoint: Record<string, string | number> = {
+        timestamp,
+        label: formatTimestamp(timestamp),
+      };
+      teamStatistics.slice(0, 5).forEach((team) => {
+        const point = team.timeSeries.find((p) => p.timestamp === timestamp);
+        dataPoint[team.teamId] = point ? point.value : 0;
+      });
+      return dataPoint;
+    });
+  }, [teamStatistics, formatTimestamp]);
+
+  const teamChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    teamStatistics.slice(0, 5).forEach((team, index) => {
+      config[team.teamId] = {
+        label: team.teamName,
+        color: `var(--chart-${index + 1})`,
+      };
+    });
+    return config;
+  }, [teamStatistics]);
+
+  // Convert profile statistics to recharts format
+  const profileChartData = useMemo(() => {
+    if (agentStatistics.length === 0) return [];
+
+    const allTimestamps = [
+      ...new Set(
+        agentStatistics.flatMap((stat) =>
+          stat.timeSeries.map((point) => point.timestamp),
+        ),
       ),
-    [agentStatistics],
-  );
+    ].sort();
 
-  const modelChartPlugin = useMemo(
-    () =>
-      createVisibilitySyncPlugin(
-        "modelVisibilitySync",
-        modelStatistics,
-        (model) => model.model,
-        setHiddenModels,
+    return allTimestamps.map((timestamp) => {
+      const dataPoint: Record<string, string | number> = {
+        timestamp,
+        label: formatTimestamp(timestamp),
+      };
+      agentStatistics.slice(0, 5).forEach((agent) => {
+        const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
+        dataPoint[agent.agentId] = point ? point.value : 0;
+      });
+      return dataPoint;
+    });
+  }, [agentStatistics, formatTimestamp]);
+
+  const profileChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    agentStatistics.slice(0, 5).forEach((agent, index) => {
+      config[agent.agentId] = {
+        label: agent.agentName,
+        color: `var(--chart-${index + 1})`,
+      };
+    });
+    return config;
+  }, [agentStatistics]);
+
+  // Convert model statistics to recharts format
+  const modelChartData = useMemo(() => {
+    if (modelStatistics.length === 0) return [];
+
+    const allTimestamps = [
+      ...new Set(
+        modelStatistics.flatMap((stat) =>
+          stat.timeSeries.map((point) => point.timestamp),
+        ),
       ),
-    [modelStatistics],
-  );
+    ].sort();
 
-  // Cost savings chart data (baseline vs actual)
+    return allTimestamps.map((timestamp) => {
+      const dataPoint: Record<string, string | number> = {
+        timestamp,
+        label: formatTimestamp(timestamp),
+      };
+      modelStatistics.slice(0, 5).forEach((model) => {
+        const point = model.timeSeries.find((p) => p.timestamp === timestamp);
+        dataPoint[model.model] = point ? point.value : 0;
+      });
+      return dataPoint;
+    });
+  }, [modelStatistics, formatTimestamp]);
+
+  const modelChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    modelStatistics.slice(0, 5).forEach((model, index) => {
+      config[model.model] = {
+        label: model.model,
+        color: `var(--chart-${index + 1})`,
+      };
+    });
+    return config;
+  }, [modelStatistics]);
+
+  // Cost savings chart data
   const costSavingsChartData = useMemo(() => {
-    if (!costSavingsData || costSavingsData.timeSeries.length === 0) {
-      return {
-        labels: ["No Data"],
-        datasets: [
-          {
-            label: "No data available",
-            data: [0],
-            borderColor: "#9ca3af",
-            backgroundColor: "rgba(156, 163, 175, 0.1)",
-            borderWidth: 3,
-            fill: false,
-            tension: 0.4,
-          },
-        ],
-      };
-    }
+    if (!costSavingsData || costSavingsData.timeSeries.length === 0) return [];
 
-    const labels = costSavingsData.timeSeries.map((point) => {
-      const date = new Date(point.timestamp);
-      if (timeframe === "1h") {
-        return format(date, "HH:mm");
-      } else if (timeframe === "24h") {
-        return format(date, "HH:mm");
-      } else if (timeframe === "7d" || timeframe === "30d") {
-        return format(date, "MMM d");
-      } else {
-        return format(date, "MMM d");
-      }
-    });
+    return costSavingsData.timeSeries.map((point) => ({
+      timestamp: point.timestamp,
+      label: formatTimestamp(point.timestamp),
+      nonOptimized: point.baselineCost,
+      actual: point.actualCost,
+    }));
+  }, [costSavingsData, formatTimestamp]);
 
-    return {
-      labels,
-      datasets: [
-        {
-          label: "Non-Optimized Cost",
-          data: costSavingsData.timeSeries.map((point) => point.baselineCost),
-          borderColor: "#ef4444", // red
-          backgroundColor: "rgba(239, 68, 68, 0.1)",
-          borderWidth: 3,
-          fill: false,
-          tension: 0.4,
-          pointBackgroundColor: "#ef4444",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 8,
-        },
-        {
-          label: "Actual Cost",
-          data: costSavingsData.timeSeries.map((point) => point.actualCost),
-          borderColor: "#10b981", // green
-          backgroundColor: "rgba(16, 185, 129, 0.1)",
-          borderWidth: 3,
-          fill: false,
-          tension: 0.4,
-          pointBackgroundColor: "#10b981",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 8,
-        },
-      ],
-    };
-  }, [costSavingsData, timeframe]);
+  const costSavingsChartConfig: ChartConfig = {
+    nonOptimized: {
+      label: "Non-Optimized Cost",
+      color: "var(--chart-4)",
+    },
+    actual: {
+      label: "Actual Cost",
+      color: "var(--chart-2)",
+    },
+  };
 
-  // Savings breakdown chart data (optimization rules vs TOON)
+  // Savings breakdown chart data
   const savingsBreakdownChartData = useMemo(() => {
-    if (!costSavingsData || costSavingsData.timeSeries.length === 0) {
-      return {
-        labels: ["No Data"],
-        datasets: [
-          {
-            label: "No data available",
-            data: [0],
-            borderColor: "#9ca3af",
-            backgroundColor: "rgba(156, 163, 175, 0.1)",
-            borderWidth: 3,
-            fill: false,
-            tension: 0.4,
-          },
-        ],
-      };
-    }
+    if (!costSavingsData || costSavingsData.timeSeries.length === 0) return [];
 
-    const labels = costSavingsData.timeSeries.map((point) => {
-      const date = new Date(point.timestamp);
-      if (timeframe === "1h") {
-        return format(date, "HH:mm");
-      } else if (timeframe === "24h") {
-        return format(date, "HH:mm");
-      } else if (timeframe === "7d" || timeframe === "30d") {
-        return format(date, "MMM d");
-      } else {
-        return format(date, "MMM d");
-      }
-    });
+    return costSavingsData.timeSeries.map((point) => ({
+      timestamp: point.timestamp,
+      label: formatTimestamp(point.timestamp),
+      optimization: point.optimizationSavings,
+      compression: point.toonSavings,
+    }));
+  }, [costSavingsData, formatTimestamp]);
 
-    return {
-      labels,
-      datasets: [
-        {
-          label: "Optimization Rules Savings",
-          data: costSavingsData.timeSeries.map(
-            (point) => point.optimizationSavings,
-          ),
-          borderColor: "#3b82f6", // blue
-          backgroundColor: "rgba(59, 130, 246, 0.1)",
-          borderWidth: 3,
-          fill: false,
-          tension: 0.4,
-          pointBackgroundColor: "#3b82f6",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 8,
-        },
-        {
-          label: "Tool Compression Savings",
-          data: costSavingsData.timeSeries.map((point) => point.toonSavings),
-          borderColor: "#8b5cf6", // purple
-          backgroundColor: "rgba(139, 92, 246, 0.1)",
-          borderWidth: 3,
-          fill: false,
-          tension: 0.4,
-          pointBackgroundColor: "#8b5cf6",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 8,
-        },
-      ],
-    };
-  }, [costSavingsData, timeframe]);
+  const savingsBreakdownChartConfig: ChartConfig = {
+    optimization: {
+      label: "Optimization Rules Savings",
+      color: "var(--chart-1)",
+    },
+    compression: {
+      label: "Tool Compression Savings",
+      color: "var(--chart-5)",
+    },
+  };
 
   return (
     <div className="space-y-6">
@@ -854,13 +481,64 @@ export default function StatisticsPage() {
             <CardTitle>Costs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-80">
-              <Line
-                key={`cost-savings-${timeframe}`}
-                data={costSavingsChartData}
-                options={chartOptions}
-              />
-            </div>
+            <ChartContainer
+              config={costSavingsChartConfig}
+              className="aspect-auto h-80 w-full"
+            >
+              {costSavingsChartData.length > 0 ? (
+                <LineChart
+                  accessibilityLayer
+                  data={costSavingsChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => `$${Number(value).toFixed(2)}`}
+                      />
+                    }
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Line
+                    dataKey="nonOptimized"
+                    type="monotone"
+                    stroke="var(--color-nonOptimized)"
+                    strokeWidth={2}
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-nonOptimized)",
+                    }}
+                    activeDot={{ strokeWidth: 0, r: 5 }}
+                  />
+                  <Line
+                    dataKey="actual"
+                    type="monotone"
+                    stroke="var(--color-actual)"
+                    strokeWidth={2}
+                    dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
+                    activeDot={{ strokeWidth: 0, r: 5 }}
+                  />
+                </LineChart>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  No data available
+                </div>
+              )}
+            </ChartContainer>
           </CardContent>
         </Card>
 
@@ -869,13 +547,68 @@ export default function StatisticsPage() {
             <CardTitle>Cost Savings</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-80">
-              <Line
-                key={`savings-breakdown-${timeframe}`}
-                data={savingsBreakdownChartData}
-                options={chartOptions}
-              />
-            </div>
+            <ChartContainer
+              config={savingsBreakdownChartConfig}
+              className="aspect-auto h-80 w-full"
+            >
+              {savingsBreakdownChartData.length > 0 ? (
+                <LineChart
+                  accessibilityLayer
+                  data={savingsBreakdownChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => `$${Number(value).toFixed(2)}`}
+                      />
+                    }
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Line
+                    dataKey="optimization"
+                    type="monotone"
+                    stroke="var(--color-optimization)"
+                    strokeWidth={2}
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-optimization)",
+                    }}
+                    activeDot={{ strokeWidth: 0, r: 5 }}
+                  />
+                  <Line
+                    dataKey="compression"
+                    type="monotone"
+                    stroke="var(--color-compression)"
+                    strokeWidth={2}
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-compression)",
+                    }}
+                    activeDot={{ strokeWidth: 0, r: 5 }}
+                  />
+                </LineChart>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  No data available
+                </div>
+              )}
+            </ChartContainer>
           </CardContent>
         </Card>
       </div>
@@ -887,14 +620,59 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <div className="h-80">
-                <Line
-                  key={teamChartKey}
-                  data={teamChartData}
-                  options={chartOptions}
-                  plugins={[teamChartPlugin]}
-                />
-              </div>
+              <ChartContainer
+                config={teamChartConfig}
+                className="aspect-auto h-80 w-full"
+              >
+                {teamChartData.length > 0 ? (
+                  <LineChart
+                    accessibilityLayer
+                    data={teamChartData}
+                    margin={{ top: 12, left: 12, right: 12 }}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => `$${value}`}
+                    />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => `$${Number(value).toFixed(2)}`}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    {teamStatistics.slice(0, 5).map((team) => (
+                      <Line
+                        key={team.teamId}
+                        dataKey={team.teamId}
+                        type="monotone"
+                        stroke={`var(--color-${team.teamId})`}
+                        strokeWidth={2}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${team.teamId})`,
+                        }}
+                        activeDot={{ strokeWidth: 0, r: 5 }}
+                      />
+                    ))}
+                  </LineChart>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No team data available
+                  </div>
+                )}
+              </ChartContainer>
             </div>
 
             <div className="order-1 lg:order-2">
@@ -910,7 +688,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleTeamStatistics.length === 0 ? (
+                  {teamStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
@@ -920,7 +698,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleTeamStatistics.map((team) => (
+                    teamStatistics.map((team) => (
                       <TableRow key={team.teamId}>
                         <TableCell className="font-medium">
                           {team.teamName}
@@ -953,14 +731,59 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <div className="h-80">
-                <Line
-                  key={agentChartKey}
-                  data={agentChartData}
-                  options={chartOptions}
-                  plugins={[agentChartPlugin]}
-                />
-              </div>
+              <ChartContainer
+                config={profileChartConfig}
+                className="aspect-auto h-80 w-full"
+              >
+                {profileChartData.length > 0 ? (
+                  <LineChart
+                    accessibilityLayer
+                    data={profileChartData}
+                    margin={{ top: 12, left: 12, right: 12 }}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => `$${value}`}
+                    />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => `$${Number(value).toFixed(2)}`}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    {agentStatistics.slice(0, 5).map((agent) => (
+                      <Line
+                        key={agent.agentId}
+                        dataKey={agent.agentId}
+                        type="monotone"
+                        stroke={`var(--color-${agent.agentId})`}
+                        strokeWidth={2}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${agent.agentId})`,
+                        }}
+                        activeDot={{ strokeWidth: 0, r: 5 }}
+                      />
+                    ))}
+                  </LineChart>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No profile data available
+                  </div>
+                )}
+              </ChartContainer>
             </div>
 
             <div className="order-1 lg:order-2">
@@ -975,7 +798,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleProfileStatistics.length === 0 ? (
+                  {agentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -985,7 +808,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleProfileStatistics.map((profile) => (
+                    agentStatistics.map((profile) => (
                       <TableRow key={profile.agentId}>
                         <TableCell className="font-medium">
                           {profile.agentName}
@@ -1019,14 +842,59 @@ export default function StatisticsPage() {
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="order-2 lg:order-1">
-              <div className="h-80">
-                <Line
-                  key={modelChartKey}
-                  data={modelChartData}
-                  options={chartOptions}
-                  plugins={[modelChartPlugin]}
-                />
-              </div>
+              <ChartContainer
+                config={modelChartConfig}
+                className="aspect-auto h-80 w-full"
+              >
+                {modelChartData.length > 0 ? (
+                  <LineChart
+                    accessibilityLayer
+                    data={modelChartData}
+                    margin={{ top: 12, left: 12, right: 12 }}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => `$${value}`}
+                    />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => `$${Number(value).toFixed(2)}`}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    {modelStatistics.slice(0, 5).map((model) => (
+                      <Line
+                        key={model.model}
+                        dataKey={model.model}
+                        type="monotone"
+                        stroke={`var(--color-${model.model})`}
+                        strokeWidth={2}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${model.model})`,
+                        }}
+                        activeDot={{ strokeWidth: 0, r: 5 }}
+                      />
+                    ))}
+                  </LineChart>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No model data available
+                  </div>
+                )}
+              </ChartContainer>
             </div>
 
             <div className="order-1 lg:order-2">
@@ -1041,7 +909,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleModelStatistics.length === 0 ? (
+                  {modelStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -1051,7 +919,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleModelStatistics.map((model) => (
+                    modelStatistics.map((model) => (
                       <TableRow key={model.model}>
                         <TableCell className="font-medium">
                           {model.model}

@@ -54307,6 +54307,7 @@
                         "mono",
                         "twitter",
                         "tangerine",
+                        "bubblegum",
                         "caffeine",
                         "amber-minimal",
                         "cosmic-night",
@@ -54318,7 +54319,13 @@
                         "vercel",
                         "claude",
                         "vintage-paper",
-                        "boxy-minimalistic"
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
                       ]
                     },
                     "customFont": {
@@ -54606,6 +54613,7 @@
                       "mono",
                       "twitter",
                       "tangerine",
+                      "bubblegum",
                       "caffeine",
                       "amber-minimal",
                       "cosmic-night",
@@ -54617,7 +54625,13 @@
                       "vercel",
                       "claude",
                       "vintage-paper",
-                      "boxy-minimalistic"
+                      "boxy-minimalistic",
+                      "catppuccin",
+                      "solarized-dark",
+                      "gruvbox-dark",
+                      "dracula-dark",
+                      "monokai-dark",
+                      "moonlight-dark"
                     ]
                   },
                   "customFont": {
@@ -54725,6 +54739,7 @@
                         "mono",
                         "twitter",
                         "tangerine",
+                        "bubblegum",
                         "caffeine",
                         "amber-minimal",
                         "cosmic-night",
@@ -54736,7 +54751,13 @@
                         "vercel",
                         "claude",
                         "vintage-paper",
-                        "boxy-minimalistic"
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
                       ]
                     },
                     "customFont": {
@@ -55272,6 +55293,7 @@
                         "mono",
                         "twitter",
                         "tangerine",
+                        "bubblegum",
                         "caffeine",
                         "amber-minimal",
                         "cosmic-night",
@@ -55283,7 +55305,13 @@
                         "vercel",
                         "claude",
                         "vintage-paper",
-                        "boxy-minimalistic"
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
                       ]
                     },
                     "customFont": {

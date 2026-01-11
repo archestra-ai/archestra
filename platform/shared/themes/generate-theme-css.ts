@@ -12,7 +12,11 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Import theme configuration
-import { SUPPORTED_THEMES } from "./theme-config";
+import {
+  DARK_ONLY_THEMES,
+  LIGHT_ONLY_THEMES,
+  SUPPORTED_THEMES,
+} from "./theme-config";
 import type { ThemeId } from "./theme-utils";
 import themeRegistry from "./tweakcn-themes.json";
 
@@ -87,12 +91,28 @@ function generateCSSVars(vars: Record<string, string>): string {
  */
 function generateThemeCSS(theme: ThemeItem): string {
   const className = `theme-${theme.name}`;
+  const isLightOnly = (LIGHT_ONLY_THEMES as readonly string[]).includes(
+    theme.name,
+  );
+  const isDarkOnly = (DARK_ONLY_THEMES as readonly string[]).includes(
+    theme.name,
+  );
 
   // Generate light mode CSS - use html.class for higher specificity than :root
   const lightCSS = `html.${className} {\n${generateCSSVars(theme.cssVars.light)}\n}`;
 
   // Generate dark mode CSS
   const darkCSS = `html.dark.${className} {\n${generateCSSVars(theme.cssVars.dark)}\n}`;
+
+  // Dark-only themes: only output dark mode CSS
+  if (isDarkOnly) {
+    return `/* ${theme.title} (dark only) */\n${darkCSS}`;
+  }
+
+  // Light-only themes: only output light mode CSS
+  if (isLightOnly) {
+    return `/* ${theme.title} (light only) */\n${lightCSS}`;
+  }
 
   return `/* ${theme.title} */\n${lightCSS}\n\n${darkCSS}`;
 }

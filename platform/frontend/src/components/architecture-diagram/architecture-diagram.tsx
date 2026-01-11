@@ -45,8 +45,8 @@ const nodeTypes = {
 const AGENTS_GROUP_X = 0;
 const ARCHESTRA_GROUP_X = 200;
 const KUBERNETES_GROUP_X = 620;
-const REMOTE_GROUP_X = 730;
-const LLM_GROUP_X = 730;
+const REMOTE_GROUP_X = 660;
+const LLM_GROUP_X = 660;
 
 function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
   const { resolvedTheme } = useTheme();

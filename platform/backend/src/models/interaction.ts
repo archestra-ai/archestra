@@ -644,7 +644,7 @@ class InteractionModel {
     pagination: PaginationQuery,
     requestingUserId?: string,
     isAgentAdmin?: boolean,
-    filters?: { profileId?: string },
+    filters?: { profileId?: string; userId?: string; externalAgentId?: string },
   ): Promise<
     PaginatedResult<{
       sessionId: string | null;
@@ -691,6 +691,18 @@ class InteractionModel {
     if (filters?.profileId) {
       conditions.push(
         eq(schema.interactionsTable.profileId, filters.profileId),
+      );
+    }
+
+    // User filter
+    if (filters?.userId) {
+      conditions.push(eq(schema.interactionsTable.userId, filters.userId));
+    }
+
+    // External agent ID filter
+    if (filters?.externalAgentId) {
+      conditions.push(
+        eq(schema.interactionsTable.externalAgentId, filters.externalAgentId),
       );
     }
 
@@ -782,30 +794,45 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
+    // Collect all external agent IDs to resolve prompt names
+    const allExternalAgentIds = sessionsData.flatMap((s) =>
+      s.externalAgentIds ? s.externalAgentIds.split(",").filter(Boolean) : [],
+    );
+    const promptNamesMap = await getPromptNamesById(
+      extractAllPromptIdsFromExternalAgentIds(allExternalAgentIds),
+    );
+
     // Transform the data to the expected format
-    const sessions = sessionsData.map((s) => ({
-      sessionId: s.sessionId,
-      sessionSource: s.sessionSource,
-      interactionId: s.interactionId, // Only set for single interactions (null session)
-      requestCount: Number(s.requestCount),
-      totalInputTokens: Number(s.totalInputTokens) || 0,
-      totalOutputTokens: Number(s.totalOutputTokens) || 0,
-      totalCost: s.totalCost,
-      totalBaselineCost: s.totalBaselineCost,
-      firstRequestTime: s.firstRequestTime ?? new Date(),
-      lastRequestTime: s.lastRequestTime ?? new Date(),
-      models: s.models ? s.models.split(",").filter(Boolean) : [],
-      profileId: s.profileId,
-      profileName: s.profileName,
-      externalAgentIds: s.externalAgentIds
+    const sessions = sessionsData.map((s) => {
+      const externalAgentIds = s.externalAgentIds
         ? s.externalAgentIds.split(",").filter(Boolean)
-        : [],
-      userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
-      lastInteractionRequest: s.lastInteractionRequest,
-      lastInteractionType: s.lastInteractionType,
-      conversationTitle: s.conversationTitle,
-      claudeCodeTitle: s.claudeCodeTitle,
-    }));
+        : [];
+
+      return {
+        sessionId: s.sessionId,
+        sessionSource: s.sessionSource,
+        interactionId: s.interactionId, // Only set for single interactions (null session)
+        requestCount: Number(s.requestCount),
+        totalInputTokens: Number(s.totalInputTokens) || 0,
+        totalOutputTokens: Number(s.totalOutputTokens) || 0,
+        totalCost: s.totalCost,
+        totalBaselineCost: s.totalBaselineCost,
+        firstRequestTime: s.firstRequestTime ?? new Date(),
+        lastRequestTime: s.lastRequestTime ?? new Date(),
+        models: s.models ? s.models.split(",").filter(Boolean) : [],
+        profileId: s.profileId,
+        profileName: s.profileName,
+        externalAgentIds,
+        externalAgentIdLabels: externalAgentIds.map((id) =>
+          resolveExternalAgentIdLabel(id, promptNamesMap),
+        ),
+        userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
+        lastInteractionRequest: s.lastInteractionRequest,
+        lastInteractionType: s.lastInteractionType,
+        conversationTitle: s.conversationTitle,
+        claudeCodeTitle: s.claudeCodeTitle,
+      };
+    });
 
     return createPaginatedResult(sessions, Number(total), pagination);
   }

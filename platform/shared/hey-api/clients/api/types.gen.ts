@@ -9036,6 +9036,14 @@ export type GetInteractionSessionsData = {
          * Filter by profile ID (internal Archestra profile)
          */
         profileId?: string;
+        /**
+         * Filter by user ID (from X-Archestra-User-Id header)
+         */
+        userId?: string;
+        /**
+         * Filter by external agent ID (from X-Archestra-Agent-Id header)
+         */
+        externalAgentId?: string;
         limit?: number;
         offset?: number;
     };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { SESSION_ID_HEADER } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -284,8 +285,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
             | undefined) ||
           (request.headers[SESSION_ID_HEADER] as string | undefined);
         const sessionId =
-          headerSessionId ||
-          `a2a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
 
         // Execute using shared A2A service
         // Pass promptId as the initial delegation chain (will be extended by any delegated calls)

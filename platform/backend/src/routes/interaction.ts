@@ -32,6 +32,7 @@ const SessionSummarySchema = z.object({
   profileId: z.string(),
   profileName: z.string().nullable(),
   externalAgentIds: z.array(z.string()),
+  externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names
   userNames: z.array(z.string()),
   lastInteractionRequest: z.unknown().nullable(),
   lastInteractionType: z.string().nullable(),
@@ -154,6 +155,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: UuidIdSchema.optional().describe(
               "Filter by profile ID (internal Archestra profile)",
             ),
+            userId: z
+              .string()
+              .optional()
+              .describe("Filter by user ID (from X-Archestra-User-Id header)"),
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
@@ -161,7 +166,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { profileId, limit, offset }, user, headers }, reply) => {
+    async (
+      { query: { profileId, userId, limit, offset }, user, headers },
+      reply,
+    ) => {
       const pagination = { limit, offset };
 
       const { success: isAgentAdmin } = await hasPermission(
@@ -175,6 +183,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           email: user.email,
           isAgentAdmin,
           profileId,
+          filterUserId: userId,
           pagination,
         },
         "GetInteractionSessions request",
@@ -184,7 +193,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pagination,
         user.id,
         isAgentAdmin,
-        { profileId },
+        { profileId, userId },
       );
 
       fastify.log.info(

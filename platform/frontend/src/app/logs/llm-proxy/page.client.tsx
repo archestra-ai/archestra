@@ -19,7 +19,10 @@ import {
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
-import { useInteractionSessions } from "@/lib/interaction.query";
+import {
+  useInteractionSessions,
+  useUniqueUserIds,
+} from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
@@ -322,11 +325,13 @@ function SessionsTable({
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
   const profileIdFromUrl = searchParams.get("profileId");
+  const userIdFromUrl = searchParams.get("userId");
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
+  const [userFilter, setUserFilter] = useState(userIdFromUrl || "all");
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -365,20 +370,34 @@ function SessionsTable({
     [updateUrlParams],
   );
 
+  const handleUserFilterChange = useCallback(
+    (value: string) => {
+      setUserFilter(value);
+      updateUrlParams({
+        userId: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateUrlParams],
+  );
+
   const { data: sessionsResponse } = useInteractionSessions({
     limit: pageSize,
     offset: pageIndex * pageSize,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
+    userId: userFilter !== "all" ? userFilter : undefined,
   });
 
   const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
 
+  const { data: uniqueUsers } = useUniqueUserIds();
+
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
 
-  const hasFilters = profileFilter !== "all";
+  const hasFilters = profileFilter !== "all" || userFilter !== "all";
 
   return (
     <div className="space-y-4">
@@ -397,12 +416,27 @@ function SessionsTable({
           className="w-[200px]"
         />
 
+        <SearchableSelect
+          value={userFilter}
+          onValueChange={handleUserFilterChange}
+          placeholder="Filter by User"
+          items={[
+            { value: "all", label: "All Users" },
+            ...(uniqueUsers?.map((user) => ({
+              value: user.id,
+              label: user.name || user.id,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
+
         {hasFilters && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               handleProfileFilterChange("all");
+              handleUserFilterChange("all");
             }}
           >
             Clear filters

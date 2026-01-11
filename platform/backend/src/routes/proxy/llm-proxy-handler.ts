@@ -32,12 +32,15 @@ import {
   type ToonCompressionResult,
 } from "@/types";
 import * as utils from "./utils";
+import type { SessionSource } from "./utils/session-id";
 
 export interface Context {
   organizationId: string;
   agentId?: string;
   externalAgentId?: string;
   userId?: string;
+  sessionId?: string | null;
+  sessionSource?: SessionSource;
 }
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -73,6 +76,21 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const { agentId, externalAgentId } = context;
   const providerName = provider.provider;
+
+  // Extract session info if not already provided in context
+  const sessionInfo =
+    context.sessionId !== undefined
+      ? { sessionId: context.sessionId, sessionSource: context.sessionSource }
+      : utils.sessionId.extractSessionInfo(
+          headers as Record<string, string | string[] | undefined>,
+          body as
+            | {
+                metadata?: { user_id?: string | null };
+                user?: string | null;
+              }
+            | undefined,
+        );
+  const { sessionId, sessionSource } = sessionInfo;
 
   const requestAdapter = provider.createRequestAdapter(body);
   const streamAdapter = provider.createStreamAdapter();
@@ -358,6 +376,8 @@ export async function handleLLMProxy<
         globalToolPolicy,
         externalAgentId,
         context.userId,
+        sessionId,
+        sessionSource,
       );
     } else {
       return handleNonStreaming(
@@ -375,6 +395,8 @@ export async function handleLLMProxy<
         globalToolPolicy,
         externalAgentId,
         context.userId,
+        sessionId,
+        sessionSource,
       );
     }
   } catch (error) {
@@ -413,6 +435,8 @@ async function handleStreaming<
   globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
+  sessionId?: string | null,
+  sessionSource?: SessionSource,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
   const streamStartTime = Date.now();
@@ -601,6 +625,8 @@ async function handleStreaming<
         profileId: agent.id,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -645,6 +671,8 @@ async function handleNonStreaming<
   globalToolPolicy: "permissive" | "restrictive",
   externalAgentId?: string,
   userId?: string,
+  sessionId?: string | null,
+  sessionSource?: SessionSource,
 ): Promise<FastifyReply> {
   const providerName = provider.provider;
 
@@ -737,6 +765,8 @@ async function handleNonStreaming<
         profileId: agent.id,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
         type: provider.interactionType,
         // Cast generic types to interaction types - valid at runtime
         request: originalRequest as unknown as InteractionRequest,
@@ -788,6 +818,8 @@ async function handleNonStreaming<
     profileId: agent.id,
     externalAgentId,
     userId,
+    sessionId,
+    sessionSource,
     type: provider.interactionType,
     // Cast generic types to interaction types - valid at runtime
     request: originalRequest as unknown as InteractionRequest,

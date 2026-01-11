@@ -38,6 +38,13 @@ const BaseSelectInteractionSchema = createSelectSchema(
 );
 
 /**
+ * Schema for computed request type field
+ * - "main": Primary conversation requests (have Task tool for Claude Code)
+ * - "subagent": Background/utility requests (no Task tool, prompt suggestions, etc.)
+ */
+export const RequestTypeSchema = z.enum(["main", "subagent"]);
+
+/**
  * Discriminated union schema for API responses
  * This provides type safety based on the type field
  */
@@ -48,6 +55,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       OpenAi.API.ChatCompletionRequestSchema.nullable().optional(),
     response: OpenAi.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["gemini:generateContent"]),
@@ -55,12 +65,18 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Gemini.API.GenerateContentRequestSchema.nullable().optional(),
     response: Gemini.API.GenerateContentResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["anthropic:messages"]),
     request: Anthropic.API.MessagesRequestSchema,
     processedRequest: Anthropic.API.MessagesRequestSchema.nullable().optional(),
     response: Anthropic.API.MessagesResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["vllm:chatCompletions"]),

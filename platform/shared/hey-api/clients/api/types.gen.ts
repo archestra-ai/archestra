@@ -6015,6 +6015,10 @@ export type AnthropicMessagesWithDefaultAgentData = {
          */
         'anthropic-beta'?: string;
         'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
     };
     path?: never;
     query?: never;
@@ -6102,6 +6106,10 @@ export type AnthropicMessagesWithAgentData = {
          */
         'anthropic-beta'?: string;
         'x-api-key'?: string;
+        /**
+         * Authorization header (Bearer token for OAuth)
+         */
+        authorization?: string;
     };
     path: {
         agentId: string;
@@ -10176,6 +10184,10 @@ export type GetInteractionsData = {
          * Filter by user ID (from X-Archestra-User-Id header)
          */
         userId?: string;
+        /**
+         * Filter by session ID
+         */
+        sessionId?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
@@ -10253,6 +10265,8 @@ export type GetInteractionsResponses = {
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: OpenAiChatCompletionRequest;
             processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
@@ -10266,11 +10280,15 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: GeminiGenerateContentRequest;
             processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
@@ -10284,11 +10302,15 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: AnthropicMessagesRequest;
             processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
@@ -10302,11 +10324,15 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             createdAt: string;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: VllmChatCompletionRequest;
             processedRequest?: VllmChatCompletionRequest | null;
             response: VllmChatCompletionResponse;
@@ -10325,6 +10351,8 @@ export type GetInteractionsResponses = {
             profileId: string;
             externalAgentId: string | null;
             userId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
             request: OllamaChatCompletionRequest;
             processedRequest?: OllamaChatCompletionRequest | null;
             response: OllamaChatCompletionResponse;
@@ -10351,6 +10379,127 @@ export type GetInteractionsResponses = {
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetInteractionSessionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by profile ID (internal Archestra profile)
+         */
+        profileId?: string;
+        /**
+         * Filter by user ID (from X-Archestra-User-Id header)
+         */
+        userId?: string;
+        /**
+         * Filter by session ID
+         */
+        sessionId?: string;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/interactions/sessions';
+};
+
+export type GetInteractionSessionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetInteractionSessionsError = GetInteractionSessionsErrors[keyof GetInteractionSessionsErrors];
+
+export type GetInteractionSessionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            sessionId: string | null;
+            sessionSource: string | null;
+            interactionId: string | null;
+            requestCount: number;
+            totalInputTokens: number;
+            totalOutputTokens: number;
+            totalCost: string | null;
+            totalBaselineCost: string | null;
+            firstRequestTime: string;
+            lastRequestTime: string;
+            models: Array<string>;
+            profileId: string;
+            profileName: string | null;
+            externalAgentIds: Array<string>;
+            externalAgentIdLabels: Array<string | null>;
+            userNames: Array<string>;
+            lastInteractionRequest: unknown;
+            lastInteractionType: string | null;
+            conversationTitle: string | null;
+            claudeCodeTitle: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInteractionSessionsResponse = GetInteractionSessionsResponses[keyof GetInteractionSessionsResponses];
 
 export type GetUniqueExternalAgentIdsData = {
     body?: never;
@@ -10582,6 +10731,8 @@ export type GetInteractionResponses = {
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: OpenAiChatCompletionRequest;
         processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
@@ -10595,11 +10746,15 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: GeminiGenerateContentRequest;
         processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
@@ -10613,11 +10768,15 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: AnthropicMessagesRequest;
         processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
@@ -10631,11 +10790,15 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         createdAt: string;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: VllmChatCompletionRequest;
         processedRequest?: VllmChatCompletionRequest | null;
         response: VllmChatCompletionResponse;
@@ -10654,6 +10817,8 @@ export type GetInteractionResponses = {
         profileId: string;
         externalAgentId: string | null;
         userId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
         request: OllamaChatCompletionRequest;
         processedRequest?: OllamaChatCompletionRequest | null;
         response: OllamaChatCompletionResponse;

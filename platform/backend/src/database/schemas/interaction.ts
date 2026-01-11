@@ -34,6 +34,19 @@ const interactionsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * Session ID to group related LLM requests together.
+     * Can be extracted from:
+     * - X-Archestra-Session-Id header (explicit)
+     * - Claude Code's metadata.user_id field (format: user_xxx_session_{uuid})
+     * - OpenAI's user field
+     */
+    sessionId: varchar("session_id"),
+    /**
+     * Source of the session ID for display purposes.
+     * Values: 'claude_code', 'header', 'openai_user', null
+     */
+    sessionSource: varchar("session_source"),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
@@ -54,6 +67,7 @@ const interactionsTable = pgTable(
       table.externalAgentId,
     ),
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
+    sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),
   }),
 );
 

@@ -122,6 +122,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     externalAgentId?: string,
     userId?: string,
+    sessionId?: string | null,
+    sessionSource?: string | null,
   ) => {
     const { tools, stream } = body;
 
@@ -910,6 +912,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               profileId: resolvedAgentId,
               externalAgentId,
               userId,
+              sessionId,
+              sessionSource,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -1036,6 +1040,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               profileId: resolvedAgentId,
               externalAgentId,
               userId,
+              sessionId,
+              sessionSource,
               type: "anthropic:messages",
               request: body,
               processedRequest: {
@@ -1091,6 +1097,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           profileId: resolvedAgentId,
           externalAgentId,
           userId,
+          sessionId,
+          sessionSource,
           type: "anthropic:messages",
           request: body,
           processedRequest: {
@@ -1199,6 +1207,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Extract metadata for session info - handles null/undefined difference
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        { metadata: request.body.metadata },
+      );
       return handleMessages(
         request.body,
         request.headers,
@@ -1207,6 +1220,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );
@@ -1239,6 +1254,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       const userId = await utils.userId.getUserId(request.headers);
+      // Extract metadata for session info - handles null/undefined difference
+      const { sessionId, sessionSource } = utils.sessionId.extractSessionInfo(
+        request.headers,
+        { metadata: request.body.metadata },
+      );
       return handleMessages(
         request.body,
         request.headers,
@@ -1247,6 +1267,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.agentId,
         externalAgentId,
         userId,
+        sessionId,
+        sessionSource,
       );
     },
   );

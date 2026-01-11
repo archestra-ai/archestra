@@ -23,6 +23,7 @@ import {
   type OpenAi,
   SupportedChatProviderSchema,
 } from "@/types";
+import { getModelCapabilities } from "./model-capabilities-detection";
 
 /** TTL for caching chat models from provider APIs */
 const CHAT_MODELS_CACHE_TTL_MS = TimeInMs.Hour * 2;
@@ -34,6 +35,23 @@ const ChatModelSchema = z.object({
   displayName: z.string(),
   provider: SupportedChatProviderSchema,
   createdAt: z.string().optional(),
+  capabilities: z
+    .object({
+      capabilities: z.array(z.string()),
+      metadata: z
+        .object({
+          maxTokens: z.number().optional(),
+          supportsImages: z.boolean().optional(),
+          supportsAudio: z.boolean().optional(),
+          supportsVideo: z.boolean().optional(),
+          supportsStreaming: z.boolean().optional(),
+          supportsFunctionCalling: z.boolean().optional(),
+          supportsJsonMode: z.boolean().optional(),
+          hasReasoning: z.boolean().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export interface ModelInfo {
@@ -41,6 +59,19 @@ export interface ModelInfo {
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
+  capabilities?: {
+    capabilities: string[];
+    metadata?: {
+      maxTokens?: number;
+      supportsImages?: boolean;
+      supportsAudio?: boolean;
+      supportsVideo?: boolean;
+      supportsStreaming?: boolean;
+      supportsFunctionCalling?: boolean;
+      supportsJsonMode?: boolean;
+      hasReasoning?: boolean;
+    };
+  };
 }
 
 /**
@@ -71,12 +102,16 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
   };
 
   // All Anthropic models are chat models, no filtering needed
-  return data.data.map((model) => ({
-    id: model.id,
-    displayName: model.display_name,
-    provider: "anthropic" as const,
-    createdAt: model.created_at,
-  }));
+  return data.data.map((model) => {
+    const capabilities = getModelCapabilities(model.id, "anthropic");
+    return {
+      id: model.id,
+      displayName: model.display_name,
+      provider: "anthropic" as const,
+      createdAt: model.created_at,
+      capabilities,
+    };
+  });
 }
 
 /**
@@ -143,6 +178,8 @@ export function mapOpenAiModelToModelInfo(
     }
   }
 
+  const capabilities = getModelCapabilities(model.id, provider);
+
   return {
     id: model.id,
     displayName: "name" in model ? model.name : model.id,
@@ -151,6 +188,7 @@ export function mapOpenAiModelToModelInfo(
       "created" in model
         ? new Date(model.created * 1000).toISOString()
         : undefined,
+    capabilities,
   };
 }
 
@@ -185,10 +223,12 @@ export async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
     .map((model) => {
       // Model name is in format "models/gemini-1.5-flash-001", extract just the model ID
       const modelId = model.name.replace("models/", "");
+      const capabilities = getModelCapabilities(modelId, "gemini");
       return {
         id: modelId,
         displayName: model.displayName ?? modelId,
         provider: "gemini" as const,
+        capabilities,
       };
     });
 }
@@ -230,14 +270,18 @@ async function fetchVllmModels(apiKey: string): Promise<ModelInfo[]> {
   };
 
   // vLLM returns all loaded models, no filtering needed
-  return data.data.map((model) => ({
-    id: model.id,
-    displayName: model.id,
-    provider: "vllm" as const,
-    createdAt: model.created
-      ? new Date(model.created * 1000).toISOString()
-      : undefined,
-  }));
+  return data.data.map((model) => {
+    const capabilities = getModelCapabilities(model.id, "vllm");
+    return {
+      id: model.id,
+      displayName: model.id,
+      provider: "vllm" as const,
+      createdAt: model.created
+        ? new Date(model.created * 1000).toISOString()
+        : undefined,
+      capabilities,
+    };
+  });
 }
 
 /**
@@ -275,14 +319,18 @@ async function fetchOllamaModels(apiKey: string): Promise<ModelInfo[]> {
   };
 
   // Ollama returns all locally available models, no filtering needed
-  return data.data.map((model) => ({
-    id: model.id,
-    displayName: model.id,
-    provider: "ollama" as const,
-    createdAt: model.created
-      ? new Date(model.created * 1000).toISOString()
-      : undefined,
-  }));
+  return data.data.map((model) => {
+    const capabilities = getModelCapabilities(model.id, "ollama");
+    return {
+      id: model.id,
+      displayName: model.id,
+      provider: "ollama" as const,
+      createdAt: model.created
+        ? new Date(model.created * 1000).toISOString()
+        : undefined,
+      capabilities,
+    };
+  });
 }
 
 /**
@@ -340,10 +388,12 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
 
+    const capabilities = getModelCapabilities(modelId, "gemini");
     models.push({
       id: modelId,
       displayName,
       provider: "gemini" as const,
+      capabilities,
     });
   }
 

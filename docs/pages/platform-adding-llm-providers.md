@@ -276,3 +276,170 @@ Existing provider implementations for reference:
 Use [PROVIDER_SMOKE_TEST.md](https://github.com/archestra-ai/archestra/blob/main/platform/PROVIDER_SMOKE_TEST.md) during development to verify basic functionality. This is a quick, non-exhaustive list.
 
 Note, that Archestra Chat uses streaming for all LLM interactions. To test non-streaming responses, use an external client like n8n Chat node.
+
+## Model Capabilities
+
+Archestra automatically detects and displays model capabilities in the UI using pattern-based detection. This helps users understand what each model can do (reasoning, vision, audio, etc.) without manual configuration.
+
+### How Capabilities Work
+
+Capabilities are detected automatically based on model ID patterns. The system:
+
+1. **Scans model IDs** against predefined regex patterns for each capability
+2. **Prioritizes matches** when multiple patterns match (reasoning > vision > multimodal > etc.)
+3. **Extracts metadata** like context window size and feature support
+4. **Displays badges** in the model selector UI with tooltips
+
+### Available Capabilities
+
+The platform supports 15 capability categories:
+
+- **reasoning**: Advanced reasoning models (Claude Sonnet, GPT-4o, Gemini Thinking)
+- **vision**: Image/visual understanding capabilities
+- **multimodal**: Multi-modal input support
+- **audio**: Audio processing capabilities
+- **functionCalling**: Function/tool calling support
+- **jsonMode**: JSON mode support
+- **streaming**: Streaming response support
+- **highContext**: Large context windows (128K+ tokens)
+- **highSpeed**: Fast inference models
+- **highAccuracy**: High-accuracy models
+- **code**: Code generation capabilities
+- **math**: Mathematical reasoning capabilities
+- **creative**: Creative writing capabilities
+- **instructionFollowing**: Strong instruction following
+
+### Adding Capability Detection for New Models
+
+When adding support for new models, ensure capability detection works correctly:
+
+#### 1. Update Pattern Detection
+
+Add model ID patterns to the capability detection file:
+
+| File | Description |
+|------|-------------|
+| `backend/src/routes/chat/model-capabilities-detection.ts` | Add regex patterns for new models |
+
+**Example patterns to add:**
+
+```typescript
+// For a new reasoning model
+reasoning: [
+  /your-new-model-reasoning/i,
+  // ... existing patterns
+],
+
+// For a new vision model  
+vision: [
+  /your-new-model-vision/i,
+  // ... existing patterns
+]
+```
+
+#### 2. Add Context Window Metadata
+
+Update context window sizes for accurate token counting:
+
+| File | Description |
+|------|-------------|
+| `backend/src/routes/chat/model-capabilities-detection.ts` | Add context window sizes |
+
+**Example metadata addition:**
+
+```typescript
+const contextWindowSizes = {
+  'your-new-model': 128000,
+  'your-new-model-vision': 200000,
+  // ... existing sizes
+};
+```
+
+#### 3. Test Capability Detection
+
+Verify detection works correctly by testing model IDs:
+
+```bash
+# Run capability detection test
+cd platform && npx tsx test-capabilities.ts
+```
+
+### Manual Capability Configuration
+
+For models that don't follow standard naming patterns, you can add manual capability mappings:
+
+#### Option 1: Add to Pattern Detection
+
+Add specific model IDs to existing patterns:
+
+```typescript
+// In model-capabilities-detection.ts
+const capabilityPatterns = {
+  reasoning: [
+    /custom-model-reasoning/i,
+    /another-custom-reasoning-model/i,
+    // ... existing patterns
+  ],
+  // ... other capabilities
+};
+```
+
+#### Option 2: Create Custom Detection Logic
+
+For complex detection logic, extend the detection function:
+
+```typescript
+function detectModelCapabilities(modelId: string): ModelCapabilities {
+  // Custom logic for specific models
+  if (modelId === 'custom-special-model') {
+    return {
+      capabilities: ['reasoning', 'vision', 'highContext'],
+      metadata: { maxTokens: 256000 }
+    };
+  }
+  
+  // Fall back to pattern detection
+  return detectCapabilitiesByPattern(modelId);
+}
+```
+
+### Frontend Integration
+
+Capabilities are automatically displayed in the UI through:
+
+| Component | Description |
+|-----------|-------------|
+| `frontend/src/components/ai-elements/model-capability-badge.tsx` | Individual capability badges with tooltips |
+| `frontend/src/components/chat/model-selector.tsx` | Model selector with capability display |
+
+**Badge Display Rules:**
+- Shows top 3 prioritized capabilities by default
+- Shows "+N more" for additional capabilities
+- Prioritization: reasoning > vision > multimodal > audio > functionCalling > etc.
+
+### Testing Capability Display
+
+After adding new models, verify the UI displays capabilities correctly:
+
+1. **Start the development environment**: `tilt up`
+2. **Access Chat UI**: http://localhost:3000/chat
+3. **Open model selector**: Check that capabilities appear as badges
+4. **Hover over badges**: Verify tooltips show correct capability descriptions
+
+### Common Patterns
+
+Use these naming conventions for consistent capability detection:
+
+- **Reasoning models**: Include "reasoning", "thinking", "sonnet", "opus"
+- **Vision models**: Include "vision", "visual", "multimodal"
+- **Audio models**: Include "audio", "whisper", "speech"
+- **High-context models**: Include context size in model name or metadata
+
+### Troubleshooting
+
+If capabilities aren't detected correctly:
+
+1. **Check pattern matching**: Verify model ID matches regex patterns
+2. **Test detection**: Use the test script to verify detection logic
+3. **Update patterns**: Add more specific patterns if needed
+4. **Check priority**: Ensure higher-priority capabilities aren't overriding lower ones

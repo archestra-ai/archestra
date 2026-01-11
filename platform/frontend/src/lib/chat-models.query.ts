@@ -9,6 +9,19 @@ export interface ChatModel {
   displayName: string;
   provider: SupportedProvider;
   createdAt?: string;
+  capabilities?: {
+    capabilities: string[];
+    metadata?: {
+      maxTokens?: number;
+      supportsImages?: boolean;
+      supportsAudio?: boolean;
+      supportsVideo?: boolean;
+      supportsStreaming?: boolean;
+      supportsFunctionCalling?: boolean;
+      supportsJsonMode?: boolean;
+      hasReasoning?: boolean;
+    };
+  };
 }
 
 /**

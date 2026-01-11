@@ -1,8 +1,13 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
+import {
+  type ModelCapability,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
 import { CheckIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ModelCapabilitiesList } from "@/components/ai-elements/model-capability-badge";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -192,7 +197,18 @@ export function ModelSelector({
                     <ModelSelectorLogo
                       provider={providerToLogoProvider[provider]}
                     />
-                    <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                    <div className="flex flex-col min-w-0">
+                      <ModelSelectorName>{model.displayName}</ModelSelectorName>
+                      {model.capabilities?.capabilities && (
+                        <ModelCapabilitiesList
+                          capabilities={
+                            model.capabilities.capabilities as ModelCapability[]
+                          }
+                          className="mt-1"
+                          maxDisplay={2}
+                        />
+                      )}
+                    </div>
                     {selectedModel === model.id ? (
                       <CheckIcon className="ml-auto size-4" />
                     ) : (

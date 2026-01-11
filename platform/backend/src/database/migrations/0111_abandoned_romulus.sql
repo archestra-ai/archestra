@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ALTER COLUMN "global_tool_policy" SET DEFAULT 'restrictive';

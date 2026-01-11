@@ -44,7 +44,7 @@ const organizationsTable = pgTable("organization", {
   globalToolPolicy: varchar("global_tool_policy")
     .$type<GlobalToolPolicy>()
     .notNull()
-    .default("permissive"),
+    .default("restrictive"),
 });
 
 export default organizationsTable;

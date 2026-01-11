@@ -1,10 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { Layers, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Savings } from "@/components/savings";
-import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -69,11 +69,7 @@ function SessionSourceBadge({
   sessionId: string | null;
 }) {
   if (!sessionId) {
-    return (
-      <Badge variant="outline" className="text-xs text-muted-foreground">
-        Single
-      </Badge>
-    );
+    return null;
   }
 
   switch (sessionSource) {
@@ -182,12 +178,6 @@ function SessionRow({
 
   return (
     <TableRow className="cursor-pointer" onClick={handleRowClick}>
-      <TableCell className="py-3">
-        <TruncatedText
-          message={agent?.name ?? session.profileName ?? "Unknown"}
-          maxLength={25}
-        />
-      </TableCell>
       <TableCell className="font-mono text-xs py-3">
         {session.requestCount.toLocaleString()}
       </TableCell>
@@ -233,10 +223,31 @@ function SessionRow({
         </div>
       </TableCell>
       <TableCell className="py-3">
-        <SessionSourceBadge
-          sessionSource={session.sessionSource}
-          sessionId={session.sessionId}
-        />
+        <div className="flex flex-wrap gap-1">
+          <Badge variant="secondary" className="text-xs">
+            <Layers className="h-3 w-3 mr-1" />
+            {agent?.name ?? session.profileName ?? "Unknown"}
+          </Badge>
+          <SessionSourceBadge
+            sessionSource={session.sessionSource}
+            sessionId={session.sessionId}
+          />
+          {session.userNames.map((userName) => (
+            <Badge key={userName} variant="outline" className="text-xs">
+              <User className="h-3 w-3 mr-1" />
+              {userName}
+            </Badge>
+          ))}
+          {session.externalAgentIds.map((agentId) => (
+            <Badge
+              key={agentId}
+              variant="outline"
+              className="text-xs font-mono"
+            >
+              {agentId}
+            </Badge>
+          ))}
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -374,13 +385,12 @@ function SessionsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[150px]">Profile</TableHead>
                 <TableHead className="w-[80px]">Requests</TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
                 <TableHead className="w-[140px]">Tokens (In/Out)</TableHead>
                 <TableHead className="w-[100px]">Savings</TableHead>
                 <TableHead className="w-[200px]">Time</TableHead>
-                <TableHead className="w-[100px]">Source</TableHead>
+                <TableHead>Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

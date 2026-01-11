@@ -29681,6 +29681,18 @@
                           "profileName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "externalAgentIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "userNames": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           }
                         },
                         "required": [
@@ -29696,7 +29708,9 @@
                           "lastRequest",
                           "models",
                           "profileId",
-                          "profileName"
+                          "profileName",
+                          "externalAgentIds",
+                          "userNames"
                         ],
                         "additionalProperties": false
                       }

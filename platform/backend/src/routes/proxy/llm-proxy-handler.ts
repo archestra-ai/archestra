@@ -229,11 +229,16 @@ export async function handleLLMProxy<
       }
     }
 
+    // Get global tool policy from organization (with fallback) - needed for both trusted data and tool invocation
+    const globalToolPolicy =
+      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
+
     // Evaluate trusted data policies
     logger.debug(
       {
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
+        globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
@@ -246,6 +251,7 @@ export async function handleLLMProxy<
         apiKey,
         providerName,
         resolvedAgent.considerContextUntrusted,
+        globalToolPolicy,
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
@@ -334,10 +340,6 @@ export async function handleLLMProxy<
 
     // Extract enabled tool names for filtering in evaluatePolicies
     const enabledToolNames = new Set(tools.map((t) => t.name).filter(Boolean));
-
-    // Get global tool policy from organization (with fallback)
-    const globalToolPolicy =
-      await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
     if (requestAdapter.isStreaming()) {
       return handleStreaming(

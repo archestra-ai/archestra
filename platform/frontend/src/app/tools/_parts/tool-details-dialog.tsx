@@ -82,7 +82,7 @@ export function ToolDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[90vw] max-w-[1600px] max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <DialogTitle className="text-xl font-semibold tracking-tight">
@@ -232,7 +232,7 @@ export function ToolDetailsDialog({
               </div>
             </Collapsible>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <ToolCallPolicies tool={tool} />
               <ToolResultPolicies tool={tool} />
             </div>

@@ -174,7 +174,7 @@ function SessionRow({
         <div className="flex items-center gap-1">
           {isArchestraChat ? (
             <>
-              <span>
+              <span className="truncate">
                 {conversationTitle.length > 60
                   ? `${conversationTitle.slice(0, 60)}...`
                   : conversationTitle}
@@ -182,6 +182,7 @@ function SessionRow({
               <Link
                 href={`/chat?conversation=${session.sessionId}`}
                 onClick={(e) => e.stopPropagation()}
+                className="flex-shrink-0"
               >
                 <Badge
                   variant="outline"
@@ -194,7 +195,7 @@ function SessionRow({
             </>
           ) : isClaudeCodeSession ? (
             <>
-              <span>
+              <span className="truncate">
                 {displayText
                   ? displayText.length > 80
                     ? `${displayText.slice(0, 80)}...`
@@ -203,7 +204,7 @@ function SessionRow({
               </span>
               <Badge
                 variant="secondary"
-                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 flex-shrink-0"
               >
                 Claude Code
               </Badge>
@@ -282,17 +283,6 @@ function SessionRow({
               {userName}
             </Badge>
           ))}
-          {session.externalAgentIds
-            .filter((agentId) => agentId !== "Archestra Chat")
-            .map((agentId) => (
-              <Badge
-                key={agentId}
-                variant="outline"
-                className="text-xs font-mono"
-              >
-                {agentId}
-              </Badge>
-            ))}
         </div>
       </TableCell>
     </TableRow>
@@ -431,12 +421,16 @@ function SessionsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Session</TableHead>
-                <TableHead className="w-[80px]">Requests</TableHead>
+                <TableHead className="min-w-[200px]">Session</TableHead>
+                <TableHead className="w-[100px] whitespace-nowrap">
+                  Requests
+                </TableHead>
                 <TableHead className="w-[200px]">Models</TableHead>
-                <TableHead className="w-[140px]">Tokens / Savings</TableHead>
+                <TableHead className="w-[140px] whitespace-nowrap">
+                  Tokens / Savings
+                </TableHead>
                 <TableHead className="w-[160px]">Time</TableHead>
-                <TableHead>Details</TableHead>
+                <TableHead className="min-w-[100px]">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

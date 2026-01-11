@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Bot } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
@@ -147,7 +147,7 @@ export default function SessionDetailPage({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[160px]">Time</TableHead>
-              <TableHead className="w-[80px]">Type</TableHead>
+              <TableHead className="w-[80px]">Agent</TableHead>
               <TableHead className="w-[180px]">Model</TableHead>
               <TableHead className="w-[120px]">Tokens (In/Out)</TableHead>
               <TableHead className="w-[80px]">Savings</TableHead>
@@ -172,6 +172,10 @@ export default function SessionDetailPage({
                 const assistantResponse =
                   dynamicInteraction.getLastAssistantResponse();
                 const requestType = interaction.requestType ?? "main";
+                // Show prompt name if available, otherwise fall back to Main/Subagent
+                const typeLabel =
+                  interaction.externalAgentIdLabel ||
+                  (requestType === "main" ? "Main" : "Subagent");
 
                 return (
                   <TableRow
@@ -183,13 +187,11 @@ export default function SessionDetailPage({
                       {formatDate({ date: dynamicInteraction.createdAt })}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          requestType === "main" ? "default" : "secondary"
-                        }
-                        className="text-xs"
-                      >
-                        {requestType === "main" ? "Main" : "Subagent"}
+                      <Badge variant="outline" className="text-xs">
+                        {interaction.externalAgentIdLabel && (
+                          <Bot className="h-3 w-3 mr-1" />
+                        )}
+                        {typeLabel}
                       </Badge>
                     </TableCell>
                     <TableCell>

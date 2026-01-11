@@ -276,19 +276,26 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         // Extract session ID from headers to group A2A requests with calling session
-        const sessionId =
+        // If no session ID provided, generate a unique one for this A2A request
+        // This ensures all tool calls within one A2A request are grouped together
+        const headerSessionId =
           (request.headers[SESSION_ID_HEADER.toLowerCase()] as
             | string
             | undefined) ||
           (request.headers[SESSION_ID_HEADER] as string | undefined);
+        const sessionId =
+          headerSessionId ||
+          `a2a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
         // Execute using shared A2A service
+        // Pass promptId as the initial delegation chain (will be extended by any delegated calls)
         const result = await executeA2AMessage({
           promptId,
           message: userMessage,
           organizationId,
           userId,
           sessionId,
+          parentDelegationChain: undefined, // This is the root call, chain starts with promptId
         });
 
         return reply.send({

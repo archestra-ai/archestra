@@ -29080,6 +29080,10 @@
                                   "main",
                                   "subagent"
                                 ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -29203,6 +29207,10 @@
                                   "main",
                                   "subagent"
                                 ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -29326,6 +29334,10 @@
                                   "main",
                                   "subagent"
                                 ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -30642,6 +30654,10 @@
                             "main",
                             "subagent"
                           ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -30765,6 +30781,10 @@
                             "main",
                             "subagent"
                           ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -30888,6 +30908,10 @@
                             "main",
                             "subagent"
                           ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [

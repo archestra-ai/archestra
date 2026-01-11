@@ -114,6 +114,12 @@ export interface ArchestraContext {
   tokenAuth?: TokenAuthResult;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
+  /**
+   * Delegation chain of prompt IDs (colon-separated).
+   * Used to track the path of delegated agent calls.
+   * E.g., "promptA:promptB" means promptA delegated to promptB.
+   */
+  delegationChain?: string;
 }
 
 /**
@@ -217,6 +223,8 @@ export async function executeArchestraTool(
         organizationId,
         userId: userId || "system",
         sessionId,
+        // Pass the current delegation chain so the child can extend it
+        parentDelegationChain: context.delegationChain || context.promptId,
       });
 
       return {

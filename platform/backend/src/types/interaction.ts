@@ -52,6 +52,8 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       OpenAi.API.ChatCompletionRequestSchema.nullable().optional(),
     response: OpenAi.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["gemini:generateContent"]),
@@ -60,6 +62,8 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       Gemini.API.GenerateContentRequestSchema.nullable().optional(),
     response: Gemini.API.GenerateContentResponseSchema,
     requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["anthropic:messages"]),
@@ -67,6 +71,8 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: Anthropic.API.MessagesRequestSchema.nullable().optional(),
     response: Anthropic.API.MessagesResponseSchema,
     requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);
 

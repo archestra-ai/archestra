@@ -8969,6 +8969,7 @@ export type GetInteractionsResponses = {
             toonCostSavings: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string;
@@ -8990,6 +8991,7 @@ export type GetInteractionsResponses = {
             toonCostSavings: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         } | {
             id: string;
             profileId: string;
@@ -9011,6 +9013,7 @@ export type GetInteractionsResponses = {
             toonCostSavings: string | null;
             createdAt: string;
             requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -9383,6 +9386,7 @@ export type GetInteractionResponses = {
         toonCostSavings: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string;
@@ -9404,6 +9408,7 @@ export type GetInteractionResponses = {
         toonCostSavings: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     } | {
         id: string;
         profileId: string;
@@ -9425,6 +9430,7 @@ export type GetInteractionResponses = {
         toonCostSavings: string | null;
         createdAt: string;
         requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     };
 };
 

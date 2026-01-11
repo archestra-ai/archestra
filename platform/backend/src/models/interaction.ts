@@ -97,6 +97,93 @@ function computeRequestType(
   return hasTaskTool ? "main" : "subagent";
 }
 
+/**
+ * Check if a string is a valid UUID format
+ */
+function isUuid(str: string): boolean {
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+/**
+ * Extract all prompt IDs from external agent IDs.
+ * External agent IDs can be:
+ * - A single prompt ID (UUID)
+ * - A delegation chain (colon-separated UUIDs like "promptA:promptB:promptC")
+ * - A non-UUID string like "Archestra Chat" (ignored)
+ */
+function extractAllPromptIdsFromExternalAgentIds(
+  externalAgentIds: (string | null)[],
+): string[] {
+  const allIds = new Set<string>();
+
+  for (const id of externalAgentIds) {
+    if (!id) continue;
+
+    // Check if it's a delegation chain (contains colons)
+    if (id.includes(":")) {
+      for (const part of id.split(":")) {
+        if (isUuid(part)) {
+          allIds.add(part);
+        }
+      }
+    } else if (isUuid(id)) {
+      allIds.add(id);
+    }
+  }
+
+  return [...allIds];
+}
+
+/**
+ * Fetch prompt names for a list of prompt IDs.
+ */
+async function getPromptNamesById(
+  promptIds: string[],
+): Promise<Map<string, string>> {
+  if (promptIds.length === 0) return new Map();
+
+  const prompts = await db
+    .select({ id: schema.promptsTable.id, name: schema.promptsTable.name })
+    .from(schema.promptsTable)
+    .where(inArray(schema.promptsTable.id, promptIds));
+
+  return new Map(prompts.map((p) => [p.id, p.name]));
+}
+
+/**
+ * Resolve an external agent ID to a human-readable label.
+ * - Single prompt ID: Returns the prompt name
+ * - Delegation chain: Returns only the last (most specific) prompt name
+ * - Non-UUID: Returns null (will fall back to Main/Subagent)
+ */
+function resolveExternalAgentIdLabel(
+  externalAgentId: string | null,
+  promptNamesMap: Map<string, string>,
+): string | null {
+  if (!externalAgentId) return null;
+
+  // Check if it's a delegation chain (contains colons)
+  if (externalAgentId.includes(":")) {
+    const parts = externalAgentId.split(":");
+    // Get the last prompt ID in the chain (the actual executing agent)
+    const lastPromptId = parts[parts.length - 1];
+    if (isUuid(lastPromptId)) {
+      return promptNamesMap.get(lastPromptId) ?? null;
+    }
+    return null;
+  }
+
+  // Single ID - return the prompt name if it exists
+  if (isUuid(externalAgentId)) {
+    return promptNamesMap.get(externalAgentId) ?? null;
+  }
+
+  // Non-UUID (like "Archestra Chat") - no label
+  return null;
+}
+
 class InteractionModel {
   static async create(data: InsertInteraction) {
     const [interaction] = await db
@@ -197,18 +284,30 @@ class InteractionModel {
         .where(whereClause),
     ]);
 
-    // Add computed requestType field to each interaction
-    const dataWithRequestType = data.map((interaction) => ({
+    // Resolve external agent IDs (including delegation chains) to prompt names
+    const allPromptIds = extractAllPromptIdsFromExternalAgentIds(
+      data.map((i) => i.externalAgentId),
+    );
+    const promptNamesMap = await getPromptNamesById(allPromptIds);
+
+    // Add computed requestType and externalAgentIdLabel fields to each interaction
+    const dataWithComputedFields = data.map((interaction) => ({
       ...interaction,
       requestType: computeRequestType(
         interaction.request,
         interaction.sessionSource,
       ),
+      // Resolve externalAgentId to human-readable label (supports delegation chains)
+      externalAgentIdLabel: resolveExternalAgentIdLabel(
+        interaction.externalAgentId,
+        promptNamesMap,
+      ),
     }));
 
     return createPaginatedResult(
-      dataWithRequestType as (Interaction & {
+      dataWithComputedFields as (Interaction & {
         requestType: "main" | "subagent";
+        externalAgentIdLabel: string | null;
       })[],
       Number(total),
       pagination,
@@ -562,6 +661,7 @@ class InteractionModel {
       profileId: string;
       profileName: string | null;
       externalAgentIds: string[];
+      externalAgentIdLabels: (string | null)[]; // Resolved prompt names for external agent IDs
       userNames: string[];
       lastInteractionRequest: unknown | null;
       lastInteractionType: string | null;
@@ -662,7 +762,10 @@ class InteractionModel {
         )
         .leftJoin(
           schema.conversationsTable,
-          sql`${schema.interactionsTable.sessionId}::uuid = ${schema.conversationsTable.id}`,
+          // Only join when session_id is a valid UUID format (conversation IDs are UUIDs)
+          // Non-UUID session IDs (like "a2a-...") won't match any conversation
+          // Use CASE to safely handle the cast - only cast when length is 36 (UUID format)
+          sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
         )
         .where(whereClause)
         .groupBy(

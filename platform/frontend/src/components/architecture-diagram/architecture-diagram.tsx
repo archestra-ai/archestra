@@ -79,7 +79,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           type: "architectureGroup",
           position: { x: AGENTS_GROUP_X, y: 0 },
           data: {
-            label: "Agents",
+            label: "External Agents",
             width: 160,
             height: 190,
             highlighted: isProxy || isMcp,

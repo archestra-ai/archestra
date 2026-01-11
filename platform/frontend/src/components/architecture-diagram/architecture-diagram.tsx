@@ -73,7 +73,12 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
       const isProxy = activeTab === "proxy";
       const isMcp = activeTab === "mcp";
       const isA2a = activeTab === "a2a";
-      const highlightColor = isProxy ? "blue" : isMcp ? "green" : "orange";
+      // chart-1: blue (LLM Gateway), chart-2: green (MCP Gateway), chart-3: amber (A2A Gateway)
+      const highlightColor = isProxy
+        ? "chart-1"
+        : isMcp
+          ? "chart-2"
+          : "chart-3";
 
       return [
         // Agents group
@@ -134,7 +139,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           position: { x: AGENTS_GROUP_X + 15, y: 157 },
           data: {
             label: "Claude Code",
-            highlighted: isProxy || isMcp,
+            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -146,7 +151,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
           position: { x: AGENTS_GROUP_X + 15, y: 192 },
           data: {
             label: "MS Foundry",
-            highlighted: isProxy || isMcp,
+            highlighted: isProxy,
             highlightColor,
           },
           draggable: false,
@@ -514,14 +519,19 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
       strokeDasharray: "5,5",
     };
 
-    const highlightedEdgeStyle = (color: "blue" | "green" | "orange") => ({
+    // Get computed chart color from CSS variable
+    const getChartColor = (chartVar: "chart-1" | "chart-2" | "chart-3") => {
+      if (typeof window === "undefined") return "#888";
+      const style = getComputedStyle(document.documentElement);
+      const value = style.getPropertyValue(`--${chartVar}`).trim();
+      return value || "#888";
+    };
+
+    const highlightedEdgeStyle = (
+      color: "chart-1" | "chart-2" | "chart-3",
+    ) => ({
       strokeWidth: 2,
-      stroke:
-        color === "blue"
-          ? "#3b82f6"
-          : color === "green"
-            ? "#10b981"
-            : "#f97316",
+      stroke: getChartColor(color),
       strokeDasharray: "0",
     });
 
@@ -531,13 +541,13 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "cursor-gw",
         source: "agent-cursor",
         target: "mcp-gateway",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
       {
         id: "n8n-gw",
         source: "agent-n8n",
         target: "mcp-gateway",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
 
       // Agent to LLM Gateway connections
@@ -545,13 +555,25 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "n8n-llm",
         source: "agent-n8n",
         target: "llm-gateway",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
       },
       {
         id: "support-llm",
         source: "agent-support",
         target: "llm-gateway",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
+      },
+      {
+        id: "claude-code-llm",
+        source: "agent-claude-code",
+        target: "llm-gateway",
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
+      },
+      {
+        id: "ms-foundry-llm",
+        source: "agent-ms-foundry",
+        target: "llm-gateway",
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
       },
 
       // MCP Gateway to Orchestrator
@@ -559,7 +581,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "gw-orch",
         source: "mcp-gateway",
         target: "mcp-orchestrator",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
 
       // Orchestrator to Kubernetes MCPs
@@ -567,19 +589,19 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "orch-jira",
         source: "mcp-orchestrator",
         target: "jira-mcp",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
       {
         id: "orch-servicenow",
         source: "mcp-orchestrator",
         target: "servicenow-mcp",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
       {
         id: "orch-custom",
         source: "mcp-orchestrator",
         target: "custom-mcp",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
 
       // MCP Gateway to Remote MCP
@@ -587,7 +609,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "gw-github",
         source: "mcp-gateway",
         target: "github-mcp",
-        style: isMcp ? highlightedEdgeStyle("green") : baseEdgeStyle,
+        style: isMcp ? highlightedEdgeStyle("chart-2") : baseEdgeStyle,
       },
 
       // LLM Gateway to Security Policies
@@ -595,7 +617,7 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "llm-security",
         source: "llm-gateway",
         target: "security-policies",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
       },
 
       // Security Policies to LLM Providers
@@ -603,19 +625,19 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "security-openai",
         source: "security-policies",
         target: "openai",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
       },
       {
         id: "security-gemini",
         source: "security-policies",
         target: "gemini",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
       },
       {
         id: "security-claude",
         source: "security-policies",
         target: "claude",
-        style: isProxy ? highlightedEdgeStyle("blue") : baseEdgeStyle,
+        style: isProxy ? highlightedEdgeStyle("chart-1") : baseEdgeStyle,
       },
 
       // External A2A clients to A2A Gateway
@@ -623,31 +645,31 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "slack-a2a",
         source: "slack",
         target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "ms-teams-a2a",
         source: "ms-teams",
         target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "webhook-a2a",
         source: "webhook",
         target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "langgraph-a2a",
         source: "agent-langgraph",
         target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "bedrock-a2a",
         source: "agent-bedrock",
         target: "a2a-gateway",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
 
       // A2A Gateway to Internal agents
@@ -655,32 +677,32 @@ function ArchitectureDiagramInner({ activeTab }: ArchitectureDiagramProps) {
         id: "a2a-chat",
         source: "a2a-gateway",
         target: "chat-agent",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "a2a-accountant",
         source: "a2a-gateway",
         target: "accountant-agent",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "a2a-ai-sre",
         source: "a2a-gateway",
         target: "ai-sre-agent",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       // AI SRE to Observability and Coding
       {
         id: "sre-observability",
         source: "ai-sre-agent",
         target: "observability-agent",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
       {
         id: "sre-coding",
         source: "ai-sre-agent",
         target: "coding-agent",
-        style: isA2a ? highlightedEdgeStyle("orange") : baseEdgeStyle,
+        style: isA2a ? highlightedEdgeStyle("chart-3") : baseEdgeStyle,
       },
     ];
   }, [activeTab]);
@@ -761,10 +783,14 @@ export function ArchitectureDiagram({
                 variant="outline"
                 size="sm"
                 onClick={() => handleDialogTabChange("proxy")}
-                className={
+                className={dialogTab === "proxy" ? "text-white" : ""}
+                style={
                   dialogTab === "proxy"
-                    ? "bg-blue-500 border-blue-600 text-white hover:bg-blue-600 hover:text-white"
-                    : ""
+                    ? {
+                        backgroundColor: "var(--chart-1)",
+                        borderColor: "var(--chart-1)",
+                      }
+                    : undefined
                 }
               >
                 LLM Gateway
@@ -773,10 +799,14 @@ export function ArchitectureDiagram({
                 variant="outline"
                 size="sm"
                 onClick={() => handleDialogTabChange("mcp")}
-                className={
+                className={dialogTab === "mcp" ? "text-white" : ""}
+                style={
                   dialogTab === "mcp"
-                    ? "bg-emerald-500 border-emerald-600 text-white hover:bg-emerald-600 hover:text-white"
-                    : ""
+                    ? {
+                        backgroundColor: "var(--chart-2)",
+                        borderColor: "var(--chart-2)",
+                      }
+                    : undefined
                 }
               >
                 MCP Gateway
@@ -785,10 +815,14 @@ export function ArchitectureDiagram({
                 variant="outline"
                 size="sm"
                 onClick={() => handleDialogTabChange("a2a")}
-                className={
+                className={dialogTab === "a2a" ? "text-white" : ""}
+                style={
                   dialogTab === "a2a"
-                    ? "bg-orange-500 border-orange-600 text-white hover:bg-orange-600 hover:text-white"
-                    : ""
+                    ? {
+                        backgroundColor: "var(--chart-3)",
+                        borderColor: "var(--chart-3)",
+                      }
+                    : undefined
                 }
               >
                 A2A Gateway

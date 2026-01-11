@@ -4,10 +4,14 @@ import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 
+// Map highlight colors to chart CSS variables
+// chart-1: blue (LLM Gateway), chart-2: green (MCP Gateway), chart-3: amber (A2A Gateway)
+export type HighlightColor = "chart-1" | "chart-2" | "chart-3";
+
 export type ArchitectureNodeData = {
   label: string;
   highlighted?: boolean;
-  highlightColor?: "blue" | "green" | "orange";
+  highlightColor?: HighlightColor;
   isGroup?: boolean;
   groupLabel?: string;
 };
@@ -31,18 +35,22 @@ export const ArchitectureNode = memo(
       );
     }
 
+    const highlightStyle =
+      highlighted && highlightColor
+        ? {
+            backgroundColor: `var(--${highlightColor})`,
+            borderColor: `var(--${highlightColor})`,
+            color: "white",
+          }
+        : undefined;
+
     return (
       <div
         className={cn(
           "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors min-w-[90px] text-center whitespace-pre-line",
-          highlighted && highlightColor === "blue"
-            ? "bg-blue-500 border-blue-600 text-white"
-            : highlighted && highlightColor === "green"
-              ? "bg-emerald-500 border-emerald-600 text-white"
-              : highlighted && highlightColor === "orange"
-                ? "bg-orange-500 border-orange-600 text-white"
-                : "bg-card border-border text-card-foreground",
+          !highlighted && "bg-card border-border text-card-foreground",
         )}
+        style={highlightStyle}
       >
         <Handle
           type="target"

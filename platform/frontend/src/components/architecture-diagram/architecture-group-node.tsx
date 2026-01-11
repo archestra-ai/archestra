@@ -3,14 +3,14 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import Image from "next/image";
 import { memo } from "react";
-import { cn } from "@/lib/utils";
+import type { HighlightColor } from "./architecture-node";
 
 export type ArchitectureGroupNodeData = {
   label: string;
   width: number;
   height: number;
   highlighted?: boolean;
-  highlightColor?: "blue" | "green" | "orange";
+  highlightColor?: HighlightColor;
   logo?: string;
 };
 
@@ -23,19 +23,22 @@ export const ArchitectureGroupNode = memo(
   ({ data }: NodeProps<ArchitectureGroupNodeType>) => {
     const { label, width, height, highlighted, highlightColor, logo } = data;
 
+    const highlightStyle =
+      highlighted && highlightColor
+        ? {
+            borderColor: `color-mix(in oklch, var(--${highlightColor}) 50%, transparent)`,
+            backgroundColor: `color-mix(in oklch, var(--${highlightColor}) 10%, transparent)`,
+          }
+        : undefined;
+
     return (
       <div
-        className={cn(
-          "rounded-lg border bg-muted/30",
-          highlighted && highlightColor === "blue"
-            ? "border-blue-500/50 bg-blue-500/10"
-            : highlighted && highlightColor === "green"
-              ? "border-emerald-500/50 bg-emerald-500/10"
-              : highlighted && highlightColor === "orange"
-                ? "border-orange-500/50 bg-orange-500/10"
-                : "border-border/50",
-        )}
-        style={{ width, height }}
+        className={
+          highlighted
+            ? "rounded-lg border bg-muted/30"
+            : "rounded-lg border bg-muted/30 border-border/50"
+        }
+        style={{ width, height, ...highlightStyle }}
       >
         <div className="px-3 py-1.5 text-[10px] text-muted-foreground font-medium flex items-center gap-1.5">
           {logo && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bot, Layers, User } from "lucide-react";
+import { ArrowLeft, Bot, ExternalLink, Layers, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
@@ -120,6 +120,17 @@ export default function SessionDetailPage({
 
   const sessionTitle = getSessionTitle();
 
+  // Find the last main request (requestType === "main" or first in delegation chain)
+  const lastMainRequest = interactions.find((interaction) => {
+    const requestType = interaction.requestType ?? "main";
+    // Main request or has no delegation (externalAgentIdLabel without "→")
+    return (
+      requestType === "main" ||
+      (interaction.externalAgentIdLabel &&
+        !interaction.externalAgentIdLabel.includes("→"))
+    );
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -162,6 +173,14 @@ export default function SessionDetailPage({
               ))}
             </div>
           </div>
+          {lastMainRequest && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/logs/${lastMainRequest.id}`}>
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View
+              </Link>
+            </Button>
+          )}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
@@ -205,24 +224,23 @@ export default function SessionDetailPage({
       </div>
 
       {/* Interactions Table */}
-      <div className="rounded-md border">
-        <Table>
+      <div className="rounded-md border overflow-x-auto">
+        <Table className="table-fixed w-full min-w-[700px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[160px]">Time</TableHead>
-              <TableHead className="w-[120px]">Agent</TableHead>
-              <TableHead className="w-[220px]">Model</TableHead>
-              <TableHead className="w-[120px]">Tokens (In/Out)</TableHead>
-              <TableHead className="w-[80px]">Savings</TableHead>
-              <TableHead>User Message</TableHead>
-              <TableHead className="w-[200px]">Assistant Response</TableHead>
+              <TableHead className="w-[120px]">Time</TableHead>
+              <TableHead className="w-[115px]">Agent</TableHead>
+              <TableHead className="w-[140px]">Model</TableHead>
+              <TableHead className="w-[115px]">Tokens / Savings</TableHead>
+              <TableHead className="w-[30%]">User Message</TableHead>
+              <TableHead className="w-[120px]">Tools</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {interactions.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={6}
                   className="text-center text-muted-foreground"
                 >
                   No interactions found for this session
@@ -232,8 +250,7 @@ export default function SessionDetailPage({
               interactions.map((interaction) => {
                 const dynamicInteraction = new DynamicInteraction(interaction);
                 const userMessage = dynamicInteraction.getLastUserMessage();
-                const assistantResponse =
-                  dynamicInteraction.getLastAssistantResponse();
+                const toolsUsed = dynamicInteraction.getToolNamesUsed();
                 const requestType = interaction.requestType ?? "main";
                 // Show prompt name if available, otherwise fall back to Main/Subagent
                 const typeLabel =
@@ -249,45 +266,71 @@ export default function SessionDetailPage({
                     <TableCell className="font-mono text-xs">
                       {formatDate({ date: dynamicInteraction.createdAt })}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
+                    <TableCell className="overflow-hidden">
+                      <Badge
+                        variant="outline"
+                        className="text-xs max-w-full inline-flex truncate"
+                      >
                         {interaction.externalAgentIdLabel && (
-                          <Bot className="h-3 w-3 mr-1" />
+                          <Bot className="h-3 w-3 mr-1 shrink-0" />
                         )}
-                        {typeLabel}
+                        <span className="truncate">{typeLabel}</span>
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-xs">
+                    <TableCell className="overflow-hidden">
+                      <Badge
+                        variant="secondary"
+                        className="text-xs max-w-full inline-block truncate"
+                      >
                         {dynamicInteraction.modelName}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {(interaction.inputTokens ?? 0).toLocaleString()} /{" "}
-                      {(interaction.outputTokens ?? 0).toLocaleString()}
+                      <div className="flex flex-col gap-0.5">
+                        <span>
+                          {(interaction.inputTokens ?? 0).toLocaleString()} /{" "}
+                          {(interaction.outputTokens ?? 0).toLocaleString()}
+                        </span>
+                        {interaction.cost && interaction.baselineCost ? (
+                          <TooltipProvider>
+                            <Savings
+                              cost={interaction.cost}
+                              baselineCost={interaction.baselineCost}
+                              format="percent"
+                              tooltip="hover"
+                            />
+                          </TooltipProvider>
+                        ) : null}
+                      </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {interaction.cost && interaction.baselineCost ? (
-                        <TooltipProvider>
-                          <Savings
-                            cost={interaction.cost}
-                            baselineCost={interaction.baselineCost}
-                            format="percent"
-                            tooltip="hover"
-                          />
-                        </TooltipProvider>
+                    <TableCell className="text-xs overflow-hidden">
+                      <TruncatedText
+                        message={userMessage}
+                        maxLength={80}
+                        showTooltip={false}
+                      />
+                    </TableCell>
+                    <TableCell className="text-xs overflow-hidden">
+                      {toolsUsed.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {toolsUsed.slice(0, 2).map((tool) => (
+                            <Badge
+                              key={tool}
+                              variant="outline"
+                              className="text-xs max-w-[65px] inline-block truncate"
+                            >
+                              {tool}
+                            </Badge>
+                          ))}
+                          {toolsUsed.length > 2 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{toolsUsed.length - 2}
+                            </Badge>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      <TruncatedText message={userMessage} maxLength={100} />
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      <TruncatedText
-                        message={assistantResponse}
-                        maxLength={60}
-                      />
                     </TableCell>
                   </TableRow>
                 );
